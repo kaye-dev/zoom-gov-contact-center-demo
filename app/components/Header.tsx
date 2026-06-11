@@ -9,7 +9,7 @@ import { GlobeIcon } from './svg/GlobeIcon';
 const navItems = [
   { label: 'アクセス・施設案内', icon: PinIcon },
   { label: '窓口混雑状況', icon: CrowdIcon },
-  { label: 'Foreign Language', icon: GlobeIcon },
+  { label: 'Language', icon: GlobeIcon },
 ];
 
 export function Header() {
