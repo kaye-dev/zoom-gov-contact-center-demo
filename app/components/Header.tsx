@@ -14,7 +14,7 @@ const navItems = [
 
 export function Header() {
   return (
-    <header className="flex h-20 items-stretch border-b border-gray-200 bg-white text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
+    <header className="flex h-20 items-stretch border-t-4 border-b border-t-primary border-b-gray-200 bg-white text-gray-800 dark:border-b-gray-700 dark:bg-gray-900 dark:text-gray-100">
       {/* ロゴ */}
       <div className="flex items-center gap-3 pl-6 pr-4">
         <StarEmblem className="h-11 w-11 shrink-0" />
