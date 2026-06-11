@@ -29,6 +29,13 @@ export type Dictionary = {
   };
   emergency: string;
   searchMenu: string;
+  findInfo: {
+    title: string;
+    subtitle: string;
+    sectionLabel: string;
+    call: { title: string; description: string };
+    chat: { title: string; description: string };
+  };
   footer: {
     sitePolicy: string;
     privacy: string;
@@ -55,6 +62,21 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     emergency: '緊急情報',
     searchMenu: '検索メニュー',
+    findInfo: {
+      title: '情報を探す',
+      subtitle: 'Find information',
+      sectionLabel: 'Zoom AI に相談',
+      call: {
+        title: 'AI 電話相談',
+        description:
+          '相談内容を AI が一次対応を行い、高度なご相談や個人情報に関わるご相談は有人オペレーターにお繋ぎします。',
+      },
+      chat: {
+        title: 'AI チャット相談',
+        description:
+          '相談内容を AI がチャット形式でお答えします。高度なご質問や個人情報に関わるご相談は適切な相談先をお繋ぎいたします。',
+      },
+    },
     footer: {
       sitePolicy: 'サイトポリシー',
       privacy: 'プライバシーポリシー',
@@ -79,6 +101,21 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     emergency: 'Emergency',
     searchMenu: 'Search Menu',
+    findInfo: {
+      title: 'Find Information',
+      subtitle: 'Find information',
+      sectionLabel: 'Consult Zoom AI',
+      call: {
+        title: 'AI Phone Consultation',
+        description:
+          'AI handles your inquiry first, then connects you to a live operator for complex matters or questions involving personal information.',
+      },
+      chat: {
+        title: 'AI Chat Consultation',
+        description:
+          'AI answers your inquiry in a chat format. For advanced questions or matters involving personal information, we connect you to the appropriate contact.',
+      },
+    },
     footer: {
       sitePolicy: 'Site Policy',
       privacy: 'Privacy Policy',
@@ -103,6 +140,21 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     emergency: '紧急信息',
     searchMenu: '搜索菜单',
+    findInfo: {
+      title: '查找信息',
+      subtitle: 'Find information',
+      sectionLabel: '咨询 Zoom AI',
+      call: {
+        title: 'AI 电话咨询',
+        description:
+          '由 AI 进行首次应答，高级咨询或涉及个人信息的咨询将转接至人工坐席。',
+      },
+      chat: {
+        title: 'AI 聊天咨询',
+        description:
+          '由 AI 以聊天形式解答咨询内容。对于高级问题或涉及个人信息的咨询，将为您转接至合适的咨询窗口。',
+      },
+    },
     footer: {
       sitePolicy: '网站政策',
       privacy: '隐私政策',
@@ -127,6 +179,21 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     emergency: '緊急資訊',
     searchMenu: '搜尋選單',
+    findInfo: {
+      title: '尋找資訊',
+      subtitle: 'Find information',
+      sectionLabel: '諮詢 Zoom AI',
+      call: {
+        title: 'AI 電話諮詢',
+        description:
+          '由 AI 進行初次應答，高度諮詢或涉及個人資訊的諮詢將轉接至真人客服。',
+      },
+      chat: {
+        title: 'AI 聊天諮詢',
+        description:
+          '由 AI 以聊天形式回覆諮詢內容。對於高度問題或涉及個人資訊的諮詢，將為您轉接至合適的諮詢窗口。',
+      },
+    },
     footer: {
       sitePolicy: '網站政策',
       privacy: '隱私權政策',
@@ -151,6 +218,21 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     emergency: '긴급 정보',
     searchMenu: '검색 메뉴',
+    findInfo: {
+      title: '정보 찾기',
+      subtitle: 'Find information',
+      sectionLabel: 'Zoom AI 상담',
+      call: {
+        title: 'AI 전화 상담',
+        description:
+          '상담 내용을 AI가 1차 응대하며, 고도의 상담이나 개인정보와 관련된 상담은 상담원에게 연결해 드립니다.',
+      },
+      chat: {
+        title: 'AI 채팅 상담',
+        description:
+          '상담 내용을 AI가 채팅 형식으로 답변해 드립니다. 고도의 질문이나 개인정보와 관련된 상담은 적절한 상담처로 연결해 드립니다.',
+      },
+    },
     footer: {
       sitePolicy: '사이트 정책',
       privacy: '개인정보 보호정책',
