@@ -6,15 +6,22 @@ type LabeledBoxProps = {
   label: ReactNode;
   children: ReactNode;
   className?: string;
+  /** コンテンツ領域の余白クラス（端まで背景色を広げたい場合などに上書きする） */
+  contentClassName?: string;
 };
 
 /**
  * 上辺の枠線に見出し（スラッシュ + ラベル）が重なる枠付きボックス。角は直角。
  */
-export function LabeledBox({ label, children, className }: LabeledBoxProps) {
+export function LabeledBox({
+  label,
+  children,
+  className,
+  contentClassName = 'px-8 pb-8 pt-12',
+}: LabeledBoxProps) {
   return (
     <div
-      className={`relative border border-gray-300 px-8 pb-8 pt-12 dark:border-gray-700${
+      className={`relative border border-gray-300 dark:border-gray-700${
         className ? ` ${className}` : ''
       }`}
     >
@@ -30,7 +37,8 @@ export function LabeledBox({ label, children, className }: LabeledBoxProps) {
         </span>
       </div>
 
-      {children}
+      {/* コンテンツ領域（余白は contentClassName で制御） */}
+      <div className={contentClassName}>{children}</div>
     </div>
   );
 }
