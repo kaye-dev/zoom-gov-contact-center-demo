@@ -59,6 +59,27 @@ export type Dictionary = {
       };
     };
   };
+  news: {
+    title: string;
+    subtitle: string;
+    more: string;
+    close: string;
+    category: { new: string; featured: string };
+    articles: {
+      assembly: string;
+      construction: string;
+      floodBoard: string;
+      aircon: string;
+      floodDamage: string;
+      myNumberExpress: string;
+      minpaku: string;
+      measles: string;
+      furigana: string;
+      setayell: string;
+      childcare: string;
+      solar: string;
+    };
+  };
   footer: {
     sitePolicy: string;
     privacy: string;
@@ -123,6 +144,29 @@ export const dictionaries: Record<Locale, Dictionary> = {
         },
       },
     },
+    news: {
+      title: 'お知らせ',
+      subtitle: 'Information',
+      more: 'もっと見る',
+      close: '閉じる',
+      category: { new: '新着情報', featured: '注目情報' },
+      articles: {
+        assembly: '令和8年第2回区議会定例会を6月10日から6月19日まで開催します',
+        construction: '中東情勢を踏まえた適正な工事請負契約の確保について（通知）',
+        floodBoard: '止水板設置等助成制度のご案内',
+        aircon: '低所得世帯および生活保護世帯へのエアコン購入費等助成について',
+        floodDamage: '浸水被害にあってしまったら',
+        myNumberExpress: 'マイナンバーカードの特急発行について',
+        minpaku:
+          '特別区長会の有志による「住宅宿泊事業の適正化に関する要望」に対する区の見解',
+        measles: '麻しん（はしか）にご注意ください',
+        furigana: '住民票に氏名・旧氏の振り仮名が記載されます',
+        setayell:
+          '児童養護施設や里親等のもとを巣立つ若者などのための相談支援事業「せたエール」',
+        childcare: '未来市版こども誰でも通園制度（乳児等通園支援事業）について',
+        solar: '【モニター募集中】住宅用太陽光発電の余剰電力を活用した実証事業',
+      },
+    },
     footer: {
       sitePolicy: 'サイトポリシー',
       privacy: 'プライバシーポリシー',
@@ -183,6 +227,35 @@ export const dictionaries: Record<Locale, Dictionary> = {
           counter: 'Service Counter List',
           housing: 'Housing & Moving',
         },
+      },
+    },
+    news: {
+      title: 'News',
+      subtitle: 'Information',
+      more: 'See More',
+      close: 'Close',
+      category: { new: 'Latest News', featured: 'Featured' },
+      articles: {
+        assembly:
+          'The 2nd Regular Session of the FY2026 City Assembly will be held from June 10 to June 19',
+        construction:
+          'Ensuring Appropriate Construction Contracts in Light of the Middle East Situation (Notice)',
+        floodBoard: 'Guide to the Subsidy Program for Installing Flood Barriers',
+        aircon:
+          'Subsidy for Air Conditioner Purchase Costs for Low-Income and Public Assistance Households',
+        floodDamage: 'If You Suffer Flood Damage',
+        myNumberExpress: 'About Express Issuance of My Number Cards',
+        minpaku:
+          "The City's View on the Request for Proper Regulation of Home-Sharing Businesses by Volunteer Ward Mayors",
+        measles: 'Please Be Careful of Measles',
+        furigana:
+          'Phonetic Readings of Names and Former Names to Be Recorded on Residence Certificates',
+        setayell:
+          '"Setayell": Consultation Support Program for Youth Leaving Child Care Facilities and Foster Homes',
+        childcare:
+          'About the Mirai City Universal Childcare Access Program (Infant Childcare Support Program)',
+        solar:
+          '[Monitors Wanted] Demonstration Project Utilizing Surplus Power from Residential Solar Generation',
       },
     },
     footer: {
@@ -247,6 +320,27 @@ export const dictionaries: Record<Locale, Dictionary> = {
         },
       },
     },
+    news: {
+      title: '通知公告',
+      subtitle: 'Information',
+      more: '查看更多',
+      close: '收起',
+      category: { new: '最新消息', featured: '重点关注' },
+      articles: {
+        assembly: '令和8年度第2次区议会定例会将于6月10日至6月19日召开',
+        construction: '关于在中东局势下确保适当工程承包合同的通知',
+        floodBoard: '止水板设置等补助制度的介绍',
+        aircon: '面向低收入家庭及生活保护家庭的空调购置费等补助介绍',
+        floodDamage: '遭遇浸水灾害时的应对',
+        myNumberExpress: '关于个人编号卡的加急发放',
+        minpaku: '区对特别区长会有志提出的“关于规范住宅住宿业的要望”的见解',
+        measles: '请注意麻疹',
+        furigana: '居民票将记载姓名及旧姓的振假名（读音）',
+        setayell: '面向从儿童养护设施及寄养家庭独立的青年等的咨询支援事业“Setayell”',
+        childcare: '关于未来市版儿童普惠通园制度（婴幼儿通园支援事业）',
+        solar: '【征集体验者】利用住宅用太阳能发电余电的实证事业',
+      },
+    },
     footer: {
       sitePolicy: '网站政策',
       privacy: '隐私政策',
@@ -309,6 +403,27 @@ export const dictionaries: Record<Locale, Dictionary> = {
         },
       },
     },
+    news: {
+      title: '通知公告',
+      subtitle: 'Information',
+      more: '查看更多',
+      close: '收合',
+      category: { new: '最新消息', featured: '重點關注' },
+      articles: {
+        assembly: '令和8年度第2次區議會定例會將於6月10日至6月19日召開',
+        construction: '關於在中東局勢下確保適當工程承包合約的通知',
+        floodBoard: '止水板設置等補助制度的介紹',
+        aircon: '面向低收入家庭及生活保護家庭的空調購置費等補助介紹',
+        floodDamage: '遭遇浸水災害時的應對',
+        myNumberExpress: '關於個人編號卡的加急發放',
+        minpaku: '區對特別區長會有志提出的「關於規範住宅住宿業的要望」之見解',
+        measles: '請注意麻疹',
+        furigana: '居民票將記載姓名及舊姓的振假名（讀音）',
+        setayell: '面向從兒童養護設施及寄養家庭獨立的青年等的諮詢支援事業「Setayell」',
+        childcare: '關於未來市版兒童普惠通園制度（嬰幼兒通園支援事業）',
+        solar: '【徵集體驗者】利用住宅用太陽能發電餘電的實證事業',
+      },
+    },
     footer: {
       sitePolicy: '網站政策',
       privacy: '隱私權政策',
@@ -369,6 +484,27 @@ export const dictionaries: Record<Locale, Dictionary> = {
           counter: '창구 목록',
           housing: '주택・이사',
         },
+      },
+    },
+    news: {
+      title: '알림',
+      subtitle: 'Information',
+      more: '더 보기',
+      close: '닫기',
+      category: { new: '새소식', featured: '주요 정보' },
+      articles: {
+        assembly: '레이와 8년 제2회 구의회 정례회를 6월 10일부터 6월 19일까지 개최합니다',
+        construction: '중동 정세를 고려한 적정한 공사 도급 계약 확보에 관하여(통지)',
+        floodBoard: '지수판 설치 등 보조 제도 안내',
+        aircon: '저소득 세대 및 생활보호 세대를 위한 에어컨 구입비 등 보조 안내',
+        floodDamage: '침수 피해를 입었다면',
+        myNumberExpress: '마이넘버 카드 특급 발급에 관하여',
+        minpaku: "특별구청장회 유지(有志)의 '주택숙박사업 적정화에 관한 요망'에 대한 구의 견해",
+        measles: '홍역(마진)에 주의하세요',
+        furigana: '주민표에 성명·구성(旧氏)의 후리가나가 기재됩니다',
+        setayell: "아동양호시설이나 위탁가정 등을 떠나는 청년 등을 위한 상담 지원 사업 'Setayell'",
+        childcare: '미래시판 어린이 누구나 통원 제도(영유아 등 통원 지원 사업)에 관하여',
+        solar: '【모니터 모집 중】주택용 태양광 발전 잉여 전력을 활용한 실증 사업',
       },
     },
     footer: {
