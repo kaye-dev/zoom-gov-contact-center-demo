@@ -1,10 +1,19 @@
+'use client';
+
 import { StarEmblem } from './svg/StarEmblemIcon';
-
-const policyLinks = ['サイトポリシー', 'プライバシーポリシー', '庁舎案内'];
-
-const serviceLinks = ['ご意見・ご要望', 'サイトマップ'];
+import { useI18n } from '../i18n/LanguageProvider';
 
 export function Footer() {
+  const { t } = useI18n();
+
+  const policyLinks = [
+    t.footer.sitePolicy,
+    t.footer.privacy,
+    t.footer.buildingGuide,
+  ];
+
+  const serviceLinks = [t.footer.feedback, t.footer.sitemap];
+
   return (
     <footer className="bg-primary-50 text-gray-800 dark:bg-gray-900 dark:text-gray-100">
       <div className="mx-auto max-w-7xl px-6 py-12">
@@ -13,27 +22,27 @@ export function Footer() {
           <div className="flex shrink-0 items-center gap-3">
             <StarEmblem className="h-10 w-10 shrink-0" />
             <div className="leading-tight">
-              <p className="text-xl font-bold tracking-wide">未来市</p>
+              <p className="text-xl font-bold tracking-wide">{t.cityName}</p>
               <p className="text-[10px] font-semibold tracking-[0.2em] text-gray-500 dark:text-gray-400">
-                MIRAI CITY
+                {t.cityNameRoman}
               </p>
             </div>
           </div>
 
           {/* 住所・連絡先 */}
           <address className="not-italic text-sm leading-7 text-gray-700 dark:text-gray-300">
-            <p>〒100-0001</p>
-            <p>未来県未来市中央1-2-3</p>
-            <p>未来シティタワー</p>
+            <p>{t.footer.postalCode}</p>
+            <p>{t.footer.address}</p>
+            <p>{t.footer.tower}</p>
             <p className="mt-4">
-              電話番号：
+              {t.footer.phoneLabel}
               <a
                 href="tel:+810312345678"
                 className="underline-offset-4 transition-colors hover:text-blue-700 hover:underline dark:hover:text-blue-300"
               >
                 (03)1234-5678
               </a>
-              （代表）
+              {t.footer.phoneNote}
             </p>
           </address>
 
@@ -67,7 +76,7 @@ export function Footer() {
 
           {/* コピーライト */}
           <div className="text-sm leading-6 text-gray-700 md:self-end md:text-right dark:text-gray-300">
-            <p>© Mirai City. All Rights Reserved.</p>
+            <p>{t.footer.copyright}</p>
           </div>
         </div>
       </div>

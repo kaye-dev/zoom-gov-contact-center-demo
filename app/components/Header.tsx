@@ -1,27 +1,31 @@
+'use client';
+
 import { ThemeToggle } from './ThemeToggle';
+import { LanguageMenu } from './LanguageMenu';
 import { AlertIcon } from './svg/AlertIcon';
 import { SearchMenuIcon } from './svg/SearchMenuIcon';
 import { StarEmblem } from './svg/StarEmblemIcon';
-import { CrowdIcon } from './svg/CrowdIcon'
+import { CrowdIcon } from './svg/CrowdIcon';
 import { PinIcon } from './svg/PinIcon';
-import { GlobeIcon } from './svg/GlobeIcon';
-
-const navItems = [
-  { label: 'アクセス・施設案内', icon: PinIcon },
-  { label: '窓口混雑状況', icon: CrowdIcon },
-  { label: 'Language', icon: GlobeIcon },
-];
+import { useI18n } from '../i18n/LanguageProvider';
 
 export function Header() {
+  const { t } = useI18n();
+
+  const navItems = [
+    { label: t.nav.access, icon: PinIcon },
+    { label: t.nav.congestion, icon: CrowdIcon },
+  ];
+
   return (
     <header className="flex h-20 items-stretch border-t-4 border-b border-t-primary border-b-gray-200 bg-white text-gray-800 dark:border-b-gray-700 dark:bg-gray-900 dark:text-gray-100">
       {/* ロゴ */}
       <div className="flex items-center gap-3 pl-6 pr-4">
         <StarEmblem className="h-11 w-11 shrink-0" />
         <div className="leading-tight">
-          <p className="text-2xl font-bold tracking-wide">未来市</p>
+          <p className="text-2xl font-bold tracking-wide">{t.cityName}</p>
           <p className="text-[10px] font-semibold tracking-[0.2em] text-gray-500 dark:text-gray-400">
-            MIRAI CITY
+            {t.cityNameRoman}
           </p>
         </div>
       </div>
@@ -39,6 +43,9 @@ export function Header() {
           </a>
         ))}
 
+        {/* 言語切り替えメニュー */}
+        <LanguageMenu />
+
         {/* ライト/ダークモード切り替えスイッチ */}
         <ThemeToggle />
       </nav>
@@ -49,7 +56,7 @@ export function Header() {
         className="flex w-24 flex-col items-center justify-center gap-1 bg-sky-100 text-xs font-semibold text-blue-900 transition-colors hover:bg-sky-200 dark:bg-sky-900/40 dark:text-sky-200 dark:hover:bg-sky-900/60"
       >
         <AlertIcon className="h-5 w-5" />
-        <span>緊急情報</span>
+        <span className="text-center">{t.emergency}</span>
       </a>
 
       {/* 検索メニュー */}
@@ -58,11 +65,7 @@ export function Header() {
         className="flex w-24 flex-col items-center justify-center gap-1 bg-blue-800 text-xs font-semibold text-white transition-colors hover:bg-blue-900"
       >
         <SearchMenuIcon className="h-5 w-5" />
-        <span className="leading-tight text-center">
-          検索
-          <br />
-          メニュー
-        </span>
+        <span className="leading-tight text-center">{t.searchMenu}</span>
       </a>
     </header>
   );
