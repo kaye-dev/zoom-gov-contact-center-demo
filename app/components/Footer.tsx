@@ -13,7 +13,7 @@ export function Footer() {
           <div className="flex shrink-0 items-center gap-3">
             <StarEmblem className="h-10 w-10 shrink-0" />
             <div className="leading-tight">
-              <p className="text-xl font-bold tracking-wide">未来区</p>
+              <p className="text-xl font-bold tracking-wide">未来市</p>
               <p className="text-[10px] font-semibold tracking-[0.2em] text-gray-500 dark:text-gray-400">
                 MIRAI CITY
               </p>
@@ -23,7 +23,7 @@ export function Footer() {
           {/* 住所・連絡先 */}
           <address className="not-italic text-sm leading-7 text-gray-700 dark:text-gray-300">
             <p>〒100-0001</p>
-            <p>未来県未来区中央1-2-3</p>
+            <p>未来県未来市中央1-2-3</p>
             <p>未来シティタワー</p>
             <p className="mt-4">
               電話番号：

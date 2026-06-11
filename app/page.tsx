@@ -6,7 +6,7 @@ export default function Home() {
     <div className="">
       <Header />
       <main className="">
-        <h1>未来区</h1>
+        <h1>未来市</h1>
       </main>
       <Footer />
     </div>

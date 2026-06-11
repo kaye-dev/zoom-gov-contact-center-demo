@@ -19,7 +19,7 @@ export function Header() {
       <div className="flex items-center gap-3 pl-6 pr-4">
         <StarEmblem className="h-11 w-11 shrink-0" />
         <div className="leading-tight">
-          <p className="text-2xl font-bold tracking-wide">未来区</p>
+          <p className="text-2xl font-bold tracking-wide">未来市</p>
           <p className="text-[10px] font-semibold tracking-[0.2em] text-gray-500 dark:text-gray-400">
             MIRAI CITY
           </p>
