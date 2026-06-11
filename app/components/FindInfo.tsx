@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import { useI18n } from '../i18n/LanguageProvider';
+import { LabeledBox } from './LabeledBox';
 
 export function FindInfo() {
   const { t } = useI18n();
@@ -22,7 +23,7 @@ export function FindInfo() {
   return (
     <section className="mx-auto max-w-7xl px-6 py-12">
       {/* 見出し */}
-      <div className="mb-6 flex items-baseline gap-4">
+      <div className="mb-12 flex items-baseline gap-4">
         <h2 className="text-3xl font-bold tracking-wide">{t.findInfo.title}</h2>
         <span className="text-sm text-gray-500 dark:text-gray-400">
           {t.findInfo.subtitle}
@@ -30,20 +31,7 @@ export function FindInfo() {
       </div>
 
       {/* 枠付きボックス（上辺の枠線に見出しが重なる。角は直角） */}
-      <div className="relative border border-gray-300 px-8 pb-8 pt-12 dark:border-gray-700">
-        {/* 区切りラベル: 上枠線をまたいで配置（左枠線とで直角コーナーを作る） */}
-        <div className="absolute -top-3.5 left-8 right-6 flex items-center">
-          {/* スラッシュ + ラベル（背景色で枠線をマスク） */}
-          <span className="flex items-center gap-2 bg-background px-3">
-            <span className="text-2xl font-bold leading-none text-gray-700 dark:text-gray-200">
-              /
-            </span>
-            <h3 className="whitespace-nowrap text-xl font-bold leading-none">
-              {t.findInfo.sectionLabel}
-            </h3>
-          </span>
-        </div>
-
+      <LabeledBox label={t.findInfo.sectionLabel}>
         {/* カードグリッド */}
         <div className="grid grid-cols-1 gap-8 md:grid-cols-2 md:divide-x md:divide-gray-200 dark:md:divide-gray-700">
           {cards.map((card) => (
@@ -68,7 +56,7 @@ export function FindInfo() {
             </a>
           ))}
         </div>
-      </div>
+      </LabeledBox>
     </section>
   );
 }
