@@ -35,6 +35,29 @@ export type Dictionary = {
     sectionLabel: string;
     call: { title: string; description: string };
     chat: { title: string; description: string };
+    lifeInfo: {
+      sectionLabel: string;
+      items: {
+        trash: string;
+        childEducation: string;
+        safety: string;
+        residence: string;
+        facilities: string;
+        event: string;
+        faq: string;
+        feedback: string;
+        welfare: string;
+        educationBoard: string;
+        myNumber: string;
+        consultation: string;
+        tax: string;
+        library: string;
+        openData: string;
+        organization: string;
+        counter: string;
+        housing: string;
+      };
+    };
   };
   footer: {
     sitePolicy: string;
@@ -76,6 +99,29 @@ export const dictionaries: Record<Locale, Dictionary> = {
         description:
           '相談内容を AI がチャット形式でお答えします。高度なご質問や個人情報に関わるご相談は適切な相談先をお繋ぎいたします。',
       },
+      lifeInfo: {
+        sectionLabel: '生活情報',
+        items: {
+          trash: 'ごみ・リサイクル',
+          childEducation: '子供・教育・若者支援',
+          safety: '救急・防犯・防災',
+          residence: '戸籍・住民登録',
+          facilities: '施設案内',
+          event: 'イベント・観光情報',
+          faq: 'よくある質問',
+          feedback: '区政へのご意見',
+          welfare: '福祉・健康',
+          educationBoard: '教育委員会',
+          myNumber: 'マイナンバー',
+          consultation: '相談・悩みごと',
+          tax: '税金・保険・年金',
+          library: '図書館',
+          openData: 'オープンデータ',
+          organization: '組織一覧',
+          counter: '窓口一覧',
+          housing: '住宅・引っ越し',
+        },
+      },
     },
     footer: {
       sitePolicy: 'サイトポリシー',
@@ -114,6 +160,29 @@ export const dictionaries: Record<Locale, Dictionary> = {
         title: 'AI Chat Consultation',
         description:
           'AI answers your inquiry in a chat format. For advanced questions or matters involving personal information, we connect you to the appropriate contact.',
+      },
+      lifeInfo: {
+        sectionLabel: 'Daily Life',
+        items: {
+          trash: 'Garbage & Recycling',
+          childEducation: 'Children, Education & Youth Support',
+          safety: 'Emergency, Crime & Disaster Prevention',
+          residence: 'Family Register & Residency',
+          facilities: 'Facility Guide',
+          event: 'Events & Tourism',
+          faq: 'FAQ',
+          feedback: 'Feedback on City Government',
+          welfare: 'Welfare & Health',
+          educationBoard: 'Board of Education',
+          myNumber: 'My Number',
+          consultation: 'Consultation & Concerns',
+          tax: 'Tax, Insurance & Pension',
+          library: 'Library',
+          openData: 'Open Data',
+          organization: 'Organization List',
+          counter: 'Service Counter List',
+          housing: 'Housing & Moving',
+        },
       },
     },
     footer: {
@@ -154,6 +223,29 @@ export const dictionaries: Record<Locale, Dictionary> = {
         description:
           '由 AI 以聊天形式解答咨询内容。对于高级问题或涉及个人信息的咨询，将为您转接至合适的咨询窗口。',
       },
+      lifeInfo: {
+        sectionLabel: '生活信息',
+        items: {
+          trash: '垃圾・回收',
+          childEducation: '儿童・教育・青少年支援',
+          safety: '急救・防范・防灾',
+          residence: '户籍・居民登记',
+          facilities: '设施指南',
+          event: '活动・观光信息',
+          faq: '常见问题',
+          feedback: '对区政的意见',
+          welfare: '福祉・健康',
+          educationBoard: '教育委员会',
+          myNumber: '个人编号',
+          consultation: '咨询・烦恼',
+          tax: '税金・保险・年金',
+          library: '图书馆',
+          openData: '开放数据',
+          organization: '组织一览',
+          counter: '窗口一览',
+          housing: '住宅・搬迁',
+        },
+      },
     },
     footer: {
       sitePolicy: '网站政策',
@@ -193,6 +285,29 @@ export const dictionaries: Record<Locale, Dictionary> = {
         description:
           '由 AI 以聊天形式回覆諮詢內容。對於高度問題或涉及個人資訊的諮詢，將為您轉接至合適的諮詢窗口。',
       },
+      lifeInfo: {
+        sectionLabel: '生活資訊',
+        items: {
+          trash: '垃圾・回收',
+          childEducation: '兒童・教育・青少年支援',
+          safety: '急救・防範・防災',
+          residence: '戶籍・居民登記',
+          facilities: '設施導覽',
+          event: '活動・觀光資訊',
+          faq: '常見問題',
+          feedback: '對區政的意見',
+          welfare: '福祉・健康',
+          educationBoard: '教育委員會',
+          myNumber: '個人編號',
+          consultation: '諮詢・煩惱',
+          tax: '稅金・保險・年金',
+          library: '圖書館',
+          openData: '開放資料',
+          organization: '組織一覽',
+          counter: '窗口一覽',
+          housing: '住宅・搬遷',
+        },
+      },
     },
     footer: {
       sitePolicy: '網站政策',
@@ -231,6 +346,29 @@ export const dictionaries: Record<Locale, Dictionary> = {
         title: 'AI 채팅 상담',
         description:
           '상담 내용을 AI가 채팅 형식으로 답변해 드립니다. 고도의 질문이나 개인정보와 관련된 상담은 적절한 상담처로 연결해 드립니다.',
+      },
+      lifeInfo: {
+        sectionLabel: '생활 정보',
+        items: {
+          trash: '쓰레기・재활용',
+          childEducation: '아동・교육・청소년 지원',
+          safety: '응급・방범・방재',
+          residence: '호적・주민등록',
+          facilities: '시설 안내',
+          event: '이벤트・관광 정보',
+          faq: '자주 묻는 질문',
+          feedback: '구정에 대한 의견',
+          welfare: '복지・건강',
+          educationBoard: '교육위원회',
+          myNumber: '마이넘버',
+          consultation: '상담・고민거리',
+          tax: '세금・보험・연금',
+          library: '도서관',
+          openData: '오픈 데이터',
+          organization: '조직 목록',
+          counter: '창구 목록',
+          housing: '주택・이사',
+        },
       },
     },
     footer: {

@@ -20,6 +20,27 @@ export function FindInfo() {
     },
   ];
 
+  const lifeItems = [
+    { label: t.findInfo.lifeInfo.items.trash, icon: '/life-information/life-trash.png' },
+    { label: t.findInfo.lifeInfo.items.childEducation, icon: '/life-information/life-child-education.png' },
+    { label: t.findInfo.lifeInfo.items.safety, icon: '/life-information/life-safety.png' },
+    { label: t.findInfo.lifeInfo.items.residence, icon: '/life-information/life-residence.png' },
+    { label: t.findInfo.lifeInfo.items.facilities, icon: '/life-information/life-facilities.png' },
+    { label: t.findInfo.lifeInfo.items.event, icon: '/life-information/life-event.png' },
+    { label: t.findInfo.lifeInfo.items.faq, icon: '/life-information/life-faq.png' },
+    { label: t.findInfo.lifeInfo.items.feedback, icon: '/life-information/life-feedback.png' },
+    { label: t.findInfo.lifeInfo.items.welfare, icon: '/life-information/life-welfare.png' },
+    { label: t.findInfo.lifeInfo.items.educationBoard, icon: '/life-information/life-education-board.png' },
+    { label: t.findInfo.lifeInfo.items.myNumber, icon: '/life-information/life-my-number.png' },
+    { label: t.findInfo.lifeInfo.items.consultation, icon: '/life-information/life-consultation.png' },
+    { label: t.findInfo.lifeInfo.items.tax, icon: '/life-information/life-tax.png' },
+    { label: t.findInfo.lifeInfo.items.library, icon: '/life-information/life-library.png' },
+    { label: t.findInfo.lifeInfo.items.openData, icon: '/life-information/life-open-data.png' },
+    { label: t.findInfo.lifeInfo.items.organization, icon: '/life-information/life-organization.png' },
+    { label: t.findInfo.lifeInfo.items.counter, icon: '/life-information/life-counter.png' },
+    { label: t.findInfo.lifeInfo.items.housing, icon: '/life-information/life-housing.png' },
+  ];
+
   return (
     <section className="mx-auto max-w-7xl px-6 py-12">
       {/* 見出し */}
@@ -56,6 +77,45 @@ export function FindInfo() {
               </div>
             </a>
           ))}
+        </div>
+      </LabeledBox>
+
+      {/* 生活情報（アイコングリッド、デスクトップ 1 行 6 列） */}
+      <LabeledBox
+        label={t.findInfo.lifeInfo.sectionLabel}
+        className="mt-12"
+        contentClassName="px-4 pb-6 pt-10"
+      >
+        <div className="grid grid-cols-3 md:grid-cols-6">
+          {lifeItems.map((item, index) => {
+            // 内側だけに区切り線を引く（最終列は右線なし、最終行は下線なし）
+            const isLastCol = index % 6 === 5;
+            const isLastRow = index >= lifeItems.length - (lifeItems.length % 6 || 6);
+            const dividers = [
+              isLastCol ? '' : 'md:border-r',
+              isLastRow ? '' : 'border-b',
+            ]
+              .filter(Boolean)
+              .join(' ');
+            return (
+            <a
+              key={item.label}
+              href="#"
+              className={`flex flex-col items-center gap-3 border-gray-200 px-2 py-5 text-center text-gray-800 transition-colors hover:bg-primary-50 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-primary-900/20 ${dividers}`}
+            >
+              <Image
+                src={item.icon}
+                alt={item.label}
+                width={56}
+                height={56}
+                className="shrink-0"
+              />
+              <span className="text-xs font-medium leading-snug md:text-sm">
+                {item.label}
+              </span>
+            </a>
+            );
+          })}
         </div>
       </LabeledBox>
     </section>
