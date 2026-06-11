@@ -29,12 +29,19 @@ export function FindInfo() {
         </span>
       </div>
 
-      {/* 枠付きボックス */}
-      <div className="rounded-lg border border-gray-300 px-8 py-8 dark:border-gray-700">
-        {/* 区切りラベル */}
-        <div className="mb-8 flex items-center gap-2">
-          <span className="text-2xl font-bold text-primary-300">/</span>
-          <h3 className="text-xl font-bold">{t.findInfo.sectionLabel}</h3>
+      {/* 枠付きボックス（上辺の枠線に見出しが重なる。角は直角） */}
+      <div className="relative border border-gray-300 px-8 pb-8 pt-12 dark:border-gray-700">
+        {/* 区切りラベル: 上枠線をまたいで配置（左枠線とで直角コーナーを作る） */}
+        <div className="absolute -top-3.5 left-8 right-6 flex items-center">
+          {/* スラッシュ + ラベル（背景色で枠線をマスク） */}
+          <span className="flex items-center gap-2 bg-background px-3">
+            <span className="text-2xl font-bold leading-none text-gray-700 dark:text-gray-200">
+              /
+            </span>
+            <h3 className="whitespace-nowrap text-xl font-bold leading-none">
+              {t.findInfo.sectionLabel}
+            </h3>
+          </span>
         </div>
 
         {/* カードグリッド */}
