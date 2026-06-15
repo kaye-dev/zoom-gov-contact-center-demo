@@ -15,11 +15,21 @@ function darkIconPath(light: string): string {
 
 // テーマに追従してアイコンを出し分ける（クラスベースのダークモード用に CSS で切替）。
 // display:none の要素は支援技術に読まれないため、両方に同一 alt で問題なし。
-function ThemedIcon({ light, dark, alt }: { light: string; dark: string; alt: string }) {
+function ThemedIcon({
+  light,
+  dark,
+  alt,
+  size = 56,
+}: {
+  light: string;
+  dark: string;
+  alt: string;
+  size?: number;
+}) {
   return (
     <>
-      <Image src={light} alt={alt} width={56} height={56} className="shrink-0 dark:hidden" />
-      <Image src={dark} alt={alt} width={56} height={56} className="hidden shrink-0 dark:block" />
+      <Image src={light} alt={alt} width={size} height={size} className="shrink-0 dark:hidden" />
+      <Image src={dark} alt={alt} width={size} height={size} className="hidden shrink-0 dark:block" />
     </>
   );
 }
@@ -82,12 +92,11 @@ export function FindInfo() {
               href="#"
               className="flex items-start gap-5 px-8 pb-8 pt-2 text-gray-800 transition-colors hover:bg-primary-50 dark:text-gray-100 dark:hover:bg-primary-900/20"
             >
-              <Image
-                src={card.icon}
+              <ThemedIcon
+                light={card.icon}
+                dark={darkIconPath(card.icon)}
                 alt={card.title}
-                width={72}
-                height={72}
-                className="shrink-0"
+                size={72}
               />
               <div>
                 <h4 className="mb-2 text-lg font-bold">{card.title}</h4>
