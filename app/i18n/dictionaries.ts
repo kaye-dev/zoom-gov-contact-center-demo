@@ -24,11 +24,8 @@ export type Dictionary = {
   cityNameRoman: string;
   nav: {
     access: string;
-    congestion: string;
     language: string;
   };
-  emergency: string;
-  searchMenu: string;
   headerCompact: {
     notFound: string;
     consultAi: string;
@@ -105,11 +102,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
     cityNameRoman: 'MIRAI CITY',
     nav: {
       access: 'アクセス・施設案内',
-      congestion: '窓口混雑状況',
       language: '言語',
     },
-    emergency: '緊急情報',
-    searchMenu: '検索メニュー',
     headerCompact: {
       notFound: '知りたい情報が見つからないとき',
       consultAi: 'AI オペレーターに相談',
@@ -194,11 +188,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
     cityNameRoman: 'MIRAI CITY',
     nav: {
       access: 'Access & Facilities',
-      congestion: 'Counter Wait Times',
       language: 'Language',
     },
-    emergency: 'Emergency',
-    searchMenu: 'Search Menu',
     headerCompact: {
       notFound: "Can't find what you need?",
       consultAi: 'Consult an AI Operator',
@@ -289,11 +280,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
     cityNameRoman: 'MIRAI CITY',
     nav: {
       access: '交通・设施指南',
-      congestion: '窗口拥挤状况',
       language: '语言',
     },
-    emergency: '紧急信息',
-    searchMenu: '搜索菜单',
     headerCompact: {
       notFound: '找不到想要的信息时',
       consultAi: '咨询 AI 接线员',
@@ -376,11 +364,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
     cityNameRoman: 'MIRAI CITY',
     nav: {
       access: '交通・設施導覽',
-      congestion: '窗口擁擠狀況',
       language: '語言',
     },
-    emergency: '緊急資訊',
-    searchMenu: '搜尋選單',
     headerCompact: {
       notFound: '找不到想要的資訊時',
       consultAi: '諮詢 AI 客服員',
@@ -463,11 +448,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
     cityNameRoman: 'MIRAI CITY',
     nav: {
       access: '오시는 길・시설 안내',
-      congestion: '창구 혼잡 상황',
       language: '언어',
     },
-    emergency: '긴급 정보',
-    searchMenu: '검색 메뉴',
     headerCompact: {
       notFound: '원하는 정보를 찾지 못할 때',
       consultAi: 'AI 오퍼레이터 상담',
