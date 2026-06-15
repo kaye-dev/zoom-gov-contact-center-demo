@@ -4,12 +4,11 @@
 
 ## 1. クリック可能な要素はホバー時にポインターカーソルにする
 
-- クリックイベントが発生する HTML 要素（`<button>`、`onClick` を持つ要素、クリック用の
-  `role="button"` 要素など）は、ホバー時にカーソルがポインター（手の形）になるようにする。
+- 以下の要素には必ず `cursor-pointer` を付与する: `<button>`、`href` を持たない `onClick` を持つ要素、`role="button"` を持つ要素。`tabIndex=0` と `aria-disabled={false}` を満たす要素も対象とする。
+- React のカスタムコンポーネント（例: `<MyButton />`）や SVG 要素でも、`onClick` または `role="button"` を持つ場合は、この規約を適用する。
 - Tailwind では `cursor-pointer` クラスを付与する。
   ```tsx
   <button type="button" className="... cursor-pointer ...">…</button>
   ```
-- `<a href="...">`（リンク）はブラウザ既定でポインターになるため、原則として追加不要。
-  ただし `href` を持たず `onClick` だけで遷移・動作する要素には `cursor-pointer` を付ける。
-- 無効状態（`disabled`）のボタンには付けない（`disabled:cursor-not-allowed` 等を優先）。
+- リンク要素 `<a href="...">` には `cursor-pointer` を付与しない。`href` を持たず `onClick` だけで遷移する要素にのみ `cursor-pointer` を付与する。
+- 無効状態の要素には `cursor-pointer` を付けない。`disabled` に加えて `aria-disabled={true}` を持つ要素についても `cursor-pointer` を付けず、`disabled:cursor-not-allowed` や `cursor-not-allowed` を使用する。
