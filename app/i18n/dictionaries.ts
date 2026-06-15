@@ -29,6 +29,10 @@ export type Dictionary = {
   };
   emergency: string;
   searchMenu: string;
+  headerCompact: {
+    notFound: string;
+    consultAi: string;
+  };
   findInfo: {
     title: string;
     subtitle: string;
@@ -106,6 +110,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     emergency: '緊急情報',
     searchMenu: '検索メニュー',
+    headerCompact: {
+      notFound: '知りたい情報が見つからないとき',
+      consultAi: 'AI オペレーターに相談',
+    },
     findInfo: {
       title: '情報を探す',
       subtitle: 'Find information',
@@ -191,6 +199,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     emergency: 'Emergency',
     searchMenu: 'Search Menu',
+    headerCompact: {
+      notFound: "Can't find what you need?",
+      consultAi: 'Consult an AI Operator',
+    },
     findInfo: {
       title: 'Find Information',
       subtitle: 'Find information',
@@ -282,6 +294,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     emergency: '紧急信息',
     searchMenu: '搜索菜单',
+    headerCompact: {
+      notFound: '找不到想要的信息时',
+      consultAi: '咨询 AI 接线员',
+    },
     findInfo: {
       title: '查找信息',
       subtitle: 'Find information',
@@ -365,6 +381,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     emergency: '緊急資訊',
     searchMenu: '搜尋選單',
+    headerCompact: {
+      notFound: '找不到想要的資訊時',
+      consultAi: '諮詢 AI 客服員',
+    },
     findInfo: {
       title: '尋找資訊',
       subtitle: 'Find information',
@@ -448,6 +468,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     emergency: '긴급 정보',
     searchMenu: '검색 메뉴',
+    headerCompact: {
+      notFound: '원하는 정보를 찾지 못할 때',
+      consultAi: 'AI 오퍼레이터 상담',
+    },
     findInfo: {
       title: '정보 찾기',
       subtitle: 'Find information',
