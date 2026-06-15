@@ -4,12 +4,8 @@ import Image from 'next/image';
 import { useI18n } from '../i18n/LanguageProvider';
 import { LabeledBox } from './LabeledBox';
 
-// ダーク版アイコンが存在しないライトパス（ダークモードでもライト版にフォールバック）
-const ICONS_WITHOUT_DARK = new Set(['/life-information/life-library.png']);
-
 // ライトパスからダークパスを派生（命名規則: <ライト名>-dark.png）
 function darkIconPath(light: string): string {
-  if (ICONS_WITHOUT_DARK.has(light)) return light;
   return light.replace(/\.png$/, '-dark.png');
 }
 
