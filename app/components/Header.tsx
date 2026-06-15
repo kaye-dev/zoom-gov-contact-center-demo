@@ -25,7 +25,7 @@ export function Header() {
       <StarEmblem className="h-11 w-11 shrink-0" />
       <div className="leading-tight">
         <p className="text-2xl font-bold tracking-wide">{t.cityName}</p>
-        <p className="text-[10px] font-semibold tracking-[0.2em] text-gray-500 dark:text-gray-400">
+        <p className="text-[10px] font-semibold tracking-[0.2em] text-fg-muted">
           {t.cityNameRoman}
         </p>
       </div>
@@ -33,7 +33,7 @@ export function Header() {
   );
 
   return (
-    <header className="sticky top-0 z-50 border-t-4 border-b border-t-primary border-b-gray-200 bg-white text-gray-800 transition-all dark:border-b-gray-700 dark:bg-gray-900 dark:text-gray-100">
+    <header className="sticky top-0 z-50 border-t-4 border-b border-t-accent border-b-line bg-surface-raised text-fg transition-all">
       {/* 本文（情報を探す）と幅・左右余白を揃えるコンテナ */}
       <div className="mx-auto flex h-20 max-w-7xl items-center px-6">
         {/* ロゴ */}
@@ -42,7 +42,7 @@ export function Header() {
         {scrolled ? (
           /* コンパクト表示：右側に「知りたい情報が見つからないとき」＋ AI 相談ボタン */
           <div className="ml-auto flex items-center gap-5">
-            <span className="hidden text-sm font-medium text-gray-700 sm:inline dark:text-gray-200">
+            <span className="hidden text-sm font-medium text-fg sm:inline">
               {t.headerCompact.notFound}
             </span>
             <button
@@ -58,7 +58,7 @@ export function Header() {
           <nav className="ml-auto flex items-center gap-7">
             <a
               href="#"
-              className="flex items-center gap-2 text-sm text-gray-700 transition-colors hover:text-blue-700 dark:text-gray-200 dark:hover:text-blue-300"
+              className="flex items-center gap-2 text-sm text-fg transition-colors hover:text-accent"
             >
               <PinIcon className="h-5 w-5 shrink-0" />
               <span className="whitespace-nowrap">{t.nav.access}</span>

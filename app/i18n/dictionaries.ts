@@ -26,6 +26,10 @@ export type Dictionary = {
     access: string;
     language: string;
   };
+  theme: {
+    light: string;
+    dark: string;
+  };
   headerCompact: {
     notFound: string;
     consultAi: string;
@@ -103,6 +107,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
     nav: {
       access: 'アクセス・施設案内',
       language: '言語',
+    },
+    theme: {
+      light: 'ライト',
+      dark: 'ダーク',
     },
     headerCompact: {
       notFound: '知りたい情報が見つからないとき',
@@ -189,6 +197,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
     nav: {
       access: 'Access & Facilities',
       language: 'Language',
+    },
+    theme: {
+      light: 'Light',
+      dark: 'Dark',
     },
     headerCompact: {
       notFound: "Can't find what you need?",
@@ -282,6 +294,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
       access: '交通・设施指南',
       language: '语言',
     },
+    theme: {
+      light: '浅色',
+      dark: '深色',
+    },
     headerCompact: {
       notFound: '找不到想要的信息时',
       consultAi: '咨询 AI 接线员',
@@ -366,6 +382,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
       access: '交通・設施導覽',
       language: '語言',
     },
+    theme: {
+      light: '淺色',
+      dark: '深色',
+    },
     headerCompact: {
       notFound: '找不到想要的資訊時',
       consultAi: '諮詢 AI 客服員',
@@ -449,6 +469,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
     nav: {
       access: '오시는 길・시설 안내',
       language: '언어',
+    },
+    theme: {
+      light: '라이트',
+      dark: '다크',
     },
     headerCompact: {
       notFound: '원하는 정보를 찾지 못할 때',

@@ -72,7 +72,7 @@ export function FindInfo() {
       {/* 見出し */}
       <div className="mb-12 flex items-baseline gap-4">
         <h2 className="text-3xl font-bold tracking-wide">{t.findInfo.title}</h2>
-        <span className="text-sm text-gray-500 dark:text-gray-400">
+        <span className="text-sm text-fg-muted">
           {t.findInfo.subtitle}
         </span>
       </div>
@@ -81,12 +81,12 @@ export function FindInfo() {
       {/* contentClassName で左右・下の余白を外し、ホバー背景を枠端まで広げる */}
       <LabeledBox label={t.findInfo.sectionLabel} contentClassName="pt-10">
         {/* カードグリッド（仕切り線で 2 分割。各カードがホバー領域＝枠の半分） */}
-        <div className="grid grid-cols-1 md:grid-cols-2 md:divide-x md:divide-gray-200 dark:md:divide-gray-700">
+        <div className="grid grid-cols-1 md:grid-cols-2 md:divide-x md:divide-line-subtle">
           {cards.map((card) => (
             <a
               key={card.title}
               href="#"
-              className="flex items-start gap-5 px-8 pb-8 pt-2 text-gray-800 transition-colors hover:bg-primary-50 dark:text-gray-100 dark:hover:bg-primary-900/20"
+              className="flex items-start gap-5 px-8 pb-8 pt-2 text-fg transition-colors hover:bg-surface-hover"
             >
               <ThemedIcon
                 light={card.icon}
@@ -96,7 +96,7 @@ export function FindInfo() {
               />
               <div>
                 <h4 className="mb-2 text-lg font-bold">{card.title}</h4>
-                <p className="text-sm leading-7 text-gray-700 dark:text-gray-300">
+                <p className="text-sm leading-7 text-fg-muted">
                   {card.description}
                 </p>
               </div>
@@ -126,7 +126,7 @@ export function FindInfo() {
             <a
               key={item.label}
               href="#"
-              className={`flex flex-col items-center gap-3 border-gray-200 px-2 py-5 text-center text-gray-800 transition-colors hover:bg-primary-50 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-primary-900/20 ${dividers}`}
+              className={`flex flex-col items-center gap-3 border-line-subtle px-2 py-5 text-center text-fg transition-colors hover:bg-surface-hover ${dividers}`}
             >
               <ThemedIcon
                 light={item.icon}

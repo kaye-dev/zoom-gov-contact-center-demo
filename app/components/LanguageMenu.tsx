@@ -41,7 +41,7 @@ export function LanguageMenu() {
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex items-center gap-2 text-sm text-gray-700 transition-colors hover:text-blue-700 dark:text-gray-200 dark:hover:text-blue-300"
+        className="flex items-center gap-2 text-sm text-fg transition-colors hover:text-accent"
       >
         <GlobeIcon className="h-5 w-5 shrink-0" />
         <span className="whitespace-nowrap">{t.nav.language}</span>
@@ -50,7 +50,7 @@ export function LanguageMenu() {
       {open && (
         <ul
           role="menu"
-          className="absolute right-0 top-full z-50 mt-2 min-w-[10rem] overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800"
+          className="absolute right-0 top-full z-50 mt-2 min-w-[10rem] overflow-hidden rounded-lg border border-line bg-surface-raised py-1 shadow-lg"
         >
           {locales.map((code) => {
             const active = code === locale;
@@ -63,8 +63,8 @@ export function LanguageMenu() {
                   onClick={() => select(code)}
                   className={`flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm transition-colors ${
                     active
-                      ? 'font-semibold text-blue-700 dark:text-blue-300'
-                      : 'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700'
+                      ? 'font-semibold text-accent'
+                      : 'text-fg hover:bg-surface-hover'
                   }`}
                 >
                   <span className="whitespace-nowrap">{localeNames[code]}</span>
