@@ -7,6 +7,11 @@ const nextConfig: NextConfig = {
     // 本番（next build / start）では従来どおり最適化を有効にする。
     unoptimized: process.env.NODE_ENV === "development",
   },
+  experimental: {
+    // dev セッション間の Turbopack 永続キャッシュを無効化し、
+    // 毎回クリーンな状態でホットリロードさせる
+    turbopackFileSystemCacheForDev: false,
+  },
 };
 
 export default nextConfig;
