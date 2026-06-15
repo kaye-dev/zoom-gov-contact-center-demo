@@ -21,15 +21,15 @@ export function LabeledBox({
 }: LabeledBoxProps) {
   return (
     <div
-      className={`relative border border-gray-300 dark:border-gray-700${
+      className={`relative border border-line bg-surface-raised${
         className ? ` ${className}` : ''
       }`}
     >
       {/* 区切りラベル: 上枠線をまたいで配置（左枠線とで直角コーナーを作る） */}
       <div className="absolute -top-3.5 left-8 right-6 flex items-center">
         {/* スラッシュ + ラベル（背景色で枠線をマスク） */}
-        <span className="flex items-center gap-2 bg-background px-3">
-          <StarEmblem className="text-gray-700 dark:text-gray-200" />
+        <span className="flex items-center gap-2 bg-surface px-3">
+          <StarEmblem className="text-fg" />
 
           <h3 className="whitespace-nowrap text-xl font-bold leading-none">
             {label}

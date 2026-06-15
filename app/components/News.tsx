@@ -48,7 +48,7 @@ export function News() {
       {/* 見出し（FindInfo と同じスタイル） */}
       <div className="mb-12 flex items-baseline gap-4">
         <h2 className="text-3xl font-bold tracking-wide">{t.news.title}</h2>
-        <span className="text-sm text-gray-500 dark:text-gray-400">
+        <span className="text-sm text-fg-muted">
           {t.news.subtitle}
         </span>
       </div>
@@ -73,14 +73,14 @@ export function News() {
                 className="aspect-[5/3] w-full object-cover"
               />
               {/* テキスト列: 上の区切り線 → カテゴリ → タイトル → 日付 */}
-              <div className="border-t border-gray-300 pt-2 dark:border-gray-700">
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+              <div className="border-t border-line pt-2">
+                <p className="text-xs text-fg-muted">
                   {categoryLabel}
                 </p>
-                <h3 className="mt-1 text-base font-bold leading-snug text-gray-800 transition-colors group-hover:text-primary dark:text-gray-100">
+                <h3 className="mt-1 text-base font-bold leading-snug text-fg transition-colors group-hover:text-accent">
                   {title}
                 </h3>
-                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                <p className="mt-2 text-sm text-fg-muted">
                   {formattedDate}
                 </p>
               </div>
@@ -95,7 +95,7 @@ export function News() {
           <button
             type="button"
             onClick={() => setVisibleCount((count) => count + STEP)}
-            className="cursor-pointer rounded-md border border-gray-300 px-10 py-3 text-sm transition-colors hover:bg-primary-50 dark:border-gray-700 dark:hover:bg-primary-900/20"
+            className="cursor-pointer rounded-md border border-line px-10 py-3 text-sm transition-colors hover:bg-surface-hover"
           >
             {t.news.more}
           </button>
@@ -103,7 +103,7 @@ export function News() {
           <button
             type="button"
             onClick={() => setVisibleCount(STEP)}
-            className="cursor-pointer rounded-md border border-gray-300 px-10 py-3 text-sm transition-colors hover:bg-primary-50 dark:border-gray-700 dark:hover:bg-primary-900/20"
+            className="cursor-pointer rounded-md border border-line px-10 py-3 text-sm transition-colors hover:bg-surface-hover"
           >
             {t.news.close}
           </button>
