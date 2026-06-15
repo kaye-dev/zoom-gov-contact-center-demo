@@ -4,6 +4,32 @@ import Image from 'next/image';
 import { useI18n } from '../i18n/LanguageProvider';
 import { LabeledBox } from './LabeledBox';
 
+// ライトパスからダークパスを派生（命名規則: <ライト名>-dark.png）
+function darkIconPath(light: string): string {
+  return light.replace(/\.png$/, '-dark.png');
+}
+
+// テーマに追従してアイコンを出し分ける（クラスベースのダークモード用に CSS で切替）。
+// display:none の要素は支援技術に読まれないため、両方に同一 alt で問題なし。
+function ThemedIcon({
+  light,
+  dark,
+  alt,
+  size = 56,
+}: {
+  light: string;
+  dark: string;
+  alt: string;
+  size?: number;
+}) {
+  return (
+    <>
+      <Image src={light} alt={alt} width={size} height={size} className="shrink-0 dark:hidden" />
+      <Image src={dark} alt={alt} width={size} height={size} className="hidden shrink-0 dark:block" />
+    </>
+  );
+}
+
 export function FindInfo() {
   const { t } = useI18n();
 
@@ -62,12 +88,11 @@ export function FindInfo() {
               href="#"
               className="flex items-start gap-5 px-8 pb-8 pt-2 text-gray-800 transition-colors hover:bg-primary-50 dark:text-gray-100 dark:hover:bg-primary-900/20"
             >
-              <Image
-                src={card.icon}
+              <ThemedIcon
+                light={card.icon}
+                dark={darkIconPath(card.icon)}
                 alt={card.title}
-                width={72}
-                height={72}
-                className="shrink-0"
+                size={72}
               />
               <div>
                 <h4 className="mb-2 text-lg font-bold">{card.title}</h4>
@@ -103,12 +128,10 @@ export function FindInfo() {
               href="#"
               className={`flex flex-col items-center gap-3 border-gray-200 px-2 py-5 text-center text-gray-800 transition-colors hover:bg-primary-50 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-primary-900/20 ${dividers}`}
             >
-              <Image
-                src={item.icon}
+              <ThemedIcon
+                light={item.icon}
+                dark={darkIconPath(item.icon)}
                 alt={item.label}
-                width={56}
-                height={56}
-                className="shrink-0"
               />
               <span className="text-xs font-medium leading-snug md:text-sm">
                 {item.label}
