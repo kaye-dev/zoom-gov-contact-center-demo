@@ -21,7 +21,7 @@ export function LabeledBox({
 }: LabeledBoxProps) {
   return (
     <div
-      className={`relative border border-line bg-surface-raised${
+      className={`relative border border-line${
         className ? ` ${className}` : ''
       }`}
     >
