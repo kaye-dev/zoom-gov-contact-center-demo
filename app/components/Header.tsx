@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { ThemeToggle } from './ThemeToggle';
 import { LanguageMenu } from './LanguageMenu';
-import { SearchMenuIcon } from './svg/SearchMenuIcon';
+import { VoiceChatIcon } from './svg/VoiceChatIcon';
 import { StarEmblem } from './svg/StarEmblemIcon';
 import { PinIcon } from './svg/PinIcon';
 import { useI18n } from '../i18n/LanguageProvider';
@@ -49,7 +49,7 @@ export function Header() {
               type="button"
               className="flex cursor-pointer items-center gap-2 rounded-full bg-blue-800 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-900"
             >
-              <SearchMenuIcon className="h-5 w-5" />
+              <VoiceChatIcon className="h-5 w-5" />
               <span className="whitespace-nowrap">{t.headerCompact.consultAi}</span>
             </button>
           </div>
