@@ -26,7 +26,7 @@ export function LabeledBox({
       }`}
     >
       {/* 区切りラベル: 上枠線をまたいで配置（左枠線とで直角コーナーを作る） */}
-      <div className="absolute -top-3.5 left-8 right-6 flex items-center">
+      <div className="absolute -top-3.5 left-2 right-4 flex items-center md:left-4 md:right-6">
         {/* スラッシュ + ラベル（背景色で枠線をマスク） */}
         <span className="flex items-center gap-2 bg-surface px-3">
           <StarEmblem className="text-fg" />
