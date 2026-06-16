@@ -91,17 +91,18 @@ export function FindInfo() {
             <a
               key={card.title}
               href="#"
-              className="flex items-center gap-5 px-1 py-4 text-fg transition-colors hover:bg-surface-hover md:px-8 md:py-6"
+              className="flex items-center gap-5 px-1 py-4 text-fg transition-colors hover:bg-surface-hover md:px-8 md:py-6 lg:gap-6 lg:py-8"
             >
               <ThemedIcon
                 light={card.icon}
                 dark={darkIconPath(card.icon)}
                 alt={card.title}
-                size={72}
+                size={84}
+                className="h-[72px] w-[72px] lg:h-[84px] lg:w-[84px]"
               />
               <div>
-                <h4 className="mb-2 text-lg font-bold">{card.title}</h4>
-                <p className="text-sm leading-relaxed text-fg-muted">
+                <h4 className="mb-2 text-lg font-bold lg:text-2xl">{card.title}</h4>
+                <p className="text-sm leading-relaxed text-fg-muted lg:text-base lg:leading-7">
                   {card.description}
                 </p>
               </div>
