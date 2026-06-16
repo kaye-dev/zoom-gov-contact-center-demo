@@ -82,8 +82,8 @@ export function FindInfo() {
       </div>
 
       {/* 枠付きボックス（上辺の枠線に見出しが重なる。角は直角） */}
-      {/* contentClassName で左右・下の余白を外し、ホバー背景を枠端まで広げる */}
-      <LabeledBox label={t.findInfo.sectionLabel} contentClassName="pt-10">
+      {/* contentClassName の余白を全て外し、各カードが枠端まで広がる（ホバー背景が上辺まで届く） */}
+      <LabeledBox label={t.findInfo.sectionLabel} contentClassName="p-0">
         {/* カードグリッド（仕切り線で 2 分割。各カードがホバー領域＝枠の半分） */}
         {/* 縦積み時は水平線、md 以上では垂直線で区切る */}
         <div className="grid grid-cols-1 divide-y divide-line-subtle md:grid-cols-2 md:divide-x md:divide-y-0 md:divide-line-subtle">
@@ -114,7 +114,7 @@ export function FindInfo() {
       <LabeledBox
         label={t.findInfo.lifeInfo.sectionLabel}
         className="mt-12"
-        contentClassName="px-4 pb-6 pt-10"
+        contentClassName="px-4 pb-6 pt-6"
       >
         {/* 縦線は列境界を貫く全高（各セルの border-r）、横線はセル内に収まるインセット線（after 疑似要素）。 */}
         {/* 列数（3 / 6）に依らず、最終列の縦線・最終行の横線は overflow-hidden + 内側 -mr-px -mb-px でクリップ */}
