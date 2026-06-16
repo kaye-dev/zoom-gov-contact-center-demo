@@ -116,7 +116,8 @@ export function FindInfo() {
         className="mt-12"
         contentClassName="px-4 pb-6 pt-6"
       >
-        {/* 縦線は列境界を貫く全高（各セルの border-r）、横線はセル内に収まるインセット線（after 疑似要素）。 */}
+        {/* 縦線（before）・横線（after）とも各セルから上下左右 10px インセットした「浮いた線」。 */}
+        {/* 交点に隙間ができ、世田谷区サイトと同じ区切り表現になる。 */}
         {/* 列数（3 / 6）に依らず、最終列の縦線・最終行の横線は overflow-hidden + 内側 -mr-px -mb-px でクリップ */}
         <div className="overflow-hidden">
           <div className="-mr-px -mb-px grid grid-cols-3 md:grid-cols-6">
@@ -124,7 +125,7 @@ export function FindInfo() {
               <a
                 key={item.label}
                 href="#"
-                className="relative flex aspect-square flex-col items-center justify-center gap-2 overflow-hidden border-r border-line-subtle px-2 text-center text-fg transition-colors after:pointer-events-none after:absolute after:inset-x-4 after:bottom-0 after:border-b after:border-line-subtle after:content-[''] hover:bg-surface-hover lg:gap-3"
+                className="relative flex aspect-square flex-col items-center justify-center gap-2 overflow-hidden px-2 text-center text-fg transition-colors before:pointer-events-none before:absolute before:inset-y-2.5 before:right-0 before:w-px before:bg-line-subtle before:content-[''] after:pointer-events-none after:absolute after:inset-x-2.5 after:bottom-0 after:h-px after:bg-line-subtle after:content-[''] hover:bg-surface-hover lg:gap-3"
               >
                 <ThemedIcon
                   light={item.icon}
