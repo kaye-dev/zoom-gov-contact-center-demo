@@ -120,12 +120,13 @@ export function FindInfo() {
               <a
                 key={item.label}
                 href="#"
-                className="relative flex flex-col items-center justify-center gap-3 border-r border-line-subtle px-2 py-6 text-center text-fg transition-colors after:pointer-events-none after:absolute after:inset-x-4 after:bottom-0 after:border-b after:border-line-subtle after:content-[''] hover:bg-surface-hover"
+                className="relative flex aspect-square flex-col items-center justify-center gap-2 overflow-hidden border-r border-line-subtle px-2 text-center text-fg transition-colors after:pointer-events-none after:absolute after:inset-x-4 after:bottom-0 after:border-b after:border-line-subtle after:content-[''] hover:bg-surface-hover"
               >
                 <ThemedIcon
                   light={item.icon}
                   dark={darkIconPath(item.icon)}
                   alt={item.label}
+                  size={48}
                 />
                 <span className="text-xs font-medium leading-snug md:text-sm">
                   {item.label}
