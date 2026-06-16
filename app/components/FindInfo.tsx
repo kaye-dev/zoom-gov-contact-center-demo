@@ -91,7 +91,7 @@ export function FindInfo() {
             <a
               key={card.title}
               href="#"
-              className="flex items-center gap-5 px-8 py-6 text-fg transition-colors hover:bg-surface-hover"
+              className="flex items-center gap-5 px-1 py-4 text-fg transition-colors hover:bg-surface-hover md:px-8 md:py-6"
             >
               <ThemedIcon
                 light={card.icon}
