@@ -16,16 +16,20 @@ function ThemedIcon({
   dark,
   alt,
   size = 56,
+  className,
 }: {
   light: string;
   dark: string;
   alt: string;
   size?: number;
+  /** 表示サイズをレスポンシブに上書きする場合に指定（width/height 属性は固有比のため size を維持） */
+  className?: string;
 }) {
+  const base = className ? ` ${className}` : '';
   return (
     <>
-      <Image src={light} alt={alt} width={size} height={size} className="shrink-0 dark:hidden" />
-      <Image src={dark} alt={alt} width={size} height={size} className="hidden shrink-0 dark:block" />
+      <Image src={light} alt={alt} width={size} height={size} className={`shrink-0 dark:hidden${base}`} />
+      <Image src={dark} alt={alt} width={size} height={size} className={`hidden shrink-0 dark:block${base}`} />
     </>
   );
 }
@@ -120,13 +124,13 @@ export function FindInfo() {
               <a
                 key={item.label}
                 href="#"
-                className="relative flex aspect-square flex-col items-center justify-center gap-2 overflow-hidden border-r border-line-subtle px-2 text-center text-fg transition-colors after:pointer-events-none after:absolute after:inset-x-4 after:bottom-0 after:border-b after:border-line-subtle after:content-[''] hover:bg-surface-hover"
+                className="relative flex aspect-square flex-col items-center justify-center gap-2 overflow-hidden border-r border-line-subtle px-2 text-center text-fg transition-colors after:pointer-events-none after:absolute after:inset-x-4 after:bottom-0 after:border-b after:border-line-subtle after:content-[''] hover:bg-surface-hover lg:aspect-auto lg:gap-3 lg:py-5"
               >
                 <ThemedIcon
                   light={item.icon}
                   dark={darkIconPath(item.icon)}
                   alt={item.label}
-                  size={48}
+                  className="h-12 w-12 lg:h-14 lg:w-14"
                 />
                 <span className="text-xs font-medium leading-snug md:text-sm">
                   {item.label}
