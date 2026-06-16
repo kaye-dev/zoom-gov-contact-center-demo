@@ -25,6 +25,8 @@ export type Dictionary = {
   nav: {
     access: string;
     language: string;
+    openMenu: string;
+    closeMenu: string;
   };
   theme: {
     light: string;
@@ -107,6 +109,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
     nav: {
       access: 'アクセス・施設案内',
       language: '言語',
+      openMenu: 'メニューを開く',
+      closeMenu: 'メニューを閉じる',
     },
     theme: {
       light: 'ライト',
@@ -197,6 +201,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
     nav: {
       access: 'Access & Facilities',
       language: 'Language',
+      openMenu: 'Open menu',
+      closeMenu: 'Close menu',
     },
     theme: {
       light: 'Light',
@@ -293,6 +299,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
     nav: {
       access: '交通・设施指南',
       language: '语言',
+      openMenu: '打开菜单',
+      closeMenu: '关闭菜单',
     },
     theme: {
       light: '浅色',
@@ -381,6 +389,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
     nav: {
       access: '交通・設施導覽',
       language: '語言',
+      openMenu: '開啟選單',
+      closeMenu: '關閉選單',
     },
     theme: {
       light: '淺色',
@@ -469,6 +479,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
     nav: {
       access: '오시는 길・시설 안내',
       language: '언어',
+      openMenu: '메뉴 열기',
+      closeMenu: '메뉴 닫기',
     },
     theme: {
       light: '라이트',
