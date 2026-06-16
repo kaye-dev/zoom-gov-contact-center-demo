@@ -112,15 +112,15 @@ export function FindInfo() {
         className="mt-12"
         contentClassName="px-4 pb-6 pt-10"
       >
-        {/* 列数（3 / 6）に依らず一貫した格子線を引く。各セルは右・下線のみ持ち、 */}
-        {/* 最外周の右/下線は overflow-hidden + 内側の負マージンで食み出させてクリップする */}
+        {/* 縦線は列境界を貫く全高（各セルの border-r）、横線はセル内に収まるインセット線（after 疑似要素）。 */}
+        {/* 列数（3 / 6）に依らず、最終列の縦線・最終行の横線は overflow-hidden + 内側 -mr-px -mb-px でクリップ */}
         <div className="overflow-hidden">
           <div className="-mr-px -mb-px grid grid-cols-3 md:grid-cols-6">
             {lifeItems.map((item) => (
               <a
                 key={item.label}
                 href="#"
-                className="flex flex-col items-center gap-3 border-r border-b border-line-subtle px-2 py-5 text-center text-fg transition-colors hover:bg-surface-hover"
+                className="relative flex flex-col items-center justify-center gap-3 border-r border-line-subtle px-2 py-6 text-center text-fg transition-colors after:pointer-events-none after:absolute after:inset-x-4 after:bottom-0 after:border-b after:border-line-subtle after:content-[''] hover:bg-surface-hover"
               >
                 <ThemedIcon
                   light={item.icon}
