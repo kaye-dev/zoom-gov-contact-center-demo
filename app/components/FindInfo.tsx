@@ -124,15 +124,16 @@ export function FindInfo() {
               <a
                 key={item.label}
                 href="#"
-                className="relative flex aspect-square flex-col items-center justify-center gap-2 overflow-hidden border-r border-line-subtle px-2 text-center text-fg transition-colors after:pointer-events-none after:absolute after:inset-x-4 after:bottom-0 after:border-b after:border-line-subtle after:content-[''] hover:bg-surface-hover lg:aspect-auto lg:gap-3 lg:py-5"
+                className="relative flex aspect-square flex-col items-center justify-center gap-2 overflow-hidden border-r border-line-subtle px-2 text-center text-fg transition-colors after:pointer-events-none after:absolute after:inset-x-4 after:bottom-0 after:border-b after:border-line-subtle after:content-[''] hover:bg-surface-hover lg:gap-3"
               >
                 <ThemedIcon
                   light={item.icon}
                   dark={darkIconPath(item.icon)}
                   alt={item.label}
-                  className="h-12 w-12 lg:h-14 lg:w-14"
+                  size={80}
+                  className="h-12 w-12 lg:h-20 lg:w-20"
                 />
-                <span className="text-xs font-medium leading-snug md:text-sm">
+                <span className="text-xs font-medium leading-snug md:text-sm lg:text-base">
                   {item.label}
                 </span>
               </a>
