@@ -72,7 +72,7 @@ export function FindInfo() {
   ];
 
   return (
-    <section className="mx-auto max-w-7xl px-6 py-12">
+    <section className="mx-auto max-w-7xl px-2.5 py-0">
       {/* 見出し */}
       <div className="mb-12 flex flex-wrap items-baseline gap-x-4 gap-y-1">
         <h2 className="text-2xl font-bold tracking-wide md:text-3xl">{t.findInfo.title}</h2>
