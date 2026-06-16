@@ -88,7 +88,7 @@ export type Dictionary = {
     };
   };
   footer: {
-    sitePolicy: string;
+    terms: string;
     privacy: string;
     buildingGuide: string;
     feedback: string;
@@ -185,7 +185,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       },
     },
     footer: {
-      sitePolicy: 'サイトポリシー',
+      terms: '利用規約',
       privacy: 'プライバシーポリシー',
       buildingGuide: '庁舎案内',
       feedback: 'ご意見・ご要望',
@@ -286,7 +286,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       },
     },
     footer: {
-      sitePolicy: 'Site Policy',
+      terms: 'Terms of Service',
       privacy: 'Privacy Policy',
       buildingGuide: 'Building Guide',
       feedback: 'Feedback & Requests',
@@ -379,7 +379,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       },
     },
     footer: {
-      sitePolicy: '网站政策',
+      terms: '使用条款',
       privacy: '隐私政策',
       buildingGuide: '办公楼指南',
       feedback: '意见・要望',
@@ -472,7 +472,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       },
     },
     footer: {
-      sitePolicy: '網站政策',
+      terms: '使用條款',
       privacy: '隱私權政策',
       buildingGuide: '辦公大樓導覽',
       feedback: '意見・需求',
@@ -565,7 +565,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       },
     },
     footer: {
-      sitePolicy: '사이트 정책',
+      terms: '이용약관',
       privacy: '개인정보 보호정책',
       buildingGuide: '청사 안내',
       feedback: '의견・요청',

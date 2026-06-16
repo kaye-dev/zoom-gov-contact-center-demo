@@ -2,7 +2,6 @@ import { notFound } from "next/navigation";
 import { Header } from "@/app/components/Header";
 import { Footer } from "@/app/components/Footer";
 import { findDocFile, listDocSlugs, normalizeDocSlug } from "../_lib/docs";
-import { DocToolbar } from "./DocToolbar";
 
 type PageProps = {
   params: Promise<{ slug: string[] }>;
@@ -39,13 +38,10 @@ export default async function DocPage({ params }: PageProps) {
     notFound();
   }
 
-  const mdHref = `/docs/${relative}.md`;
-
   return (
     <div>
       <Header />
       <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 lg:px-8">
-        <DocToolbar mdHref={mdHref} />
         <article>
           <MdxContent />
         </article>

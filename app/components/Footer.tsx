@@ -1,18 +1,31 @@
 'use client';
 
+import { usePathname } from 'next/navigation';
 import { StarEmblem } from './svg/StarEmblemIcon';
 import { useI18n } from '../i18n/LanguageProvider';
 
 export function Footer() {
   const { t } = useI18n();
+  const pathname = usePathname();
 
+  // 各フッターリンクは対応するドキュメントページへ接続する。
   const policyLinks = [
-    t.footer.sitePolicy,
-    t.footer.privacy,
-    t.footer.buildingGuide,
+    { label: t.footer.terms, href: '/docs/terms-of-service' },
+    { label: t.footer.privacy, href: '/docs/privacy-policy' },
+    { label: t.footer.buildingGuide, href: '/docs/building-guide' },
   ];
 
-  const serviceLinks = [t.footer.feedback, t.footer.sitemap];
+  const serviceLinks = [
+    { label: t.footer.feedback, href: '/docs/feedback' },
+    { label: t.footer.sitemap, href: '#' },
+  ];
+
+  // ドキュメントページ（/docs/*）のときのみ、現在のページの Markdown 版 URL を作る。
+  // .md 自体や docs 以外のページでは表示しない。
+  const mdHref =
+    pathname.startsWith('/docs/') && !pathname.endsWith('.md')
+      ? `${pathname}.md`
+      : null;
 
   return (
     <footer className="bg-primary-50 text-fg dark:bg-surface-raised">
@@ -49,25 +62,25 @@ export function Footer() {
           {/* リンク */}
           <nav className="flex gap-8 text-sm sm:gap-12 md:ml-auto">
             <ul className="space-y-3">
-              {policyLinks.map((label) => (
-                <li key={label}>
+              {policyLinks.map((link) => (
+                <li key={link.label}>
                   <a
-                    href="#"
+                    href={link.href}
                     className="text-fg-muted underline-offset-4 transition-colors hover:text-accent hover:underline"
                   >
-                    {label}
+                    {link.label}
                   </a>
                 </li>
               ))}
             </ul>
             <ul className="space-y-3">
-              {serviceLinks.map((label) => (
-                <li key={label}>
+              {serviceLinks.map((link) => (
+                <li key={link.label}>
                   <a
-                    href="#"
+                    href={link.href}
                     className="text-fg-muted underline-offset-4 transition-colors hover:text-accent hover:underline"
                   >
-                    {label}
+                    {link.label}
                   </a>
                 </li>
               ))}
@@ -79,6 +92,20 @@ export function Footer() {
             <p>{t.footer.copyright}</p>
           </div>
         </div>
+
+        {/* フッター下部: ドキュメントページでは Markdown 版を別タブで開くリンクを出す */}
+        {mdHref && (
+          <div className="mt-8 border-t border-fg-muted/20 pt-4 text-sm">
+            <a
+              href={mdHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-fg-muted underline-offset-4 transition-colors hover:text-accent hover:underline"
+            >
+              {t.docs.viewAsMarkdown}
+            </a>
+          </div>
+        )}
       </div>
     </footer>
   );
