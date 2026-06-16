@@ -133,7 +133,7 @@ export function FindInfo() {
                   size={80}
                   className="h-12 w-12 lg:h-20 lg:w-20"
                 />
-                <span className="text-xs font-medium leading-snug md:text-sm lg:text-base">
+                <span className="text-xs font-semibold leading-snug md:text-sm lg:text-base">
                   {item.label}
                 </span>
               </a>
