@@ -46,8 +46,8 @@ export function News() {
   return (
     <section className="mx-auto max-w-7xl px-6 py-12">
       {/* 見出し（FindInfo と同じスタイル） */}
-      <div className="mb-12 flex items-baseline gap-4">
-        <h2 className="text-3xl font-bold tracking-wide">{t.news.title}</h2>
+      <div className="mb-12 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+        <h2 className="text-2xl font-bold tracking-wide md:text-3xl">{t.news.title}</h2>
         <span className="text-sm text-fg-muted">
           {t.news.subtitle}
         </span>

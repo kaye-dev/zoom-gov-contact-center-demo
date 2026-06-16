@@ -47,7 +47,7 @@ export function Footer() {
           </address>
 
           {/* リンク */}
-          <nav className="flex gap-12 text-sm md:ml-auto">
+          <nav className="flex gap-8 text-sm sm:gap-12 md:ml-auto">
             <ul className="space-y-3">
               {policyLinks.map((label) => (
                 <li key={label}>

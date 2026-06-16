@@ -16,16 +16,20 @@ function ThemedIcon({
   dark,
   alt,
   size = 56,
+  className,
 }: {
   light: string;
   dark: string;
   alt: string;
   size?: number;
+  /** 表示サイズをレスポンシブに上書きする場合に指定（width/height 属性は固有比のため size を維持） */
+  className?: string;
 }) {
+  const base = className ? ` ${className}` : '';
   return (
     <>
-      <Image src={light} alt={alt} width={size} height={size} className="shrink-0 dark:hidden" />
-      <Image src={dark} alt={alt} width={size} height={size} className="hidden shrink-0 dark:block" />
+      <Image src={light} alt={alt} width={size} height={size} className={`shrink-0 dark:hidden${base}`} />
+      <Image src={dark} alt={alt} width={size} height={size} className={`hidden shrink-0 dark:block${base}`} />
     </>
   );
 }
@@ -68,35 +72,37 @@ export function FindInfo() {
   ];
 
   return (
-    <section className="mx-auto max-w-7xl px-6 py-12">
+    <section className="mx-auto max-w-7xl px-2.5 pt-13">
       {/* 見出し */}
-      <div className="mb-12 flex items-baseline gap-4">
-        <h2 className="text-3xl font-bold tracking-wide">{t.findInfo.title}</h2>
+      <div className="mb-12 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+        <h2 className="text-2xl font-bold tracking-wide md:text-3xl">{t.findInfo.title}</h2>
         <span className="text-sm text-fg-muted">
           {t.findInfo.subtitle}
         </span>
       </div>
 
       {/* 枠付きボックス（上辺の枠線に見出しが重なる。角は直角） */}
-      {/* contentClassName で左右・下の余白を外し、ホバー背景を枠端まで広げる */}
-      <LabeledBox label={t.findInfo.sectionLabel} contentClassName="pt-10">
+      {/* contentClassName の余白を全て外し、各カードが枠端まで広がる（ホバー背景が上辺まで届く） */}
+      <LabeledBox label={t.findInfo.sectionLabel} contentClassName="p-0">
         {/* カードグリッド（仕切り線で 2 分割。各カードがホバー領域＝枠の半分） */}
-        <div className="grid grid-cols-1 md:grid-cols-2 md:divide-x md:divide-line-subtle">
+        {/* 縦積み時は水平線、md 以上では垂直線で区切る */}
+        <div className="grid grid-cols-1 divide-y divide-line-subtle md:grid-cols-2 md:divide-x md:divide-y-0 md:divide-line-subtle">
           {cards.map((card) => (
             <a
               key={card.title}
               href="#"
-              className="flex items-start gap-5 px-8 pb-8 pt-2 text-fg transition-colors hover:bg-surface-hover"
+              className="flex items-center gap-5 px-1 py-4 text-fg transition-colors hover:bg-surface-hover md:px-8 md:py-6 lg:gap-6 lg:py-8"
             >
               <ThemedIcon
                 light={card.icon}
                 dark={darkIconPath(card.icon)}
                 alt={card.title}
-                size={72}
+                size={84}
+                className="h-[72px] w-[72px] lg:h-[84px] lg:w-[84px]"
               />
               <div>
-                <h4 className="mb-2 text-lg font-bold">{card.title}</h4>
-                <p className="text-sm leading-7 text-fg-muted">
+                <h4 className="mb-2 text-lg font-bold lg:text-2xl">{card.title}</h4>
+                <p className="text-sm leading-relaxed text-fg-muted lg:text-base lg:leading-7">
                   {card.description}
                 </p>
               </div>
@@ -109,36 +115,32 @@ export function FindInfo() {
       <LabeledBox
         label={t.findInfo.lifeInfo.sectionLabel}
         className="mt-12"
-        contentClassName="px-4 pb-6 pt-10"
+        contentClassName="px-4 pb-6 pt-6"
       >
-        <div className="grid grid-cols-3 md:grid-cols-6">
-          {lifeItems.map((item, index) => {
-            // 内側だけに区切り線を引く（最終列は右線なし、最終行は下線なし）
-            const isLastCol = index % 6 === 5;
-            const isLastRow = index >= lifeItems.length - (lifeItems.length % 6 || 6);
-            const dividers = [
-              isLastCol ? '' : 'md:border-r',
-              isLastRow ? '' : 'border-b',
-            ]
-              .filter(Boolean)
-              .join(' ');
-            return (
-            <a
-              key={item.label}
-              href="#"
-              className={`flex flex-col items-center gap-3 border-line-subtle px-2 py-5 text-center text-fg transition-colors hover:bg-surface-hover ${dividers}`}
-            >
-              <ThemedIcon
-                light={item.icon}
-                dark={darkIconPath(item.icon)}
-                alt={item.label}
-              />
-              <span className="text-xs font-medium leading-snug md:text-sm">
-                {item.label}
-              </span>
-            </a>
-            );
-          })}
+        {/* 縦線（before）・横線（after）とも各セルから上下左右 10px インセットした「浮いた線」。 */}
+        {/* 交点に隙間ができ、世田谷区サイトと同じ区切り表現になる。 */}
+        {/* 列数（3 / 6）に依らず、最終列の縦線・最終行の横線は overflow-hidden + 内側 -mr-px -mb-px でクリップ */}
+        <div className="overflow-hidden">
+          <div className="-mr-px -mb-px grid grid-cols-3 md:grid-cols-6">
+            {lifeItems.map((item) => (
+              <a
+                key={item.label}
+                href="#"
+                className="relative flex aspect-square flex-col items-center justify-center gap-2 overflow-hidden px-2 text-center text-fg transition-colors before:pointer-events-none before:absolute before:inset-y-2.5 before:right-0 before:w-px before:bg-line-subtle before:content-[''] after:pointer-events-none after:absolute after:inset-x-2.5 after:bottom-0 after:h-px after:bg-line-subtle after:content-[''] hover:bg-surface-hover lg:gap-3"
+              >
+                <ThemedIcon
+                  light={item.icon}
+                  dark={darkIconPath(item.icon)}
+                  alt={item.label}
+                  size={80}
+                  className="h-12 w-12 lg:h-20 lg:w-20"
+                />
+                <span className="text-xs font-semibold leading-snug md:text-sm lg:text-base">
+                  {item.label}
+                </span>
+              </a>
+            ))}
+          </div>
         </div>
       </LabeledBox>
     </section>

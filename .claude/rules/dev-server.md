@@ -22,3 +22,33 @@
   新たに `npm run dev` の実行を提案しない。
 - **ポートが起動していない場合のみ**:
   `npm run dev` を実行してよいかをユーザーに確認する。
+
+## 4. 実際の動作確認は chrome-devtools MCP で行う
+
+- ユーザーから動作確認を求められた場合、または自分で画面の動作確認を実施する場合は、
+  `.mcp.json` に設定されている `chrome-devtools` MCP を使って確認する。
+- 具体的には、`mcp__chrome-devtools__*` 系のツール（`navigate_page` / `take_screenshot` /
+  `take_snapshot` / `click` / `fill` / `resize_page` など）を用いて、起動中のポート
+  （例: `localhost:3000`）へアクセスし、画面の表示・挙動を確認する。
+- スクリーンショットや DOM スナップショットを取得して、参照デザインや期待する挙動と一致しているかを
+  確認する。レスポンシブの確認が必要な場合は `resize_page` でビューポートを切り替えて確認する。
+- `curl` などで HTML を取得するだけの確認や、確認を省略して「確認してください」とユーザーに丸投げする
+  対応はしない。実際の描画は chrome-devtools 経由で確認する。
+
+## 5. chrome-devtools への接続（MCP が自前で Chrome を起動する）
+
+`.mcp.json` の `chrome-devtools` は `--autoConnect` を付けていないため、`mcp__chrome-devtools__*`
+を最初に呼んだ時点で **MCP が専用の隔離 Chrome を自動起動して接続する**。常用 Chrome を
+デバッグポート付きで起動し直したり、別プロファイルを手動で立てたりする必要はない。
+
+- 動作確認を始めるときは、いきなり `navigate_page` で `localhost:3000`（起動中ポート）へ移動して
+  よい。MCP 側が Chrome を立ち上げてくれる。
+- 自動起動される Chrome は隔離プロファイルのため、**常用 Chrome のログイン状態やクッキーは
+  引き継がれない**。ログインが必要な画面の確認では、対象画面内でログインするか、その旨を踏まえて確認する。
+
+### やってはいけない回り道（実際につまずいた事例）
+
+- 動作確認のために**常用 Chrome を `--remote-debugging-port` 付きで起動し直さない**。MCP が
+  自前で Chrome を起動するので不要。
+- `DevToolsActivePort` ファイルを手動でコピーするなどの小細工で接続しようとしない。
+- ポート 9222 を `lsof` / `curl` で探し回らない。接続は MCP に任せ、失敗したときだけ原因を調べる。
