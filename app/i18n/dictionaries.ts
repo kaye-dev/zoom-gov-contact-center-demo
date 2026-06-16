@@ -100,6 +100,9 @@ export type Dictionary = {
     phoneNote: string;
     copyright: string;
   };
+  docs: {
+    viewAsMarkdown: string;
+  };
 };
 
 export const dictionaries: Record<Locale, Dictionary> = {
@@ -193,6 +196,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       phoneLabel: '電話番号：',
       phoneNote: '（代表）',
       copyright: '© Mirai City. All Rights Reserved.',
+    },
+    docs: {
+      viewAsMarkdown: 'Markdown 版を表示',
     },
   },
   en: {
@@ -292,6 +298,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       phoneNote: ' (Main)',
       copyright: '© Mirai City. All Rights Reserved.',
     },
+    docs: {
+      viewAsMarkdown: 'View as Markdown',
+    },
   },
   'zh-Hans': {
     cityName: '未来市',
@@ -381,6 +390,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       phoneLabel: '电话号码：',
       phoneNote: '（总机）',
       copyright: '© Mirai City. All Rights Reserved.',
+    },
+    docs: {
+      viewAsMarkdown: '查看 Markdown 版本',
     },
   },
   'zh-Hant': {
@@ -472,6 +484,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       phoneNote: '（總機）',
       copyright: '© Mirai City. All Rights Reserved.',
     },
+    docs: {
+      viewAsMarkdown: '檢視 Markdown 版本',
+    },
   },
   ko: {
     cityName: '미래시',
@@ -561,6 +576,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       phoneLabel: '전화번호：',
       phoneNote: '（대표）',
       copyright: '© Mirai City. All Rights Reserved.',
+    },
+    docs: {
+      viewAsMarkdown: 'Markdown 버전 보기',
     },
   },
 };
