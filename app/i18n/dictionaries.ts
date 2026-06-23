@@ -103,6 +103,70 @@ export type Dictionary = {
   docs: {
     viewAsMarkdown: string;
   };
+  auth: {
+    loginTitle: string;
+    loginDescription: string;
+    email: string;
+    password: string;
+    currentPassword: string;
+    newPassword: string;
+    name: string;
+    role: string;
+    roleUser: string;
+    roleAdmin: string;
+    login: string;
+    signOut: string;
+    forgotPassword: string;
+    forgotPasswordTitle: string;
+    forgotPasswordDescription: string;
+    requestReset: string;
+    resetRequestSent: string;
+    changePasswordTitle: string;
+    changePasswordDescription: string;
+    changePassword: string;
+    passwordChanged: string;
+    temporaryPassword: string;
+    temporaryPasswordDescription: string;
+    required: string;
+    error: string;
+  };
+  admin: {
+    title: string;
+    users: string;
+    newUser: string;
+    passwordResets: string;
+    userListTitle: string;
+    searchPlaceholder: string;
+    search: string;
+    clear: string;
+    createUserTitle: string;
+    createUserDescription: string;
+    createUser: string;
+    email: string;
+    name: string;
+    role: string;
+    mustChangePassword: string;
+    createdAt: string;
+    status: string;
+    requestedAt: string;
+    reviewedAt: string;
+    approve: string;
+    reject: string;
+    pending: string;
+    approved: string;
+    rejected: string;
+    consumed: string;
+    noUsers: string;
+    noResetRequests: string;
+    page: string;
+    previous: string;
+    next: string;
+    issuedPasswordTitle: string;
+    issuedPasswordDescription: string;
+    adminOnly: string;
+    dashboardTitle: string;
+    dashboardDescription: string;
+  };
 };
 
 export const dictionaries: Record<Locale, Dictionary> = {
@@ -199,6 +263,78 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     docs: {
       viewAsMarkdown: 'Markdown 版を表示',
+    },
+    auth: {
+      loginTitle: '管理ログイン',
+      loginDescription:
+        '記事作成や電話番号変更など、デモ運用者向けの管理機能にアクセスします。',
+      email: 'メールアドレス',
+      password: 'パスワード',
+      currentPassword: '現在のパスワード',
+      newPassword: '新しいパスワード',
+      name: '氏名',
+      role: '権限',
+      roleUser: '一般ユーザー',
+      roleAdmin: '管理者',
+      login: 'ログイン',
+      signOut: 'ログアウト',
+      forgotPassword: 'パスワード再設定を申請',
+      forgotPasswordTitle: 'パスワード再設定申請',
+      forgotPasswordDescription:
+        '管理者が申請を確認し、新しい仮パスワードを発行します。',
+      requestReset: '再設定を申請',
+      resetRequestSent:
+        '申請を受け付けました。管理者からの案内をお待ちください。',
+      changePasswordTitle: 'パスワード変更',
+      changePasswordDescription:
+        '仮パスワードでログインした場合は、続行前に新しいパスワードへ変更してください。',
+      changePassword: 'パスワードを変更',
+      passwordChanged: 'パスワードを変更しました。',
+      temporaryPassword: '仮パスワード',
+      temporaryPasswordDescription:
+        'この仮パスワードは一度だけ表示されます。安全な方法で対象ユーザーに共有してください。',
+      required: '必須',
+      error: '処理に失敗しました。',
+    },
+    admin: {
+      title: '管理画面',
+      users: 'ユーザー管理',
+      newUser: 'ユーザー作成',
+      passwordResets: '再設定申請',
+      userListTitle: 'ユーザー管理',
+      searchPlaceholder: '氏名またはメールアドレスで検索',
+      search: '検索',
+      clear: 'クリア',
+      createUserTitle: '管理者によるユーザー作成',
+      createUserDescription:
+        '初回ログイン用の仮パスワードを発行し、初回ログイン後に変更を強制します。',
+      createUser: 'ユーザーを作成',
+      email: 'メールアドレス',
+      name: '氏名',
+      role: '権限',
+      mustChangePassword: '要パスワード変更',
+      createdAt: '作成日時',
+      status: '状態',
+      requestedAt: '申請日時',
+      reviewedAt: '確認日時',
+      approve: '承認',
+      reject: '却下',
+      pending: '未対応',
+      approved: '承認済み',
+      rejected: '却下済み',
+      consumed: '変更済み',
+      noUsers: '該当するユーザーはいません。',
+      noResetRequests: 'パスワード再設定申請はありません。',
+      page: 'ページ',
+      previous: '前へ',
+      next: '次へ',
+      issuedPasswordTitle: '仮パスワードを発行しました',
+      issuedPasswordDescription:
+        'この画面を閉じると再表示できません。共有後はユーザーにログインと変更を依頼してください。',
+      adminOnly: '管理者のみアクセスできます。',
+      dashboardTitle: '管理画面',
+      dashboardDescription:
+        'ログイン済みです。ユーザー管理機能を利用するには管理者権限が必要です。',
     },
   },
   en: {
@@ -301,6 +437,78 @@ export const dictionaries: Record<Locale, Dictionary> = {
     docs: {
       viewAsMarkdown: 'View as Markdown',
     },
+    auth: {
+      loginTitle: 'Admin Login',
+      loginDescription:
+        'Access demo-operator features such as article editing and phone number updates.',
+      email: 'Email address',
+      password: 'Password',
+      currentPassword: 'Current password',
+      newPassword: 'New password',
+      name: 'Name',
+      role: 'Role',
+      roleUser: 'User',
+      roleAdmin: 'Admin',
+      login: 'Log in',
+      signOut: 'Log out',
+      forgotPassword: 'Request password reset',
+      forgotPasswordTitle: 'Password Reset Request',
+      forgotPasswordDescription:
+        'An administrator will review the request and issue a new temporary password.',
+      requestReset: 'Request reset',
+      resetRequestSent:
+        'Your request has been received. Please wait for administrator guidance.',
+      changePasswordTitle: 'Change Password',
+      changePasswordDescription:
+        'If you logged in with a temporary password, change it before continuing.',
+      changePassword: 'Change password',
+      passwordChanged: 'Your password has been changed.',
+      temporaryPassword: 'Temporary password',
+      temporaryPasswordDescription:
+        'This temporary password is shown only once. Share it with the user through a secure channel.',
+      required: 'Required',
+      error: 'The request failed.',
+    },
+    admin: {
+      title: 'Admin',
+      users: 'User Management',
+      newUser: 'Create User',
+      passwordResets: 'Reset Requests',
+      userListTitle: 'User Management',
+      searchPlaceholder: 'Search by name or email',
+      search: 'Search',
+      clear: 'Clear',
+      createUserTitle: 'Create User',
+      createUserDescription:
+        'Issue a temporary password and require the user to change it after first login.',
+      createUser: 'Create user',
+      email: 'Email',
+      name: 'Name',
+      role: 'Role',
+      mustChangePassword: 'Must change password',
+      createdAt: 'Created at',
+      status: 'Status',
+      requestedAt: 'Requested at',
+      reviewedAt: 'Reviewed at',
+      approve: 'Approve',
+      reject: 'Reject',
+      pending: 'Pending',
+      approved: 'Approved',
+      rejected: 'Rejected',
+      consumed: 'Changed',
+      noUsers: 'No matching users.',
+      noResetRequests: 'No password reset requests.',
+      page: 'Page',
+      previous: 'Previous',
+      next: 'Next',
+      issuedPasswordTitle: 'Temporary Password Issued',
+      issuedPasswordDescription:
+        'It cannot be shown again after this view closes. Ask the user to log in and change it.',
+      adminOnly: 'Administrators only.',
+      dashboardTitle: 'Admin',
+      dashboardDescription:
+        'You are signed in. Administrator features require the admin role.',
+    },
   },
   'zh-Hans': {
     cityName: '未来市',
@@ -393,6 +601,72 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     docs: {
       viewAsMarkdown: '查看 Markdown 版本',
+    },
+    auth: {
+      loginTitle: '管理登录',
+      loginDescription: '访问面向演示运营者的文章编辑、电话号码变更等管理功能。',
+      email: '电子邮件地址',
+      password: '密码',
+      currentPassword: '当前密码',
+      newPassword: '新密码',
+      name: '姓名',
+      role: '权限',
+      roleUser: '普通用户',
+      roleAdmin: '管理员',
+      login: '登录',
+      signOut: '退出登录',
+      forgotPassword: '申请重置密码',
+      forgotPasswordTitle: '密码重置申请',
+      forgotPasswordDescription: '管理员将确认申请并发放新的临时密码。',
+      requestReset: '申请重置',
+      resetRequestSent: '已受理申请。请等待管理员通知。',
+      changePasswordTitle: '更改密码',
+      changePasswordDescription: '使用临时密码登录后，请先更改为新密码。',
+      changePassword: '更改密码',
+      passwordChanged: '密码已更改。',
+      temporaryPassword: '临时密码',
+      temporaryPasswordDescription:
+        '临时密码只会显示一次。请通过安全方式共享给目标用户。',
+      required: '必填',
+      error: '处理失败。',
+    },
+    admin: {
+      title: '管理页面',
+      users: '用户管理',
+      newUser: '创建用户',
+      passwordResets: '重置申请',
+      userListTitle: '用户管理',
+      searchPlaceholder: '按姓名或电子邮件搜索',
+      search: '搜索',
+      clear: '清除',
+      createUserTitle: '管理员创建用户',
+      createUserDescription: '发放首次登录用临时密码，并要求首次登录后更改。',
+      createUser: '创建用户',
+      email: '电子邮件地址',
+      name: '姓名',
+      role: '权限',
+      mustChangePassword: '需要更改密码',
+      createdAt: '创建时间',
+      status: '状态',
+      requestedAt: '申请时间',
+      reviewedAt: '确认时间',
+      approve: '批准',
+      reject: '拒绝',
+      pending: '待处理',
+      approved: '已批准',
+      rejected: '已拒绝',
+      consumed: '已更改',
+      noUsers: '没有符合条件的用户。',
+      noResetRequests: '没有密码重置申请。',
+      page: '页面',
+      previous: '上一页',
+      next: '下一页',
+      issuedPasswordTitle: '已发放临时密码',
+      issuedPasswordDescription:
+        '关闭此画面后无法再次显示。共享后请用户登录并更改密码。',
+      adminOnly: '仅限管理员访问。',
+      dashboardTitle: '管理页面',
+      dashboardDescription: '您已登录。用户管理功能需要管理员权限。',
     },
   },
   'zh-Hant': {
@@ -487,6 +761,72 @@ export const dictionaries: Record<Locale, Dictionary> = {
     docs: {
       viewAsMarkdown: '檢視 Markdown 版本',
     },
+    auth: {
+      loginTitle: '管理登入',
+      loginDescription: '存取面向示範營運者的文章編輯、電話號碼變更等管理功能。',
+      email: '電子郵件地址',
+      password: '密碼',
+      currentPassword: '目前密碼',
+      newPassword: '新密碼',
+      name: '姓名',
+      role: '權限',
+      roleUser: '一般使用者',
+      roleAdmin: '管理員',
+      login: '登入',
+      signOut: '登出',
+      forgotPassword: '申請重設密碼',
+      forgotPasswordTitle: '密碼重設申請',
+      forgotPasswordDescription: '管理員將確認申請並發放新的臨時密碼。',
+      requestReset: '申請重設',
+      resetRequestSent: '已受理申請。請等待管理員通知。',
+      changePasswordTitle: '變更密碼',
+      changePasswordDescription: '使用臨時密碼登入後，請先變更為新密碼。',
+      changePassword: '變更密碼',
+      passwordChanged: '密碼已變更。',
+      temporaryPassword: '臨時密碼',
+      temporaryPasswordDescription:
+        '臨時密碼只會顯示一次。請透過安全方式分享給目標使用者。',
+      required: '必填',
+      error: '處理失敗。',
+    },
+    admin: {
+      title: '管理頁面',
+      users: '使用者管理',
+      newUser: '建立使用者',
+      passwordResets: '重設申請',
+      userListTitle: '使用者管理',
+      searchPlaceholder: '依姓名或電子郵件搜尋',
+      search: '搜尋',
+      clear: '清除',
+      createUserTitle: '管理員建立使用者',
+      createUserDescription: '發放首次登入用臨時密碼，並要求首次登入後變更。',
+      createUser: '建立使用者',
+      email: '電子郵件地址',
+      name: '姓名',
+      role: '權限',
+      mustChangePassword: '需要變更密碼',
+      createdAt: '建立時間',
+      status: '狀態',
+      requestedAt: '申請時間',
+      reviewedAt: '確認時間',
+      approve: '核准',
+      reject: '拒絕',
+      pending: '待處理',
+      approved: '已核准',
+      rejected: '已拒絕',
+      consumed: '已變更',
+      noUsers: '沒有符合條件的使用者。',
+      noResetRequests: '沒有密碼重設申請。',
+      page: '頁面',
+      previous: '上一頁',
+      next: '下一頁',
+      issuedPasswordTitle: '已發放臨時密碼',
+      issuedPasswordDescription:
+        '關閉此畫面後無法再次顯示。分享後請使用者登入並變更密碼。',
+      adminOnly: '僅限管理員存取。',
+      dashboardTitle: '管理頁面',
+      dashboardDescription: '您已登入。使用者管理功能需要管理員權限。',
+    },
   },
   ko: {
     cityName: '미래시',
@@ -579,6 +919,72 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     docs: {
       viewAsMarkdown: 'Markdown 버전 보기',
+    },
+    auth: {
+      loginTitle: '관리 로그인',
+      loginDescription: '데모 운영자를 위한 기사 작성, 전화번호 변경 등의 관리 기능에 접근합니다.',
+      email: '이메일 주소',
+      password: '비밀번호',
+      currentPassword: '현재 비밀번호',
+      newPassword: '새 비밀번호',
+      name: '이름',
+      role: '권한',
+      roleUser: '일반 사용자',
+      roleAdmin: '관리자',
+      login: '로그인',
+      signOut: '로그아웃',
+      forgotPassword: '비밀번호 재설정 신청',
+      forgotPasswordTitle: '비밀번호 재설정 신청',
+      forgotPasswordDescription: '관리자가 신청을 확인하고 새 임시 비밀번호를 발급합니다.',
+      requestReset: '재설정 신청',
+      resetRequestSent: '신청을 접수했습니다. 관리자의 안내를 기다려 주세요.',
+      changePasswordTitle: '비밀번호 변경',
+      changePasswordDescription: '임시 비밀번호로 로그인한 경우 계속하기 전에 새 비밀번호로 변경하세요.',
+      changePassword: '비밀번호 변경',
+      passwordChanged: '비밀번호를 변경했습니다.',
+      temporaryPassword: '임시 비밀번호',
+      temporaryPasswordDescription:
+        '임시 비밀번호는 한 번만 표시됩니다. 안전한 방법으로 대상 사용자에게 공유하세요.',
+      required: '필수',
+      error: '처리에 실패했습니다.',
+    },
+    admin: {
+      title: '관리 화면',
+      users: '사용자 관리',
+      newUser: '사용자 생성',
+      passwordResets: '재설정 신청',
+      userListTitle: '사용자 관리',
+      searchPlaceholder: '이름 또는 이메일로 검색',
+      search: '검색',
+      clear: '초기화',
+      createUserTitle: '관리자 사용자 생성',
+      createUserDescription: '첫 로그인용 임시 비밀번호를 발급하고 첫 로그인 후 변경을 강제합니다.',
+      createUser: '사용자 생성',
+      email: '이메일 주소',
+      name: '이름',
+      role: '권한',
+      mustChangePassword: '비밀번호 변경 필요',
+      createdAt: '생성 일시',
+      status: '상태',
+      requestedAt: '신청 일시',
+      reviewedAt: '확인 일시',
+      approve: '승인',
+      reject: '거절',
+      pending: '대기 중',
+      approved: '승인됨',
+      rejected: '거절됨',
+      consumed: '변경됨',
+      noUsers: '해당 사용자가 없습니다.',
+      noResetRequests: '비밀번호 재설정 신청이 없습니다.',
+      page: '페이지',
+      previous: '이전',
+      next: '다음',
+      issuedPasswordTitle: '임시 비밀번호를 발급했습니다',
+      issuedPasswordDescription:
+        '이 화면을 닫으면 다시 표시할 수 없습니다. 공유 후 사용자에게 로그인과 변경을 요청하세요.',
+      adminOnly: '관리자만 접근할 수 있습니다.',
+      dashboardTitle: '관리 화면',
+      dashboardDescription: '로그인되어 있습니다. 사용자 관리 기능에는 관리자 권한이 필요합니다.',
     },
   },
 };

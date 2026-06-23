@@ -31,7 +31,9 @@ export default async function DocPage({ params }: PageProps) {
   let MdxContent: React.ComponentType;
   try {
     const mod = file.endsWith(".md")
-      ? await import(`@/content/docs/${relative}.md`)
+      ? await import(
+          /* turbopackOptional: true */ `@/content/docs/${relative}.md`
+        )
       : await import(`@/content/docs/${relative}.mdx`);
     MdxContent = mod.default;
   } catch {

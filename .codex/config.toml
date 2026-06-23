@@ -1,0 +1,31 @@
+model = "gpt-5.5"
+model_reasoning_effort = "xhigh"
+
+[mcp_servers."aws-knowledge"]
+url = "https://knowledge-mcp.global.api.aws"
+
+[mcp_servers."playwright"]
+command = "npx"
+args = [
+    "@playwright/mcp@0.0.76",
+    "--browser=chrome",
+    "--user-data-dir=.playwright-mcp-profile",
+    "--viewport-size=1440x1000",
+    "--timeout-action=10000",
+    "--timeout-navigation=120000",
+    "--output-dir=.playwright-mcp-output",
+]
+
+[mcp_servers."chrome-devtools"]
+command = "npx"
+args = [
+    "chrome-devtools-mcp@1.3.0",
+    "--no-usage-statistics",
+    "--headless=false",
+    "--user-data-dir=.chrome-devtools-mcp-profile",
+    # 既存 Chrome のログイン状態を共有して手動確認と agent 調査を行き来したい場合だけ有効化する。
+    # "--autoConnect",
+]
+
+[mcp_servers."openaiDeveloperDocs"]
+url = "https://developers.openai.com/mcp"
