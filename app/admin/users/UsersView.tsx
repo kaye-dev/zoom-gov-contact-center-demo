@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { useI18n } from "../../i18n/LanguageProvider";
+import { formatAdminDateTime } from "../date-format";
 
 type UserRow = {
   id: string;
@@ -21,7 +22,7 @@ type UsersViewProps = {
 };
 
 export function UsersView({ users, search, page, totalPages }: UsersViewProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const previousHref = getPageHref(search, page - 1);
   const nextHref = getPageHref(search, page + 1);
 
@@ -96,10 +97,7 @@ export function UsersView({ users, search, page, totalPages }: UsersViewProps) {
                   {user.mustChangePassword ? t.auth.required : "-"}
                 </td>
                 <td className="px-4 py-3">
-                  {new Intl.DateTimeFormat(undefined, {
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                  }).format(new Date(user.createdAt))}
+                  {formatAdminDateTime(user.createdAt, locale)}
                 </td>
               </tr>
             ))}

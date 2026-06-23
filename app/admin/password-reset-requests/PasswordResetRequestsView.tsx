@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { formatAdminDateTime } from "../date-format";
 import { useI18n } from "../../i18n/LanguageProvider";
 
 type ResetStatus = "PENDING" | "APPROVED" | "REJECTED" | "CONSUMED";
@@ -30,7 +31,7 @@ export function PasswordResetRequestsView({
 }: {
   requests: ResetRequest[];
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const router = useRouter();
   const [issuedPassword, setIssuedPassword] = useState<IssuedPassword | null>(
     null,
@@ -132,10 +133,12 @@ export function PasswordResetRequestsView({
                 <td className="px-4 py-3">{request.user?.name ?? "-"}</td>
                 <td className="px-4 py-3">{getStatusLabel(request.status, t)}</td>
                 <td className="px-4 py-3">
-                  {formatDate(request.requestedAt)}
+                  {formatAdminDateTime(request.requestedAt, locale)}
                 </td>
                 <td className="px-4 py-3">
-                  {request.reviewedAt ? formatDate(request.reviewedAt) : "-"}
+                  {request.reviewedAt
+                    ? formatAdminDateTime(request.reviewedAt, locale)
+                    : "-"}
                 </td>
                 <td className="px-4 py-3">
                   {request.status === "PENDING" ? (
@@ -185,11 +188,4 @@ function getStatusLabel(
   };
 
   return labels[status];
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
 }
