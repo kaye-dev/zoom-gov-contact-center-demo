@@ -1,16 +1,17 @@
 'use client';
 
 import Image from 'next/image';
+import type { CSSProperties } from 'react';
 import { useI18n } from '../i18n/LanguageProvider';
 import { LabeledBox } from './LabeledBox';
+import { useIsDarkTheme } from './theme-store';
 
 // ライトパスからダークパスを派生（命名規則: <ライト名>-dark.png）
 function darkIconPath(light: string): string {
   return light.replace(/\.png$/, '-dark.png');
 }
 
-// テーマに追従してアイコンを出し分ける（クラスベースのダークモード用に CSS で切替）。
-// display:none の要素は支援技術に読まれないため、両方に同一 alt で問題なし。
+// テーマ状態を購読し、AI 相談カード用の多色アイコン画像を src レベルで出し分ける。
 function ThemedIcon({
   light,
   dark,
@@ -25,12 +26,38 @@ function ThemedIcon({
   /** 表示サイズをレスポンシブに上書きする場合に指定（width/height 属性は固有比のため size を維持） */
   className?: string;
 }) {
+  const isDark = useIsDarkTheme();
   const base = className ? ` ${className}` : '';
+
   return (
-    <>
-      <Image src={light} alt={alt} width={size} height={size} className={`shrink-0 dark:hidden${base}`} />
-      <Image src={dark} alt={alt} width={size} height={size} className={`hidden shrink-0 dark:block${base}`} />
-    </>
+    <Image
+      src={isDark ? dark : light}
+      alt={alt}
+      width={size}
+      height={size}
+      className={`shrink-0${base}`}
+    />
+  );
+}
+
+function MaskedIcon({ src, className }: { src: string; className?: string }) {
+  const style: CSSProperties = {
+    WebkitMaskImage: `url("${src}")`,
+    maskImage: `url("${src}")`,
+    WebkitMaskPosition: 'center',
+    maskPosition: 'center',
+    WebkitMaskRepeat: 'no-repeat',
+    maskRepeat: 'no-repeat',
+    WebkitMaskSize: 'contain',
+    maskSize: 'contain',
+  };
+
+  return (
+    <span
+      aria-hidden="true"
+      className={`block shrink-0 bg-icon-muted transition-colors group-hover:bg-icon-strong${className ? ` ${className}` : ''}`}
+      style={style}
+    />
   );
 }
 
@@ -126,15 +153,9 @@ export function FindInfo() {
               <a
                 key={item.label}
                 href="#"
-                className="relative flex aspect-square flex-col items-center justify-center gap-2 overflow-hidden px-2 text-center text-fg transition-colors before:pointer-events-none before:absolute before:inset-y-2.5 before:right-0 before:w-px before:bg-line-subtle before:content-[''] after:pointer-events-none after:absolute after:inset-x-2.5 after:bottom-0 after:h-px after:bg-line-subtle after:content-[''] hover:bg-surface-hover lg:gap-3"
+                className="group relative flex aspect-square flex-col items-center justify-center gap-2 overflow-hidden px-2 text-center text-fg transition-colors before:pointer-events-none before:absolute before:inset-y-2.5 before:right-0 before:w-px before:bg-line-subtle before:content-[''] after:pointer-events-none after:absolute after:inset-x-2.5 after:bottom-0 after:h-px after:bg-line-subtle after:content-[''] hover:bg-surface-hover lg:gap-3"
               >
-                <ThemedIcon
-                  light={item.icon}
-                  dark={darkIconPath(item.icon)}
-                  alt={item.label}
-                  size={80}
-                  className="h-12 w-12 lg:h-20 lg:w-20"
-                />
+                <MaskedIcon src={item.icon} className="h-12 w-12 lg:h-20 lg:w-20" />
                 <span className="text-xs font-semibold leading-snug md:text-sm lg:text-base">
                   {item.label}
                 </span>
