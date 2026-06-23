@@ -38,6 +38,20 @@ services:
       - .:/app
       - node_modules:/app/node_modules
 
+  studio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: npm run db:studio:docker
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/zoom_demo
+      NEXT_TELEMETRY_DISABLED: "1"
+    ports:
+      - "${STUDIO_PORT:-5555}:5555"
+
 volumes:
   node_modules:
   postgres-data:
