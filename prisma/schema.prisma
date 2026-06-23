@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum PasswordResetRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CONSUMED
+}
+
+model user {
+  id                        String    @id
+  name                      String
+  email                     String
+  emailVerified             Boolean
+  image                     String?
+  createdAt                 DateTime
+  updatedAt                 DateTime
+  role                      String?
+  banned                    Boolean?
+  banReason                 String?
+  banExpires                DateTime?
+  mustChangePassword        Boolean   @default(false)
+  temporaryPasswordIssuedAt DateTime?
+  passwordChangedAt         DateTime?
+
+  sessions                 session[]
+  accounts                 account[]
+  passwordResetRequests    PasswordResetRequest[] @relation("PasswordResetRequestUser")
+  reviewedPasswordRequests PasswordResetRequest[] @relation("PasswordResetRequestReviewer")
+
+  @@unique([email])
+  @@map("user")
+}
+
+model session {
+  id             String   @id
+  expiresAt      DateTime
+  token          String
+  createdAt      DateTime
+  updatedAt      DateTime
+  ipAddress      String?
+  userAgent      String?
+  userId         String
+  impersonatedBy String?
+
+  user user @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@map("session")
+}
+
+model account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime
+  updatedAt             DateTime
+
+  user user @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("account")
+}
+
+model verification {
+  id         String    @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime?
+  updatedAt  DateTime?
+
+  @@map("verification")
+}
+
+model DemoRecord {
+  id        Int      @id @default(autoincrement())
+  message   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("demo_records")
+}
+
+model PasswordResetRequest {
+  id               String                     @id @default(cuid())
+  email            String
+  status           PasswordResetRequestStatus @default(PENDING)
+  requestedAt      DateTime                   @default(now())
+  reviewedAt       DateTime?
+  issuedAt         DateTime?
+  consumedAt       DateTime?
+  userId           String?
+  reviewedByUserId String?
+
+  user       user? @relation("PasswordResetRequestUser", fields: [userId], references: [id], onDelete: SetNull)
+  reviewedBy user? @relation("PasswordResetRequestReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([email])
+  @@index([status, requestedAt])
+  @@map("password_reset_requests")
+}

@@ -10,8 +10,12 @@ export function ThemeToggle() {
 
   // マウント後に現在のテーマ（html.dark の有無）を読み取る
   useEffect(() => {
-    setIsDark(document.documentElement.classList.contains('dark'));
-    setMounted(true);
+    const frame = requestAnimationFrame(() => {
+      setIsDark(document.documentElement.classList.contains('dark'));
+      setMounted(true);
+    });
+
+    return () => cancelAnimationFrame(frame);
   }, []);
 
   const toggle = () => {

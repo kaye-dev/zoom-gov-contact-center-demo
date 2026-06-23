@@ -30,15 +30,19 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   // マウント後に保存済みの言語設定を反映する（SSR とのハイドレーション不整合を避けるため初期値は既定ロケール）
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored && isLocale(stored) && stored !== defaultLocale) {
-        setLocaleState(stored);
-        document.documentElement.lang = stored;
+    const frame = requestAnimationFrame(() => {
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored && isLocale(stored) && stored !== defaultLocale) {
+          setLocaleState(stored);
+          document.documentElement.lang = stored;
+        }
+      } catch {
+        /* localStorage が使えない環境では無視 */
       }
-    } catch {
-      /* localStorage が使えない環境では無視 */
-    }
+    });
+
+    return () => cancelAnimationFrame(frame);
   }, []);
 
   const setLocale = (next: Locale) => {

@@ -6,6 +6,7 @@ build
 coverage
 node_modules
 out
+lib/generated/prisma
 
 .DS_Store
 *.log
