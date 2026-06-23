@@ -12,6 +12,8 @@
   --line-subtle: #e5e7eb;    /* 仕切り線（= gray-200） */
   --fg: #1f2937;             /* 本文（= gray-800） */
   --fg-muted: #6b7280;       /* 補足/日付/サブタイトル（= gray-500） */
+  --icon-muted: #303640;     /* 生活情報アイコン */
+  --icon-strong: #00118f;    /* 生活情報アイコン（hover） */
   --accent: #00118f;         /* リンク/ホバー文字/アクセント（= primary） */
 
   /* body 用エイリアスは surface/fg に追従させる */
@@ -28,6 +30,8 @@
   --line-subtle: #232932;
   --fg: #e6edf3;
   --fg-muted: #9aa4b2;
+  --icon-muted: #dbe7f6;
+  --icon-strong: #9db7f9;
   --accent: #7096f8;         /* = primary-400（ダークで視認可能な明るい青） */
 }
 
@@ -45,6 +49,8 @@
   --color-line-subtle: var(--line-subtle);
   --color-fg: var(--fg);
   --color-fg-muted: var(--fg-muted);
+  --color-icon-muted: var(--icon-muted);
+  --color-icon-strong: var(--icon-strong);
   --color-accent: var(--accent);
 
   /* テーマカラー（Blue スケール） */

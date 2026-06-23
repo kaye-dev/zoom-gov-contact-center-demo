@@ -4,7 +4,7 @@ import {
   createContext,
   useContext,
   useEffect,
-  useState,
+  useSyncExternalStore,
   type ReactNode,
 } from 'react';
 import {
@@ -16,6 +16,7 @@ import {
 } from './dictionaries';
 
 const STORAGE_KEY = 'locale';
+const LOCALE_CHANGE_EVENT = 'mirai-city-locale-change';
 
 type LanguageContextValue = {
   locale: Locale;
@@ -25,30 +26,49 @@ type LanguageContextValue = {
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
-export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(defaultLocale);
+function getStoredLocale(): Locale {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored && isLocale(stored)) return stored;
+  } catch {
+    /* localStorage が使えない環境では既定ロケールを使う */
+  }
+  return defaultLocale;
+}
 
-  // マウント後に保存済みの言語設定を反映する（SSR とのハイドレーション不整合を避けるため初期値は既定ロケール）
+function getServerLocaleSnapshot(): Locale {
+  return defaultLocale;
+}
+
+function subscribeLocaleChange(onStoreChange: () => void) {
+  window.addEventListener(LOCALE_CHANGE_EVENT, onStoreChange);
+  window.addEventListener('storage', onStoreChange);
+
+  return () => {
+    window.removeEventListener(LOCALE_CHANGE_EVENT, onStoreChange);
+    window.removeEventListener('storage', onStoreChange);
+  };
+}
+
+export function LanguageProvider({ children }: { children: ReactNode }) {
+  const locale = useSyncExternalStore(
+    subscribeLocaleChange,
+    getStoredLocale,
+    getServerLocaleSnapshot,
+  );
+
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored && isLocale(stored) && stored !== defaultLocale) {
-        setLocaleState(stored);
-        document.documentElement.lang = stored;
-      }
-    } catch {
-      /* localStorage が使えない環境では無視 */
-    }
-  }, []);
+    document.documentElement.lang = locale;
+  }, [locale]);
 
   const setLocale = (next: Locale) => {
-    setLocaleState(next);
-    document.documentElement.lang = next;
     try {
       localStorage.setItem(STORAGE_KEY, next);
     } catch {
       /* localStorage が使えない環境では無視 */
     }
+    document.documentElement.lang = next;
+    window.dispatchEvent(new Event(LOCALE_CHANGE_EVENT));
   };
 
   return (
