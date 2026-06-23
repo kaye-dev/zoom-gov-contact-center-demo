@@ -1,32 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useI18n } from '../i18n/LanguageProvider';
+import { setStoredTheme, useIsDarkTheme } from './theme-store';
 
 export function ThemeToggle() {
   const { t } = useI18n();
-  const [mounted, setMounted] = useState(false);
-  const [isDark, setIsDark] = useState(false);
-
-  // マウント後に現在のテーマ（html.dark の有無）を読み取る
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      setIsDark(document.documentElement.classList.contains('dark'));
-      setMounted(true);
-    });
-
-    return () => cancelAnimationFrame(frame);
-  }, []);
+  const isDark = useIsDarkTheme();
 
   const toggle = () => {
     const next = !isDark;
-    setIsDark(next);
-    document.documentElement.classList.toggle('dark', next);
-    try {
-      localStorage.setItem('theme', next ? 'dark' : 'light');
-    } catch {
-      /* localStorage が使えない環境では無視 */
-    }
+    setStoredTheme(next);
   };
 
   return (
@@ -44,7 +27,7 @@ export function ThemeToggle() {
         {/* 丸いつまみ：ライト時は左、ダーク時は右へスライド */}
         <span
           className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform duration-300 ${
-            mounted && isDark ? 'translate-x-[22px]' : 'translate-x-[2px]'
+            isDark ? 'translate-x-[22px]' : 'translate-x-[2px]'
           }`}
         />
       </button>
