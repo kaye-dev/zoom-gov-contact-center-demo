@@ -93,6 +93,8 @@ export type Dictionary = {
     buildingGuide: string;
     feedback: string;
     sitemap: string;
+    login: string;
+    goToAdmin: string;
     postalCode: string;
     address: string;
     tower: string;
@@ -254,6 +256,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       buildingGuide: '庁舎案内',
       feedback: 'ご意見・ご要望',
       sitemap: 'サイトマップ',
+      login: 'ログイン',
+      goToAdmin: '管理画面',
       postalCode: '〒100-0001',
       address: '未来県未来市中央1-2-3',
       tower: '未来シティタワー',
@@ -427,6 +431,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       buildingGuide: 'Building Guide',
       feedback: 'Feedback & Requests',
       sitemap: 'Site Map',
+      login: 'Log in',
+      goToAdmin: 'Admin',
       postalCode: '100-0001',
       address: '1-2-3 Chuo, Mirai City, Mirai Pref.',
       tower: 'Mirai City Tower',
@@ -592,6 +598,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       buildingGuide: '办公楼指南',
       feedback: '意见・要望',
       sitemap: '网站地图',
+      login: '登录',
+      goToAdmin: '管理页面',
       postalCode: '〒100-0001',
       address: '未来县未来市中央1-2-3',
       tower: '未来城市大厦',
@@ -751,6 +759,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       buildingGuide: '辦公大樓導覽',
       feedback: '意見・需求',
       sitemap: '網站地圖',
+      login: '登入',
+      goToAdmin: '管理頁面',
       postalCode: '〒100-0001',
       address: '未來縣未來市中央1-2-3',
       tower: '未來城市大樓',
@@ -910,6 +920,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       buildingGuide: '청사 안내',
       feedback: '의견・요청',
       sitemap: '사이트맵',
+      login: '로그인',
+      goToAdmin: '관리 화면',
       postalCode: '〒100-0001',
       address: '미래현 미래시 주오 1-2-3',
       tower: '미래 시티 타워',
