@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* クラスベースのダークモードを有効化（.dark を html に付与して切り替える） */
+/* .dark を html に付与して切り替える。初回表示は OS の設定も fallback として使う。 */
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
@@ -21,7 +21,7 @@
   --foreground: var(--fg);
 }
 
-.dark {
+:root.dark {
   /* 純黒を避け、面の階層（elevation）と明るめアクセントで視認性を確保 */
   --surface: #0f1115;
   --surface-raised: #171b21;
@@ -33,6 +33,21 @@
   --icon-muted: #dbe7f6;
   --icon-strong: #9db7f9;
   --accent: #7096f8;         /* = primary-400（ダークで視認可能な明るい青） */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --surface: #0f1115;
+    --surface-raised: #171b21;
+    --surface-hover: #1e242c;
+    --line: #2b313a;
+    --line-subtle: #232932;
+    --fg: #e6edf3;
+    --fg-muted: #9aa4b2;
+    --icon-muted: #dbe7f6;
+    --icon-strong: #9db7f9;
+    --accent: #7096f8;
+  }
 }
 
 @theme inline {

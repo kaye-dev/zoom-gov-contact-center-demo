@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import Script from "next/script";
 import "./globals.css";
+import { ThemeSync } from "./components/ThemeSync";
 import { LanguageProvider } from "./i18n/LanguageProvider";
 
 const geistSans = Geist({
@@ -32,13 +32,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
-        <Script
-          id="theme-init"
-          strategy="beforeInteractive"
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('theme');var d=t?t==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;if(d)document.documentElement.classList.add('dark');}catch(e){}})();`,
-          }}
-        />
+        <ThemeSync />
         <LanguageProvider>{children}</LanguageProvider>
       </body>
     </html>
