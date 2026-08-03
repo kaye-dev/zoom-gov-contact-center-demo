@@ -59,7 +59,7 @@ export function FooterClient({ isSignedIn }: FooterClientProps) {
             <p className="mt-4">
               {t.footer.phoneLabel}
               <a
-                href="tel:+810312345678"
+                href="tel:+81312345678"
                 className="underline-offset-4 transition-colors hover:text-accent hover:underline"
               >
                 (03)1234-5678

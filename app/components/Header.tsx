@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { ThemeToggle } from './ThemeToggle';
 import { LanguageMenu } from './LanguageMenu';
@@ -24,7 +25,10 @@ export function Header() {
 
   // ロゴ（通常・コンパクト両状態で共通）
   const logo = (
-    <div className="flex min-w-0 items-center gap-3 pr-4">
+    <Link
+      href="/"
+      className="flex min-w-0 items-center gap-3 pr-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
+    >
       <StarEmblem className="h-11 w-11 shrink-0" />
       <div className="leading-tight">
         <p className="text-2xl font-bold tracking-wide">{t.cityName}</p>
@@ -32,7 +36,7 @@ export function Header() {
           {t.cityNameRoman}
         </p>
       </div>
-    </div>
+    </Link>
   );
 
   return (

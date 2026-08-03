@@ -1,7 +1,9 @@
 'use client';
 
 import Image from 'next/image';
+import Link from 'next/link';
 import type { CSSProperties } from 'react';
+import { lifeCategories } from '../content/site-content';
 import { useI18n } from '../i18n/LanguageProvider';
 import { LabeledBox } from './LabeledBox';
 import { useIsDarkTheme } from './theme-store';
@@ -77,26 +79,10 @@ export function FindInfo() {
     },
   ];
 
-  const lifeItems = [
-    { label: t.findInfo.lifeInfo.items.trash, icon: '/life-information/life-trash.png' },
-    { label: t.findInfo.lifeInfo.items.childEducation, icon: '/life-information/life-child-education.png' },
-    { label: t.findInfo.lifeInfo.items.safety, icon: '/life-information/life-safety.png' },
-    { label: t.findInfo.lifeInfo.items.residence, icon: '/life-information/life-residence.png' },
-    { label: t.findInfo.lifeInfo.items.facilities, icon: '/life-information/life-facilities.png' },
-    { label: t.findInfo.lifeInfo.items.event, icon: '/life-information/life-event.png' },
-    { label: t.findInfo.lifeInfo.items.faq, icon: '/life-information/life-faq.png' },
-    { label: t.findInfo.lifeInfo.items.feedback, icon: '/life-information/life-feedback.png' },
-    { label: t.findInfo.lifeInfo.items.welfare, icon: '/life-information/life-welfare.png' },
-    { label: t.findInfo.lifeInfo.items.educationBoard, icon: '/life-information/life-education-board.png' },
-    { label: t.findInfo.lifeInfo.items.myNumber, icon: '/life-information/life-my-number.png' },
-    { label: t.findInfo.lifeInfo.items.consultation, icon: '/life-information/life-consultation.png' },
-    { label: t.findInfo.lifeInfo.items.tax, icon: '/life-information/life-tax.png' },
-    { label: t.findInfo.lifeInfo.items.library, icon: '/life-information/life-library.png' },
-    { label: t.findInfo.lifeInfo.items.openData, icon: '/life-information/life-open-data.png' },
-    { label: t.findInfo.lifeInfo.items.organization, icon: '/life-information/life-organization.png' },
-    { label: t.findInfo.lifeInfo.items.counter, icon: '/life-information/life-counter.png' },
-    { label: t.findInfo.lifeInfo.items.housing, icon: '/life-information/life-housing.png' },
-  ];
+  const lifeItems = lifeCategories.map((category) => ({
+    ...category,
+    label: t.findInfo.lifeInfo.items[category.id],
+  }));
 
   return (
     <section className="mx-auto max-w-7xl px-2.5 pt-13">
@@ -150,16 +136,16 @@ export function FindInfo() {
         <div className="overflow-hidden">
           <div className="-mr-px -mb-px grid grid-cols-3 md:grid-cols-6">
             {lifeItems.map((item) => (
-              <a
+              <Link
                 key={item.label}
-                href="#"
+                href={`/life/${item.slug}`}
                 className="group relative flex aspect-square flex-col items-center justify-center gap-2 overflow-hidden px-2 text-center text-fg transition-colors before:pointer-events-none before:absolute before:inset-y-2.5 before:right-0 before:w-px before:bg-line-subtle before:content-[''] after:pointer-events-none after:absolute after:inset-x-2.5 after:bottom-0 after:h-px after:bg-line-subtle after:content-[''] hover:bg-surface-hover lg:gap-3"
               >
                 <MaskedIcon src={item.icon} className="h-12 w-12 lg:h-20 lg:w-20" />
                 <span className="text-xs font-semibold leading-snug md:text-sm lg:text-base">
                   {item.label}
                 </span>
-              </a>
+              </Link>
             ))}
           </div>
         </div>
