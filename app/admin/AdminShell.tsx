@@ -36,26 +36,38 @@ export function AdminShell({ children, isAdmin }: AdminShellProps) {
             {t.cityName}
           </Link>
           <span className="text-sm text-fg-muted">{t.admin.title}</span>
-          <nav className="ml-auto flex flex-wrap items-center gap-2">
+          <nav className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto">
             {isAdmin ? (
               <>
                 <Link
                   href="/admin/users"
-                  className="rounded-md px-3 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-hover hover:text-accent"
+                  className="whitespace-nowrap rounded-md px-3 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-hover hover:text-accent"
                 >
                   {t.admin.users}
                 </Link>
                 <Link
                   href="/admin/users/new"
-                  className="rounded-md px-3 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-hover hover:text-accent"
+                  className="whitespace-nowrap rounded-md px-3 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-hover hover:text-accent"
                 >
                   {t.admin.newUser}
                 </Link>
                 <Link
                   href="/admin/password-reset-requests"
-                  className="rounded-md px-3 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-hover hover:text-accent"
+                  className="whitespace-nowrap rounded-md px-3 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-hover hover:text-accent"
                 >
                   {t.admin.passwordResets}
+                </Link>
+                <Link
+                  href="/admin/phone-numbers"
+                  className="whitespace-nowrap rounded-md px-3 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-hover hover:text-accent"
+                >
+                  {t.admin.phoneNumbers}
+                </Link>
+                <Link
+                  href="/admin/languages"
+                  className="whitespace-nowrap rounded-md px-3 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-hover hover:text-accent"
+                >
+                  {t.admin.languageSettings}
                 </Link>
               </>
             ) : null}

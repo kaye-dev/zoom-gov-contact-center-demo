@@ -2,7 +2,8 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
+import type { ContactSettings } from '@/lib/site-settings';
 import { lifeCategories } from '../content/site-content';
 import { useI18n } from '../i18n/LanguageProvider';
 import { LabeledBox } from './LabeledBox';
@@ -63,19 +64,32 @@ function MaskedIcon({ src, className }: { src: string; className?: string }) {
   );
 }
 
-export function FindInfo() {
-  const { t } = useI18n();
+export function FindInfo({
+  destinations,
+}: {
+  destinations: ContactSettings['destinations'];
+}) {
+  const { locale, t } = useI18n();
+  const destination = destinations[locale];
 
   const cards = [
     {
       title: t.findInfo.call.title,
       description: t.findInfo.call.description,
       icon: '/ai-call-assistant.png',
+      href: destination.aiPhoneE164
+        ? `tel:${destination.aiPhoneE164}`
+        : null,
+      unavailableAlert: t.findInfo.call.unavailableAlert,
+      external: false,
     },
     {
       title: t.findInfo.chat.title,
       description: t.findInfo.chat.description,
       icon: '/ai-chat-assistant.png',
+      href: destination.virtualAgentCampaignUrl,
+      unavailableAlert: t.findInfo.chat.unavailableAlert,
+      external: true,
     },
   ];
 
@@ -100,12 +114,9 @@ export function FindInfo() {
         {/* カードグリッド（仕切り線で 2 分割。各カードがホバー領域＝枠の半分） */}
         {/* 縦積み時は水平線、md 以上では垂直線で区切る */}
         <div className="grid grid-cols-1 divide-y divide-line-subtle md:grid-cols-2 md:divide-x md:divide-y-0 md:divide-line-subtle">
-          {cards.map((card) => (
-            <a
-              key={card.title}
-              href="#"
-              className="flex items-center gap-5 px-1 py-4 text-fg transition-colors hover:bg-surface-hover md:px-8 md:py-6 lg:gap-6 lg:py-8"
-            >
+          {cards.map((card) => {
+            const content = (
+              <>
               <ThemedIcon
                 light={card.icon}
                 dark={darkIconPath(card.icon)}
@@ -119,8 +130,28 @@ export function FindInfo() {
                   {card.description}
                 </p>
               </div>
-            </a>
-          ))}
+              </>
+            );
+
+            return card.href ? (
+              <a
+                key={card.title}
+                href={card.href}
+                target={card.external ? '_blank' : undefined}
+                rel={card.external ? 'noopener noreferrer' : undefined}
+                className="flex items-center gap-5 px-1 py-4 text-fg transition-colors hover:bg-surface-hover md:px-8 md:py-6 lg:gap-6 lg:py-8"
+              >
+                {content}
+              </a>
+            ) : (
+              <ConsultationUnavailableButton
+                key={card.title}
+                message={card.unavailableAlert}
+              >
+                {content}
+              </ConsultationUnavailableButton>
+            );
+          })}
         </div>
       </LabeledBox>
 
@@ -151,5 +182,23 @@ export function FindInfo() {
         </div>
       </LabeledBox>
     </section>
+  );
+}
+
+function ConsultationUnavailableButton({
+  message,
+  children,
+}: {
+  message: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => window.alert(message)}
+      className="flex w-full cursor-pointer items-center gap-5 px-1 py-4 text-left text-fg transition-colors hover:bg-surface-hover md:px-8 md:py-6 lg:gap-6 lg:py-8"
+    >
+      {children}
+    </button>
   );
 }

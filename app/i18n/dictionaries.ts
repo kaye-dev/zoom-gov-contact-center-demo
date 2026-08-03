@@ -1,14 +1,21 @@
 // 対応ロケールと UI 文言の辞書。
 // ルーティングを使わず、クライアント側で言語を切り替えるシンプルな構成。
 
-export const locales = ['ja', 'en', 'zh-Hans', 'zh-Hant', 'ko'] as const;
+import {
+  DEFAULT_SITE_LOCALE,
+  SITE_LOCALES,
+  isSiteLocale,
+  type SettingsErrorCode,
+  type SiteLocale,
+} from '@/lib/site-settings';
 
-export type Locale = (typeof locales)[number];
+export const locales = SITE_LOCALES;
 
-export const defaultLocale: Locale = 'ja';
+export type Locale = SiteLocale;
 
-export const isLocale = (value: string): value is Locale =>
-  (locales as readonly string[]).includes(value);
+export const defaultLocale: Locale = DEFAULT_SITE_LOCALE;
+
+export const isLocale = isSiteLocale;
 
 // 言語メニューに表示する各言語の名称（常にその言語自身の表記）
 export const localeNames: Record<Locale, string> = {
@@ -94,8 +101,8 @@ export type Dictionary = {
     title: string;
     subtitle: string;
     sectionLabel: string;
-    call: { title: string; description: string };
-    chat: { title: string; description: string };
+    call: { title: string; description: string; unavailableAlert: string };
+    chat: { title: string; description: string; unavailableAlert: string };
     lifeInfo: {
       sectionLabel: string;
       items: {
@@ -216,6 +223,8 @@ export type Dictionary = {
     users: string;
     newUser: string;
     passwordResets: string;
+    phoneNumbers: string;
+    languageSettings: string;
     userListTitle: string;
     searchPlaceholder: string;
     search: string;
@@ -247,6 +256,38 @@ export type Dictionary = {
     adminOnly: string;
     dashboardTitle: string;
     dashboardDescription: string;
+    settings: {
+      save: string;
+      saving: string;
+      saved: string;
+      saveError: string;
+      errors: Record<SettingsErrorCode, string>;
+    };
+    contactSettings: {
+      title: string;
+      description: string;
+      representativeTitle: string;
+      representativeDescription: string;
+      representativeDisplayLabel: string;
+      representativeDisplayHelp: string;
+      representativeE164Label: string;
+      representativeE164Help: string;
+      aiPhoneTitle: string;
+      aiPhoneDescription: string;
+      aiPhoneLabel: string;
+      virtualAgentTitle: string;
+      virtualAgentDescription: string;
+      campaignUrlLabel: string;
+      hidden: string;
+    };
+    languageManagement: {
+      title: string;
+      description: string;
+      enabledCountLabel: string;
+      japaneseRequired: string;
+      moveUp: string;
+      moveDown: string;
+    };
   };
 };
 
@@ -276,11 +317,13 @@ export const dictionaries: Record<Locale, Dictionary> = {
         title: 'AI 電話相談',
         description:
           '相談内容を AI が一次対応を行い、高度なご相談や個人情報に関わるご相談は有人オペレーターにお繋ぎします。',
+        unavailableAlert: 'AI 電話相談の電話番号が設定されていません。',
       },
       chat: {
         title: 'AI チャット相談',
         description:
           '相談内容を AI がチャット形式でお答えします。高度なご質問や個人情報に関わるご相談は適切な相談先をお繋ぎいたします。',
+        unavailableAlert: 'AI チャット相談の接続先が設定されていません。',
       },
       lifeInfo: {
         sectionLabel: '生活情報',
@@ -564,6 +607,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       users: 'ユーザー管理',
       newUser: 'ユーザー作成',
       passwordResets: '再設定申請',
+      phoneNumbers: '電話番号管理',
+      languageSettings: '言語管理',
       userListTitle: 'ユーザー管理',
       searchPlaceholder: '氏名またはメールアドレスで検索',
       search: '検索',
@@ -598,6 +643,59 @@ export const dictionaries: Record<Locale, Dictionary> = {
       dashboardTitle: '管理画面',
       dashboardDescription:
         'ログイン済みです。ユーザー管理機能を利用するには管理者権限が必要です。',
+      settings: {
+        save: '設定を保存',
+        saving: '保存中…',
+        saved: '設定を保存しました。',
+        saveError: '設定を保存できませんでした。',
+        errors: {
+          AUTHENTICATION_REQUIRED: 'ログインが必要です。',
+          ADMINISTRATOR_REQUIRED: '管理者権限が必要です。',
+          INVALID_REQUEST: '入力内容を確認してください。',
+          INVALID_REPRESENTATIVE_PHONE_DISPLAY:
+            '代表電話の表示値に使用できない文字が含まれています。',
+          INVALID_REPRESENTATIVE_PHONE_E164:
+            '代表電話の発信用番号をE.164形式で入力してください。',
+          INVALID_AI_PHONE_E164:
+            'AI電話番号をE.164形式で入力してください。',
+          INVALID_CAMPAIGN_URL:
+            'Campaign URLには有効なHTTPS URLを入力してください。',
+          INVALID_LANGUAGE_SETTINGS:
+            '5言語を重複なく1回ずつ指定してください。',
+          JAPANESE_REQUIRED: '日本語は無効にできません。',
+          SETTINGS_SAVE_FAILED: '設定を保存できませんでした。',
+        },
+      },
+      contactSettings: {
+        title: '電話番号管理',
+        description:
+          '代表電話と、言語ごとのAI電話相談・AIチャット相談の接続先を設定します。',
+        representativeTitle: '代表電話',
+        representativeDescription:
+          '共通フッターに表示する電話番号と、発信に使用する番号を設定します。',
+        representativeDisplayLabel: '表示用電話番号',
+        representativeDisplayHelp: '例：(03)1234-5678',
+        representativeE164Label: '発信用電話番号（E.164）',
+        representativeE164Help: '例：+81312345678',
+        aiPhoneTitle: 'AI 電話相談',
+        aiPhoneDescription:
+          '公開サイトで選択中の言語に応じて発信する電話番号を設定します。空欄の場合は未設定として保存されます。',
+        aiPhoneLabel: 'AI電話番号（E.164）',
+        virtualAgentTitle: 'AI チャット相談',
+        virtualAgentDescription:
+          'Zoom Virtual AgentのFull-page / Offsite Campaign URLを設定します。空欄の場合は未設定として保存されます。',
+        campaignUrlLabel: 'Campaign URL（HTTPS）',
+        hidden: '非表示中',
+      },
+      languageManagement: {
+        title: '言語管理',
+        description:
+          '公開サイトの言語メニューに表示する言語と、その並び順を設定します。',
+        enabledCountLabel: '表示する言語数',
+        japaneseRequired: '必須',
+        moveUp: '上へ',
+        moveDown: '下へ',
+      },
     },
   },
   en: {
@@ -625,11 +723,15 @@ export const dictionaries: Record<Locale, Dictionary> = {
         title: 'AI Phone Consultation',
         description:
           'AI handles your inquiry first, then connects you to a live operator for complex matters or questions involving personal information.',
+        unavailableAlert:
+          'A phone number has not been configured for AI phone consultation.',
       },
       chat: {
         title: 'AI Chat Consultation',
         description:
           'AI answers your inquiry in a chat format. For advanced questions or matters involving personal information, we connect you to the appropriate contact.',
+        unavailableAlert:
+          'A destination has not been configured for AI chat consultation.',
       },
       lifeInfo: {
         sectionLabel: 'Daily Life',
@@ -920,6 +1022,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       users: 'User Management',
       newUser: 'Create User',
       passwordResets: 'Reset Requests',
+      phoneNumbers: 'Phone Numbers',
+      languageSettings: 'Languages',
       userListTitle: 'User Management',
       searchPlaceholder: 'Search by name or email',
       search: 'Search',
@@ -954,6 +1058,59 @@ export const dictionaries: Record<Locale, Dictionary> = {
       dashboardTitle: 'Admin',
       dashboardDescription:
         'You are signed in. Administrator features require the admin role.',
+      settings: {
+        save: 'Save settings',
+        saving: 'Saving…',
+        saved: 'Settings saved.',
+        saveError: 'Unable to save settings.',
+        errors: {
+          AUTHENTICATION_REQUIRED: 'Please sign in.',
+          ADMINISTRATOR_REQUIRED: 'Administrator access is required.',
+          INVALID_REQUEST: 'Please review the entered values.',
+          INVALID_REPRESENTATIVE_PHONE_DISPLAY:
+            'The representative phone display contains unsupported characters.',
+          INVALID_REPRESENTATIVE_PHONE_E164:
+            'Enter the representative dialing number in E.164 format.',
+          INVALID_AI_PHONE_E164:
+            'Enter each AI phone number in E.164 format.',
+          INVALID_CAMPAIGN_URL:
+            'Enter a valid HTTPS Campaign URL.',
+          INVALID_LANGUAGE_SETTINGS:
+            'Include each of the five languages exactly once.',
+          JAPANESE_REQUIRED: 'Japanese cannot be disabled.',
+          SETTINGS_SAVE_FAILED: 'Unable to save settings.',
+        },
+      },
+      contactSettings: {
+        title: 'Phone Number Management',
+        description:
+          'Configure the representative phone and the AI phone and chat destination for each language.',
+        representativeTitle: 'Representative Phone',
+        representativeDescription:
+          'Configure the number shown in the shared footer and the number used for dialing.',
+        representativeDisplayLabel: 'Display phone number',
+        representativeDisplayHelp: 'Example: (03)1234-5678',
+        representativeE164Label: 'Dialing number (E.164)',
+        representativeE164Help: 'Example: +81312345678',
+        aiPhoneTitle: 'AI Phone Consultation',
+        aiPhoneDescription:
+          'Set the phone number dialed for each selected site language. A blank value is saved as not configured.',
+        aiPhoneLabel: 'AI phone number (E.164)',
+        virtualAgentTitle: 'AI Chat Consultation',
+        virtualAgentDescription:
+          'Set the Zoom Virtual Agent Full-page / Offsite Campaign URL. A blank value is saved as not configured.',
+        campaignUrlLabel: 'Campaign URL (HTTPS)',
+        hidden: 'Hidden',
+      },
+      languageManagement: {
+        title: 'Language Management',
+        description:
+          'Choose which languages appear in the public language menu and arrange their order.',
+        enabledCountLabel: 'Displayed languages',
+        japaneseRequired: 'Required',
+        moveUp: 'Move up',
+        moveDown: 'Move down',
+      },
     },
   },
   'zh-Hans': {
@@ -981,11 +1138,13 @@ export const dictionaries: Record<Locale, Dictionary> = {
         title: 'AI 电话咨询',
         description:
           '由 AI 进行首次应答，高级咨询或涉及个人信息的咨询将转接至人工坐席。',
+        unavailableAlert: '尚未设置 AI 电话咨询的电话号码。',
       },
       chat: {
         title: 'AI 聊天咨询',
         description:
           '由 AI 以聊天形式解答咨询内容。对于高级问题或涉及个人信息的咨询，将为您转接至合适的咨询窗口。',
+        unavailableAlert: '尚未设置 AI 聊天咨询的连接地址。',
       },
       lifeInfo: {
         sectionLabel: '生活信息',
@@ -1265,6 +1424,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       users: '用户管理',
       newUser: '创建用户',
       passwordResets: '重置申请',
+      phoneNumbers: '电话号码管理',
+      languageSettings: '语言管理',
       userListTitle: '用户管理',
       searchPlaceholder: '按姓名或电子邮件搜索',
       search: '搜索',
@@ -1297,6 +1458,54 @@ export const dictionaries: Record<Locale, Dictionary> = {
       adminOnly: '仅限管理员访问。',
       dashboardTitle: '管理页面',
       dashboardDescription: '您已登录。用户管理功能需要管理员权限。',
+      settings: {
+        save: '保存设置',
+        saving: '正在保存…',
+        saved: '设置已保存。',
+        saveError: '无法保存设置。',
+        errors: {
+          AUTHENTICATION_REQUIRED: '请先登录。',
+          ADMINISTRATOR_REQUIRED: '需要管理员权限。',
+          INVALID_REQUEST: '请检查输入内容。',
+          INVALID_REPRESENTATIVE_PHONE_DISPLAY:
+            '代表电话号码的显示值包含不支持的字符。',
+          INVALID_REPRESENTATIVE_PHONE_E164:
+            '请以E.164格式输入代表电话的拨号号码。',
+          INVALID_AI_PHONE_E164: '请以E.164格式输入AI电话号码。',
+          INVALID_CAMPAIGN_URL: '请输入有效的HTTPS Campaign URL。',
+          INVALID_LANGUAGE_SETTINGS: '请将5种语言各指定一次且不要重复。',
+          JAPANESE_REQUIRED: '不能停用日语。',
+          SETTINGS_SAVE_FAILED: '无法保存设置。',
+        },
+      },
+      contactSettings: {
+        title: '电话号码管理',
+        description: '设置代表电话以及各语言的AI电话和AI聊天连接地址。',
+        representativeTitle: '代表电话',
+        representativeDescription:
+          '设置在共用页脚中显示的电话号码以及拨号时使用的号码。',
+        representativeDisplayLabel: '显示用电话号码',
+        representativeDisplayHelp: '示例：(03)1234-5678',
+        representativeE164Label: '拨号电话号码（E.164）',
+        representativeE164Help: '示例：+81312345678',
+        aiPhoneTitle: 'AI 电话咨询',
+        aiPhoneDescription:
+          '按公开网站当前选择的语言设置拨打号码。留空时保存为未设置。',
+        aiPhoneLabel: 'AI电话号码（E.164）',
+        virtualAgentTitle: 'AI 聊天咨询',
+        virtualAgentDescription:
+          '设置Zoom Virtual Agent的Full-page / Offsite Campaign URL。留空时保存为未设置。',
+        campaignUrlLabel: 'Campaign URL（HTTPS）',
+        hidden: '已隐藏',
+      },
+      languageManagement: {
+        title: '语言管理',
+        description: '设置公开网站语言菜单中显示的语言及其排列顺序。',
+        enabledCountLabel: '显示语言数',
+        japaneseRequired: '必需',
+        moveUp: '上移',
+        moveDown: '下移',
+      },
     },
   },
   'zh-Hant': {
@@ -1324,11 +1533,13 @@ export const dictionaries: Record<Locale, Dictionary> = {
         title: 'AI 電話諮詢',
         description:
           '由 AI 進行初次應答，高度諮詢或涉及個人資訊的諮詢將轉接至真人客服。',
+        unavailableAlert: '尚未設定 AI 電話諮詢的電話號碼。',
       },
       chat: {
         title: 'AI 聊天諮詢',
         description:
           '由 AI 以聊天形式回覆諮詢內容。對於高度問題或涉及個人資訊的諮詢，將為您轉接至合適的諮詢窗口。',
+        unavailableAlert: '尚未設定 AI 聊天諮詢的連線位址。',
       },
       lifeInfo: {
         sectionLabel: '生活資訊',
@@ -1608,6 +1819,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       users: '使用者管理',
       newUser: '建立使用者',
       passwordResets: '重設申請',
+      phoneNumbers: '電話號碼管理',
+      languageSettings: '語言管理',
       userListTitle: '使用者管理',
       searchPlaceholder: '依姓名或電子郵件搜尋',
       search: '搜尋',
@@ -1640,6 +1853,54 @@ export const dictionaries: Record<Locale, Dictionary> = {
       adminOnly: '僅限管理員存取。',
       dashboardTitle: '管理頁面',
       dashboardDescription: '您已登入。使用者管理功能需要管理員權限。',
+      settings: {
+        save: '儲存設定',
+        saving: '正在儲存…',
+        saved: '設定已儲存。',
+        saveError: '無法儲存設定。',
+        errors: {
+          AUTHENTICATION_REQUIRED: '請先登入。',
+          ADMINISTRATOR_REQUIRED: '需要管理員權限。',
+          INVALID_REQUEST: '請檢查輸入內容。',
+          INVALID_REPRESENTATIVE_PHONE_DISPLAY:
+            '代表電話號碼的顯示值包含不支援的字元。',
+          INVALID_REPRESENTATIVE_PHONE_E164:
+            '請以E.164格式輸入代表電話的撥號號碼。',
+          INVALID_AI_PHONE_E164: '請以E.164格式輸入AI電話號碼。',
+          INVALID_CAMPAIGN_URL: '請輸入有效的HTTPS Campaign URL。',
+          INVALID_LANGUAGE_SETTINGS: '請將5種語言各指定一次且不要重複。',
+          JAPANESE_REQUIRED: '不能停用日語。',
+          SETTINGS_SAVE_FAILED: '無法儲存設定。',
+        },
+      },
+      contactSettings: {
+        title: '電話號碼管理',
+        description: '設定代表電話以及各語言的AI電話和AI聊天連線位址。',
+        representativeTitle: '代表電話',
+        representativeDescription:
+          '設定在共用頁尾顯示的電話號碼以及撥號時使用的號碼。',
+        representativeDisplayLabel: '顯示用電話號碼',
+        representativeDisplayHelp: '範例：(03)1234-5678',
+        representativeE164Label: '撥號電話號碼（E.164）',
+        representativeE164Help: '範例：+81312345678',
+        aiPhoneTitle: 'AI 電話諮詢',
+        aiPhoneDescription:
+          '依公開網站目前選擇的語言設定撥打號碼。留白時儲存為未設定。',
+        aiPhoneLabel: 'AI電話號碼（E.164）',
+        virtualAgentTitle: 'AI 聊天諮詢',
+        virtualAgentDescription:
+          '設定Zoom Virtual Agent的Full-page / Offsite Campaign URL。留白時儲存為未設定。',
+        campaignUrlLabel: 'Campaign URL（HTTPS）',
+        hidden: '已隱藏',
+      },
+      languageManagement: {
+        title: '語言管理',
+        description: '設定公開網站語言選單中顯示的語言及其排列順序。',
+        enabledCountLabel: '顯示語言數',
+        japaneseRequired: '必須',
+        moveUp: '上移',
+        moveDown: '下移',
+      },
     },
   },
   ko: {
@@ -1667,11 +1928,13 @@ export const dictionaries: Record<Locale, Dictionary> = {
         title: 'AI 전화 상담',
         description:
           '상담 내용을 AI가 1차 응대하며, 고도의 상담이나 개인정보와 관련된 상담은 상담원에게 연결해 드립니다.',
+        unavailableAlert: 'AI 전화 상담 전화번호가 설정되어 있지 않습니다.',
       },
       chat: {
         title: 'AI 채팅 상담',
         description:
           '상담 내용을 AI가 채팅 형식으로 답변해 드립니다. 고도의 질문이나 개인정보와 관련된 상담은 적절한 상담처로 연결해 드립니다.',
+        unavailableAlert: 'AI 채팅 상담 연결 주소가 설정되어 있지 않습니다.',
       },
       lifeInfo: {
         sectionLabel: '생활 정보',
@@ -1950,6 +2213,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       users: '사용자 관리',
       newUser: '사용자 생성',
       passwordResets: '재설정 신청',
+      phoneNumbers: '전화번호 관리',
+      languageSettings: '언어 관리',
       userListTitle: '사용자 관리',
       searchPlaceholder: '이름 또는 이메일로 검색',
       search: '검색',
@@ -1982,6 +2247,59 @@ export const dictionaries: Record<Locale, Dictionary> = {
       adminOnly: '관리자만 접근할 수 있습니다.',
       dashboardTitle: '관리 화면',
       dashboardDescription: '로그인되어 있습니다. 사용자 관리 기능에는 관리자 권한이 필요합니다.',
+      settings: {
+        save: '설정 저장',
+        saving: '저장 중…',
+        saved: '설정을 저장했습니다.',
+        saveError: '설정을 저장할 수 없습니다.',
+        errors: {
+          AUTHENTICATION_REQUIRED: '로그인이 필요합니다.',
+          ADMINISTRATOR_REQUIRED: '관리자 권한이 필요합니다.',
+          INVALID_REQUEST: '입력 내용을 확인해 주세요.',
+          INVALID_REPRESENTATIVE_PHONE_DISPLAY:
+            '대표 전화번호 표시값에 지원되지 않는 문자가 포함되어 있습니다.',
+          INVALID_REPRESENTATIVE_PHONE_E164:
+            '대표 전화 발신 번호를 E.164 형식으로 입력해 주세요.',
+          INVALID_AI_PHONE_E164:
+            'AI 전화번호를 E.164 형식으로 입력해 주세요.',
+          INVALID_CAMPAIGN_URL:
+            '유효한 HTTPS Campaign URL을 입력해 주세요.',
+          INVALID_LANGUAGE_SETTINGS:
+            '5개 언어를 중복 없이 한 번씩 지정해 주세요.',
+          JAPANESE_REQUIRED: '일본어는 비활성화할 수 없습니다.',
+          SETTINGS_SAVE_FAILED: '설정을 저장할 수 없습니다.',
+        },
+      },
+      contactSettings: {
+        title: '전화번호 관리',
+        description:
+          '대표 전화와 언어별 AI 전화 상담 및 AI 채팅 상담 연결 대상을 설정합니다.',
+        representativeTitle: '대표 전화',
+        representativeDescription:
+          '공통 푸터에 표시할 전화번호와 발신에 사용할 번호를 설정합니다.',
+        representativeDisplayLabel: '표시용 전화번호',
+        representativeDisplayHelp: '예: (03)1234-5678',
+        representativeE164Label: '발신 전화번호(E.164)',
+        representativeE164Help: '예: +81312345678',
+        aiPhoneTitle: 'AI 전화 상담',
+        aiPhoneDescription:
+          '공개 사이트에서 선택한 언어에 따라 발신할 번호를 설정합니다. 빈칸은 미설정으로 저장됩니다.',
+        aiPhoneLabel: 'AI 전화번호(E.164)',
+        virtualAgentTitle: 'AI 채팅 상담',
+        virtualAgentDescription:
+          'Zoom Virtual Agent의 Full-page / Offsite Campaign URL을 설정합니다. 빈칸은 미설정으로 저장됩니다.',
+        campaignUrlLabel: 'Campaign URL(HTTPS)',
+        hidden: '숨김',
+      },
+      languageManagement: {
+        title: '언어 관리',
+        description:
+          '공개 사이트 언어 메뉴에 표시할 언어와 정렬 순서를 설정합니다.',
+        enabledCountLabel: '표시 언어 수',
+        japaneseRequired: '필수',
+        moveUp: '위로',
+        moveDown: '아래로',
+      },
     },
   },
 };

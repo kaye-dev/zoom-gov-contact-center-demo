@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../i18n/LanguageProvider';
-import { locales, localeNames, type Locale } from '../i18n/dictionaries';
+import { localeNames, type Locale } from '../i18n/dictionaries';
 import { GlobeIcon } from './svg/GlobeIcon';
 
 export function LanguageMenu() {
-  const { locale, setLocale, t } = useI18n();
+  const { availableLocales, locale, setLocale, t } = useI18n();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -41,7 +41,7 @@ export function LanguageMenu() {
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex items-center gap-2 text-sm text-fg transition-colors hover:text-accent"
+        className="flex cursor-pointer items-center gap-2 text-sm text-fg transition-colors hover:text-accent"
       >
         <GlobeIcon className="h-5 w-5 shrink-0" />
         <span className="whitespace-nowrap">{t.nav.language}</span>
@@ -52,7 +52,7 @@ export function LanguageMenu() {
           role="menu"
           className="absolute right-0 top-full z-50 mt-2 min-w-[10rem] overflow-hidden rounded-lg border border-line bg-surface-raised py-1 shadow-lg"
         >
-          {locales.map((code) => {
+          {availableLocales.map((code) => {
             const active = code === locale;
             return (
               <li key={code} role="none">
@@ -61,7 +61,7 @@ export function LanguageMenu() {
                   role="menuitemradio"
                   aria-checked={active}
                   onClick={() => select(code)}
-                  className={`flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm transition-colors ${
+                  className={`flex w-full cursor-pointer items-center justify-between gap-3 px-4 py-2 text-left text-sm transition-colors ${
                     active
                       ? 'font-semibold text-accent'
                       : 'text-fg hover:bg-surface-hover'

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { handle } from "hono/vercel";
+import { revalidatePath } from "next/cache";
 
 import { auth } from "@/lib/auth";
 import {
@@ -18,6 +19,15 @@ import {
   shouldChangePassword,
 } from "@/lib/server/auth/helpers";
 import { prisma } from "@/lib/server/prisma";
+import {
+  saveContactSettings,
+  saveLanguageSettings,
+} from "@/lib/server/site-settings";
+import {
+  SETTINGS_ERROR_CODES,
+  parseContactSettings,
+  parseLanguageSettings,
+} from "@/lib/site-settings";
 
 export const runtime = "nodejs";
 
@@ -290,6 +300,52 @@ app.post("/admin/users", async (c) => {
   }
 });
 
+app.put("/admin/contact-settings", async (c) => {
+  const session = await getAppSession(c.req.raw.headers);
+  const unauthorized = rejectNonAdminForSettings(session);
+
+  if (unauthorized) {
+    return c.json(unauthorized.body, unauthorized.status);
+  }
+
+  const parsed = parseContactSettings(await readJsonBody(c.req.raw));
+  if (!parsed.ok) {
+    return c.json({ error: parsed.code }, 400);
+  }
+
+  try {
+    const settings = await saveContactSettings(parsed.value);
+    revalidatePath("/", "layout");
+    return c.json({ settings });
+  } catch (error) {
+    console.error("Failed to save contact settings.", error);
+    return c.json({ error: SETTINGS_ERROR_CODES.saveFailed }, 500);
+  }
+});
+
+app.put("/admin/language-settings", async (c) => {
+  const session = await getAppSession(c.req.raw.headers);
+  const unauthorized = rejectNonAdminForSettings(session);
+
+  if (unauthorized) {
+    return c.json(unauthorized.body, unauthorized.status);
+  }
+
+  const parsed = parseLanguageSettings(await readJsonBody(c.req.raw));
+  if (!parsed.ok) {
+    return c.json({ error: parsed.code }, 400);
+  }
+
+  try {
+    const settings = await saveLanguageSettings(parsed.value);
+    revalidatePath("/", "layout");
+    return c.json({ settings });
+  } catch (error) {
+    console.error("Failed to save language settings.", error);
+    return c.json({ error: SETTINGS_ERROR_CODES.saveFailed }, 500);
+  }
+});
+
 app.post("/account/change-password", async (c) => {
   const session = await getAppSession(c.req.raw.headers);
   const user = getSessionUser(session);
@@ -352,6 +408,7 @@ const handler = handle(app);
 
 export const GET = handler;
 export const POST = handler;
+export const PUT = handler;
 
 async function readJsonBody(request: Request) {
   try {
@@ -426,6 +483,26 @@ function rejectNonAdmin(session: Awaited<ReturnType<typeof getAppSession>>) {
 
   if (!isAdminSession(session)) {
     return { status: 403 as const, body: { error: "Administrator role is required." } };
+  }
+
+  return null;
+}
+
+function rejectNonAdminForSettings(
+  session: Awaited<ReturnType<typeof getAppSession>>,
+) {
+  if (!session) {
+    return {
+      status: 401 as const,
+      body: { error: SETTINGS_ERROR_CODES.authenticationRequired },
+    };
+  }
+
+  if (!isAdminSession(session)) {
+    return {
+      status: 403 as const,
+      body: { error: SETTINGS_ERROR_CODES.administratorRequired },
+    };
   }
 
   return null;
