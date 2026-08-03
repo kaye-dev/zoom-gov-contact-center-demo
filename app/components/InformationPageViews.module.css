@@ -1,0 +1,30 @@
+.animatedLink {
+  text-decoration: none;
+}
+
+.animatedLinkLabel {
+  position: relative;
+  display: inline-block;
+}
+
+.animatedLinkLabel::after {
+  position: absolute;
+  bottom: -4px;
+  left: 0;
+  width: 0;
+  height: 1px;
+  background-color: currentColor;
+  content: '';
+  transition: width 0.4s ease-in-out;
+}
+
+.animatedLink:hover .animatedLinkLabel::after,
+.animatedLink:focus-visible .animatedLinkLabel::after {
+  width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animatedLinkLabel::after {
+    transition-duration: 0s;
+  }
+}

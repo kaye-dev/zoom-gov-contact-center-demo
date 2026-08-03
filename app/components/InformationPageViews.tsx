@@ -11,9 +11,14 @@ import {
   type NewsArticle,
 } from '../content/site-content';
 import { useI18n } from '../i18n/LanguageProvider';
+import styles from './InformationPageViews.module.css';
 
 function interpolate(message: string, name: string) {
   return message.replace('{name}', name);
+}
+
+function AnimatedLinkLabel({ children }: { children: ReactNode }) {
+  return <span className={styles.animatedLinkLabel}>{children}</span>;
 }
 
 function CategoryIcon({ src, className = 'h-14 w-14' }: { src: string; className?: string }) {
@@ -46,8 +51,8 @@ function Breadcrumbs({ items }: { items: readonly Breadcrumb[] }) {
           <li key={`${item.label}-${index}`} className="flex items-center gap-2">
             {index > 0 && <span aria-hidden="true">&gt;</span>}
             {item.href ? (
-              <Link href={item.href} className="text-accent underline underline-offset-4 hover:no-underline">
-                {item.label}
+              <Link href={item.href} className={`${styles.animatedLink} text-accent`}>
+                <AnimatedLinkLabel>{item.label}</AnimatedLinkLabel>
               </Link>
             ) : (
               <span aria-current="page" className="text-fg">
@@ -69,7 +74,7 @@ function PageTitleBand({ title, iconSrc }: { title: string; iconSrc?: string }) 
   return (
     <header className="border-l-[6px] border-primary-1000 bg-primary-50 px-5 py-7 dark:border-primary-400 dark:bg-surface-raised md:px-8 md:py-9">
       <div className="relative flex items-center">
-        {iconSrc && <CategoryIcon src={iconSrc} className="absolute h-11 w-11 opacity-20 md:h-13 md:w-13" />}
+        {iconSrc && <CategoryIcon src={iconSrc} className="absolute h-11 w-11 opacity-60 md:h-13 md:w-13" />}
         <h1
           className={`relative break-words text-2xl font-bold leading-snug text-fg md:text-4xl ${
             iconSrc ? 'pl-12 md:pl-15' : ''
@@ -111,10 +116,12 @@ function ContentsNavigation({ items }: { items: readonly ContentsItem[] }) {
           <li key={item.href} className="border-t border-line-subtle first:border-t-0 md:[&:nth-child(2)]:border-t-0">
             <a
               href={item.href}
-              className="flex min-h-11 items-start gap-2 py-3 font-semibold leading-7 text-accent underline underline-offset-4 hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className={`${styles.animatedLink} flex min-h-11 items-start gap-2 py-3 font-semibold leading-7 text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
             >
-              <span aria-hidden="true">›</span>
-              <span>{item.label}</span>
+              <span aria-hidden="true" className="shrink-0 text-lg font-bold leading-7">
+                &gt;
+              </span>
+              <AnimatedLinkLabel>{item.label}</AnimatedLinkLabel>
             </a>
           </li>
         ))}
@@ -137,9 +144,9 @@ function ContactSection() {
             <dd className="px-4 py-3">
               <a
                 href="tel:+81312345678"
-                className="font-semibold text-accent underline underline-offset-4 hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                className={`${styles.animatedLink} font-semibold text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
               >
-                (03)1234-5678
+                <AnimatedLinkLabel>(03)1234-5678</AnimatedLinkLabel>
               </a>
             </dd>
           </div>
@@ -237,10 +244,12 @@ export function LifeCategoryView({ category }: { category: LifeCategory }) {
                 <p className="leading-8 text-fg">{t.contentPages.lifeTopicSummaries[topic.id]}</p>
                 <Link
                   href={`/life/${category.slug}/${topic.slug}`}
-                  className="mt-5 inline-flex items-center gap-2 font-semibold text-accent underline underline-offset-4 hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  className={`${styles.animatedLink} mt-5 inline-flex items-center gap-2 font-semibold text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
                 >
-                  <span aria-hidden="true">›</span>
-                  {t.contentPages.readMore}
+                  <span aria-hidden="true" className="shrink-0 text-lg font-bold">
+                    &gt;
+                  </span>
+                  <AnimatedLinkLabel>{t.contentPages.readMore}</AnimatedLinkLabel>
                 </Link>
               </div>
             </section>
@@ -304,10 +313,12 @@ export function LifeTopicView({ category, topic }: { category: LifeCategory; top
 
         <Link
           href={`/life/${category.slug}`}
-          className="mt-10 inline-flex items-center gap-2 font-semibold text-accent underline underline-offset-4 hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className={`${styles.animatedLink} mt-10 inline-flex items-center gap-2 font-semibold text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
         >
-          <span aria-hidden="true">‹</span>
-          {t.contentPages.backToCategory}
+          <span aria-hidden="true" className="shrink-0 text-lg font-bold">
+            &lt;
+          </span>
+          <AnimatedLinkLabel>{t.contentPages.backToCategory}</AnimatedLinkLabel>
         </Link>
       </article>
     </PageFrame>
@@ -416,10 +427,12 @@ export function NewsArticleView({ article }: { article: NewsArticle }) {
 
         <Link
           href="/news"
-          className="mt-10 inline-flex items-center gap-2 font-semibold text-accent underline underline-offset-4 hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className={`${styles.animatedLink} mt-10 inline-flex items-center gap-2 font-semibold text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
         >
-          <span aria-hidden="true">‹</span>
-          {t.contentPages.allNews}
+          <span aria-hidden="true" className="shrink-0 text-lg font-bold">
+            &lt;
+          </span>
+          <AnimatedLinkLabel>{t.contentPages.allNews}</AnimatedLinkLabel>
         </Link>
       </article>
     </PageFrame>
