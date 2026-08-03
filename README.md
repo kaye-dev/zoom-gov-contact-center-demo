@@ -27,7 +27,7 @@ Zoom 製品のデモ用に作成した、架空の市区町村ホームページ
 ローカルに Node.js や PostgreSQL の実行環境を直接用意せず、Docker Compose で開発サーバーと DB を起動できます。
 
 ```bash
-docker compose up --build
+./dev-compose.sh
 ```
 
 [http://localhost:3000](http://localhost:3000) をブラウザで開くと表示されます。
@@ -35,19 +35,20 @@ Prisma Studio は [http://localhost:5555](http://localhost:5555) で開けます
 既に `3000` 番ポートを使っている場合は、外側のポートを変えて起動できます。
 
 ```bash
-HOST_PORT=3001 docker compose up --build
+HOST_PORT=3001 ./dev-compose.sh
 ```
 
 Prisma Studio の外側ポートを変える場合は、`STUDIO_PORT` を指定します。
 
 ```bash
-STUDIO_PORT=5556 docker compose up --build
+STUDIO_PORT=5556 ./dev-compose.sh
 ```
 
-初回起動後、別ターミナルで Prisma migration と初期管理者 seed を実行します。
+`./dev-compose.sh` は Colima が停止している場合に自動起動します。`web` または `studio` を起動する前に Prisma migration の状態を確認し、未適用 migration がある場合だけ `db:deploy` を実行するか確認します。直接 `docker compose` を実行する場合は、事前に `colima start` を実行してください。
+
+初回起動後、別ターミナルで初期管理者 seed を実行します。
 
 ```bash
-docker compose exec web npm run db:migrate
 docker compose exec web npm run db:seed-admin
 ```
 
@@ -97,15 +98,15 @@ npm run dev
 
 | コマンド | 説明 |
 | --- | --- |
-| `docker compose up --build` | Docker で開発サーバーを起動 |
+| `./dev-compose.sh` | Colima と Prisma migration 状態を確認して Docker で開発サーバーを起動 |
 | `docker compose down -v` | Docker volume を含めて停止・削除 |
-| `docker compose up studio` | Prisma Studio を Docker 上で起動 |
+| `./dev-compose.sh up studio` | Prisma Studio を Docker 上で起動 |
 | `npm run dev` | 開発サーバーを起動 |
 | `npm run build` | 本番ビルドを作成 |
 | `npm run start` | 本番サーバーを起動 |
 | `npm run lint` | ESLint を実行 |
 | `npm run db:generate` | Prisma Client を生成 |
-| `npm run db:migrate` | Prisma migration をローカル DB に適用 |
+| `npm run db:migrate` | Prisma migration を作成し、ローカル DB に適用 |
 | `npm run db:deploy` | Prisma migration をデプロイ先 DB に適用 |
 | `npm run db:seed-admin` | 初期管理者を作成または更新 |
 | `npm run db:studio` | Prisma Studio を起動 |
