@@ -12,6 +12,7 @@ import {
 } from '../content/site-content';
 import { useI18n } from '../i18n/LanguageProvider';
 import styles from './InformationPageViews.module.css';
+import { ChevronDownIcon } from './svg/ChevronDownIcon';
 import { ChevronLeftIcon } from './svg/ChevronLeftIcon';
 import { ChevronRightIcon } from './svg/ChevronRightIcon';
 
@@ -74,11 +75,11 @@ function PageFrame({ children }: { children: ReactNode }) {
 
 function PageTitleBand({ title, iconSrc }: { title: string; iconSrc?: string }) {
   return (
-    <header className="border-l-[6px] border-primary-1000 bg-primary-50 px-5 py-7 dark:border-primary-400 dark:bg-surface-raised md:px-8 md:py-9">
+    <header className="border-l-[6px] border-primary-1000 bg-primary-50 px-5 py-3 dark:border-primary-400 dark:bg-surface-raised md:px-7 md:py-6">
       <div className="relative flex items-center">
         {iconSrc && <CategoryIcon src={iconSrc} className="absolute h-11 w-11 opacity-60 md:h-13 md:w-13" />}
         <h1
-          className={`relative break-words text-2xl font-bold leading-snug text-fg md:text-4xl ${
+          className={`relative break-words text-2xl font-bold leading-[1.5] text-fg md:text-4xl md:leading-snug ${
             iconSrc ? 'pl-12 md:pl-15' : ''
           }`}
         >
@@ -100,6 +101,10 @@ function SectionHeading({ id, children }: { id: string; children: ReactNode }) {
   );
 }
 
+function ContentSectionStack({ children }: { children: ReactNode }) {
+  return <div className="mt-12 flex max-w-6xl flex-col gap-12">{children}</div>;
+}
+
 type ContentsItem = {
   href: string;
   label: string;
@@ -114,13 +119,18 @@ function ContentsNavigation({ items }: { items: readonly ContentsItem[] }) {
         {t.contentPages.tableOfContents}
       </h2>
       <ul className="mt-4 grid gap-x-10 md:grid-cols-2">
-        {items.map((item) => (
-          <li key={item.href} className="border-t border-line-subtle first:border-t-0 md:[&:nth-child(2)]:border-t-0">
+        {items.map((item, index) => (
+          <li
+            key={item.href}
+            className={`border-t border-line-subtle first:border-t-0 md:[&:nth-child(2)]:border-t-0 ${
+              items.length % 2 === 1 && index === items.length - 1 ? 'md:col-span-2' : ''
+            }`}
+          >
             <a
               href={item.href}
-              className={`${styles.animatedLink} flex min-h-11 items-start gap-2 py-3 font-semibold leading-7 text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
+              className={`${styles.animatedLink} flex min-h-11 items-center gap-2 py-3 font-semibold leading-7 text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
             >
-              <ChevronRightIcon className="shrink-0" />
+              <ChevronDownIcon className="shrink-0" />
               <AnimatedLinkLabel>{item.label}</AnimatedLinkLabel>
             </a>
           </li>
@@ -134,11 +144,16 @@ function ContactSection() {
   const { t } = useI18n();
 
   return (
-    <section id="contact" aria-labelledby="contact-heading" className="mt-12 max-w-6xl scroll-mt-24">
-      <SectionHeading id="contact-heading">{t.contentPages.contactHeading}</SectionHeading>
-      <div className="border-x border-b border-line px-5 py-6 md:px-6">
+    <section id="contact" aria-labelledby="contact-heading" className="scroll-mt-24 border border-line">
+      <h2
+        id="contact-heading"
+        className="scroll-mt-24 bg-surface-hover px-5 py-4 text-xl font-bold leading-8 text-fg md:px-6 md:text-2xl"
+      >
+        {t.contentPages.contactHeading}
+      </h2>
+      <div className="px-5 py-6 md:px-6">
         <p className="leading-8 text-fg">{t.contentPages.contactNote}</p>
-        <dl className="mt-5 border-y border-line">
+        <dl className="mt-5 border border-line">
           <div className="grid md:grid-cols-[12rem_1fr]">
             <dt className="bg-surface-hover px-4 py-3 font-bold text-fg">{t.contentPages.contactPhoneLabel}</dt>
             <dd className="px-4 py-3">
@@ -158,7 +173,7 @@ function ContactSection() {
 
 function DetailsTable({ rows }: { rows: readonly (readonly [string, string])[] }) {
   return (
-    <dl className="border-x border-b border-line">
+    <dl className="mt-12 border-x border-b border-line">
       {rows.map(([title, description]) => (
         <div key={title} className="grid border-t border-line md:grid-cols-[14rem_1fr]">
           <dt className="bg-surface-hover px-5 py-4 font-bold leading-7 text-fg md:px-6">{title}</dt>
@@ -227,7 +242,7 @@ export function LifeCategoryView({ category }: { category: LifeCategory }) {
 
       <ContentsNavigation items={contentsItems} />
 
-      <div className="mt-12 max-w-6xl space-y-12">
+      <ContentSectionStack>
         {category.topics.map((topic) => {
           const topicTitle = t.contentPages.lifeTopics[topic.id];
           return (
@@ -251,9 +266,8 @@ export function LifeCategoryView({ category }: { category: LifeCategory }) {
             </section>
           );
         })}
-      </div>
-
-      <ContactSection />
+        <ContactSection />
+      </ContentSectionStack>
     </PageFrame>
   );
 }
@@ -293,19 +307,21 @@ export function LifeTopicView({ category, topic }: { category: LifeCategory; top
           ]}
         />
 
-        <section id="overview" aria-labelledby="overview-heading" className="mt-12 max-w-6xl scroll-mt-24">
-          <SectionHeading id="overview-heading">{t.contentPages.overviewHeading}</SectionHeading>
-          <div className="border-x border-b border-line px-5 py-6 md:px-6">
-            <p className="leading-8 text-fg">{t.contentPages.lifeTopicSummaries[topic.id]}</p>
-          </div>
-        </section>
+        <ContentSectionStack>
+          <section id="overview" aria-labelledby="overview-heading" className="scroll-mt-24">
+            <SectionHeading id="overview-heading">{t.contentPages.overviewHeading}</SectionHeading>
+            <div className="mt-8 px-5 md:px-6">
+              <p className="leading-8 text-fg">{t.contentPages.lifeTopicSummaries[topic.id]}</p>
+            </div>
+          </section>
 
-        <section id="check-points" aria-labelledby="check-points-heading" className="mt-12 max-w-6xl scroll-mt-24">
-          <SectionHeading id="check-points-heading">{t.contentPages.checkHeading}</SectionHeading>
-          <DetailsTable rows={details} />
-        </section>
+          <section id="check-points" aria-labelledby="check-points-heading" className="scroll-mt-24">
+            <SectionHeading id="check-points-heading">{t.contentPages.checkHeading}</SectionHeading>
+            <DetailsTable rows={details} />
+          </section>
 
-        <ContactSection />
+          <ContactSection />
+        </ContentSectionStack>
 
         <Link
           href={`/life/${category.slug}`}
@@ -403,19 +419,21 @@ export function NewsArticleView({ article }: { article: NewsArticle }) {
           ]}
         />
 
-        <section id="news-overview" aria-labelledby="news-overview-heading" className="mt-12 max-w-6xl scroll-mt-24">
-          <SectionHeading id="news-overview-heading">{t.contentPages.overviewHeading}</SectionHeading>
-          <div className="border-x border-b border-line px-5 py-6 md:px-6">
-            <p className="leading-8 text-fg">{t.contentPages.newsSummaries[article.id]}</p>
-          </div>
-        </section>
+        <ContentSectionStack>
+          <section id="news-overview" aria-labelledby="news-overview-heading" className="scroll-mt-24">
+            <SectionHeading id="news-overview-heading">{t.contentPages.overviewHeading}</SectionHeading>
+            <div className="mt-8 px-5 md:px-6">
+              <p className="leading-8 text-fg">{t.contentPages.newsSummaries[article.id]}</p>
+            </div>
+          </section>
 
-        <section id="news-check" aria-labelledby="news-check-heading" className="mt-12 max-w-6xl scroll-mt-24">
-          <SectionHeading id="news-check-heading">{t.contentPages.checkHeading}</SectionHeading>
-          <DetailsTable rows={details} />
-        </section>
+          <section id="news-check" aria-labelledby="news-check-heading" className="scroll-mt-24">
+            <SectionHeading id="news-check-heading">{t.contentPages.checkHeading}</SectionHeading>
+            <DetailsTable rows={details} />
+          </section>
 
-        <ContactSection />
+          <ContactSection />
+        </ContentSectionStack>
 
         <Link
           href="/news"
