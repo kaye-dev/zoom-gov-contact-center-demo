@@ -225,6 +225,7 @@ export type Dictionary = {
     passwordResets: string;
     phoneNumbers: string;
     languageSettings: string;
+    settingsMenu: string;
     userListTitle: string;
     searchPlaceholder: string;
     search: string;
@@ -609,6 +610,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       passwordResets: '再設定申請',
       phoneNumbers: '電話番号管理',
       languageSettings: '言語管理',
+      settingsMenu: '設定',
       userListTitle: 'ユーザー管理',
       searchPlaceholder: '氏名またはメールアドレスで検索',
       search: '検索',
@@ -1024,6 +1026,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       passwordResets: 'Reset Requests',
       phoneNumbers: 'Phone Numbers',
       languageSettings: 'Languages',
+      settingsMenu: 'Settings',
       userListTitle: 'User Management',
       searchPlaceholder: 'Search by name or email',
       search: 'Search',
@@ -1426,6 +1429,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       passwordResets: '重置申请',
       phoneNumbers: '电话号码管理',
       languageSettings: '语言管理',
+      settingsMenu: '设置',
       userListTitle: '用户管理',
       searchPlaceholder: '按姓名或电子邮件搜索',
       search: '搜索',
@@ -1821,6 +1825,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       passwordResets: '重設申請',
       phoneNumbers: '電話號碼管理',
       languageSettings: '語言管理',
+      settingsMenu: '設定',
       userListTitle: '使用者管理',
       searchPlaceholder: '依姓名或電子郵件搜尋',
       search: '搜尋',
@@ -2215,6 +2220,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       passwordResets: '재설정 신청',
       phoneNumbers: '전화번호 관리',
       languageSettings: '언어 관리',
+      settingsMenu: '설정',
       userListTitle: '사용자 관리',
       searchPlaceholder: '이름 또는 이메일로 검색',
       search: '검색',
