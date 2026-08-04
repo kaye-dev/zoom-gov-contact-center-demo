@@ -1,0 +1,3062 @@
+{
+  "departments": [
+    {
+      "slug": "policy-planning-and-management",
+      "sourceName": "企画経営課",
+      "labels": {
+        "en": "Policy Planning and Management Division",
+        "zh-Hans": "规划经营课",
+        "zh-Hant": "規劃經營課",
+        "ko": "기획경영과"
+      },
+      "organizationSourceName": "企画部",
+      "organizationLabels": {
+        "en": "Planning Department",
+        "zh-Hans": "企划部",
+        "zh-Hant": "企劃部",
+        "ko": "기획부"
+      },
+      "categories": [
+        {
+          "slug": "comprehensive-planning-and-administrative-evaluation",
+          "sourceFile": "01_総合計画・行政評価_FAQ.md",
+          "sourceName": "総合計画・行政評価",
+          "labels": {
+            "en": "Comprehensive Planning and Administrative Evaluation",
+            "zh-Hans": "综合规划与行政评估",
+            "zh-Hant": "綜合規劃與行政評估",
+            "ko": "종합계획 및 행정평가"
+          },
+          "topicTerms": [
+            "総合計画",
+            "行政評価"
+          ]
+        },
+        {
+          "slug": "policy-coordination",
+          "sourceFile": "02_政策調整_FAQ.md",
+          "sourceName": "政策調整",
+          "labels": {
+            "en": "Policy Coordination",
+            "zh-Hans": "政策协调",
+            "zh-Hant": "政策協調",
+            "ko": "정책 조정"
+          },
+          "topicTerms": [
+            "政策調整"
+          ]
+        },
+        {
+          "slug": "administrative-and-financial-reform",
+          "sourceFile": "03_行財政改革_FAQ.md",
+          "sourceName": "行財政改革",
+          "labels": {
+            "en": "Administrative and Financial Reform",
+            "zh-Hans": "行政与财政改革",
+            "zh-Hant": "行政與財政改革",
+            "ko": "행정 및 재정 개혁"
+          },
+          "topicTerms": [
+            "行財政改革"
+          ]
+        },
+        {
+          "slug": "public-opinion-surveys-and-statistics",
+          "sourceFile": "04_市民意識調査・統計_FAQ.md",
+          "sourceName": "市民意識調査・統計",
+          "labels": {
+            "en": "Public Opinion Surveys and Statistics",
+            "zh-Hans": "市民意识调查与统计",
+            "zh-Hant": "市民意識調查與統計",
+            "ko": "시민의식 조사 및 통계"
+          },
+          "topicTerms": [
+            "市民意識調査",
+            "統計"
+          ]
+        },
+        {
+          "slug": "cross-departmental-projects",
+          "sourceFile": "05_庁内横断プロジェクト_FAQ.md",
+          "sourceName": "庁内横断プロジェクト",
+          "labels": {
+            "en": "Cross-Departmental Projects",
+            "zh-Hans": "跨部门项目",
+            "zh-Hant": "跨部門專案",
+            "ko": "부서 간 공동 프로젝트"
+          },
+          "topicTerms": [
+            "庁内横断プロジェクト"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "mayors-office",
+      "sourceName": "市長公室",
+      "labels": {
+        "en": "Mayor's Office",
+        "zh-Hans": "市长办公室",
+        "zh-Hant": "市長辦公室",
+        "ko": "시장실"
+      },
+      "organizationSourceName": "企画部",
+      "organizationLabels": {
+        "en": "Planning Department",
+        "zh-Hans": "企划部",
+        "zh-Hant": "企劃部",
+        "ko": "기획부"
+      },
+      "categories": [
+        {
+          "slug": "letters-to-the-mayor",
+          "sourceFile": "01_市長への手紙_FAQ.md",
+          "sourceName": "市長への手紙",
+          "labels": {
+            "en": "Letters to the Mayor",
+            "zh-Hans": "致市长信件",
+            "zh-Hant": "致市長信件",
+            "ko": "시장에게 보내는 편지"
+          },
+          "topicTerms": [
+            "市長への手紙"
+          ]
+        },
+        {
+          "slug": "secretarial-services-and-commendations",
+          "sourceFile": "02_秘書・表彰_FAQ.md",
+          "sourceName": "秘書・表彰",
+          "labels": {
+            "en": "Secretarial Services and Commendations",
+            "zh-Hans": "秘书工作与表彰",
+            "zh-Hant": "秘書業務與表揚",
+            "ko": "비서 업무 및 표창"
+          },
+          "topicTerms": [
+            "秘書",
+            "表彰"
+          ]
+        },
+        {
+          "slug": "public-relations-and-community-engagement",
+          "sourceFile": "03_広報広聴_FAQ.md",
+          "sourceName": "広報広聴",
+          "labels": {
+            "en": "Public Relations and Community Engagement",
+            "zh-Hans": "政务宣传与民意听取",
+            "zh-Hant": "政務宣傳與民意聽取",
+            "ko": "시정 홍보 및 시민 의견 수렴"
+          },
+          "topicTerms": [
+            "広報広聴"
+          ]
+        },
+        {
+          "slug": "media-relations",
+          "sourceFile": "04_報道対応_FAQ.md",
+          "sourceName": "報道対応",
+          "labels": {
+            "en": "Media Relations",
+            "zh-Hans": "媒体应对",
+            "zh-Hant": "媒體應對",
+            "ko": "언론 대응"
+          },
+          "topicTerms": [
+            "報道対応"
+          ]
+        },
+        {
+          "slug": "municipal-information",
+          "sourceFile": "05_市政情報発信_FAQ.md",
+          "sourceName": "市政情報発信",
+          "labels": {
+            "en": "Municipal Information",
+            "zh-Hans": "市政信息发布",
+            "zh-Hant": "市政資訊發布",
+            "ko": "시정 정보 제공"
+          },
+          "topicTerms": [
+            "市政情報発信"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "information-policy",
+      "sourceName": "情報政策課",
+      "labels": {
+        "en": "Information Policy Division",
+        "zh-Hans": "信息政策课",
+        "zh-Hant": "資訊政策課",
+        "ko": "정보정책과"
+      },
+      "organizationSourceName": "企画部",
+      "organizationLabels": {
+        "en": "Planning Department",
+        "zh-Hans": "企划部",
+        "zh-Hant": "企劃部",
+        "ko": "기획부"
+      },
+      "categories": [
+        {
+          "slug": "online-applications",
+          "sourceFile": "01_電子申請_FAQ.md",
+          "sourceName": "電子申請",
+          "labels": {
+            "en": "Online Applications",
+            "zh-Hans": "在线申请",
+            "zh-Hant": "線上申請",
+            "ko": "온라인 신청"
+          },
+          "topicTerms": [
+            "電子申請"
+          ]
+        },
+        {
+          "slug": "information-systems",
+          "sourceFile": "02_情報システム_FAQ.md",
+          "sourceName": "情報システム",
+          "labels": {
+            "en": "Information Systems",
+            "zh-Hans": "信息系统",
+            "zh-Hant": "資訊系統",
+            "ko": "정보시스템"
+          },
+          "topicTerms": [
+            "情報システム"
+          ]
+        },
+        {
+          "slug": "digital-transformation",
+          "sourceFile": "03_DX 推進_FAQ.md",
+          "sourceName": "DX 推進",
+          "labels": {
+            "en": "Digital Transformation (DX)",
+            "zh-Hans": "数字化转型推进",
+            "zh-Hant": "數位轉型推進",
+            "ko": "디지털 전환(DX) 추진"
+          },
+          "topicTerms": [
+            "DX 推進"
+          ]
+        },
+        {
+          "slug": "open-data",
+          "sourceFile": "04_オープンデータ_FAQ.md",
+          "sourceName": "オープンデータ",
+          "labels": {
+            "en": "Open Data",
+            "zh-Hans": "开放数据",
+            "zh-Hant": "開放資料",
+            "ko": "오픈 데이터"
+          },
+          "topicTerms": [
+            "オープンデータ"
+          ]
+        },
+        {
+          "slug": "information-security",
+          "sourceFile": "05_情報セキュリティ_FAQ.md",
+          "sourceName": "情報セキュリティ",
+          "labels": {
+            "en": "Information Security",
+            "zh-Hans": "信息安全",
+            "zh-Hant": "資訊安全",
+            "ko": "정보보안"
+          },
+          "topicTerms": [
+            "情報セキュリティ"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "property-management",
+      "sourceName": "財産管理課",
+      "labels": {
+        "en": "Property Management Division",
+        "zh-Hans": "财产管理课",
+        "zh-Hant": "財產管理課",
+        "ko": "재산관리과"
+      },
+      "organizationSourceName": "総務部",
+      "organizationLabels": {
+        "en": "General Affairs Department",
+        "zh-Hans": "总务部",
+        "zh-Hant": "總務部",
+        "ko": "총무부"
+      },
+      "categories": [
+        {
+          "slug": "city-hall-facility-management",
+          "sourceFile": "01_庁舎管理_FAQ.md",
+          "sourceName": "庁舎管理",
+          "labels": {
+            "en": "City Hall Facility Management",
+            "zh-Hans": "市政府大楼管理",
+            "zh-Hant": "市政府大樓管理",
+            "ko": "시청사 관리"
+          },
+          "topicTerms": [
+            "庁舎管理"
+          ]
+        },
+        {
+          "slug": "municipal-land-and-property",
+          "sourceFile": "02_市有地・市有財産_FAQ.md",
+          "sourceName": "市有地・市有財産",
+          "labels": {
+            "en": "Municipal Land and Property",
+            "zh-Hans": "市有土地与市有财产",
+            "zh-Hant": "市有土地與市有財產",
+            "ko": "시유지 및 시유재산"
+          },
+          "topicTerms": [
+            "市有地",
+            "市有財産"
+          ]
+        },
+        {
+          "slug": "public-facility-reservations",
+          "sourceFile": "03_公共施設予約_FAQ.md",
+          "sourceName": "公共施設予約",
+          "labels": {
+            "en": "Public Facility Reservations",
+            "zh-Hans": "公共设施预约",
+            "zh-Hant": "公共設施預約",
+            "ko": "공공시설 예약"
+          },
+          "topicTerms": [
+            "公共施設予約"
+          ]
+        },
+        {
+          "slug": "facility-repair-requests",
+          "sourceFile": "04_施設修繕受付_FAQ.md",
+          "sourceName": "施設修繕受付",
+          "labels": {
+            "en": "Facility Repair Requests",
+            "zh-Hans": "设施维修受理",
+            "zh-Hant": "設施維修受理",
+            "ko": "시설 수리 접수"
+          },
+          "topicTerms": [
+            "施設修繕受付"
+          ]
+        },
+        {
+          "slug": "official-vehicles-and-equipment",
+          "sourceFile": "05_公用車・備品管理_FAQ.md",
+          "sourceName": "公用車・備品管理",
+          "labels": {
+            "en": "Official Vehicles and Equipment Management",
+            "zh-Hans": "公务车辆与备品管理",
+            "zh-Hant": "公務車輛與備品管理",
+            "ko": "공용차량 및 비품 관리"
+          },
+          "topicTerms": [
+            "公用車",
+            "備品管理"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "public-building-maintenance",
+      "sourceName": "建築営繕課",
+      "labels": {
+        "en": "Public Building Maintenance Division",
+        "zh-Hans": "建筑营缮课",
+        "zh-Hant": "建築營繕課",
+        "ko": "건축영선과"
+      },
+      "organizationSourceName": "総務部",
+      "organizationLabels": {
+        "en": "General Affairs Department",
+        "zh-Hans": "总务部",
+        "zh-Hant": "總務部",
+        "ko": "총무부"
+      },
+      "categories": [
+        {
+          "slug": "public-building-construction",
+          "sourceFile": "01_公共建築工事_FAQ.md",
+          "sourceName": "公共建築工事",
+          "labels": {
+            "en": "Public Building Construction",
+            "zh-Hans": "公共建筑工程",
+            "zh-Hant": "公共建築工程",
+            "ko": "공공건축 공사"
+          },
+          "topicTerms": [
+            "公共建築工事"
+          ]
+        },
+        {
+          "slug": "facility-renovations",
+          "sourceFile": "02_施設改修_FAQ.md",
+          "sourceName": "施設改修",
+          "labels": {
+            "en": "Facility Renovations",
+            "zh-Hans": "设施改造",
+            "zh-Hant": "設施改修",
+            "ko": "시설 개보수"
+          },
+          "topicTerms": [
+            "施設改修"
+          ]
+        },
+        {
+          "slug": "accessibility-improvements",
+          "sourceFile": "03_バリアフリー整備_FAQ.md",
+          "sourceName": "バリアフリー整備",
+          "labels": {
+            "en": "Accessibility Improvements",
+            "zh-Hans": "无障碍设施改善",
+            "zh-Hant": "無障礙設施改善",
+            "ko": "무장애 시설 정비"
+          },
+          "topicTerms": [
+            "バリアフリー整備"
+          ]
+        },
+        {
+          "slug": "construction-design-and-supervision",
+          "sourceFile": "04_工事設計・監理_FAQ.md",
+          "sourceName": "工事設計・監理",
+          "labels": {
+            "en": "Construction Design and Supervision",
+            "zh-Hans": "工程设计与监理",
+            "zh-Hant": "工程設計與監理",
+            "ko": "공사 설계 및 감리"
+          },
+          "topicTerms": [
+            "工事設計",
+            "監理"
+          ]
+        },
+        {
+          "slug": "public-facility-repair-consultations",
+          "sourceFile": "05_公共施設修繕相談_FAQ.md",
+          "sourceName": "公共施設修繕相談",
+          "labels": {
+            "en": "Public Facility Repair Consultations",
+            "zh-Hans": "公共设施维修咨询",
+            "zh-Hant": "公共設施維修諮詢",
+            "ko": "공공시설 수리 상담"
+          },
+          "topicTerms": [
+            "公共施設修繕相談"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "policy-and-legal-affairs",
+      "sourceName": "政策法務課",
+      "labels": {
+        "en": "Policy and Legal Affairs Division",
+        "zh-Hans": "政策法务课",
+        "zh-Hant": "政策法務課",
+        "ko": "정책법무과"
+      },
+      "organizationSourceName": "総務部",
+      "organizationLabels": {
+        "en": "General Affairs Department",
+        "zh-Hans": "总务部",
+        "zh-Hant": "總務部",
+        "ko": "총무부"
+      },
+      "categories": [
+        {
+          "slug": "legal-consultations",
+          "sourceFile": "01_法務相談_FAQ.md",
+          "sourceName": "法務相談",
+          "labels": {
+            "en": "Legal Consultations",
+            "zh-Hans": "法律咨询",
+            "zh-Hant": "法律諮詢",
+            "ko": "법무 상담"
+          },
+          "topicTerms": [
+            "法務相談"
+          ]
+        },
+        {
+          "slug": "ordinance-review",
+          "sourceFile": "02_条例審査_FAQ.md",
+          "sourceName": "条例審査",
+          "labels": {
+            "en": "Ordinance Review",
+            "zh-Hans": "条例审查",
+            "zh-Hant": "條例審查",
+            "ko": "조례 심사"
+          },
+          "topicTerms": [
+            "条例審査"
+          ]
+        },
+        {
+          "slug": "litigation-and-administrative-appeals",
+          "sourceFile": "03_訴訟・不服申立て_FAQ.md",
+          "sourceName": "訴訟・不服申立て",
+          "labels": {
+            "en": "Litigation and Administrative Appeals",
+            "zh-Hans": "诉讼与行政复议申请",
+            "zh-Hant": "訴訟與行政救濟申請",
+            "ko": "소송 및 불복신청"
+          },
+          "topicTerms": [
+            "訴訟",
+            "不服申立て"
+          ]
+        },
+        {
+          "slug": "compliance",
+          "sourceFile": "04_コンプライアンス_FAQ.md",
+          "sourceName": "コンプライアンス",
+          "labels": {
+            "en": "Compliance",
+            "zh-Hans": "合规管理",
+            "zh-Hant": "法令遵循",
+            "ko": "컴플라이언스"
+          },
+          "topicTerms": [
+            "コンプライアンス"
+          ]
+        },
+        {
+          "slug": "administrative-procedures",
+          "sourceFile": "05_行政手続_FAQ.md",
+          "sourceName": "行政手続",
+          "labels": {
+            "en": "Administrative Procedures",
+            "zh-Hans": "行政程序",
+            "zh-Hant": "行政程序",
+            "ko": "행정절차"
+          },
+          "topicTerms": [
+            "行政手続"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "disaster-prevention-and-safety",
+      "sourceName": "防災安全課",
+      "labels": {
+        "en": "Disaster Prevention and Safety Division",
+        "zh-Hans": "防灾安全课",
+        "zh-Hant": "防災安全課",
+        "ko": "방재안전과"
+      },
+      "organizationSourceName": "総務部",
+      "organizationLabels": {
+        "en": "General Affairs Department",
+        "zh-Hans": "总务部",
+        "zh-Hant": "總務部",
+        "ko": "총무부"
+      },
+      "categories": [
+        {
+          "slug": "disaster-management-plans",
+          "sourceFile": "01_防災計画_FAQ.md",
+          "sourceName": "防災計画",
+          "labels": {
+            "en": "Disaster Management Plans",
+            "zh-Hans": "防灾规划",
+            "zh-Hant": "防災計畫",
+            "ko": "방재계획"
+          },
+          "topicTerms": [
+            "防災計画"
+          ]
+        },
+        {
+          "slug": "hazard-maps",
+          "sourceFile": "02_ハザードマップ_FAQ.md",
+          "sourceName": "ハザードマップ",
+          "labels": {
+            "en": "Hazard Maps",
+            "zh-Hans": "灾害风险地图",
+            "zh-Hant": "災害風險地圖",
+            "ko": "재해 위험 지도"
+          },
+          "topicTerms": [
+            "ハザードマップ"
+          ]
+        },
+        {
+          "slug": "evacuation-shelters-and-actions",
+          "sourceFile": "03_避難所・避難行動_FAQ.md",
+          "sourceName": "避難所・避難行動",
+          "labels": {
+            "en": "Evacuation Shelters and Actions",
+            "zh-Hans": "避难所与避难行动",
+            "zh-Hant": "避難所與避難行動",
+            "ko": "대피소 및 대피 행동"
+          },
+          "topicTerms": [
+            "避難所",
+            "避難行動"
+          ]
+        },
+        {
+          "slug": "disaster-preparedness-drills",
+          "sourceFile": "04_防災訓練_FAQ.md",
+          "sourceName": "防災訓練",
+          "labels": {
+            "en": "Disaster Preparedness Drills",
+            "zh-Hans": "防灾演练",
+            "zh-Hant": "防災演練",
+            "ko": "방재훈련"
+          },
+          "topicTerms": [
+            "防災訓練"
+          ]
+        },
+        {
+          "slug": "crime-prevention-and-community-safety",
+          "sourceFile": "05_防犯・地域安全_FAQ.md",
+          "sourceName": "防犯・地域安全",
+          "labels": {
+            "en": "Crime Prevention and Community Safety",
+            "zh-Hans": "防范犯罪与社区安全",
+            "zh-Hant": "犯罪預防與社區安全",
+            "ko": "방범 및 지역안전"
+          },
+          "topicTerms": [
+            "防犯",
+            "地域安全"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "resident-services",
+      "sourceName": "市民窓口課",
+      "labels": {
+        "en": "Resident Services Division",
+        "zh-Hans": "市民窗口课",
+        "zh-Hant": "市民服務窗口課",
+        "ko": "시민창구과"
+      },
+      "organizationSourceName": "市民部",
+      "organizationLabels": {
+        "en": "Resident Affairs Department",
+        "zh-Hans": "市民事务部",
+        "zh-Hant": "市民事務部",
+        "ko": "시민부"
+      },
+      "categories": [
+        {
+          "slug": "residence-certificates-and-address-changes",
+          "sourceFile": "01_住民票・住民異動_FAQ.md",
+          "sourceName": "住民票・住民異動",
+          "labels": {
+            "en": "Residence Certificates and Address Changes",
+            "zh-Hans": "居民登记证明及住址变更",
+            "zh-Hant": "居民登記證明及住址變更",
+            "ko": "주민표 및 주소 변경"
+          },
+          "topicTerms": [
+            "住民票",
+            "住民異動"
+          ]
+        },
+        {
+          "slug": "family-register-certificates-and-notifications",
+          "sourceFile": "02_戸籍証明・戸籍届出_FAQ.md",
+          "sourceName": "戸籍証明・戸籍届出",
+          "labels": {
+            "en": "Family Register Certificates and Notifications",
+            "zh-Hans": "户籍证明及户籍申报",
+            "zh-Hant": "戶籍證明及戶籍申報",
+            "ko": "호적증명 및 호적신고"
+          },
+          "topicTerms": [
+            "戸籍証明",
+            "戸籍届出"
+          ]
+        },
+        {
+          "slug": "my-number",
+          "sourceFile": "03_マイナンバー_FAQ.md",
+          "sourceName": "マイナンバー",
+          "labels": {
+            "en": "My Number (Individual Number)",
+            "zh-Hans": "个人编号（My Number）",
+            "zh-Hant": "個人編號（My Number）",
+            "ko": "마이넘버(개인번호)"
+          },
+          "topicTerms": [
+            "マイナンバー"
+          ]
+        },
+        {
+          "slug": "seal-registration",
+          "sourceFile": "04_印鑑登録_FAQ.md",
+          "sourceName": "印鑑登録",
+          "labels": {
+            "en": "Seal Registration",
+            "zh-Hans": "印章登记",
+            "zh-Hant": "印鑑登記",
+            "ko": "인감등록"
+          },
+          "topicTerms": [
+            "印鑑登録"
+          ]
+        },
+        {
+          "slug": "identity-verification-and-powers-of-attorney",
+          "sourceFile": "05_本人確認・委任状_FAQ.md",
+          "sourceName": "本人確認・委任状",
+          "labels": {
+            "en": "Identity Verification and Powers of Attorney",
+            "zh-Hans": "身份核验与委托书",
+            "zh-Hant": "身分確認與委任狀",
+            "ko": "본인확인 및 위임장"
+          },
+          "topicTerms": [
+            "本人確認",
+            "委任状"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "municipal-tax",
+      "sourceName": "市民税課",
+      "labels": {
+        "en": "Municipal Tax Division",
+        "zh-Hans": "市民税课",
+        "zh-Hant": "市民稅課",
+        "ko": "시민세과"
+      },
+      "organizationSourceName": "市民部",
+      "organizationLabels": {
+        "en": "Resident Affairs Department",
+        "zh-Hans": "市民事务部",
+        "zh-Hant": "市民事務部",
+        "ko": "시민부"
+      },
+      "categories": [
+        {
+          "slug": "individual-resident-tax",
+          "sourceFile": "01_個人住民税_FAQ.md",
+          "sourceName": "個人住民税",
+          "labels": {
+            "en": "Individual Resident Tax",
+            "zh-Hans": "个人居民税",
+            "zh-Hant": "個人住民稅",
+            "ko": "개인 주민세"
+          },
+          "topicTerms": [
+            "個人住民税"
+          ]
+        },
+        {
+          "slug": "corporate-resident-tax",
+          "sourceFile": "02_法人市民税_FAQ.md",
+          "sourceName": "法人市民税",
+          "labels": {
+            "en": "Corporate Resident Tax",
+            "zh-Hans": "法人居民税",
+            "zh-Hant": "法人市民稅",
+            "ko": "법인 주민세"
+          },
+          "topicTerms": [
+            "法人市民税"
+          ]
+        },
+        {
+          "slug": "light-motor-vehicle-tax",
+          "sourceFile": "03_軽自動車税_FAQ.md",
+          "sourceName": "軽自動車税",
+          "labels": {
+            "en": "Light Motor Vehicle Tax",
+            "zh-Hans": "轻型汽车税",
+            "zh-Hant": "輕型汽車稅",
+            "ko": "경자동차세"
+          },
+          "topicTerms": [
+            "軽自動車税"
+          ]
+        },
+        {
+          "slug": "taxable-and-tax-exempt-certificates",
+          "sourceFile": "04_課税・非課税証明_FAQ.md",
+          "sourceName": "課税・非課税証明",
+          "labels": {
+            "en": "Certificates of Taxation and Tax Exemption",
+            "zh-Hans": "课税及免税证明",
+            "zh-Hant": "課稅及免稅證明",
+            "ko": "과세·비과세 증명"
+          },
+          "topicTerms": [
+            "課税",
+            "非課税証明"
+          ]
+        },
+        {
+          "slug": "resident-tax-returns",
+          "sourceFile": "05_住民税申告_FAQ.md",
+          "sourceName": "住民税申告",
+          "labels": {
+            "en": "Resident Tax Returns",
+            "zh-Hans": "居民税申报",
+            "zh-Hant": "住民稅申報",
+            "ko": "주민세 신고"
+          },
+          "topicTerms": [
+            "住民税申告"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "insurance-and-pension",
+      "sourceName": "保険年金課",
+      "labels": {
+        "en": "Insurance and Pension Division",
+        "zh-Hans": "保险年金课",
+        "zh-Hant": "保險年金課",
+        "ko": "보험연금과"
+      },
+      "organizationSourceName": "市民部",
+      "organizationLabels": {
+        "en": "Resident Affairs Department",
+        "zh-Hans": "市民事务部",
+        "zh-Hant": "市民事務部",
+        "ko": "시민부"
+      },
+      "categories": [
+        {
+          "slug": "national-health-insurance",
+          "sourceFile": "01_国民健康保険_FAQ.md",
+          "sourceName": "国民健康保険",
+          "labels": {
+            "en": "National Health Insurance",
+            "zh-Hans": "国民健康保险",
+            "zh-Hant": "國民健康保險",
+            "ko": "국민건강보험"
+          },
+          "topicTerms": [
+            "国民健康保険"
+          ]
+        },
+        {
+          "slug": "national-pension",
+          "sourceFile": "02_国民年金_FAQ.md",
+          "sourceName": "国民年金",
+          "labels": {
+            "en": "National Pension",
+            "zh-Hans": "国民年金",
+            "zh-Hant": "國民年金",
+            "ko": "국민연금"
+          },
+          "topicTerms": [
+            "国民年金"
+          ]
+        },
+        {
+          "slug": "medical-care-for-older-senior-citizens",
+          "sourceFile": "03_後期高齢者医療_FAQ.md",
+          "sourceName": "後期高齢者医療",
+          "labels": {
+            "en": "Medical Care System for the Elderly Aged 75 and Over",
+            "zh-Hans": "后期高龄者医疗制度",
+            "zh-Hant": "後期高齡者醫療制度",
+            "ko": "후기고령자 의료제도"
+          },
+          "topicTerms": [
+            "後期高齢者医療"
+          ]
+        },
+        {
+          "slug": "high-cost-medical-expense-benefit",
+          "sourceFile": "04_高額療養費_FAQ.md",
+          "sourceName": "高額療養費",
+          "labels": {
+            "en": "High-Cost Medical Expense Benefit",
+            "zh-Hans": "高额疗养费",
+            "zh-Hant": "高額療養費",
+            "ko": "고액요양비"
+          },
+          "topicTerms": [
+            "高額療養費"
+          ]
+        },
+        {
+          "slug": "insurance-taxes-and-premiums",
+          "sourceFile": "05_保険税・保険料_FAQ.md",
+          "sourceName": "保険税・保険料",
+          "labels": {
+            "en": "Insurance Taxes and Premiums",
+            "zh-Hans": "保险税与保险费",
+            "zh-Hant": "保險稅與保險費",
+            "ko": "보험세 및 보험료"
+          },
+          "topicTerms": [
+            "保険税",
+            "保険料"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "administrative-service-center",
+      "sourceName": "行政サービスセンター",
+      "labels": {
+        "en": "Administrative Service Center",
+        "zh-Hans": "行政服务中心",
+        "zh-Hant": "行政服務中心",
+        "ko": "행정 서비스 센터"
+      },
+      "organizationSourceName": "市民部",
+      "organizationLabels": {
+        "en": "Resident Affairs Department",
+        "zh-Hans": "市民事务部",
+        "zh-Hant": "市民事務部",
+        "ko": "시민부"
+      },
+      "categories": [
+        {
+          "slug": "service-counter-guide",
+          "sourceFile": "01_窓口案内_FAQ.md",
+          "sourceName": "窓口案内",
+          "labels": {
+            "en": "Service Counter Guide",
+            "zh-Hans": "窗口服务指南",
+            "zh-Hant": "窗口服務指南",
+            "ko": "민원 창구 안내"
+          },
+          "topicTerms": [
+            "窓口案内"
+          ]
+        },
+        {
+          "slug": "certificate-issuance",
+          "sourceFile": "02_証明書交付_FAQ.md",
+          "sourceName": "証明書交付",
+          "labels": {
+            "en": "Certificate Issuance",
+            "zh-Hans": "证明书发放",
+            "zh-Hant": "證明書核發",
+            "ko": "증명서 발급"
+          },
+          "topicTerms": [
+            "証明書交付"
+          ]
+        },
+        {
+          "slug": "address-change-notifications",
+          "sourceFile": "03_住所異動受付_FAQ.md",
+          "sourceName": "住所異動受付",
+          "labels": {
+            "en": "Address Change Notifications",
+            "zh-Hans": "住址变更受理",
+            "zh-Hant": "住址變更受理",
+            "ko": "주소 변경 접수"
+          },
+          "topicTerms": [
+            "住所異動受付"
+          ]
+        },
+        {
+          "slug": "community-consultations",
+          "sourceFile": "04_地域相談_FAQ.md",
+          "sourceName": "地域相談",
+          "labels": {
+            "en": "Community Consultations",
+            "zh-Hans": "社区咨询",
+            "zh-Hant": "社區諮詢",
+            "ko": "지역 상담"
+          },
+          "topicTerms": [
+            "地域相談"
+          ]
+        },
+        {
+          "slug": "location-and-access",
+          "sourceFile": "05_所在地・アクセス_FAQ.md",
+          "sourceName": "所在地・アクセス",
+          "labels": {
+            "en": "Location and Access",
+            "zh-Hans": "地址与交通指南",
+            "zh-Hant": "地址與交通指南",
+            "ko": "위치 및 교통 안내"
+          },
+          "topicTerms": [
+            "所在地・アクセス"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "environmental-policy",
+      "sourceName": "環境政策課",
+      "labels": {
+        "en": "Environmental Policy Division",
+        "zh-Hans": "环境政策课",
+        "zh-Hant": "環境政策課",
+        "ko": "환경정책과"
+      },
+      "organizationSourceName": "環境共生部",
+      "organizationLabels": {
+        "en": "Environmental Coexistence Department",
+        "zh-Hans": "环境共生部",
+        "zh-Hant": "環境共生部",
+        "ko": "환경공생부"
+      },
+      "categories": [
+        {
+          "slug": "global-warming-measures",
+          "sourceFile": "01_地球温暖化対策_FAQ.md",
+          "sourceName": "地球温暖化対策",
+          "labels": {
+            "en": "Global Warming Measures",
+            "zh-Hans": "全球变暖应对措施",
+            "zh-Hant": "全球暖化因應措施",
+            "ko": "지구온난화 대책"
+          },
+          "topicTerms": [
+            "地球温暖化対策"
+          ]
+        },
+        {
+          "slug": "energy-efficiency-and-renewables",
+          "sourceFile": "02_省エネ・再エネ_FAQ.md",
+          "sourceName": "省エネ・再エネ",
+          "labels": {
+            "en": "Energy Efficiency and Renewable Energy",
+            "zh-Hans": "节能与可再生能源",
+            "zh-Hant": "節能與再生能源",
+            "ko": "에너지 절약 및 재생에너지"
+          },
+          "topicTerms": [
+            "省エネ",
+            "再エネ"
+          ]
+        },
+        {
+          "slug": "pollution-and-noise",
+          "sourceFile": "03_公害・騒音_FAQ.md",
+          "sourceName": "公害・騒音",
+          "labels": {
+            "en": "Pollution and Noise",
+            "zh-Hans": "公害与噪声",
+            "zh-Hant": "公害與噪音",
+            "ko": "공해 및 소음"
+          },
+          "topicTerms": [
+            "公害",
+            "騒音"
+          ]
+        },
+        {
+          "slug": "environmental-education",
+          "sourceFile": "04_環境学習_FAQ.md",
+          "sourceName": "環境学習",
+          "labels": {
+            "en": "Environmental Education",
+            "zh-Hans": "环境教育",
+            "zh-Hant": "環境教育",
+            "ko": "환경교육"
+          },
+          "topicTerms": [
+            "環境学習"
+          ]
+        },
+        {
+          "slug": "biodiversity",
+          "sourceFile": "05_生物多様性_FAQ.md",
+          "sourceName": "生物多様性",
+          "labels": {
+            "en": "Biodiversity",
+            "zh-Hans": "生物多样性",
+            "zh-Hant": "生物多樣性",
+            "ko": "생물다양성"
+          },
+          "topicTerms": [
+            "生物多様性"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "sewerage",
+      "sourceName": "下水道課",
+      "labels": {
+        "en": "Sewerage Division",
+        "zh-Hans": "下水道课",
+        "zh-Hant": "下水道課",
+        "ko": "하수도과"
+      },
+      "organizationSourceName": "環境共生部",
+      "organizationLabels": {
+        "en": "Environmental Coexistence Department",
+        "zh-Hans": "环境共生部",
+        "zh-Hant": "環境共生部",
+        "ko": "환경공생부"
+      },
+      "categories": [
+        {
+          "slug": "sewer-connections",
+          "sourceFile": "01_下水道接続_FAQ.md",
+          "sourceName": "下水道接続",
+          "labels": {
+            "en": "Sewer Connections",
+            "zh-Hans": "下水道接入",
+            "zh-Hant": "下水道接管",
+            "ko": "하수도 연결"
+          },
+          "topicTerms": [
+            "下水道接続"
+          ]
+        },
+        {
+          "slug": "drainage-facilities",
+          "sourceFile": "02_排水設備_FAQ.md",
+          "sourceName": "排水設備",
+          "labels": {
+            "en": "Drainage Facilities",
+            "zh-Hans": "排水设施",
+            "zh-Hant": "排水設備",
+            "ko": "배수설비"
+          },
+          "topicTerms": [
+            "排水設備"
+          ]
+        },
+        {
+          "slug": "sewerage-charges",
+          "sourceFile": "03_下水道使用料_FAQ.md",
+          "sourceName": "下水道使用料",
+          "labels": {
+            "en": "Sewerage Charges",
+            "zh-Hans": "下水道使用费",
+            "zh-Hant": "下水道使用費",
+            "ko": "하수도 사용료"
+          },
+          "topicTerms": [
+            "下水道使用料"
+          ]
+        },
+        {
+          "slug": "road-flooding-and-stormwater",
+          "sourceFile": "04_道路冠水・雨水_FAQ.md",
+          "sourceName": "道路冠水・雨水",
+          "labels": {
+            "en": "Road Flooding and Stormwater",
+            "zh-Hans": "道路积水与雨水",
+            "zh-Hant": "道路積水與雨水",
+            "ko": "도로 침수 및 우수"
+          },
+          "topicTerms": [
+            "道路冠水",
+            "雨水"
+          ]
+        },
+        {
+          "slug": "private-road-drainage",
+          "sourceFile": "05_私道排水_FAQ.md",
+          "sourceName": "私道排水",
+          "labels": {
+            "en": "Private Road Drainage",
+            "zh-Hans": "私有道路排水",
+            "zh-Hant": "私有道路排水",
+            "ko": "사도 배수"
+          },
+          "topicTerms": [
+            "私道排水"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "zero-waste-promotion",
+      "sourceName": "ごみゼロ推進課",
+      "labels": {
+        "en": "Zero Waste Promotion Division",
+        "zh-Hans": "零废弃物推进课",
+        "zh-Hant": "零廢棄物推進課",
+        "ko": "쓰레기 제로 추진과"
+      },
+      "organizationSourceName": "環境共生部",
+      "organizationLabels": {
+        "en": "Environmental Coexistence Department",
+        "zh-Hans": "环境共生部",
+        "zh-Hant": "環境共生部",
+        "ko": "환경공생부"
+      },
+      "categories": [
+        {
+          "slug": "waste-sorting",
+          "sourceFile": "01_ごみ分別_FAQ.md",
+          "sourceName": "ごみ分別",
+          "labels": {
+            "en": "Waste Sorting",
+            "zh-Hans": "垃圾分类",
+            "zh-Hant": "垃圾分類",
+            "ko": "쓰레기 분리배출"
+          },
+          "topicTerms": [
+            "ごみ分別"
+          ]
+        },
+        {
+          "slug": "collection-days",
+          "sourceFile": "02_収集日_FAQ.md",
+          "sourceName": "収集日",
+          "labels": {
+            "en": "Collection Days",
+            "zh-Hans": "垃圾收集日",
+            "zh-Hant": "垃圾收集日",
+            "ko": "수거일"
+          },
+          "topicTerms": [
+            "収集日"
+          ]
+        },
+        {
+          "slug": "bulky-waste",
+          "sourceFile": "03_粗大ごみ_FAQ.md",
+          "sourceName": "粗大ごみ",
+          "labels": {
+            "en": "Bulky Waste",
+            "zh-Hans": "大件垃圾",
+            "zh-Hant": "大型垃圾",
+            "ko": "대형 폐기물"
+          },
+          "topicTerms": [
+            "粗大ごみ"
+          ]
+        },
+        {
+          "slug": "recycling",
+          "sourceFile": "04_リサイクル_FAQ.md",
+          "sourceName": "リサイクル",
+          "labels": {
+            "en": "Recycling",
+            "zh-Hans": "回收利用",
+            "zh-Hant": "資源回收",
+            "ko": "재활용"
+          },
+          "topicTerms": [
+            "リサイクル"
+          ]
+        },
+        {
+          "slug": "commercial-waste",
+          "sourceFile": "05_事業系ごみ_FAQ.md",
+          "sourceName": "事業系ごみ",
+          "labels": {
+            "en": "Commercial Waste",
+            "zh-Hans": "经营活动垃圾",
+            "zh-Hant": "事業廢棄物",
+            "ko": "사업장 폐기물"
+          },
+          "topicTerms": [
+            "事業系ごみ"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "urban-planning",
+      "sourceName": "都市計画課",
+      "labels": {
+        "en": "Urban Planning Division",
+        "zh-Hans": "城市规划课",
+        "zh-Hant": "都市計畫課",
+        "ko": "도시계획과"
+      },
+      "organizationSourceName": "まちづくり部",
+      "organizationLabels": {
+        "en": "Urban Development Department",
+        "zh-Hans": "城市建设部",
+        "zh-Hant": "城市建設部",
+        "ko": "도시개발부"
+      },
+      "categories": [
+        {
+          "slug": "zoning",
+          "sourceFile": "01_用途地域_FAQ.md",
+          "sourceName": "用途地域",
+          "labels": {
+            "en": "Zoning",
+            "zh-Hans": "用途分区",
+            "zh-Hant": "土地使用分區",
+            "ko": "용도지역"
+          },
+          "topicTerms": [
+            "用途地域"
+          ]
+        },
+        {
+          "slug": "urban-planning-roads",
+          "sourceFile": "02_都市計画道路_FAQ.md",
+          "sourceName": "都市計画道路",
+          "labels": {
+            "en": "Urban Planning Roads",
+            "zh-Hans": "城市规划道路",
+            "zh-Hant": "都市計畫道路",
+            "ko": "도시계획도로"
+          },
+          "topicTerms": [
+            "都市計画道路"
+          ]
+        },
+        {
+          "slug": "district-plans",
+          "sourceFile": "03_地区計画_FAQ.md",
+          "sourceName": "地区計画",
+          "labels": {
+            "en": "District Plans",
+            "zh-Hans": "地区规划",
+            "zh-Hant": "地區計畫",
+            "ko": "지구계획"
+          },
+          "topicTerms": [
+            "地区計画"
+          ]
+        },
+        {
+          "slug": "landscape-and-streetscape",
+          "sourceFile": "04_景観・街並み_FAQ.md",
+          "sourceName": "景観・街並み",
+          "labels": {
+            "en": "Landscape and Streetscape",
+            "zh-Hans": "景观与街道风貌",
+            "zh-Hant": "景觀與街道風貌",
+            "ko": "경관 및 거리 풍경"
+          },
+          "topicTerms": [
+            "景観",
+            "街並み"
+          ]
+        },
+        {
+          "slug": "urban-planning-certificates",
+          "sourceFile": "05_都市計画証明_FAQ.md",
+          "sourceName": "都市計画証明",
+          "labels": {
+            "en": "Urban Planning Certificates",
+            "zh-Hans": "城市规划证明",
+            "zh-Hant": "都市計畫證明",
+            "ko": "도시계획 증명"
+          },
+          "topicTerms": [
+            "都市計画証明"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "building-guidance",
+      "sourceName": "建築指導課",
+      "labels": {
+        "en": "Building Guidance Division",
+        "zh-Hans": "建筑指导课",
+        "zh-Hant": "建築指導課",
+        "ko": "건축지도과"
+      },
+      "organizationSourceName": "まちづくり部",
+      "organizationLabels": {
+        "en": "Urban Development Department",
+        "zh-Hans": "城市建设部",
+        "zh-Hant": "城市建設部",
+        "ko": "도시개발부"
+      },
+      "categories": [
+        {
+          "slug": "building-confirmation",
+          "sourceFile": "01_建築確認_FAQ.md",
+          "sourceName": "建築確認",
+          "labels": {
+            "en": "Building Confirmation",
+            "zh-Hans": "建筑确认",
+            "zh-Hant": "建築確認",
+            "ko": "건축확인"
+          },
+          "topicTerms": [
+            "建築確認"
+          ]
+        },
+        {
+          "slug": "building-consultations",
+          "sourceFile": "02_建築相談_FAQ.md",
+          "sourceName": "建築相談",
+          "labels": {
+            "en": "Building Consultations",
+            "zh-Hans": "建筑咨询",
+            "zh-Hant": "建築諮詢",
+            "ko": "건축 상담"
+          },
+          "topicTerms": [
+            "建築相談"
+          ]
+        },
+        {
+          "slug": "building-code-violations",
+          "sourceFile": "03_違反建築_FAQ.md",
+          "sourceName": "違反建築",
+          "labels": {
+            "en": "Building Code Violations",
+            "zh-Hans": "违法建筑",
+            "zh-Hant": "違規建築",
+            "ko": "위반 건축물"
+          },
+          "topicTerms": [
+            "違反建築"
+          ]
+        },
+        {
+          "slug": "narrow-roads",
+          "sourceFile": "04_狭あい道路_FAQ.md",
+          "sourceName": "狭あい道路",
+          "labels": {
+            "en": "Narrow Roads",
+            "zh-Hans": "狭窄道路",
+            "zh-Hant": "狹窄道路",
+            "ko": "협소도로"
+          },
+          "topicTerms": [
+            "狭あい道路"
+          ]
+        },
+        {
+          "slug": "seismic-safety-and-block-walls",
+          "sourceFile": "05_耐震・ブロック塀_FAQ.md",
+          "sourceName": "耐震・ブロック塀",
+          "labels": {
+            "en": "Seismic Safety and Block Walls",
+            "zh-Hans": "抗震与砌块围墙",
+            "zh-Hant": "耐震與砌塊圍牆",
+            "ko": "내진 및 블록담"
+          },
+          "topicTerms": [
+            "耐震",
+            "ブロック塀"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "industry-promotion",
+      "sourceName": "産業振興課",
+      "labels": {
+        "en": "Industry Promotion Division",
+        "zh-Hans": "产业振兴课",
+        "zh-Hant": "產業振興課",
+        "ko": "산업진흥과"
+      },
+      "organizationSourceName": "産業スポーツ部",
+      "organizationLabels": {
+        "en": "Industry and Sports Department",
+        "zh-Hans": "产业与体育部",
+        "zh-Hant": "產業與體育部",
+        "ko": "산업스포츠부"
+      },
+      "categories": [
+        {
+          "slug": "business-support",
+          "sourceFile": "01_商工支援_FAQ.md",
+          "sourceName": "商工支援",
+          "labels": {
+            "en": "Business Support",
+            "zh-Hans": "商工企业支持",
+            "zh-Hant": "商工業支援",
+            "ko": "상공업 지원"
+          },
+          "topicTerms": [
+            "商工支援"
+          ]
+        },
+        {
+          "slug": "startup-support",
+          "sourceFile": "02_創業支援_FAQ.md",
+          "sourceName": "創業支援",
+          "labels": {
+            "en": "Startup Support",
+            "zh-Hans": "创业支持",
+            "zh-Hant": "創業支援",
+            "ko": "창업 지원"
+          },
+          "topicTerms": [
+            "創業支援"
+          ]
+        },
+        {
+          "slug": "loans-and-subsidies",
+          "sourceFile": "03_融資・補助金_FAQ.md",
+          "sourceName": "融資・補助金",
+          "labels": {
+            "en": "Loans and Subsidies",
+            "zh-Hans": "融资与补助金",
+            "zh-Hant": "融資與補助金",
+            "ko": "융자 및 보조금"
+          },
+          "topicTerms": [
+            "融資",
+            "補助金"
+          ]
+        },
+        {
+          "slug": "tourist-information",
+          "sourceFile": "04_観光案内_FAQ.md",
+          "sourceName": "観光案内",
+          "labels": {
+            "en": "Tourist Information",
+            "zh-Hans": "旅游信息",
+            "zh-Hant": "觀光資訊",
+            "ko": "관광 안내"
+          },
+          "topicTerms": [
+            "観光案内"
+          ]
+        },
+        {
+          "slug": "labor-consultations",
+          "sourceFile": "05_労働相談_FAQ.md",
+          "sourceName": "労働相談",
+          "labels": {
+            "en": "Labor Consultations",
+            "zh-Hans": "劳动咨询",
+            "zh-Hant": "勞動諮詢",
+            "ko": "노동 상담"
+          },
+          "topicTerms": [
+            "労働相談"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "culture-sports",
+      "sourceName": "文化スポーツ課",
+      "labels": {
+        "en": "Culture and Sports Division",
+        "zh-Hans": "文化体育课",
+        "zh-Hant": "文化體育課",
+        "ko": "문화스포츠과"
+      },
+      "organizationSourceName": "産業スポーツ部",
+      "organizationLabels": {
+        "en": "Industry and Sports Department",
+        "zh-Hans": "产业与体育部",
+        "zh-Hant": "產業與體育部",
+        "ko": "산업스포츠부"
+      },
+      "categories": [
+        {
+          "slug": "cultural-programs",
+          "sourceFile": "01_文化事業_FAQ.md",
+          "sourceName": "文化事業",
+          "labels": {
+            "en": "Cultural Programs",
+            "zh-Hans": "文化事业",
+            "zh-Hant": "文化事業",
+            "ko": "문화사업"
+          },
+          "topicTerms": [
+            "文化事業"
+          ]
+        },
+        {
+          "slug": "sports-facilities",
+          "sourceFile": "02_スポーツ施設_FAQ.md",
+          "sourceName": "スポーツ施設",
+          "labels": {
+            "en": "Sports Facilities",
+            "zh-Hans": "体育设施",
+            "zh-Hant": "體育設施",
+            "ko": "체육시설"
+          },
+          "topicTerms": [
+            "スポーツ施設"
+          ]
+        },
+        {
+          "slug": "facility-reservations",
+          "sourceFile": "03_施設予約_FAQ.md",
+          "sourceName": "施設予約",
+          "labels": {
+            "en": "Facility Reservations",
+            "zh-Hans": "设施预约",
+            "zh-Hant": "設施預約",
+            "ko": "시설 예약"
+          },
+          "topicTerms": [
+            "施設予約"
+          ]
+        },
+        {
+          "slug": "community-tournaments-classes",
+          "sourceFile": "04_市民大会・教室_FAQ.md",
+          "sourceName": "市民大会・教室",
+          "labels": {
+            "en": "Community Tournaments and Classes",
+            "zh-Hans": "市民赛事与课程",
+            "zh-Hant": "市民賽事與課程",
+            "ko": "시민대회·강좌"
+          },
+          "topicTerms": [
+            "市民大会",
+            "教室"
+          ]
+        },
+        {
+          "slug": "arts-cultural-support",
+          "sourceFile": "05_芸術文化支援_FAQ.md",
+          "sourceName": "芸術文化支援",
+          "labels": {
+            "en": "Arts and Cultural Support",
+            "zh-Hans": "艺术文化支援",
+            "zh-Hant": "藝術文化支援",
+            "ko": "예술문화 지원"
+          },
+          "topicTerms": [
+            "芸術文化支援"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "welfare-policy",
+      "sourceName": "福祉政策課",
+      "labels": {
+        "en": "Welfare Policy Division",
+        "zh-Hans": "福利政策课",
+        "zh-Hant": "福利政策課",
+        "ko": "복지정책과"
+      },
+      "organizationSourceName": "健康福祉部",
+      "organizationLabels": {
+        "en": "Health and Welfare Department",
+        "zh-Hans": "健康福利部",
+        "zh-Hant": "健康福利部",
+        "ko": "건강복지부"
+      },
+      "categories": [
+        {
+          "slug": "community-welfare-plan",
+          "sourceFile": "01_地域福祉計画_FAQ.md",
+          "sourceName": "地域福祉計画",
+          "labels": {
+            "en": "Community Welfare Plan",
+            "zh-Hans": "社区福利规划",
+            "zh-Hant": "社區福利計畫",
+            "ko": "지역복지계획"
+          },
+          "topicTerms": [
+            "地域福祉計画"
+          ]
+        },
+        {
+          "slug": "welfare-commissioners",
+          "sourceFile": "02_民生委員_FAQ.md",
+          "sourceName": "民生委員",
+          "labels": {
+            "en": "Community Welfare Commissioners",
+            "zh-Hans": "民生委员",
+            "zh-Hant": "民生委員",
+            "ko": "민생위원"
+          },
+          "topicTerms": [
+            "民生委員"
+          ]
+        },
+        {
+          "slug": "comprehensive-welfare-consultation",
+          "sourceFile": "03_福祉総合相談_FAQ.md",
+          "sourceName": "福祉総合相談",
+          "labels": {
+            "en": "Comprehensive Welfare Consultation",
+            "zh-Hans": "综合福利咨询",
+            "zh-Hant": "綜合福利諮詢",
+            "ko": "종합복지상담"
+          },
+          "topicTerms": [
+            "福祉総合相談"
+          ]
+        },
+        {
+          "slug": "social-welfare-corporations",
+          "sourceFile": "04_社会福祉法人_FAQ.md",
+          "sourceName": "社会福祉法人",
+          "labels": {
+            "en": "Social Welfare Corporations",
+            "zh-Hans": "社会福利法人",
+            "zh-Hant": "社會福利法人",
+            "ko": "사회복지법인"
+          },
+          "topicTerms": [
+            "社会福祉法人"
+          ]
+        },
+        {
+          "slug": "rights-advocacy",
+          "sourceFile": "05_権利擁護_FAQ.md",
+          "sourceName": "権利擁護",
+          "labels": {
+            "en": "Rights Protection and Advocacy",
+            "zh-Hans": "权益维护",
+            "zh-Hant": "權益維護",
+            "ko": "권익옹호"
+          },
+          "topicTerms": [
+            "権利擁護"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "livelihood-support",
+      "sourceName": "生活福祉課",
+      "labels": {
+        "en": "Livelihood Support Division",
+        "zh-Hans": "生活福利课",
+        "zh-Hant": "生活福利課",
+        "ko": "생활복지과"
+      },
+      "organizationSourceName": "健康福祉部",
+      "organizationLabels": {
+        "en": "Health and Welfare Department",
+        "zh-Hans": "健康福利部",
+        "zh-Hant": "健康福利部",
+        "ko": "건강복지부"
+      },
+      "categories": [
+        {
+          "slug": "public-assistance-consultation",
+          "sourceFile": "01_生活保護相談_FAQ.md",
+          "sourceName": "生活保護相談",
+          "labels": {
+            "en": "Public Assistance Consultation",
+            "zh-Hans": "生活保障咨询",
+            "zh-Hant": "生活保障諮詢",
+            "ko": "생활보호 상담"
+          },
+          "topicTerms": [
+            "生活保護相談"
+          ]
+        },
+        {
+          "slug": "financial-hardship-support",
+          "sourceFile": "02_生活困窮者支援_FAQ.md",
+          "sourceName": "生活困窮者支援",
+          "labels": {
+            "en": "Support for People in Financial Hardship",
+            "zh-Hans": "生活困难者支援",
+            "zh-Hant": "生活困難者支援",
+            "ko": "생활곤란자 지원"
+          },
+          "topicTerms": [
+            "生活困窮者支援"
+          ]
+        },
+        {
+          "slug": "housing-security-benefit",
+          "sourceFile": "03_住居確保給付_FAQ.md",
+          "sourceName": "住居確保給付",
+          "labels": {
+            "en": "Housing Security Benefit",
+            "zh-Hans": "住房保障补助",
+            "zh-Hant": "住宅保障給付",
+            "ko": "주거확보급여"
+          },
+          "topicTerms": [
+            "住居確保給付"
+          ]
+        },
+        {
+          "slug": "employment-support",
+          "sourceFile": "04_就労支援_FAQ.md",
+          "sourceName": "就労支援",
+          "labels": {
+            "en": "Employment Support",
+            "zh-Hans": "就业支援",
+            "zh-Hant": "就業支援",
+            "ko": "취업 지원"
+          },
+          "topicTerms": [
+            "就労支援"
+          ]
+        },
+        {
+          "slug": "emergency-livelihood-consultation",
+          "sourceFile": "05_緊急生活相談_FAQ.md",
+          "sourceName": "緊急生活相談",
+          "labels": {
+            "en": "Emergency Livelihood Consultation",
+            "zh-Hans": "紧急生活咨询",
+            "zh-Hant": "緊急生活諮詢",
+            "ko": "긴급생활 상담"
+          },
+          "topicTerms": [
+            "緊急生活相談"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "welfare-consultation-desk",
+      "sourceName": "福祉総合相談窓口",
+      "labels": {
+        "en": "Comprehensive Welfare Consultation Desk",
+        "zh-Hans": "综合福利咨询窗口",
+        "zh-Hant": "綜合福利諮詢窗口",
+        "ko": "복지 종합 상담 창구"
+      },
+      "organizationSourceName": "健康福祉部",
+      "organizationLabels": {
+        "en": "Health and Welfare Department",
+        "zh-Hans": "健康福利部",
+        "zh-Hant": "健康福利部",
+        "ko": "건강복지부"
+      },
+      "categories": [
+        {
+          "slug": "financial-hardship-consultation",
+          "sourceFile": "01_生活困窮相談_FAQ.md",
+          "sourceName": "生活困窮相談",
+          "labels": {
+            "en": "Financial Hardship Consultation",
+            "zh-Hans": "生活困难咨询",
+            "zh-Hant": "生活困難諮詢",
+            "ko": "생활곤란 상담"
+          },
+          "topicTerms": [
+            "生活困窮相談"
+          ]
+        },
+        {
+          "slug": "hikikomori-consultation",
+          "sourceFile": "02_ひきこもり相談_FAQ.md",
+          "sourceName": "ひきこもり相談",
+          "labels": {
+            "en": "Hikikomori Consultation",
+            "zh-Hans": "蛰居咨询",
+            "zh-Hant": "繭居諮詢",
+            "ko": "은둔·고립 상담"
+          },
+          "topicTerms": [
+            "ひきこもり相談"
+          ]
+        },
+        {
+          "slug": "housing-consultation",
+          "sourceFile": "03_住まいの相談_FAQ.md",
+          "sourceName": "住まいの相談",
+          "labels": {
+            "en": "Housing Consultation",
+            "zh-Hans": "住房咨询",
+            "zh-Hant": "住宅諮詢",
+            "ko": "주거 상담"
+          },
+          "topicTerms": [
+            "住まいの相談"
+          ]
+        },
+        {
+          "slug": "employment-readiness",
+          "sourceFile": "04_就労準備_FAQ.md",
+          "sourceName": "就労準備",
+          "labels": {
+            "en": "Employment Readiness",
+            "zh-Hans": "就业准备",
+            "zh-Hant": "就業準備",
+            "ko": "취업 준비"
+          },
+          "topicTerms": [
+            "就労準備"
+          ]
+        },
+        {
+          "slug": "household-financial-improvement",
+          "sourceFile": "05_家計改善_FAQ.md",
+          "sourceName": "家計改善",
+          "labels": {
+            "en": "Household Financial Improvement",
+            "zh-Hans": "家庭收支改善",
+            "zh-Hant": "家計改善",
+            "ko": "가계 개선"
+          },
+          "topicTerms": [
+            "家計改善"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "senior-welfare",
+      "sourceName": "高齢福祉課",
+      "labels": {
+        "en": "Senior Welfare Division",
+        "zh-Hans": "老年人福利课",
+        "zh-Hant": "高齡者福利課",
+        "ko": "노인복지과"
+      },
+      "organizationSourceName": "健康福祉部",
+      "organizationLabels": {
+        "en": "Health and Welfare Department",
+        "zh-Hans": "健康福利部",
+        "zh-Hant": "健康福利部",
+        "ko": "건강복지부"
+      },
+      "categories": [
+        {
+          "slug": "senior-consultation",
+          "sourceFile": "01_高齢者相談_FAQ.md",
+          "sourceName": "高齢者相談",
+          "labels": {
+            "en": "Senior Citizens Consultation",
+            "zh-Hans": "老年人咨询",
+            "zh-Hant": "高齡者諮詢",
+            "ko": "노인 상담"
+          },
+          "topicTerms": [
+            "高齢者相談"
+          ]
+        },
+        {
+          "slug": "senior-monitoring-support",
+          "sourceFile": "02_見守り支援_FAQ.md",
+          "sourceName": "見守り支援",
+          "labels": {
+            "en": "Safety Monitoring Support",
+            "zh-Hans": "关怀看护支援",
+            "zh-Hant": "關懷照護支援",
+            "ko": "안부확인 지원"
+          },
+          "topicTerms": [
+            "見守り支援"
+          ]
+        },
+        {
+          "slug": "senior-services",
+          "sourceFile": "03_高齢者サービス_FAQ.md",
+          "sourceName": "高齢者サービス",
+          "labels": {
+            "en": "Services for Senior Citizens",
+            "zh-Hans": "老年人服务",
+            "zh-Hant": "高齡者服務",
+            "ko": "노인 서비스"
+          },
+          "topicTerms": [
+            "高齢者サービス"
+          ]
+        },
+        {
+          "slug": "senior-clubs-social-participation",
+          "sourceFile": "04_老人クラブ・社会参加_FAQ.md",
+          "sourceName": "老人クラブ・社会参加",
+          "labels": {
+            "en": "Senior Clubs and Social Participation",
+            "zh-Hans": "老年人俱乐部与社会参与",
+            "zh-Hant": "老人俱樂部與社會參與",
+            "ko": "노인클럽·사회참여"
+          },
+          "topicTerms": [
+            "老人クラブ",
+            "社会参加"
+          ]
+        },
+        {
+          "slug": "senior-care-facilities",
+          "sourceFile": "05_高齢者施設_FAQ.md",
+          "sourceName": "高齢者施設",
+          "labels": {
+            "en": "Senior Care Facilities",
+            "zh-Hans": "老年人设施",
+            "zh-Hant": "高齡者設施",
+            "ko": "노인복지시설"
+          },
+          "topicTerms": [
+            "高齢者施設"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "health",
+      "sourceName": "健康課",
+      "labels": {
+        "en": "Health Division",
+        "zh-Hans": "健康课",
+        "zh-Hant": "健康課",
+        "ko": "건강과"
+      },
+      "organizationSourceName": "健康福祉部",
+      "organizationLabels": {
+        "en": "Health and Welfare Department",
+        "zh-Hans": "健康福利部",
+        "zh-Hant": "健康福利部",
+        "ko": "건강복지부"
+      },
+      "categories": [
+        {
+          "slug": "adult-health-checkups",
+          "sourceFile": "01_成人健診_FAQ.md",
+          "sourceName": "成人健診",
+          "labels": {
+            "en": "Adult Health Checkups",
+            "zh-Hans": "成人健康检查",
+            "zh-Hant": "成人健康檢查",
+            "ko": "성인 건강검진"
+          },
+          "topicTerms": [
+            "成人健診"
+          ]
+        },
+        {
+          "slug": "cancer-screenings",
+          "sourceFile": "02_がん検診_FAQ.md",
+          "sourceName": "がん検診",
+          "labels": {
+            "en": "Cancer Screenings",
+            "zh-Hans": "癌症筛查",
+            "zh-Hant": "癌症篩檢",
+            "ko": "암 검진"
+          },
+          "topicTerms": [
+            "がん検診"
+          ]
+        },
+        {
+          "slug": "vaccinations",
+          "sourceFile": "03_予防接種_FAQ.md",
+          "sourceName": "予防接種",
+          "labels": {
+            "en": "Vaccinations",
+            "zh-Hans": "预防接种",
+            "zh-Hant": "預防接種",
+            "ko": "예방접종"
+          },
+          "topicTerms": [
+            "予防接種"
+          ]
+        },
+        {
+          "slug": "maternal-child-health",
+          "sourceFile": "04_母子保健_FAQ.md",
+          "sourceName": "母子保健",
+          "labels": {
+            "en": "Maternal and Child Health",
+            "zh-Hans": "妇幼保健",
+            "zh-Hant": "母子保健",
+            "ko": "모자보건"
+          },
+          "topicTerms": [
+            "母子保健"
+          ]
+        },
+        {
+          "slug": "health-consultation",
+          "sourceFile": "05_健康相談_FAQ.md",
+          "sourceName": "健康相談",
+          "labels": {
+            "en": "Health Consultation",
+            "zh-Hans": "健康咨询",
+            "zh-Hant": "健康諮詢",
+            "ko": "건강 상담"
+          },
+          "topicTerms": [
+            "健康相談"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "long-term-care-insurance",
+      "sourceName": "介護保険課",
+      "labels": {
+        "en": "Long-Term Care Insurance Division",
+        "zh-Hans": "长期护理保险课",
+        "zh-Hant": "長期照護保險課",
+        "ko": "장기요양보험과"
+      },
+      "organizationSourceName": "健康福祉部",
+      "organizationLabels": {
+        "en": "Health and Welfare Department",
+        "zh-Hans": "健康福利部",
+        "zh-Hant": "健康福利部",
+        "ko": "건강복지부"
+      },
+      "categories": [
+        {
+          "slug": "long-term-care-certification",
+          "sourceFile": "01_要介護認定_FAQ.md",
+          "sourceName": "要介護認定",
+          "labels": {
+            "en": "Long-Term Care Certification",
+            "zh-Hans": "长期护理认定",
+            "zh-Hant": "長期照護認定",
+            "ko": "장기요양 인정"
+          },
+          "topicTerms": [
+            "要介護認定"
+          ]
+        },
+        {
+          "slug": "long-term-care-services",
+          "sourceFile": "02_介護サービス_FAQ.md",
+          "sourceName": "介護サービス",
+          "labels": {
+            "en": "Long-Term Care Services",
+            "zh-Hans": "长期护理服务",
+            "zh-Hant": "長期照護服務",
+            "ko": "장기요양 서비스"
+          },
+          "topicTerms": [
+            "介護サービス"
+          ]
+        },
+        {
+          "slug": "long-term-care-insurance-premiums",
+          "sourceFile": "03_介護保険料_FAQ.md",
+          "sourceName": "介護保険料",
+          "labels": {
+            "en": "Long-Term Care Insurance Premiums",
+            "zh-Hans": "长期护理保险费",
+            "zh-Hant": "長期照護保險費",
+            "ko": "장기요양보험료"
+          },
+          "topicTerms": [
+            "介護保険料"
+          ]
+        },
+        {
+          "slug": "long-term-care-benefits",
+          "sourceFile": "04_介護給付_FAQ.md",
+          "sourceName": "介護給付",
+          "labels": {
+            "en": "Long-Term Care Benefits",
+            "zh-Hans": "长期护理给付",
+            "zh-Hant": "長期照護給付",
+            "ko": "장기요양급여"
+          },
+          "topicTerms": [
+            "介護給付"
+          ]
+        },
+        {
+          "slug": "community-comprehensive-support-center",
+          "sourceFile": "05_地域包括支援センター_FAQ.md",
+          "sourceName": "地域包括支援センター",
+          "labels": {
+            "en": "Community Comprehensive Support Centers",
+            "zh-Hans": "地区综合支援中心",
+            "zh-Hant": "地區綜合支援中心",
+            "ko": "지역포괄지원센터"
+          },
+          "topicTerms": [
+            "地域包括支援センター"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "child-rearing-support",
+      "sourceName": "子育て課",
+      "labels": {
+        "en": "Child-Rearing Support Division",
+        "zh-Hans": "育儿支援课",
+        "zh-Hant": "育兒支援課",
+        "ko": "육아지원과"
+      },
+      "organizationSourceName": "子ども部",
+      "organizationLabels": {
+        "en": "Children's Services Department",
+        "zh-Hans": "儿童事务部",
+        "zh-Hant": "兒童事務部",
+        "ko": "아동복지부"
+      },
+      "categories": [
+        {
+          "slug": "child-allowance",
+          "sourceFile": "01_児童手当_FAQ.md",
+          "sourceName": "児童手当",
+          "labels": {
+            "en": "Child Allowance",
+            "zh-Hans": "儿童津贴",
+            "zh-Hant": "兒童津貼",
+            "ko": "아동수당"
+          },
+          "topicTerms": [
+            "児童手当"
+          ]
+        },
+        {
+          "slug": "children-medical-expenses",
+          "sourceFile": "02_子ども医療費_FAQ.md",
+          "sourceName": "子ども医療費",
+          "labels": {
+            "en": "Children's Medical Expenses",
+            "zh-Hans": "儿童医疗费",
+            "zh-Hant": "兒童醫療費",
+            "ko": "아동 의료비"
+          },
+          "topicTerms": [
+            "子ども医療費"
+          ]
+        },
+        {
+          "slug": "single-parent-support",
+          "sourceFile": "03_ひとり親支援_FAQ.md",
+          "sourceName": "ひとり親支援",
+          "labels": {
+            "en": "Single-Parent Support",
+            "zh-Hans": "单亲家庭支援",
+            "zh-Hant": "單親家庭支援",
+            "ko": "한부모가정 지원"
+          },
+          "topicTerms": [
+            "ひとり親支援"
+          ]
+        },
+        {
+          "slug": "parenting-consultation",
+          "sourceFile": "04_子育て相談_FAQ.md",
+          "sourceName": "子育て相談",
+          "labels": {
+            "en": "Parenting Consultation",
+            "zh-Hans": "育儿咨询",
+            "zh-Hant": "育兒諮詢",
+            "ko": "육아 상담"
+          },
+          "topicTerms": [
+            "子育て相談"
+          ]
+        },
+        {
+          "slug": "pregnancy-childbirth-support",
+          "sourceFile": "05_妊娠・出産支援_FAQ.md",
+          "sourceName": "妊娠・出産支援",
+          "labels": {
+            "en": "Pregnancy and Childbirth Support",
+            "zh-Hans": "孕产支援",
+            "zh-Hant": "懷孕與生產支援",
+            "ko": "임신·출산 지원"
+          },
+          "topicTerms": [
+            "妊娠",
+            "出産支援"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "childcare-services",
+      "sourceName": "保育課",
+      "labels": {
+        "en": "Childcare Services Division",
+        "zh-Hans": "保育课",
+        "zh-Hant": "保育課",
+        "ko": "보육과"
+      },
+      "organizationSourceName": "子ども部",
+      "organizationLabels": {
+        "en": "Children's Services Department",
+        "zh-Hans": "儿童事务部",
+        "zh-Hant": "兒童事務部",
+        "ko": "아동복지부"
+      },
+      "categories": [
+        {
+          "slug": "nursery-school-enrollment",
+          "sourceFile": "01_保育園入園_FAQ.md",
+          "sourceName": "保育園入園",
+          "labels": {
+            "en": "Nursery School Enrollment",
+            "zh-Hans": "保育园入园",
+            "zh-Hant": "保育園入園",
+            "ko": "어린이집 입소"
+          },
+          "topicTerms": [
+            "保育園入園"
+          ]
+        },
+        {
+          "slug": "childcare-certification",
+          "sourceFile": "02_保育認定_FAQ.md",
+          "sourceName": "保育認定",
+          "labels": {
+            "en": "Childcare Eligibility Certification",
+            "zh-Hans": "保育认定",
+            "zh-Hant": "保育認定",
+            "ko": "보육 인정"
+          },
+          "topicTerms": [
+            "保育認定"
+          ]
+        },
+        {
+          "slug": "childcare-fees",
+          "sourceFile": "03_保育料_FAQ.md",
+          "sourceName": "保育料",
+          "labels": {
+            "en": "Childcare Fees",
+            "zh-Hans": "保育费",
+            "zh-Hant": "保育費",
+            "ko": "보육료"
+          },
+          "topicTerms": [
+            "保育料"
+          ]
+        },
+        {
+          "slug": "temporary-childcare",
+          "sourceFile": "04_一時保育_FAQ.md",
+          "sourceName": "一時保育",
+          "labels": {
+            "en": "Temporary Childcare",
+            "zh-Hans": "临时保育",
+            "zh-Hant": "臨時保育",
+            "ko": "일시보육"
+          },
+          "topicTerms": [
+            "一時保育"
+          ]
+        },
+        {
+          "slug": "childcare-facility-consultation",
+          "sourceFile": "05_保育施設相談_FAQ.md",
+          "sourceName": "保育施設相談",
+          "labels": {
+            "en": "Childcare Facility Consultation",
+            "zh-Hans": "保育设施咨询",
+            "zh-Hant": "保育設施諮詢",
+            "ko": "보육시설 상담"
+          },
+          "topicTerms": [
+            "保育施設相談"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "child-family-support-center",
+      "sourceName": "子ども家庭支援センター",
+      "labels": {
+        "en": "Child and Family Support Center",
+        "zh-Hans": "儿童家庭支援中心",
+        "zh-Hant": "兒童家庭支援中心",
+        "ko": "아동가정지원센터"
+      },
+      "organizationSourceName": "子ども部",
+      "organizationLabels": {
+        "en": "Children's Services Department",
+        "zh-Hans": "儿童事务部",
+        "zh-Hant": "兒童事務部",
+        "ko": "아동복지부"
+      },
+      "categories": [
+        {
+          "slug": "family-consultation",
+          "sourceFile": "01_家庭相談_FAQ.md",
+          "sourceName": "家庭相談",
+          "labels": {
+            "en": "Family Consultation",
+            "zh-Hans": "家庭咨询",
+            "zh-Hant": "家庭諮詢",
+            "ko": "가정 상담"
+          },
+          "topicTerms": [
+            "家庭相談"
+          ]
+        },
+        {
+          "slug": "child-abuse-response",
+          "sourceFile": "02_児童虐待対応_FAQ.md",
+          "sourceName": "児童虐待対応",
+          "labels": {
+            "en": "Child Abuse Response",
+            "zh-Hans": "儿童虐待应对",
+            "zh-Hant": "兒童虐待應對",
+            "ko": "아동학대 대응"
+          },
+          "topicTerms": [
+            "児童虐待対応"
+          ]
+        },
+        {
+          "slug": "developmental-consultation-coordination",
+          "sourceFile": "03_発達相談連携_FAQ.md",
+          "sourceName": "発達相談連携",
+          "labels": {
+            "en": "Coordinated Developmental Consultation",
+            "zh-Hans": "发育咨询协作",
+            "zh-Hant": "發展諮詢協作",
+            "ko": "발달상담 연계"
+          },
+          "topicTerms": [
+            "発達相談連携"
+          ]
+        },
+        {
+          "slug": "parenting-support-spaces",
+          "sourceFile": "04_子育てひろば_FAQ.md",
+          "sourceName": "子育てひろば",
+          "labels": {
+            "en": "Parenting Support Spaces",
+            "zh-Hans": "育儿交流广场",
+            "zh-Hant": "育兒交流廣場",
+            "ko": "육아광장"
+          },
+          "topicTerms": [
+            "子育てひろば"
+          ]
+        },
+        {
+          "slug": "short-stay-childcare",
+          "sourceFile": "05_ショートステイ_FAQ.md",
+          "sourceName": "ショートステイ",
+          "labels": {
+            "en": "Short-Stay Childcare",
+            "zh-Hans": "短期托育",
+            "zh-Hant": "短期托育",
+            "ko": "단기보호"
+          },
+          "topicTerms": [
+            "ショートステイ"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "school-affairs",
+      "sourceName": "学務課",
+      "labels": {
+        "en": "School Affairs Division",
+        "zh-Hans": "学务课",
+        "zh-Hant": "學務課",
+        "ko": "학무과"
+      },
+      "organizationSourceName": "教育部",
+      "organizationLabels": {
+        "en": "Education Department",
+        "zh-Hans": "教育部",
+        "zh-Hant": "教育部",
+        "ko": "교육부"
+      },
+      "categories": [
+        {
+          "slug": "school-enrollment",
+          "sourceFile": "01_小中学校入学_FAQ.md",
+          "sourceName": "小中学校入学",
+          "labels": {
+            "en": "Elementary and Junior High School Enrollment",
+            "zh-Hans": "小学和初中入学",
+            "zh-Hant": "國小與國中入學",
+            "ko": "초·중학교 입학"
+          },
+          "topicTerms": [
+            "小中学校入学"
+          ]
+        },
+        {
+          "slug": "school-transfers-attendance-zones",
+          "sourceFile": "02_転校・学区域_FAQ.md",
+          "sourceName": "転校・学区域",
+          "labels": {
+            "en": "School Transfers and Attendance Zones",
+            "zh-Hans": "转学与学区",
+            "zh-Hant": "轉學與學區",
+            "ko": "전학·통학구역"
+          },
+          "topicTerms": [
+            "転校",
+            "学区域"
+          ]
+        },
+        {
+          "slug": "school-expense-assistance",
+          "sourceFile": "03_就学援助_FAQ.md",
+          "sourceName": "就学援助",
+          "labels": {
+            "en": "School Expense Assistance",
+            "zh-Hans": "就学援助",
+            "zh-Hant": "就學援助",
+            "ko": "취학지원"
+          },
+          "topicTerms": [
+            "就学援助"
+          ]
+        },
+        {
+          "slug": "school-meals",
+          "sourceFile": "04_学校給食_FAQ.md",
+          "sourceName": "学校給食",
+          "labels": {
+            "en": "School Meals",
+            "zh-Hans": "学校供餐",
+            "zh-Hant": "學校供餐",
+            "ko": "학교급식"
+          },
+          "topicTerms": [
+            "学校給食"
+          ]
+        },
+        {
+          "slug": "scholarships-schooling-consultation",
+          "sourceFile": "05_奨学金・就学相談_FAQ.md",
+          "sourceName": "奨学金・就学相談",
+          "labels": {
+            "en": "Scholarships and Schooling Consultation",
+            "zh-Hans": "奖学金与就学咨询",
+            "zh-Hant": "獎學金與就學諮詢",
+            "ko": "장학금·취학 상담"
+          },
+          "topicTerms": [
+            "奨学金",
+            "就学相談"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "education-guidance",
+      "sourceName": "教育指導課",
+      "labels": {
+        "en": "Education Guidance Division",
+        "zh-Hans": "教育指导课",
+        "zh-Hant": "教育指導課",
+        "ko": "교육지도과"
+      },
+      "organizationSourceName": "教育部",
+      "organizationLabels": {
+        "en": "Education Department",
+        "zh-Hans": "教育部",
+        "zh-Hant": "教育部",
+        "ko": "교육부"
+      },
+      "categories": [
+        {
+          "slug": "school-curriculum",
+          "sourceFile": "01_教育課程_FAQ.md",
+          "sourceName": "教育課程",
+          "labels": {
+            "en": "School Curriculum",
+            "zh-Hans": "教育课程",
+            "zh-Hant": "教育課程",
+            "ko": "교육과정"
+          },
+          "topicTerms": [
+            "教育課程"
+          ]
+        },
+        {
+          "slug": "teacher-staff-training",
+          "sourceFile": "02_教職員研修_FAQ.md",
+          "sourceName": "教職員研修",
+          "labels": {
+            "en": "Teacher and Staff Training",
+            "zh-Hans": "教职员工培训",
+            "zh-Hant": "教職員培訓",
+            "ko": "교직원 연수"
+          },
+          "topicTerms": [
+            "教職員研修"
+          ]
+        },
+        {
+          "slug": "bullying-school-refusal",
+          "sourceFile": "03_いじめ・不登校_FAQ.md",
+          "sourceName": "いじめ・不登校",
+          "labels": {
+            "en": "Bullying and School Refusal",
+            "zh-Hans": "校园欺凌与拒学",
+            "zh-Hant": "校園霸凌與拒學",
+            "ko": "괴롭힘·등교 거부"
+          },
+          "topicTerms": [
+            "いじめ",
+            "不登校"
+          ]
+        },
+        {
+          "slug": "special-needs-education",
+          "sourceFile": "04_特別支援教育_FAQ.md",
+          "sourceName": "特別支援教育",
+          "labels": {
+            "en": "Special Needs Education",
+            "zh-Hans": "特殊支援教育",
+            "zh-Hant": "特殊支援教育",
+            "ko": "특수교육"
+          },
+          "topicTerms": [
+            "特別支援教育"
+          ]
+        },
+        {
+          "slug": "academic-achievement",
+          "sourceFile": "05_学力向上_FAQ.md",
+          "sourceName": "学力向上",
+          "labels": {
+            "en": "Academic Achievement Improvement",
+            "zh-Hans": "提升学业能力",
+            "zh-Hant": "提升學習能力",
+            "ko": "학력 향상"
+          },
+          "topicTerms": [
+            "学力向上"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "education-center",
+      "sourceName": "教育センター",
+      "labels": {
+        "en": "Education Center",
+        "zh-Hans": "教育中心",
+        "zh-Hant": "教育中心",
+        "ko": "교육센터"
+      },
+      "organizationSourceName": "教育部",
+      "organizationLabels": {
+        "en": "Education Department",
+        "zh-Hans": "教育部",
+        "zh-Hant": "教育部",
+        "ko": "교육부"
+      },
+      "categories": [
+        {
+          "slug": "educational-consultation",
+          "sourceFile": "01_教育相談_FAQ.md",
+          "sourceName": "教育相談",
+          "labels": {
+            "en": "Educational Consultation",
+            "zh-Hans": "教育咨询",
+            "zh-Hant": "教育諮詢",
+            "ko": "교육 상담"
+          },
+          "topicTerms": [
+            "教育相談"
+          ]
+        },
+        {
+          "slug": "school-nonattendance-support",
+          "sourceFile": "02_不登校支援_FAQ.md",
+          "sourceName": "不登校支援",
+          "labels": {
+            "en": "School Nonattendance Support",
+            "zh-Hans": "拒学支援",
+            "zh-Hant": "拒學支援",
+            "ko": "등교 거부 지원"
+          },
+          "topicTerms": [
+            "不登校支援"
+          ]
+        },
+        {
+          "slug": "teacher-staff-training",
+          "sourceFile": "03_教職員研修_FAQ.md",
+          "sourceName": "教職員研修",
+          "labels": {
+            "en": "Teacher and Staff Training",
+            "zh-Hans": "教职员工培训",
+            "zh-Hant": "教職員培訓",
+            "ko": "교직원 연수"
+          },
+          "topicTerms": [
+            "教職員研修"
+          ]
+        },
+        {
+          "slug": "adjustment-support-classroom",
+          "sourceFile": "04_適応支援教室_FAQ.md",
+          "sourceName": "適応支援教室",
+          "labels": {
+            "en": "Adjustment Support Classroom",
+            "zh-Hans": "适应支援教室",
+            "zh-Hant": "適應支援教室",
+            "ko": "적응지원교실"
+          },
+          "topicTerms": [
+            "適応支援教室"
+          ]
+        },
+        {
+          "slug": "learning-support",
+          "sourceFile": "05_学習支援_FAQ.md",
+          "sourceName": "学習支援",
+          "labels": {
+            "en": "Learning Support",
+            "zh-Hans": "学习支援",
+            "zh-Hant": "學習支援",
+            "ko": "학습 지원"
+          },
+          "topicTerms": [
+            "学習支援"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "education-support",
+      "sourceName": "教育支援課",
+      "labels": {
+        "en": "Education Support Division",
+        "zh-Hans": "教育支援课",
+        "zh-Hant": "教育支援課",
+        "ko": "교육지원과"
+      },
+      "organizationSourceName": "教育部",
+      "organizationLabels": {
+        "en": "Education Department",
+        "zh-Hans": "教育部",
+        "zh-Hant": "教育部",
+        "ko": "교육부"
+      },
+      "categories": [
+        {
+          "slug": "schooling-consultation",
+          "sourceFile": "01_就学相談_FAQ.md",
+          "sourceName": "就学相談",
+          "labels": {
+            "en": "Schooling Consultation",
+            "zh-Hans": "就学咨询",
+            "zh-Hant": "就學諮詢",
+            "ko": "취학 상담"
+          },
+          "topicTerms": [
+            "就学相談"
+          ]
+        },
+        {
+          "slug": "special-needs-classes",
+          "sourceFile": "02_特別支援学級_FAQ.md",
+          "sourceName": "特別支援学級",
+          "labels": {
+            "en": "Special Needs Classes",
+            "zh-Hans": "特殊支援班级",
+            "zh-Hant": "特殊支援班級",
+            "ko": "특수학급"
+          },
+          "topicTerms": [
+            "特別支援学級"
+          ]
+        },
+        {
+          "slug": "educational-support-plans",
+          "sourceFile": "03_教育支援計画_FAQ.md",
+          "sourceName": "教育支援計画",
+          "labels": {
+            "en": "Educational Support Plans",
+            "zh-Hans": "教育支援计划",
+            "zh-Hant": "教育支援計畫",
+            "ko": "교육지원계획"
+          },
+          "topicTerms": [
+            "教育支援計画"
+          ]
+        },
+        {
+          "slug": "resource-rooms-support-classes",
+          "sourceFile": "04_通級・支援教室_FAQ.md",
+          "sourceName": "通級・支援教室",
+          "labels": {
+            "en": "Resource Room Instruction and Support Classes",
+            "zh-Hans": "通级指导与支援教室",
+            "zh-Hant": "通級與支援教室",
+            "ko": "순회교육·지원교실"
+          },
+          "topicTerms": [
+            "通級",
+            "支援教室"
+          ]
+        },
+        {
+          "slug": "parent-guardian-meetings",
+          "sourceFile": "05_保護者面談_FAQ.md",
+          "sourceName": "保護者面談",
+          "labels": {
+            "en": "Meetings with Parents and Guardians",
+            "zh-Hans": "家长面谈",
+            "zh-Hant": "家長面談",
+            "ko": "보호자 면담"
+          },
+          "topicTerms": [
+            "保護者面談"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "library",
+      "sourceName": "図書館",
+      "labels": {
+        "en": "Library",
+        "zh-Hans": "图书馆",
+        "zh-Hant": "圖書館",
+        "ko": "도서관"
+      },
+      "organizationSourceName": "教育部",
+      "organizationLabels": {
+        "en": "Education Department",
+        "zh-Hans": "教育部",
+        "zh-Hant": "教育部",
+        "ko": "교육부"
+      },
+      "categories": [
+        {
+          "slug": "library-registration",
+          "sourceFile": "01_利用登録_FAQ.md",
+          "sourceName": "利用登録",
+          "labels": {
+            "en": "Library Registration",
+            "zh-Hans": "使用登记",
+            "zh-Hant": "使用登記",
+            "ko": "이용 등록"
+          },
+          "topicTerms": [
+            "利用登録"
+          ]
+        },
+        {
+          "slug": "borrowing-returns-reservations",
+          "sourceFile": "02_貸出・返却・予約_FAQ.md",
+          "sourceName": "貸出・返却・予約",
+          "labels": {
+            "en": "Borrowing, Returns, and Reservations",
+            "zh-Hans": "借阅、归还与预约",
+            "zh-Hant": "借閱、歸還與預約",
+            "ko": "대출·반납·예약"
+          },
+          "topicTerms": [
+            "貸出",
+            "返却",
+            "予約"
+          ]
+        },
+        {
+          "slug": "digital-library",
+          "sourceFile": "03_電子図書館_FAQ.md",
+          "sourceName": "電子図書館",
+          "labels": {
+            "en": "Digital Library",
+            "zh-Hans": "电子图书馆",
+            "zh-Hant": "電子圖書館",
+            "ko": "전자도서관"
+          },
+          "topicTerms": [
+            "電子図書館"
+          ]
+        },
+        {
+          "slug": "reference-services",
+          "sourceFile": "04_レファレンス_FAQ.md",
+          "sourceName": "レファレンス",
+          "labels": {
+            "en": "Reference Services",
+            "zh-Hans": "参考咨询服务",
+            "zh-Hant": "參考諮詢服務",
+            "ko": "참고정보 서비스"
+          },
+          "topicTerms": [
+            "レファレンス"
+          ]
+        },
+        {
+          "slug": "reading-events",
+          "sourceFile": "05_読書イベント_FAQ.md",
+          "sourceName": "読書イベント",
+          "labels": {
+            "en": "Reading Events",
+            "zh-Hans": "阅读活动",
+            "zh-Hant": "閱讀活動",
+            "ko": "독서 행사"
+          },
+          "topicTerms": [
+            "読書イベント"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "municipal-hospital",
+      "sourceName": "市立病院",
+      "labels": {
+        "en": "Municipal Hospital",
+        "zh-Hans": "市立医院",
+        "zh-Hant": "市立醫院",
+        "ko": "시립병원"
+      },
+      "organizationSourceName": "市立病院",
+      "organizationLabels": {
+        "en": "Municipal Hospital",
+        "zh-Hans": "市立医院",
+        "zh-Hant": "市立醫院",
+        "ko": "시립병원"
+      },
+      "categories": [
+        {
+          "slug": "outpatient-visits",
+          "sourceFile": "01_外来受診_FAQ.md",
+          "sourceName": "外来受診",
+          "labels": {
+            "en": "Outpatient Visits",
+            "zh-Hans": "门诊就诊",
+            "zh-Hant": "門診就醫",
+            "ko": "외래 진료"
+          },
+          "topicTerms": [
+            "外来受診"
+          ]
+        },
+        {
+          "slug": "hospital-admission",
+          "sourceFile": "02_入院_FAQ.md",
+          "sourceName": "入院",
+          "labels": {
+            "en": "Hospital Admission",
+            "zh-Hans": "住院",
+            "zh-Hant": "住院",
+            "ko": "입원"
+          },
+          "topicTerms": [
+            "入院"
+          ]
+        },
+        {
+          "slug": "emergency-care",
+          "sourceFile": "03_救急受診_FAQ.md",
+          "sourceName": "救急受診",
+          "labels": {
+            "en": "Emergency Care",
+            "zh-Hans": "急诊就诊",
+            "zh-Hant": "急診就醫",
+            "ko": "응급 진료"
+          },
+          "topicTerms": [
+            "救急受診"
+          ]
+        },
+        {
+          "slug": "clinical-departments",
+          "sourceFile": "04_診療科案内_FAQ.md",
+          "sourceName": "診療科案内",
+          "labels": {
+            "en": "Clinical Departments",
+            "zh-Hans": "诊疗科室指南",
+            "zh-Hant": "診療科別指南",
+            "ko": "진료과 안내"
+          },
+          "topicTerms": [
+            "診療科案内"
+          ]
+        },
+        {
+          "slug": "medical-expenses-certificates",
+          "sourceFile": "05_医療費・証明書_FAQ.md",
+          "sourceName": "医療費・証明書",
+          "labels": {
+            "en": "Medical Expenses and Certificates",
+            "zh-Hans": "医疗费与证明",
+            "zh-Hant": "醫療費與證明文件",
+            "ko": "의료비·증명서"
+          },
+          "topicTerms": [
+            "医療費",
+            "証明書"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "city-council-secretariat",
+      "sourceName": "議会事務局",
+      "labels": {
+        "en": "City Council Secretariat",
+        "zh-Hans": "市议会事务局",
+        "zh-Hant": "市議會事務局",
+        "ko": "시의회사무국"
+      },
+      "organizationSourceName": "議会",
+      "organizationLabels": {
+        "en": "City Council",
+        "zh-Hans": "市议会",
+        "zh-Hant": "市議會",
+        "ko": "시의회"
+      },
+      "categories": [
+        {
+          "slug": "plenary-sessions-committees",
+          "sourceFile": "01_本会議・委員会_FAQ.md",
+          "sourceName": "本会議・委員会",
+          "labels": {
+            "en": "Plenary Sessions and Committees",
+            "zh-Hans": "全体会议与委员会",
+            "zh-Hant": "全體會議與委員會",
+            "ko": "본회의·위원회"
+          },
+          "topicTerms": [
+            "本会議",
+            "委員会"
+          ]
+        },
+        {
+          "slug": "meeting-observation",
+          "sourceFile": "02_傍聴_FAQ.md",
+          "sourceName": "傍聴",
+          "labels": {
+            "en": "Attending Council Meetings",
+            "zh-Hans": "旁听",
+            "zh-Hant": "旁聽",
+            "ko": "방청"
+          },
+          "topicTerms": [
+            "傍聴"
+          ]
+        },
+        {
+          "slug": "petitions-requests",
+          "sourceFile": "03_請願・陳情_FAQ.md",
+          "sourceName": "請願・陳情",
+          "labels": {
+            "en": "Petitions and Requests",
+            "zh-Hans": "请愿与陈情",
+            "zh-Hant": "請願與陳情",
+            "ko": "청원·진정"
+          },
+          "topicTerms": [
+            "請願",
+            "陳情"
+          ]
+        },
+        {
+          "slug": "meeting-minutes",
+          "sourceFile": "04_会議録_FAQ.md",
+          "sourceName": "会議録",
+          "labels": {
+            "en": "Meeting Minutes",
+            "zh-Hans": "会议记录",
+            "zh-Hant": "會議紀錄",
+            "ko": "회의록"
+          },
+          "topicTerms": [
+            "会議録"
+          ]
+        },
+        {
+          "slug": "council-communications",
+          "sourceFile": "05_議会広報_FAQ.md",
+          "sourceName": "議会広報",
+          "labels": {
+            "en": "Council Communications",
+            "zh-Hans": "议会宣传",
+            "zh-Hant": "議會宣傳",
+            "ko": "의회 홍보"
+          },
+          "topicTerms": [
+            "議会広報"
+          ]
+        }
+      ]
+    }
+  ]
+}

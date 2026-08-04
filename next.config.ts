@@ -1,6 +1,51 @@
 import type { NextConfig } from "next";
 import createMDX from "@next/mdx";
 
+export const FAQ_LEGACY_REDIRECTS = [
+  {
+    source: '/life/frequently-asked-questions/procedure-faq',
+    destination: '/life/frequently-asked-questions',
+    permanent: false,
+  },
+  {
+    source: '/life/frequently-asked-questions/online-service-faq',
+    destination: '/life/frequently-asked-questions',
+    permanent: false,
+  },
+  {
+    source:
+      '/life/frequently-asked-questions/nanao-branch-office/branch-office-services',
+    destination:
+      '/life/frequently-asked-questions/administrative-service-center/service-counter-guide',
+    permanent: false,
+  },
+  {
+    source:
+      '/life/frequently-asked-questions/nanao-branch-office/branch-office-access',
+    destination:
+      '/life/frequently-asked-questions/administrative-service-center/location-and-access',
+    permanent: false,
+  },
+  {
+    source: '/life/frequently-asked-questions/nanao-branch-office/:faq*',
+    destination:
+      '/life/frequently-asked-questions/administrative-service-center/:faq*',
+    permanent: false,
+  },
+  {
+    source: '/life/frequently-asked-questions/safety-net-call-center/:faq*',
+    destination:
+      '/life/frequently-asked-questions/welfare-consultation-desk/:faq*',
+    permanent: false,
+  },
+  {
+    source:
+      '/life/frequently-asked-questions/developmental-education-support/:faq*',
+    destination: '/life/frequently-asked-questions/education-support/:faq*',
+    permanent: false,
+  },
+];
+
 const nextConfig: NextConfig = {
   // content/docs 配下の .mdx をダイナミックインポートしてレンダリングする。
   // .mdx をルーティング対象（page.mdx）として使う予定はないが、@next/mdx の
@@ -16,6 +61,19 @@ const nextConfig: NextConfig = {
     // dev セッション間の Turbopack 永続キャッシュを無効化し、
     // 毎回クリーンな状態でホットリロードさせる
     turbopackFileSystemCacheForDev: false,
+  },
+  outputFileTracingIncludes: {
+    '/life/frequently-asked-questions': [
+      './knowledge-base/自治体-基礎自治体-未来市/**/*.md',
+      './knowledge-base/自治体-基礎自治体-未来市/_translations/**/*.json',
+    ],
+    '/life/frequently-asked-questions/**': [
+      './knowledge-base/自治体-基礎自治体-未来市/**/*.md',
+      './knowledge-base/自治体-基礎自治体-未来市/_translations/**/*.json',
+    ],
+  },
+  async redirects() {
+    return FAQ_LEGACY_REDIRECTS;
   },
   async rewrites() {
     return {

@@ -3,6 +3,7 @@ import { Footer } from './components/Footer';
 import { FindInfo } from './components/FindInfo';
 import { HomeHeading } from './components/HomeHeading';
 import { News } from './components/News';
+import { ZoomVirtualAgentWebTag } from './components/ZoomVirtualAgentWebTag';
 import { getContactSettings } from '@/lib/server/site-settings';
 
 export default async function Home() {
@@ -17,6 +18,9 @@ export default async function Home() {
         <News />
       </main>
       <Footer />
+      <ZoomVirtualAgentWebTag
+        webTag={contactSettings.zoomVirtualAgentWebTag}
+      />
     </div>
   );
 }

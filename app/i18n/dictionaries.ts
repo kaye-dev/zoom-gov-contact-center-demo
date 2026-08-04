@@ -54,8 +54,6 @@ export type LifeTopicDictionary = {
   accessibleFacilities: string;
   eventCalendar: string;
   tourismGuide: string;
-  procedureFaq: string;
-  onlineServiceFaq: string;
   submitOpinion: string;
   contactCenter: string;
   healthCheckups: string;
@@ -169,6 +167,17 @@ export type Dictionary = {
     backToCategory: string;
     publishedLabel: string;
     readMore: string;
+    faq: {
+      indexLead: string;
+      departmentsHeading: string;
+      departmentLead: string;
+      categoriesHeading: string;
+      categoryLead: string;
+      questionsHeading: string;
+      questionCount: string;
+      backToIndex: string;
+      backToDepartment: string;
+    };
     lifeTopics: LifeTopicDictionary;
     lifeTopicSummaries: LifeTopicDictionary;
     newsSummaries: NewsArticleDictionary;
@@ -276,6 +285,10 @@ export type Dictionary = {
       aiPhoneTitle: string;
       aiPhoneDescription: string;
       aiPhoneLabel: string;
+      webTagTitle: string;
+      webTagDescription: string;
+      webTagLabel: string;
+      webTagHelp: string;
       virtualAgentTitle: string;
       virtualAgentDescription: string;
       campaignUrlLabel: string;
@@ -414,6 +427,19 @@ export const dictionaries: Record<Locale, Dictionary> = {
       backToCategory: 'このカテゴリに戻る',
       publishedLabel: '公開日',
       readMore: '詳しく見る',
+      faq: {
+        indexLead: '未来市のよくある質問を課・局別にご案内します。',
+        departmentsHeading: '課・局から探す',
+        departmentLead:
+          '「{name}」に関するよくある質問をカテゴリ別にご案内します。',
+        categoriesHeading: 'FAQカテゴリ',
+        categoryLead:
+          '「{name}」に関するよくある質問と回答をご案内します。',
+        questionsHeading: 'よくある質問',
+        questionCount: '{count}件の質問',
+        backToIndex: 'よくある質問一覧に戻る',
+        backToDepartment: 'この課・局のFAQ一覧に戻る',
+      },
       lifeTopics: {
         garbageSorting: 'ごみの分別・収集',
         bulkyWaste: '粗大ごみ',
@@ -427,8 +453,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
         accessibleFacilities: 'バリアフリー対応施設',
         eventCalendar: 'イベントカレンダー',
         tourismGuide: '観光案内',
-        procedureFaq: '手続きに関するよくある質問',
-        onlineServiceFaq: 'オンライン手続きに関するよくある質問',
         submitOpinion: '市政へのご意見・ご要望',
         contactCenter: 'お問い合わせセンター',
         healthCheckups: '健診・検診',
@@ -477,10 +501,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
           '未来市で開催する文化、スポーツ、子育てなどのイベントを日付や分野から探せます。予約の要否と参加条件は各イベントの案内をご確認ください。',
         tourismGuide:
           '市内の公園、文化施設、商店街などの見どころと周遊情報を紹介します。季節のイベントや交通手段を組み合わせて、未来市の観光をお楽しみください。',
-        procedureFaq:
-          '引っ越し、証明書、子育てなど、市の手続きに関するよくある質問をまとめています。回答から必要な手続きの案内へ進めます。',
-        onlineServiceFaq:
-          'オンライン手続きのログイン、電子署名、ファイル添付、進捗確認に関する質問を案内します。操作に困ったときの対処方法も確認できます。',
         submitOpinion:
           '未来市の施策やサービスに対するご意見・ご要望をオンラインまたは郵送で受け付けます。回答を希望する場合は、連絡先をお知らせください。',
         contactCenter:
@@ -608,7 +628,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       users: 'ユーザー管理',
       newUser: 'ユーザー作成',
       passwordResets: '再設定申請',
-      phoneNumbers: '電話番号管理',
+      phoneNumbers: '電話・AIチャット管理',
       languageSettings: '言語管理',
       settingsMenu: '設定',
       userListTitle: 'ユーザー管理',
@@ -662,6 +682,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
             'AI電話番号をE.164形式で入力してください。',
           INVALID_CAMPAIGN_URL:
             'Campaign URLには有効なHTTPS URLを入力してください。',
+          INVALID_VIRTUAL_AGENT_WEB_TAG:
+            'Zoomが発行した有効なWeb Tagを入力してください。',
           INVALID_LANGUAGE_SETTINGS:
             '5言語を重複なく1回ずつ指定してください。',
           JAPANESE_REQUIRED: '日本語は無効にできません。',
@@ -669,9 +691,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
         },
       },
       contactSettings: {
-        title: '電話番号管理',
+        title: '電話・AIチャット管理',
         description:
-          '代表電話と、言語ごとのAI電話相談・AIチャット相談の接続先を設定します。',
+          '代表電話、AI電話相談、Zoom Virtual AgentのWeb Tagとチャット接続先を設定します。',
         representativeTitle: '代表電話',
         representativeDescription:
           '共通フッターに表示する電話番号と、発信に使用する番号を設定します。',
@@ -683,6 +705,12 @@ export const dictionaries: Record<Locale, Dictionary> = {
         aiPhoneDescription:
           '公開サイトで選択中の言語に応じて発信する電話番号を設定します。空欄の場合は未設定として保存されます。',
         aiPhoneLabel: 'AI電話番号（E.164）',
+        webTagTitle: 'Zoom Virtual Agent Web Tag',
+        webTagDescription:
+          'ZoomのCampaign設定に表示される「Embed Web Tag」のscriptタグ全体を設定します。空欄にすると公開サイトのチャットランチャーを停止します。',
+        webTagLabel: 'Web Tag（scriptタグ）',
+        webTagHelp:
+          'HTTPSのZoom配信元、公開APIキー、環境を検証して保存します。APIキーだけではなくscriptタグ全体を貼り付けてください。',
         virtualAgentTitle: 'AI チャット相談',
         virtualAgentDescription:
           'Zoom Virtual AgentのFull-page / Offsite Campaign URLを設定します。空欄の場合は未設定として保存されます。',
@@ -830,6 +858,20 @@ export const dictionaries: Record<Locale, Dictionary> = {
       backToCategory: 'Back to this category',
       publishedLabel: 'Published',
       readMore: 'Read more',
+      faq: {
+        indexLead:
+          'Browse frequently asked questions from Mirai City by department or bureau.',
+        departmentsHeading: 'Browse by Department or Bureau',
+        departmentLead:
+          'Browse frequently asked questions about {name} by category.',
+        categoriesHeading: 'FAQ Categories',
+        categoryLead:
+          'Find answers to frequently asked questions about {name}.',
+        questionsHeading: 'Frequently Asked Questions',
+        questionCount: '{count} questions',
+        backToIndex: 'Back to all frequently asked questions',
+        backToDepartment: 'Back to FAQs for this department or bureau',
+      },
       lifeTopics: {
         garbageSorting: 'Garbage Sorting & Collection',
         bulkyWaste: 'Bulky Waste',
@@ -843,8 +885,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
         accessibleFacilities: 'Accessible Facilities',
         eventCalendar: 'Event Calendar',
         tourismGuide: 'Tourism Guide',
-        procedureFaq: 'Frequently Asked Questions About Procedures',
-        onlineServiceFaq: 'Frequently Asked Questions About Online Services',
         submitOpinion: 'Feedback and Requests for Mirai City Government',
         contactCenter: 'City Contact Center',
         healthCheckups: 'Health Checkups & Screenings',
@@ -893,10 +933,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'Browse cultural, sports, and family events in Mirai City by date or category. Each listing shows whether registration is required and any participation conditions.',
         tourismGuide:
           'Explore parks, cultural venues, shopping streets, and suggested routes around Mirai City. Combine seasonal events with local transportation information to plan your visit.',
-        procedureFaq:
-          'Find answers to common questions about moving, certificates, child-rearing, and other city procedures. Each answer links you to the relevant steps and service information.',
-        onlineServiceFaq:
-          'Get help with signing in, electronic signatures, file uploads, and tracking online applications. Troubleshooting guidance is also available for common errors and interrupted submissions.',
         submitOpinion:
           'Mirai City accepts feedback and requests about city policies and services online or by post. Include your contact details if you would like an individual response.',
         contactCenter:
@@ -1024,7 +1060,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       users: 'User Management',
       newUser: 'Create User',
       passwordResets: 'Reset Requests',
-      phoneNumbers: 'Phone Numbers',
+      phoneNumbers: 'Phone & AI Chat',
       languageSettings: 'Languages',
       settingsMenu: 'Settings',
       userListTitle: 'User Management',
@@ -1078,6 +1114,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
             'Enter each AI phone number in E.164 format.',
           INVALID_CAMPAIGN_URL:
             'Enter a valid HTTPS Campaign URL.',
+          INVALID_VIRTUAL_AGENT_WEB_TAG:
+            'Enter a valid Web Tag issued by Zoom.',
           INVALID_LANGUAGE_SETTINGS:
             'Include each of the five languages exactly once.',
           JAPANESE_REQUIRED: 'Japanese cannot be disabled.',
@@ -1085,9 +1123,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
         },
       },
       contactSettings: {
-        title: 'Phone Number Management',
+        title: 'Phone and AI Chat Management',
         description:
-          'Configure the representative phone and the AI phone and chat destination for each language.',
+          'Configure the representative phone, AI phone, Zoom Virtual Agent Web Tag, and chat destinations.',
         representativeTitle: 'Representative Phone',
         representativeDescription:
           'Configure the number shown in the shared footer and the number used for dialing.',
@@ -1099,6 +1137,12 @@ export const dictionaries: Record<Locale, Dictionary> = {
         aiPhoneDescription:
           'Set the phone number dialed for each selected site language. A blank value is saved as not configured.',
         aiPhoneLabel: 'AI phone number (E.164)',
+        webTagTitle: 'Zoom Virtual Agent Web Tag',
+        webTagDescription:
+          'Paste the complete script shown under Embed Web Tag in the Zoom Campaign settings. Leave it blank to disable the chat launcher on the public site.',
+        webTagLabel: 'Web Tag (script tag)',
+        webTagHelp:
+          'The Zoom HTTPS source, public API key, and environment are validated before saving. Paste the complete script tag, not only the API key.',
         virtualAgentTitle: 'AI Chat Consultation',
         virtualAgentDescription:
           'Set the Zoom Virtual Agent Full-page / Offsite Campaign URL. A blank value is saved as not configured.',
@@ -1237,6 +1281,17 @@ export const dictionaries: Record<Locale, Dictionary> = {
       backToCategory: '返回分类页面',
       publishedLabel: '发布日期',
       readMore: '查看详情',
+      faq: {
+        indexLead: '按部门和局分类查看未来市的常见问题。',
+        departmentsHeading: '按部门或局查找',
+        departmentLead: '按类别查看有关{name}的常见问题。',
+        categoriesHeading: '常见问题类别',
+        categoryLead: '查看有关{name}的常见问题及解答。',
+        questionsHeading: '常见问题',
+        questionCount: '共{count}个问题',
+        backToIndex: '返回常见问题一览',
+        backToDepartment: '返回本部门或局的常见问题一览',
+      },
       lifeTopics: {
         garbageSorting: '垃圾分类与收集',
         bulkyWaste: '大件垃圾',
@@ -1250,8 +1305,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
         accessibleFacilities: '无障碍设施',
         eventCalendar: '活动日历',
         tourismGuide: '观光指南',
-        procedureFaq: '办事手续常见问题',
-        onlineServiceFaq: '在线服务常见问题',
         submitOpinion: '向未来市提交市政意见与建议',
         contactCenter: '市政咨询服务中心',
         healthCheckups: '健康检查',
@@ -1300,10 +1353,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
           '可按日期或类别查找未来市的文化、体育和亲子活动。每项活动都会说明是否需预约及参加条件。',
         tourismGuide:
           '介绍未来市的公园、文化设施、商业街及推荐游览路线。可结合季节活动和市内交通信息规划行程。',
-        procedureFaq:
-          '汇总搬迁、证明文件、育儿等市政手续的常见问题。可从答案直接查看相关办理步骤和服务信息。',
-        onlineServiceFaq:
-          '介绍在线办事中的登录、电子签名、文件上传和申请进度查询。也提供常见错误和提交中断时的处理方法。',
         submitOpinion:
           '未来市通过在线表单或邮寄方式接收对市政施策和服务的意见与建议。如希望获得个别回复，请填写联系方式。',
         contactCenter:
@@ -1427,7 +1476,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       users: '用户管理',
       newUser: '创建用户',
       passwordResets: '重置申请',
-      phoneNumbers: '电话号码管理',
+      phoneNumbers: '电话与AI聊天管理',
       languageSettings: '语言管理',
       settingsMenu: '设置',
       userListTitle: '用户管理',
@@ -1477,14 +1526,17 @@ export const dictionaries: Record<Locale, Dictionary> = {
             '请以E.164格式输入代表电话的拨号号码。',
           INVALID_AI_PHONE_E164: '请以E.164格式输入AI电话号码。',
           INVALID_CAMPAIGN_URL: '请输入有效的HTTPS Campaign URL。',
+          INVALID_VIRTUAL_AGENT_WEB_TAG:
+            '请输入Zoom签发的有效Web Tag。',
           INVALID_LANGUAGE_SETTINGS: '请将5种语言各指定一次且不要重复。',
           JAPANESE_REQUIRED: '不能停用日语。',
           SETTINGS_SAVE_FAILED: '无法保存设置。',
         },
       },
       contactSettings: {
-        title: '电话号码管理',
-        description: '设置代表电话以及各语言的AI电话和AI聊天连接地址。',
+        title: '电话与AI聊天管理',
+        description:
+          '设置代表电话、AI电话、Zoom Virtual Agent Web Tag以及聊天连接地址。',
         representativeTitle: '代表电话',
         representativeDescription:
           '设置在共用页脚中显示的电话号码以及拨号时使用的号码。',
@@ -1496,6 +1548,12 @@ export const dictionaries: Record<Locale, Dictionary> = {
         aiPhoneDescription:
           '按公开网站当前选择的语言设置拨打号码。留空时保存为未设置。',
         aiPhoneLabel: 'AI电话号码（E.164）',
+        webTagTitle: 'Zoom Virtual Agent Web Tag',
+        webTagDescription:
+          '请粘贴Zoom Campaign设置中“Embed Web Tag”显示的完整script标签。留空将停用公开网站上的聊天启动器。',
+        webTagLabel: 'Web Tag（script标签）',
+        webTagHelp:
+          '保存前会验证Zoom HTTPS来源、公共API密钥和环境。请粘贴完整script标签，而不是仅粘贴API密钥。',
         virtualAgentTitle: 'AI 聊天咨询',
         virtualAgentDescription:
           '设置Zoom Virtual Agent的Full-page / Offsite Campaign URL。留空时保存为未设置。',
@@ -1633,6 +1691,17 @@ export const dictionaries: Record<Locale, Dictionary> = {
       backToCategory: '返回分類頁面',
       publishedLabel: '發布日期',
       readMore: '查看詳情',
+      faq: {
+        indexLead: '按部門和局分類查看未來市的常見問題。',
+        departmentsHeading: '依部門或局查詢',
+        departmentLead: '依分類查看有關{name}的常見問題。',
+        categoriesHeading: '常見問題分類',
+        categoryLead: '查看有關{name}的常見問題與解答。',
+        questionsHeading: '常見問題',
+        questionCount: '共{count}個問題',
+        backToIndex: '返回常見問題一覽',
+        backToDepartment: '返回本部門或局的常見問題一覽',
+      },
       lifeTopics: {
         garbageSorting: '垃圾分類與收集',
         bulkyWaste: '大型垃圾',
@@ -1646,8 +1715,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
         accessibleFacilities: '無障礙設施',
         eventCalendar: '活動日曆',
         tourismGuide: '觀光指南',
-        procedureFaq: '辦理手續常見問題',
-        onlineServiceFaq: '線上服務常見問題',
         submitOpinion: '向未來市提交市政意見與建議',
         contactCenter: '市政諮詢服務中心',
         healthCheckups: '健康檢查',
@@ -1696,10 +1763,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
           '可依日期或類別查找未來市的文化、體育和親子活動。每項活動都會說明是否需預約及參加條件。',
         tourismGuide:
           '介紹未來市的公園、文化設施、商圈及建議遊覽路線。可結合季節活動和市內交通資訊安排行程。',
-        procedureFaq:
-          '彙整搬遷、證明文件、育兒等市政手續的常見問題。可從答案直接查看相關辦理步驟和服務資訊。',
-        onlineServiceFaq:
-          '介紹線上辦事的登入、電子簽章、檔案上傳和申請進度查詢。也提供常見錯誤和送出中斷時的處理方式。',
         submitOpinion:
           '未來市透過線上表單或郵寄方式接收對市政政策和服務的意見與建議。如希望獲得個別回覆，請填寫聯絡方式。',
         contactCenter:
@@ -1823,7 +1886,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       users: '使用者管理',
       newUser: '建立使用者',
       passwordResets: '重設申請',
-      phoneNumbers: '電話號碼管理',
+      phoneNumbers: '電話與AI聊天管理',
       languageSettings: '語言管理',
       settingsMenu: '設定',
       userListTitle: '使用者管理',
@@ -1873,14 +1936,17 @@ export const dictionaries: Record<Locale, Dictionary> = {
             '請以E.164格式輸入代表電話的撥號號碼。',
           INVALID_AI_PHONE_E164: '請以E.164格式輸入AI電話號碼。',
           INVALID_CAMPAIGN_URL: '請輸入有效的HTTPS Campaign URL。',
+          INVALID_VIRTUAL_AGENT_WEB_TAG:
+            '請輸入Zoom簽發的有效Web Tag。',
           INVALID_LANGUAGE_SETTINGS: '請將5種語言各指定一次且不要重複。',
           JAPANESE_REQUIRED: '不能停用日語。',
           SETTINGS_SAVE_FAILED: '無法儲存設定。',
         },
       },
       contactSettings: {
-        title: '電話號碼管理',
-        description: '設定代表電話以及各語言的AI電話和AI聊天連線位址。',
+        title: '電話與AI聊天管理',
+        description:
+          '設定代表電話、AI電話、Zoom Virtual Agent Web Tag以及聊天連線位址。',
         representativeTitle: '代表電話',
         representativeDescription:
           '設定在共用頁尾顯示的電話號碼以及撥號時使用的號碼。',
@@ -1892,6 +1958,12 @@ export const dictionaries: Record<Locale, Dictionary> = {
         aiPhoneDescription:
           '依公開網站目前選擇的語言設定撥打號碼。留白時儲存為未設定。',
         aiPhoneLabel: 'AI電話號碼（E.164）',
+        webTagTitle: 'Zoom Virtual Agent Web Tag',
+        webTagDescription:
+          '請貼上Zoom Campaign設定中「Embed Web Tag」顯示的完整script標籤。留白將停用公開網站上的聊天啟動器。',
+        webTagLabel: 'Web Tag（script標籤）',
+        webTagHelp:
+          '儲存前會驗證Zoom HTTPS來源、公開API金鑰和環境。請貼上完整script標籤，而不是只貼上API金鑰。',
         virtualAgentTitle: 'AI 聊天諮詢',
         virtualAgentDescription:
           '設定Zoom Virtual Agent的Full-page / Offsite Campaign URL。留白時儲存為未設定。',
@@ -2028,6 +2100,18 @@ export const dictionaries: Record<Locale, Dictionary> = {
       backToCategory: '이 카테고리로 돌아가기',
       publishedLabel: '게시일',
       readMore: '자세히 보기',
+      faq: {
+        indexLead: '미래시의 자주 묻는 질문을 과·국별로 안내합니다.',
+        departmentsHeading: '과·국별로 찾기',
+        departmentLead:
+          '{name}에 관한 자주 묻는 질문을 카테고리별로 안내합니다.',
+        categoriesHeading: 'FAQ 카테고리',
+        categoryLead: '{name}에 관한 자주 묻는 질문과 답변을 안내합니다.',
+        questionsHeading: '자주 묻는 질문',
+        questionCount: '질문 {count}개',
+        backToIndex: '자주 묻는 질문 목록으로 돌아가기',
+        backToDepartment: '이 과·국의 FAQ 목록으로 돌아가기',
+      },
       lifeTopics: {
         garbageSorting: '쓰레기 분리배출・수거',
         bulkyWaste: '대형 폐기물',
@@ -2041,8 +2125,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
         accessibleFacilities: '배리어프리 시설',
         eventCalendar: '이벤트 캘린더',
         tourismGuide: '관광 안내',
-        procedureFaq: '수속 관련 자주 묻는 질문',
-        onlineServiceFaq: '온라인 수속 관련 자주 묻는 질문',
         submitOpinion: '미래시 시정에 대한 의견・요청',
         contactCenter: '시 문의센터',
         healthCheckups: '건강검진・검사',
@@ -2091,10 +2173,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
           '미래시의 문화, 스포츠, 가족 행사를 날짜나 분야로 찾을 수 있습니다. 각 행사 안내에서 예약 필요 여부와 참가 조건을 확인해 주세요.',
         tourismGuide:
           '미래시의 공원, 문화시설, 상점가와 추천 관광 코스를 소개합니다. 계절 행사와 시내 교통 정보를 함께 활용해 일정을 계획해 보세요.',
-        procedureFaq:
-          '이사, 증명서, 육아 등 시정 절차에 관한 자주 묻는 질문을 모았습니다. 각 답변에서 관련 신청 절차와 서비스 안내로 이동할 수 있습니다.',
-        onlineServiceFaq:
-          '온라인 수속의 로그인, 전자서명, 파일 첨부, 신청 진행 상황 확인을 안내합니다. 자주 발생하는 오류와 제출 중단 시 해결 방법도 확인할 수 있습니다.',
         submitOpinion:
           '미래시는 시정 정책과 서비스에 대한 의견과 요청을 온라인 또는 우편으로 접수합니다. 개별 답변을 원하면 연락처를 함께 알려 주세요.',
         contactCenter:
@@ -2218,7 +2296,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       users: '사용자 관리',
       newUser: '사용자 생성',
       passwordResets: '재설정 신청',
-      phoneNumbers: '전화번호 관리',
+      phoneNumbers: '전화 및 AI 채팅 관리',
       languageSettings: '언어 관리',
       settingsMenu: '설정',
       userListTitle: '사용자 관리',
@@ -2270,6 +2348,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
             'AI 전화번호를 E.164 형식으로 입력해 주세요.',
           INVALID_CAMPAIGN_URL:
             '유효한 HTTPS Campaign URL을 입력해 주세요.',
+          INVALID_VIRTUAL_AGENT_WEB_TAG:
+            'Zoom에서 발급한 유효한 Web Tag를 입력해 주세요.',
           INVALID_LANGUAGE_SETTINGS:
             '5개 언어를 중복 없이 한 번씩 지정해 주세요.',
           JAPANESE_REQUIRED: '일본어는 비활성화할 수 없습니다.',
@@ -2277,9 +2357,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
         },
       },
       contactSettings: {
-        title: '전화번호 관리',
+        title: '전화 및 AI 채팅 관리',
         description:
-          '대표 전화와 언어별 AI 전화 상담 및 AI 채팅 상담 연결 대상을 설정합니다.',
+          '대표 전화, AI 전화, Zoom Virtual Agent Web Tag 및 채팅 연결 대상을 설정합니다.',
         representativeTitle: '대표 전화',
         representativeDescription:
           '공통 푸터에 표시할 전화번호와 발신에 사용할 번호를 설정합니다.',
@@ -2291,6 +2371,12 @@ export const dictionaries: Record<Locale, Dictionary> = {
         aiPhoneDescription:
           '공개 사이트에서 선택한 언어에 따라 발신할 번호를 설정합니다. 빈칸은 미설정으로 저장됩니다.',
         aiPhoneLabel: 'AI 전화번호(E.164)',
+        webTagTitle: 'Zoom Virtual Agent Web Tag',
+        webTagDescription:
+          'Zoom Campaign 설정의 Embed Web Tag에 표시되는 전체 script 태그를 붙여 넣으세요. 비워 두면 공개 사이트의 채팅 런처가 비활성화됩니다.',
+        webTagLabel: 'Web Tag(script 태그)',
+        webTagHelp:
+          '저장 전에 Zoom HTTPS 소스, 공개 API 키 및 환경을 검증합니다. API 키만이 아니라 전체 script 태그를 붙여 넣으세요.',
         virtualAgentTitle: 'AI 채팅 상담',
         virtualAgentDescription:
           'Zoom Virtual Agent의 Full-page / Offsite Campaign URL을 설정합니다. 빈칸은 미설정으로 저장됩니다.',

@@ -1,0 +1,221 @@
+{
+  "sourceDigest": "cb6c29b3583b35960d440cddb4f783f7c64d1ba7a7c5ea76dd6c643878d4198c",
+  "translations": {
+    "en": {
+      "items": [
+        {
+          "no": 1,
+          "question": "Can I get advice about Petitions and Requests?",
+          "answer": "The City Council Secretariat of Mirai City provides information about Petitions and Requests. The main topics are Petitions and Requests. You can find an overview of the program, available service counters, application procedures, required documents, and important points."
+        },
+        {
+          "no": 2,
+          "question": "Who or what situations are eligible for Petitions and Requests?",
+          "answer": "Eligibility varies by program or procedure. It may include people connected with Petitions and Requests, registered residents of Mirai City, and people connected with facilities, roads, projects, or schools in the city."
+        },
+        {
+          "no": 3,
+          "question": "What do I need for the Petitions and Requests procedure?",
+          "answer": "You may need an application form, identity verification documents, materials that describe the matter, contact information, and, when necessary, a power of attorney or other supporting documents."
+        },
+        {
+          "no": 4,
+          "question": "Where can I complete the Petitions and Requests procedure?",
+          "answer": "Depending on the procedure, use Mirai City's official website, the responsible department's service counter, telephone, online application, or postal mail."
+        },
+        {
+          "no": 5,
+          "question": "Are there any deadlines or application periods for Petitions and Requests?",
+          "answer": "An application, recruitment, lottery, or renewal period may be specified. Check the latest schedule on Mirai City's official website or with the responsible department."
+        },
+        {
+          "no": 6,
+          "question": "Are there any fees for Petitions and Requests?",
+          "answer": "Some consultations are free, while certificates, facility use, or processing may carry fees. Check with the responsible department or on the official website to confirm whether a fee applies."
+        },
+        {
+          "no": 7,
+          "question": "Can a representative or family member complete the Petitions and Requests procedure?",
+          "answer": "A representative or family member may be able to complete the procedure. However, identity verification documents, a power of attorney, and documents showing the relationship to the person concerned may be required. A procedure that requires confirmation of the person's intent may not be completed by a representative."
+        },
+        {
+          "no": 8,
+          "question": "What should I do if I need to change information or request reissuance for Petitions and Requests?",
+          "answer": "If you need to make a change, request reissuance, cancel, withdraw, or submit additional material, prepare the reference number, notice, identity verification documents, and materials describing the change, then contact the responsible department."
+        },
+        {
+          "no": 9,
+          "question": "Can I complete an application or reservation for Petitions and Requests through this chat?",
+          "answer": "This chat can provide general guidance, but it cannot finalize an application or reservation, issue a certificate, conduct an individual review, verify identity, or determine eligibility for a benefit. Complete the formal procedure through the designated service counter, online application, postal mail, or reservation system."
+        },
+        {
+          "no": 10,
+          "question": "What should I do if the chat response does not answer my question about Petitions and Requests?",
+          "answer": "If the referenced knowledge does not provide enough information, do not make assumptions. Check the latest main telephone number in the footer of the Mirai City official website (zoom-gov-contact-center-demo) and ask to be connected to the City Council Secretariat. Programs and application status may change. Check with the responsible department or on the official website for current information, decisions on individual cases, confirmed reservations, and review results."
+        }
+      ]
+    },
+    "zh-Hans": {
+      "items": [
+        {
+          "no": 1,
+          "question": "可以咨询有关请愿与陈情的问题吗？",
+          "answer": "未来市的市议会事务局提供请愿与陈情相关信息。主要内容包括请愿与陈情。您可以确认制度概要、可利用的服务窗口、申请方法、所需材料及注意事项。"
+        },
+        {
+          "no": 2,
+          "question": "请告诉我哪些人员或情况属于请愿与陈情的适用对象。",
+          "answer": "适用对象因制度或手续而异。与请愿与陈情有关的人员、在未来市办理居民登记的人员，以及与市内设施、道路、项目或学校等有关的人员，可能属于适用对象。"
+        },
+        {
+          "no": 3,
+          "question": "办理请愿与陈情需要准备什么？",
+          "answer": "可能需要申请表、身份证明材料、能够说明相关事项的资料、联系方式，以及视情况所需的委托书或其他相关资料。"
+        },
+        {
+          "no": 4,
+          "question": "可以在哪里办理请愿与陈情？",
+          "answer": "可根据手续内容，通过未来市官方网站、主管部门窗口、电话、在线申请或邮寄等方式办理。"
+        },
+        {
+          "no": 5,
+          "question": "请愿与陈情有办理期限或受理期间吗？",
+          "answer": "可能设有受理期间、招募期间、抽签期间或更新时期。请在未来市官方网站或向主管部门确认最新日程。"
+        },
+        {
+          "no": 6,
+          "question": "办理请愿与陈情需要付费吗？",
+          "answer": "部分咨询免费，但办理证明、使用设施或相关处理可能收费。请向主管部门或通过官方网站确认是否需要付费。"
+        },
+        {
+          "no": 7,
+          "question": "代理人或家属也可以办理“请愿与陈情”吗？",
+          "answer": "代理人或家属有时可以办理相关手续，但可能需要身份证明材料、委托书及能够确认与当事人关系的资料。需要确认本人意愿的手续，可能无法由代理人完成。"
+        },
+        {
+          "no": 8,
+          "question": "如需变更请愿与陈情的内容或重新补发，应如何办理？",
+          "answer": "如需变更、补发、取消、撤回或补交资料，请准备受理编号、通知书、身份证明材料及能够说明变更内容的资料，并向主管部门确认。"
+        },
+        {
+          "no": 9,
+          "question": "可以通过聊天完成“请愿与陈情”的申请或预约吗？",
+          "answer": "本聊天可提供一般性指引，但无法完成申请或预约确认、开具证明、个别审查、身份核实或补助资格判定。正式手续请通过指定窗口、在线申请、邮寄或预约系统办理。"
+        },
+        {
+          "no": 10,
+          "question": "如果聊天回复未能解答我关于请愿与陈情的问题，该怎么办？",
+          "answer": "如果所参考的知识库没有足够信息，请勿自行判断。请在未来市官方网站（zoom-gov-contact-center-demo）页面底部确认最新总机号码，并要求转接至市议会事务局。制度或受理情况可能发生变化。最新信息、个别情况判断、预约确认及审查结果，请向主管部门或通过官方网站确认。"
+        }
+      ]
+    },
+    "zh-Hant": {
+      "items": [
+        {
+          "no": 1,
+          "question": "可以諮詢有關請願與陳情的問題嗎？",
+          "answer": "未來市的市議會事務局提供請願與陳情相關資訊。主要內容包括請願與陳情。您可以確認制度概要、可利用的服務窗口、申請方法、所需文件及注意事項。"
+        },
+        {
+          "no": 2,
+          "question": "請告訴我哪些人員或情況屬於請願與陳情的適用對象。",
+          "answer": "適用對象因制度或手續而異。與請願與陳情有關的人員、在未來市辦理居民登記的人員，以及與市內設施、道路、計畫或學校等有關的人員，可能屬於適用對象。"
+        },
+        {
+          "no": 3,
+          "question": "辦理請願與陳情需要準備什麼？",
+          "answer": "可能需要申請表、身分證明文件、能夠說明相關事項的資料、聯絡方式，以及視情況所需的委任書或其他相關資料。"
+        },
+        {
+          "no": 4,
+          "question": "可以在哪裡辦理請願與陳情？",
+          "answer": "可依手續內容，透過未來市官方網站、主管部門窗口、電話、線上申請或郵寄等方式辦理。"
+        },
+        {
+          "no": 5,
+          "question": "請願與陳情有辦理期限或受理期間嗎？",
+          "answer": "可能設有受理期間、招募期間、抽籤期間或更新時期。請在未來市官方網站或向主管部門確認最新日程。"
+        },
+        {
+          "no": 6,
+          "question": "辦理請願與陳情需要付費嗎？",
+          "answer": "部分諮詢免費，但辦理證明、使用設施或相關處理可能收費。請向主管部門或透過官方網站確認是否需要付費。"
+        },
+        {
+          "no": 7,
+          "question": "代理人或家屬也可以辦理「請願與陳情」嗎？",
+          "answer": "代理人或家屬有時可以辦理相關手續，但可能需要身分證明文件、委任書及能夠確認與當事人關係的資料。需要確認本人意願的手續，可能無法由代理人完成。"
+        },
+        {
+          "no": 8,
+          "question": "如需變更請願與陳情的內容或重新補發，應如何辦理？",
+          "answer": "如需變更、補發、取消、撤回或補交資料，請準備受理編號、通知書、身分證明文件及能夠說明變更內容的資料，並向主管部門確認。"
+        },
+        {
+          "no": 9,
+          "question": "可以透過聊天完成「請願與陳情」的申請或預約嗎？",
+          "answer": "本聊天可提供一般性指引，但無法完成申請或預約確認、核發證明、個別審查、身分核實或補助資格判定。正式手續請透過指定窗口、線上申請、郵寄或預約系統辦理。"
+        },
+        {
+          "no": 10,
+          "question": "如果聊天回覆未能解答我關於請願與陳情的問題，該怎麼辦？",
+          "answer": "如果所參考的知識庫沒有足夠資訊，請勿自行判斷。請在未來市官方網站（zoom-gov-contact-center-demo）頁面底部確認最新總機號碼，並要求轉接至市議會事務局。制度或受理狀況可能發生變化。最新資訊、個別情況判斷、預約確認及審查結果，請向主管部門或透過官方網站確認。"
+        }
+      ]
+    },
+    "ko": {
+      "items": [
+        {
+          "no": 1,
+          "question": "청원·진정에 대해 상담할 수 있나요?",
+          "answer": "미래시의 시의회사무국에서는 청원·진정에 관한 안내를 제공합니다. 주요 내용은 청원·진정입니다. 제도의 개요, 이용 가능한 창구, 신청 방법, 필요 서류 및 유의 사항을 확인할 수 있습니다."
+        },
+        {
+          "no": 2,
+          "question": "청원·진정의 대상자나 해당 사례를 알려 주세요.",
+          "answer": "대상은 제도나 절차에 따라 다릅니다. 청원·진정와 관련된 분, 미래시에 주민등록이 되어 있는 분, 시내 시설·도로·사업·학교 등과 관련된 분이 대상이 될 수 있습니다."
+        },
+        {
+          "no": 3,
+          "question": "청원·진정 절차에는 무엇이 필요한가요?",
+          "answer": "신청서, 본인 확인 서류, 대상 내용을 확인할 수 있는 자료, 연락처와 필요에 따라 위임장이나 관계 자료 등이 필요할 수 있습니다."
+        },
+        {
+          "no": 4,
+          "question": "청원·진정 절차는 어디에서 진행할 수 있나요?",
+          "answer": "절차 내용에 따라 미래시 공식 웹사이트, 담당 부서 창구, 전화, 온라인 신청 또는 우편 등의 방법을 이용합니다."
+        },
+        {
+          "no": 5,
+          "question": "청원·진정에 기한이나 접수 기간이 있나요?",
+          "answer": "접수 기간, 모집 기간, 추첨 기간 또는 갱신 시기가 정해져 있을 수 있습니다. 최신 일정은 미래시 공식 웹사이트나 담당 부서에서 확인하세요."
+        },
+        {
+          "no": 6,
+          "question": "청원·진정에 비용이 드나요?",
+          "answer": "무료 상담도 있지만 증명서 발급, 시설 이용 또는 처리에는 비용이 들 수 있습니다. 비용 발생 여부는 담당 부서나 공식 웹사이트에서 확인하세요."
+        },
+        {
+          "no": 7,
+          "question": "대리인이나 가족도 '청원·진정' 절차를 진행할 수 있나요?",
+          "answer": "대리인이나 가족이 절차를 진행할 수 있는 경우가 있습니다. 다만 본인 확인 서류, 위임장, 대상자와의 관계를 확인할 수 있는 서류가 필요할 수 있습니다. 본인의 의사 확인이 필요한 절차는 대리로 완료할 수 없는 경우가 있습니다."
+        },
+        {
+          "no": 8,
+          "question": "청원·진정의 내용 변경이나 재발급이 필요한 경우 어떻게 해야 하나요?",
+          "answer": "변경, 재발급, 취소, 철회 또는 추가 제출이 필요한 경우 접수 번호, 통지서, 본인 확인 서류와 변경 내용을 확인할 수 있는 자료를 준비하여 담당 부서에 문의하세요."
+        },
+        {
+          "no": 9,
+          "question": "채팅으로 '청원·진정' 신청이나 예약을 완료할 수 있나요?",
+          "answer": "이 채팅에서는 일반적인 안내를 제공할 수 있지만 신청 확정, 예약 확정, 증명서 발급, 개별 심사, 본인 확인 또는 지급 가능 여부 판단은 할 수 없습니다. 정식 절차는 지정된 창구, 온라인 신청, 우편 또는 예약 시스템을 이용하세요."
+        },
+        {
+          "no": 10,
+          "question": "청원·진정에 관한 채팅 답변으로 궁금증이 해결되지 않으면 어떻게 해야 하나요?",
+          "answer": "참조한 지식에 충분한 정보가 없으면 무리하게 판단하지 마세요. 미래시 공식 웹사이트(zoom-gov-contact-center-demo) 하단에서 최신 대표 전화번호를 확인한 후 시의회사무국 연결을 요청하세요. 제도나 접수 상황은 변경될 수 있습니다. 최신 정보, 개별 판단, 예약 확정 및 심사 결과는 담당 부서나 공식 웹사이트에서 확인하세요."
+        }
+      ]
+    }
+  }
+}

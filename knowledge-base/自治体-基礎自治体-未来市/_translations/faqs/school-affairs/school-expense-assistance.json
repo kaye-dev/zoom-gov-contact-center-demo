@@ -1,0 +1,221 @@
+{
+  "sourceDigest": "462093b27cdda25009ef1ff08b7d6e6071632e92f1a2c251abf74fb79d7a61e5",
+  "translations": {
+    "en": {
+      "items": [
+        {
+          "no": 1,
+          "question": "Can I get advice about School Expense Assistance?",
+          "answer": "The School Affairs Division of Mirai City provides information about School Expense Assistance. The main topics are School Expense Assistance. You can find an overview of the program, available service counters, application procedures, required documents, and important points."
+        },
+        {
+          "no": 2,
+          "question": "Who or what situations are eligible for School Expense Assistance?",
+          "answer": "Eligibility varies by program or procedure. It may include people connected with School Expense Assistance, registered residents of Mirai City, and people connected with facilities, roads, projects, or schools in the city."
+        },
+        {
+          "no": 3,
+          "question": "What do I need for the School Expense Assistance procedure?",
+          "answer": "You may need an application form, identity verification documents, documents confirming your household circumstances, proof of employment, proof of school or childcare enrollment, or materials describing the matter for consultation."
+        },
+        {
+          "no": 4,
+          "question": "Where can I complete the School Expense Assistance procedure?",
+          "answer": "Depending on the procedure, use Mirai City's official website, the responsible department's service counter, telephone, online application, or postal mail."
+        },
+        {
+          "no": 5,
+          "question": "Are there any deadlines or application periods for School Expense Assistance?",
+          "answer": "An application, recruitment, lottery, or renewal period may be specified. Check the latest schedule on Mirai City's official website or with the responsible department."
+        },
+        {
+          "no": 6,
+          "question": "Are there any fees for School Expense Assistance?",
+          "answer": "Some consultations are free, while certificates, facility use, or processing may carry fees. Check with the responsible department or on the official website to confirm whether a fee applies."
+        },
+        {
+          "no": 7,
+          "question": "Can a representative or family member complete the School Expense Assistance procedure?",
+          "answer": "A representative or family member may be able to complete the procedure. However, identity verification documents, a power of attorney, and documents showing the relationship to the person concerned may be required. A procedure that requires confirmation of the person's intent may not be completed by a representative."
+        },
+        {
+          "no": 8,
+          "question": "What should I do if I need to change information or request reissuance for School Expense Assistance?",
+          "answer": "If you need to make a change, request reissuance, cancel, withdraw, or submit additional material, prepare the reference number, notice, identity verification documents, and materials describing the change, then contact the responsible department."
+        },
+        {
+          "no": 9,
+          "question": "Can I complete an application or reservation for School Expense Assistance through this chat?",
+          "answer": "This chat can provide general guidance, but it cannot finalize an application or reservation, issue a certificate, conduct an individual review, verify identity, or determine eligibility for a benefit. Complete the formal procedure through the designated service counter, online application, postal mail, or reservation system."
+        },
+        {
+          "no": 10,
+          "question": "What should I do if the chat response does not answer my question about School Expense Assistance?",
+          "answer": "If the referenced knowledge does not provide enough information, do not make assumptions. Check the latest main telephone number in the footer of the Mirai City official website (zoom-gov-contact-center-demo) and ask to be connected to the School Affairs Division. Programs and application status may change. Check with the responsible department or on the official website for current information, decisions on individual cases, confirmed reservations, and review results."
+        }
+      ]
+    },
+    "zh-Hans": {
+      "items": [
+        {
+          "no": 1,
+          "question": "可以咨询有关就学援助的问题吗？",
+          "answer": "未来市的学务课提供就学援助相关信息。主要内容包括就学援助。您可以确认制度概要、可利用的服务窗口、申请方法、所需材料及注意事项。"
+        },
+        {
+          "no": 2,
+          "question": "请告诉我哪些人员或情况属于就学援助的适用对象。",
+          "answer": "适用对象因制度或手续而异。与就学援助有关的人员、在未来市办理居民登记的人员，以及与市内设施、道路、项目或学校等有关的人员，可能属于适用对象。"
+        },
+        {
+          "no": 3,
+          "question": "办理就学援助需要准备什么？",
+          "answer": "可能需要申请表、身份证明材料、能够确认家庭情况的资料、就业证明、在学或在园证明，以及能够说明咨询内容的资料等。"
+        },
+        {
+          "no": 4,
+          "question": "可以在哪里办理就学援助？",
+          "answer": "可根据手续内容，通过未来市官方网站、主管部门窗口、电话、在线申请或邮寄等方式办理。"
+        },
+        {
+          "no": 5,
+          "question": "就学援助有办理期限或受理期间吗？",
+          "answer": "可能设有受理期间、招募期间、抽签期间或更新时期。请在未来市官方网站或向主管部门确认最新日程。"
+        },
+        {
+          "no": 6,
+          "question": "办理就学援助需要付费吗？",
+          "answer": "部分咨询免费，但办理证明、使用设施或相关处理可能收费。请向主管部门或通过官方网站确认是否需要付费。"
+        },
+        {
+          "no": 7,
+          "question": "代理人或家属也可以办理“就学援助”吗？",
+          "answer": "代理人或家属有时可以办理相关手续，但可能需要身份证明材料、委托书及能够确认与当事人关系的资料。需要确认本人意愿的手续，可能无法由代理人完成。"
+        },
+        {
+          "no": 8,
+          "question": "如需变更就学援助的内容或重新补发，应如何办理？",
+          "answer": "如需变更、补发、取消、撤回或补交资料，请准备受理编号、通知书、身份证明材料及能够说明变更内容的资料，并向主管部门确认。"
+        },
+        {
+          "no": 9,
+          "question": "可以通过聊天完成“就学援助”的申请或预约吗？",
+          "answer": "本聊天可提供一般性指引，但无法完成申请或预约确认、开具证明、个别审查、身份核实或补助资格判定。正式手续请通过指定窗口、在线申请、邮寄或预约系统办理。"
+        },
+        {
+          "no": 10,
+          "question": "如果聊天回复未能解答我关于就学援助的问题，该怎么办？",
+          "answer": "如果所参考的知识库没有足够信息，请勿自行判断。请在未来市官方网站（zoom-gov-contact-center-demo）页面底部确认最新总机号码，并要求转接至学务课。制度或受理情况可能发生变化。最新信息、个别情况判断、预约确认及审查结果，请向主管部门或通过官方网站确认。"
+        }
+      ]
+    },
+    "zh-Hant": {
+      "items": [
+        {
+          "no": 1,
+          "question": "可以諮詢有關就學援助的問題嗎？",
+          "answer": "未來市的學務課提供就學援助相關資訊。主要內容包括就學援助。您可以確認制度概要、可利用的服務窗口、申請方法、所需文件及注意事項。"
+        },
+        {
+          "no": 2,
+          "question": "請告訴我哪些人員或情況屬於就學援助的適用對象。",
+          "answer": "適用對象因制度或手續而異。與就學援助有關的人員、在未來市辦理居民登記的人員，以及與市內設施、道路、計畫或學校等有關的人員，可能屬於適用對象。"
+        },
+        {
+          "no": 3,
+          "question": "辦理就學援助需要準備什麼？",
+          "answer": "可能需要申請表、身分證明文件、能夠確認家庭狀況的資料、就業證明、在學或在園證明，以及能夠說明諮詢內容的資料等。"
+        },
+        {
+          "no": 4,
+          "question": "可以在哪裡辦理就學援助？",
+          "answer": "可依手續內容，透過未來市官方網站、主管部門窗口、電話、線上申請或郵寄等方式辦理。"
+        },
+        {
+          "no": 5,
+          "question": "就學援助有辦理期限或受理期間嗎？",
+          "answer": "可能設有受理期間、招募期間、抽籤期間或更新時期。請在未來市官方網站或向主管部門確認最新日程。"
+        },
+        {
+          "no": 6,
+          "question": "辦理就學援助需要付費嗎？",
+          "answer": "部分諮詢免費，但辦理證明、使用設施或相關處理可能收費。請向主管部門或透過官方網站確認是否需要付費。"
+        },
+        {
+          "no": 7,
+          "question": "代理人或家屬也可以辦理「就學援助」嗎？",
+          "answer": "代理人或家屬有時可以辦理相關手續，但可能需要身分證明文件、委任書及能夠確認與當事人關係的資料。需要確認本人意願的手續，可能無法由代理人完成。"
+        },
+        {
+          "no": 8,
+          "question": "如需變更就學援助的內容或重新補發，應如何辦理？",
+          "answer": "如需變更、補發、取消、撤回或補交資料，請準備受理編號、通知書、身分證明文件及能夠說明變更內容的資料，並向主管部門確認。"
+        },
+        {
+          "no": 9,
+          "question": "可以透過聊天完成「就學援助」的申請或預約嗎？",
+          "answer": "本聊天可提供一般性指引，但無法完成申請或預約確認、核發證明、個別審查、身分核實或補助資格判定。正式手續請透過指定窗口、線上申請、郵寄或預約系統辦理。"
+        },
+        {
+          "no": 10,
+          "question": "如果聊天回覆未能解答我關於就學援助的問題，該怎麼辦？",
+          "answer": "如果所參考的知識庫沒有足夠資訊，請勿自行判斷。請在未來市官方網站（zoom-gov-contact-center-demo）頁面底部確認最新總機號碼，並要求轉接至學務課。制度或受理狀況可能發生變化。最新資訊、個別情況判斷、預約確認及審查結果，請向主管部門或透過官方網站確認。"
+        }
+      ]
+    },
+    "ko": {
+      "items": [
+        {
+          "no": 1,
+          "question": "취학지원에 대해 상담할 수 있나요?",
+          "answer": "미래시의 학무과에서는 취학지원에 관한 안내를 제공합니다. 주요 내용은 취학지원입니다. 제도의 개요, 이용 가능한 창구, 신청 방법, 필요 서류 및 유의 사항을 확인할 수 있습니다."
+        },
+        {
+          "no": 2,
+          "question": "취학지원의 대상자나 해당 사례를 알려 주세요.",
+          "answer": "대상은 제도나 절차에 따라 다릅니다. 취학지원와 관련된 분, 미래시에 주민등록이 되어 있는 분, 시내 시설·도로·사업·학교 등과 관련된 분이 대상이 될 수 있습니다."
+        },
+        {
+          "no": 3,
+          "question": "취학지원 절차에는 무엇이 필요한가요?",
+          "answer": "신청서, 본인 확인 서류, 세대 상황을 확인할 수 있는 서류, 재직 증명서, 재학·재원 상황 또는 상담 내용을 확인할 수 있는 자료 등이 필요할 수 있습니다."
+        },
+        {
+          "no": 4,
+          "question": "취학지원 절차는 어디에서 진행할 수 있나요?",
+          "answer": "절차 내용에 따라 미래시 공식 웹사이트, 담당 부서 창구, 전화, 온라인 신청 또는 우편 등의 방법을 이용합니다."
+        },
+        {
+          "no": 5,
+          "question": "취학지원에 기한이나 접수 기간이 있나요?",
+          "answer": "접수 기간, 모집 기간, 추첨 기간 또는 갱신 시기가 정해져 있을 수 있습니다. 최신 일정은 미래시 공식 웹사이트나 담당 부서에서 확인하세요."
+        },
+        {
+          "no": 6,
+          "question": "취학지원에 비용이 드나요?",
+          "answer": "무료 상담도 있지만 증명서 발급, 시설 이용 또는 처리에는 비용이 들 수 있습니다. 비용 발생 여부는 담당 부서나 공식 웹사이트에서 확인하세요."
+        },
+        {
+          "no": 7,
+          "question": "대리인이나 가족도 '취학지원' 절차를 진행할 수 있나요?",
+          "answer": "대리인이나 가족이 절차를 진행할 수 있는 경우가 있습니다. 다만 본인 확인 서류, 위임장, 대상자와의 관계를 확인할 수 있는 서류가 필요할 수 있습니다. 본인의 의사 확인이 필요한 절차는 대리로 완료할 수 없는 경우가 있습니다."
+        },
+        {
+          "no": 8,
+          "question": "취학지원의 내용 변경이나 재발급이 필요한 경우 어떻게 해야 하나요?",
+          "answer": "변경, 재발급, 취소, 철회 또는 추가 제출이 필요한 경우 접수 번호, 통지서, 본인 확인 서류와 변경 내용을 확인할 수 있는 자료를 준비하여 담당 부서에 문의하세요."
+        },
+        {
+          "no": 9,
+          "question": "채팅으로 '취학지원' 신청이나 예약을 완료할 수 있나요?",
+          "answer": "이 채팅에서는 일반적인 안내를 제공할 수 있지만 신청 확정, 예약 확정, 증명서 발급, 개별 심사, 본인 확인 또는 지급 가능 여부 판단은 할 수 없습니다. 정식 절차는 지정된 창구, 온라인 신청, 우편 또는 예약 시스템을 이용하세요."
+        },
+        {
+          "no": 10,
+          "question": "취학지원에 관한 채팅 답변으로 궁금증이 해결되지 않으면 어떻게 해야 하나요?",
+          "answer": "참조한 지식에 충분한 정보가 없으면 무리하게 판단하지 마세요. 미래시 공식 웹사이트(zoom-gov-contact-center-demo) 하단에서 최신 대표 전화번호를 확인한 후 학무과 연결을 요청하세요. 제도나 접수 상황은 변경될 수 있습니다. 최신 정보, 개별 판단, 예약 확정 및 심사 결과는 담당 부서나 공식 웹사이트에서 확인하세요."
+        }
+      ]
+    }
+  }
+}

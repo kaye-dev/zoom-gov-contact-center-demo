@@ -1,3 +1,5 @@
+import { normalizeZoomVirtualAgentWebTag } from "./zoom-virtual-agent-web-tag";
+
 export const SITE_LOCALES = [
   "ja",
   "en",
@@ -46,6 +48,7 @@ export type ContactSettings = {
     display: string;
     e164: string;
   };
+  zoomVirtualAgentWebTag: string | null;
   destinations: Record<SiteLocale, AiContactDestination>;
 };
 
@@ -67,6 +70,7 @@ export const SETTINGS_ERROR_CODES = {
   invalidRepresentativePhoneE164: "INVALID_REPRESENTATIVE_PHONE_E164",
   invalidAiPhoneE164: "INVALID_AI_PHONE_E164",
   invalidCampaignUrl: "INVALID_CAMPAIGN_URL",
+  invalidVirtualAgentWebTag: "INVALID_VIRTUAL_AGENT_WEB_TAG",
   invalidLanguageSettings: "INVALID_LANGUAGE_SETTINGS",
   japaneseRequired: "JAPANESE_REQUIRED",
   saveFailed: "SETTINGS_SAVE_FAILED",
@@ -161,9 +165,14 @@ export function parseContactSettings(
   }
 
   const representativePhone = input.representativePhone;
+  const zoomVirtualAgentWebTag = input.zoomVirtualAgentWebTag;
   const destinations = input.destinations;
 
-  if (!isRecord(representativePhone) || !isRecord(destinations)) {
+  if (
+    !isRecord(representativePhone) ||
+    !isNullableString(zoomVirtualAgentWebTag) ||
+    !isRecord(destinations)
+  ) {
     return invalid(SETTINGS_ERROR_CODES.invalidRequest);
   }
 
@@ -182,6 +191,15 @@ export function parseContactSettings(
   const e164 = representativePhone.e164.trim();
   if (!isValidE164(e164)) {
     return invalid(SETTINGS_ERROR_CODES.invalidRepresentativePhoneE164);
+  }
+
+  const normalizedWebTag = normalizeNullableString(zoomVirtualAgentWebTag);
+  const canonicalWebTag =
+    normalizedWebTag === null
+      ? null
+      : normalizeZoomVirtualAgentWebTag(normalizedWebTag);
+  if (normalizedWebTag !== null && canonicalWebTag === null) {
+    return invalid(SETTINGS_ERROR_CODES.invalidVirtualAgentWebTag);
   }
 
   const destinationKeys = Object.keys(destinations);
@@ -234,6 +252,7 @@ export function parseContactSettings(
     ok: true,
     value: {
       representativePhone: { display, e164 },
+      zoomVirtualAgentWebTag: canonicalWebTag,
       destinations: normalizedDestinations,
     },
   };
