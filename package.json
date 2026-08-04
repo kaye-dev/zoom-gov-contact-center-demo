@@ -8,6 +8,7 @@
     "build": "next build",
     "vercel-build": "prisma generate && prisma migrate deploy && next build",
     "start": "next start",
+    "faq:generate-translations": "tsx scripts/generate-faq-translations.ts",
     "lint": "eslint",
     "postinstall": "prisma generate",
     "db:generate": "prisma generate",

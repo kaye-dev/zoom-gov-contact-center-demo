@@ -20,7 +20,7 @@ function interpolate(message: string, name: string) {
   return message.replace('{name}', name);
 }
 
-function AnimatedLinkLabel({ children }: { children: ReactNode }) {
+export function AnimatedLinkLabel({ children }: { children: ReactNode }) {
   return <span className={styles.animatedLinkLabel}>{children}</span>;
 }
 
@@ -44,7 +44,7 @@ type Breadcrumb = {
   href?: string;
 };
 
-function Breadcrumbs({ items }: { items: readonly Breadcrumb[] }) {
+export function Breadcrumbs({ items }: { items: readonly Breadcrumb[] }) {
   const { t } = useI18n();
 
   return (
@@ -69,11 +69,11 @@ function Breadcrumbs({ items }: { items: readonly Breadcrumb[] }) {
   );
 }
 
-function PageFrame({ children }: { children: ReactNode }) {
+export function PageFrame({ children }: { children: ReactNode }) {
   return <div className="mx-auto w-full max-w-7xl px-5 py-10 md:px-8 md:py-14">{children}</div>;
 }
 
-function PageTitleBand({ title, iconSrc }: { title: string; iconSrc?: string }) {
+export function PageTitleBand({ title, iconSrc }: { title: string; iconSrc?: string }) {
   return (
     <header className="border-l-[6px] border-primary-1000 bg-primary-50 px-5 py-3 dark:border-primary-400 dark:bg-surface-raised md:px-7 md:py-6">
       <div className="relative flex items-center">
@@ -90,7 +90,7 @@ function PageTitleBand({ title, iconSrc }: { title: string; iconSrc?: string }) 
   );
 }
 
-function SectionHeading({ id, children }: { id: string; children: ReactNode }) {
+export function SectionHeading({ id, children }: { id: string; children: ReactNode }) {
   return (
     <h2
       id={id}

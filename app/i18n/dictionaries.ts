@@ -54,8 +54,6 @@ export type LifeTopicDictionary = {
   accessibleFacilities: string;
   eventCalendar: string;
   tourismGuide: string;
-  procedureFaq: string;
-  onlineServiceFaq: string;
   submitOpinion: string;
   contactCenter: string;
   healthCheckups: string;
@@ -169,6 +167,17 @@ export type Dictionary = {
     backToCategory: string;
     publishedLabel: string;
     readMore: string;
+    faq: {
+      indexLead: string;
+      departmentsHeading: string;
+      departmentLead: string;
+      categoriesHeading: string;
+      categoryLead: string;
+      questionsHeading: string;
+      questionCount: string;
+      backToIndex: string;
+      backToDepartment: string;
+    };
     lifeTopics: LifeTopicDictionary;
     lifeTopicSummaries: LifeTopicDictionary;
     newsSummaries: NewsArticleDictionary;
@@ -414,6 +423,19 @@ export const dictionaries: Record<Locale, Dictionary> = {
       backToCategory: 'このカテゴリに戻る',
       publishedLabel: '公開日',
       readMore: '詳しく見る',
+      faq: {
+        indexLead: '未来市のよくある質問を課・局別にご案内します。',
+        departmentsHeading: '課・局から探す',
+        departmentLead:
+          '「{name}」に関するよくある質問をカテゴリ別にご案内します。',
+        categoriesHeading: 'FAQカテゴリ',
+        categoryLead:
+          '「{name}」に関するよくある質問と回答をご案内します。',
+        questionsHeading: 'よくある質問',
+        questionCount: '{count}件の質問',
+        backToIndex: 'よくある質問一覧に戻る',
+        backToDepartment: 'この課・局のFAQ一覧に戻る',
+      },
       lifeTopics: {
         garbageSorting: 'ごみの分別・収集',
         bulkyWaste: '粗大ごみ',
@@ -427,8 +449,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
         accessibleFacilities: 'バリアフリー対応施設',
         eventCalendar: 'イベントカレンダー',
         tourismGuide: '観光案内',
-        procedureFaq: '手続きに関するよくある質問',
-        onlineServiceFaq: 'オンライン手続きに関するよくある質問',
         submitOpinion: '市政へのご意見・ご要望',
         contactCenter: 'お問い合わせセンター',
         healthCheckups: '健診・検診',
@@ -477,10 +497,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
           '未来市で開催する文化、スポーツ、子育てなどのイベントを日付や分野から探せます。予約の要否と参加条件は各イベントの案内をご確認ください。',
         tourismGuide:
           '市内の公園、文化施設、商店街などの見どころと周遊情報を紹介します。季節のイベントや交通手段を組み合わせて、未来市の観光をお楽しみください。',
-        procedureFaq:
-          '引っ越し、証明書、子育てなど、市の手続きに関するよくある質問をまとめています。回答から必要な手続きの案内へ進めます。',
-        onlineServiceFaq:
-          'オンライン手続きのログイン、電子署名、ファイル添付、進捗確認に関する質問を案内します。操作に困ったときの対処方法も確認できます。',
         submitOpinion:
           '未来市の施策やサービスに対するご意見・ご要望をオンラインまたは郵送で受け付けます。回答を希望する場合は、連絡先をお知らせください。',
         contactCenter:
@@ -830,6 +846,20 @@ export const dictionaries: Record<Locale, Dictionary> = {
       backToCategory: 'Back to this category',
       publishedLabel: 'Published',
       readMore: 'Read more',
+      faq: {
+        indexLead:
+          'Browse frequently asked questions from Mirai City by department or bureau.',
+        departmentsHeading: 'Browse by Department or Bureau',
+        departmentLead:
+          'Browse frequently asked questions about {name} by category.',
+        categoriesHeading: 'FAQ Categories',
+        categoryLead:
+          'Find answers to frequently asked questions about {name}.',
+        questionsHeading: 'Frequently Asked Questions',
+        questionCount: '{count} questions',
+        backToIndex: 'Back to all frequently asked questions',
+        backToDepartment: 'Back to FAQs for this department or bureau',
+      },
       lifeTopics: {
         garbageSorting: 'Garbage Sorting & Collection',
         bulkyWaste: 'Bulky Waste',
@@ -843,8 +873,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
         accessibleFacilities: 'Accessible Facilities',
         eventCalendar: 'Event Calendar',
         tourismGuide: 'Tourism Guide',
-        procedureFaq: 'Frequently Asked Questions About Procedures',
-        onlineServiceFaq: 'Frequently Asked Questions About Online Services',
         submitOpinion: 'Feedback and Requests for Mirai City Government',
         contactCenter: 'City Contact Center',
         healthCheckups: 'Health Checkups & Screenings',
@@ -893,10 +921,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'Browse cultural, sports, and family events in Mirai City by date or category. Each listing shows whether registration is required and any participation conditions.',
         tourismGuide:
           'Explore parks, cultural venues, shopping streets, and suggested routes around Mirai City. Combine seasonal events with local transportation information to plan your visit.',
-        procedureFaq:
-          'Find answers to common questions about moving, certificates, child-rearing, and other city procedures. Each answer links you to the relevant steps and service information.',
-        onlineServiceFaq:
-          'Get help with signing in, electronic signatures, file uploads, and tracking online applications. Troubleshooting guidance is also available for common errors and interrupted submissions.',
         submitOpinion:
           'Mirai City accepts feedback and requests about city policies and services online or by post. Include your contact details if you would like an individual response.',
         contactCenter:
@@ -1237,6 +1261,17 @@ export const dictionaries: Record<Locale, Dictionary> = {
       backToCategory: '返回分类页面',
       publishedLabel: '发布日期',
       readMore: '查看详情',
+      faq: {
+        indexLead: '按部门和局分类查看未来市的常见问题。',
+        departmentsHeading: '按部门或局查找',
+        departmentLead: '按类别查看有关{name}的常见问题。',
+        categoriesHeading: '常见问题类别',
+        categoryLead: '查看有关{name}的常见问题及解答。',
+        questionsHeading: '常见问题',
+        questionCount: '共{count}个问题',
+        backToIndex: '返回常见问题一览',
+        backToDepartment: '返回本部门或局的常见问题一览',
+      },
       lifeTopics: {
         garbageSorting: '垃圾分类与收集',
         bulkyWaste: '大件垃圾',
@@ -1250,8 +1285,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
         accessibleFacilities: '无障碍设施',
         eventCalendar: '活动日历',
         tourismGuide: '观光指南',
-        procedureFaq: '办事手续常见问题',
-        onlineServiceFaq: '在线服务常见问题',
         submitOpinion: '向未来市提交市政意见与建议',
         contactCenter: '市政咨询服务中心',
         healthCheckups: '健康检查',
@@ -1300,10 +1333,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
           '可按日期或类别查找未来市的文化、体育和亲子活动。每项活动都会说明是否需预约及参加条件。',
         tourismGuide:
           '介绍未来市的公园、文化设施、商业街及推荐游览路线。可结合季节活动和市内交通信息规划行程。',
-        procedureFaq:
-          '汇总搬迁、证明文件、育儿等市政手续的常见问题。可从答案直接查看相关办理步骤和服务信息。',
-        onlineServiceFaq:
-          '介绍在线办事中的登录、电子签名、文件上传和申请进度查询。也提供常见错误和提交中断时的处理方法。',
         submitOpinion:
           '未来市通过在线表单或邮寄方式接收对市政施策和服务的意见与建议。如希望获得个别回复，请填写联系方式。',
         contactCenter:
@@ -1633,6 +1662,17 @@ export const dictionaries: Record<Locale, Dictionary> = {
       backToCategory: '返回分類頁面',
       publishedLabel: '發布日期',
       readMore: '查看詳情',
+      faq: {
+        indexLead: '按部門和局分類查看未來市的常見問題。',
+        departmentsHeading: '依部門或局查詢',
+        departmentLead: '依分類查看有關{name}的常見問題。',
+        categoriesHeading: '常見問題分類',
+        categoryLead: '查看有關{name}的常見問題與解答。',
+        questionsHeading: '常見問題',
+        questionCount: '共{count}個問題',
+        backToIndex: '返回常見問題一覽',
+        backToDepartment: '返回本部門或局的常見問題一覽',
+      },
       lifeTopics: {
         garbageSorting: '垃圾分類與收集',
         bulkyWaste: '大型垃圾',
@@ -1646,8 +1686,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
         accessibleFacilities: '無障礙設施',
         eventCalendar: '活動日曆',
         tourismGuide: '觀光指南',
-        procedureFaq: '辦理手續常見問題',
-        onlineServiceFaq: '線上服務常見問題',
         submitOpinion: '向未來市提交市政意見與建議',
         contactCenter: '市政諮詢服務中心',
         healthCheckups: '健康檢查',
@@ -1696,10 +1734,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
           '可依日期或類別查找未來市的文化、體育和親子活動。每項活動都會說明是否需預約及參加條件。',
         tourismGuide:
           '介紹未來市的公園、文化設施、商圈及建議遊覽路線。可結合季節活動和市內交通資訊安排行程。',
-        procedureFaq:
-          '彙整搬遷、證明文件、育兒等市政手續的常見問題。可從答案直接查看相關辦理步驟和服務資訊。',
-        onlineServiceFaq:
-          '介紹線上辦事的登入、電子簽章、檔案上傳和申請進度查詢。也提供常見錯誤和送出中斷時的處理方式。',
         submitOpinion:
           '未來市透過線上表單或郵寄方式接收對市政政策和服務的意見與建議。如希望獲得個別回覆，請填寫聯絡方式。',
         contactCenter:
@@ -2028,6 +2062,18 @@ export const dictionaries: Record<Locale, Dictionary> = {
       backToCategory: '이 카테고리로 돌아가기',
       publishedLabel: '게시일',
       readMore: '자세히 보기',
+      faq: {
+        indexLead: '미래시의 자주 묻는 질문을 과·국별로 안내합니다.',
+        departmentsHeading: '과·국별로 찾기',
+        departmentLead:
+          '{name}에 관한 자주 묻는 질문을 카테고리별로 안내합니다.',
+        categoriesHeading: 'FAQ 카테고리',
+        categoryLead: '{name}에 관한 자주 묻는 질문과 답변을 안내합니다.',
+        questionsHeading: '자주 묻는 질문',
+        questionCount: '질문 {count}개',
+        backToIndex: '자주 묻는 질문 목록으로 돌아가기',
+        backToDepartment: '이 과·국의 FAQ 목록으로 돌아가기',
+      },
       lifeTopics: {
         garbageSorting: '쓰레기 분리배출・수거',
         bulkyWaste: '대형 폐기물',
@@ -2041,8 +2087,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
         accessibleFacilities: '배리어프리 시설',
         eventCalendar: '이벤트 캘린더',
         tourismGuide: '관광 안내',
-        procedureFaq: '수속 관련 자주 묻는 질문',
-        onlineServiceFaq: '온라인 수속 관련 자주 묻는 질문',
         submitOpinion: '미래시 시정에 대한 의견・요청',
         contactCenter: '시 문의센터',
         healthCheckups: '건강검진・검사',
@@ -2091,10 +2135,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
           '미래시의 문화, 스포츠, 가족 행사를 날짜나 분야로 찾을 수 있습니다. 각 행사 안내에서 예약 필요 여부와 참가 조건을 확인해 주세요.',
         tourismGuide:
           '미래시의 공원, 문화시설, 상점가와 추천 관광 코스를 소개합니다. 계절 행사와 시내 교통 정보를 함께 활용해 일정을 계획해 보세요.',
-        procedureFaq:
-          '이사, 증명서, 육아 등 시정 절차에 관한 자주 묻는 질문을 모았습니다. 각 답변에서 관련 신청 절차와 서비스 안내로 이동할 수 있습니다.',
-        onlineServiceFaq:
-          '온라인 수속의 로그인, 전자서명, 파일 첨부, 신청 진행 상황 확인을 안내합니다. 자주 발생하는 오류와 제출 중단 시 해결 방법도 확인할 수 있습니다.',
         submitOpinion:
           '미래시는 시정 정책과 서비스에 대한 의견과 요청을 온라인 또는 우편으로 접수합니다. 개별 답변을 원하면 연락처를 함께 알려 주세요.',
         contactCenter:

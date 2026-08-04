@@ -12,7 +12,9 @@ type CategoryPageProps = {
 export const dynamicParams = false;
 
 export function generateStaticParams() {
-  return lifeCategories.map((category) => ({ category: category.slug }));
+  return lifeCategories
+    .filter((category) => category.id !== 'faq')
+    .map((category) => ({ category: category.slug }));
 }
 
 export async function generateMetadata({ params }: CategoryPageProps): Promise<Metadata> {

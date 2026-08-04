@@ -17,6 +17,30 @@ const nextConfig: NextConfig = {
     // 毎回クリーンな状態でホットリロードさせる
     turbopackFileSystemCacheForDev: false,
   },
+  outputFileTracingIncludes: {
+    '/life/frequently-asked-questions': [
+      './knowledge-base/自治体-基礎自治体-未来市/**/*.md',
+      './knowledge-base/自治体-基礎自治体-未来市/_translations/**/*.json',
+    ],
+    '/life/frequently-asked-questions/**': [
+      './knowledge-base/自治体-基礎自治体-未来市/**/*.md',
+      './knowledge-base/自治体-基礎自治体-未来市/_translations/**/*.json',
+    ],
+  },
+  async redirects() {
+    return [
+      {
+        source: '/life/frequently-asked-questions/procedure-faq',
+        destination: '/life/frequently-asked-questions',
+        permanent: false,
+      },
+      {
+        source: '/life/frequently-asked-questions/online-service-faq',
+        destination: '/life/frequently-asked-questions',
+        permanent: false,
+      },
+    ];
+  },
   async rewrites() {
     return {
       // beforeFiles: ファイルシステム/ページ照合より前に書き換える。

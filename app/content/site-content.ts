@@ -144,19 +144,8 @@ export const lifeCategories: readonly LifeCategory[] = [
     id: 'faq',
     slug: 'frequently-asked-questions',
     icon: '/life-information/life-faq.png',
-    sourceUrl: 'https://www.city.setagaya.lg.jp/02002/8436.html',
-    topics: [
-      {
-        id: 'procedureFaq',
-        slug: 'procedure-faq',
-        sourceUrl: 'https://secure.okbiz.jp/setagaya-call/?site_domain=default',
-      },
-      {
-        id: 'onlineServiceFaq',
-        slug: 'online-service-faq',
-        sourceUrl: 'https://ttzk.graffer.jp/ward-setagaya',
-      },
-    ],
+    sourceUrl: '/life/frequently-asked-questions',
+    topics: [],
   },
   {
     id: 'feedback',
