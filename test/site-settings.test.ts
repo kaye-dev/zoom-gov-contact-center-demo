@@ -23,6 +23,8 @@ const validContactSettings: ContactSettings = {
     display: "(03)1234-5678",
     e164: "+81312345678",
   },
+  zoomVirtualAgentWebTag:
+    '<script type="module" src="https://us01ccistatic.zoom.us/us01cci/web-sdk/chat-client.js" data-apikey="public-api-key" data-env="us01"></script>',
   destinations: {
     ja: {
       aiPhoneE164: "+81311111111",
@@ -85,6 +87,7 @@ test("contact settings trim values and normalize blank destinations", () => {
   input.representativePhone.display = "  (03)1234-5678  ";
   input.destinations.en.aiPhoneE164 = "  ";
   input.destinations.en.virtualAgentCampaignUrl = "";
+  input.zoomVirtualAgentWebTag = "  ";
 
   const result = parseContactSettings(input);
   assert.equal(result.ok, true);
@@ -93,6 +96,7 @@ test("contact settings trim values and normalize blank destinations", () => {
   assert.equal(result.value.representativePhone.display, "(03)1234-5678");
   assert.equal(result.value.destinations.en.aiPhoneE164, null);
   assert.equal(result.value.destinations.en.virtualAgentCampaignUrl, null);
+  assert.equal(result.value.zoomVirtualAgentWebTag, null);
 });
 
 test("contact settings reject missing locales and invalid destinations", () => {
@@ -117,6 +121,14 @@ test("contact settings reject missing locales and invalid destinations", () => {
   assert.deepEqual(parseContactSettings(invalidUrl), {
     ok: false,
     code: SETTINGS_ERROR_CODES.invalidCampaignUrl,
+  });
+
+  const invalidWebTag = structuredClone(validContactSettings);
+  invalidWebTag.zoomVirtualAgentWebTag =
+    '<script type="module" src="https://attacker.example/web-sdk/chat-client.js" data-apikey="public-api-key" data-env="us01"></script>';
+  assert.deepEqual(parseContactSettings(invalidWebTag), {
+    ok: false,
+    code: SETTINGS_ERROR_CODES.invalidVirtualAgentWebTag,
   });
 });
 

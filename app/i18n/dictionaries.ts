@@ -285,6 +285,10 @@ export type Dictionary = {
       aiPhoneTitle: string;
       aiPhoneDescription: string;
       aiPhoneLabel: string;
+      webTagTitle: string;
+      webTagDescription: string;
+      webTagLabel: string;
+      webTagHelp: string;
       virtualAgentTitle: string;
       virtualAgentDescription: string;
       campaignUrlLabel: string;
@@ -624,7 +628,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       users: 'ユーザー管理',
       newUser: 'ユーザー作成',
       passwordResets: '再設定申請',
-      phoneNumbers: '電話番号管理',
+      phoneNumbers: '電話・AIチャット管理',
       languageSettings: '言語管理',
       settingsMenu: '設定',
       userListTitle: 'ユーザー管理',
@@ -678,6 +682,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
             'AI電話番号をE.164形式で入力してください。',
           INVALID_CAMPAIGN_URL:
             'Campaign URLには有効なHTTPS URLを入力してください。',
+          INVALID_VIRTUAL_AGENT_WEB_TAG:
+            'Zoomが発行した有効なWeb Tagを入力してください。',
           INVALID_LANGUAGE_SETTINGS:
             '5言語を重複なく1回ずつ指定してください。',
           JAPANESE_REQUIRED: '日本語は無効にできません。',
@@ -685,9 +691,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
         },
       },
       contactSettings: {
-        title: '電話番号管理',
+        title: '電話・AIチャット管理',
         description:
-          '代表電話と、言語ごとのAI電話相談・AIチャット相談の接続先を設定します。',
+          '代表電話、AI電話相談、Zoom Virtual AgentのWeb Tagとチャット接続先を設定します。',
         representativeTitle: '代表電話',
         representativeDescription:
           '共通フッターに表示する電話番号と、発信に使用する番号を設定します。',
@@ -699,6 +705,12 @@ export const dictionaries: Record<Locale, Dictionary> = {
         aiPhoneDescription:
           '公開サイトで選択中の言語に応じて発信する電話番号を設定します。空欄の場合は未設定として保存されます。',
         aiPhoneLabel: 'AI電話番号（E.164）',
+        webTagTitle: 'Zoom Virtual Agent Web Tag',
+        webTagDescription:
+          'ZoomのCampaign設定に表示される「Embed Web Tag」のscriptタグ全体を設定します。空欄にすると公開サイトのチャットランチャーを停止します。',
+        webTagLabel: 'Web Tag（scriptタグ）',
+        webTagHelp:
+          'HTTPSのZoom配信元、公開APIキー、環境を検証して保存します。APIキーだけではなくscriptタグ全体を貼り付けてください。',
         virtualAgentTitle: 'AI チャット相談',
         virtualAgentDescription:
           'Zoom Virtual AgentのFull-page / Offsite Campaign URLを設定します。空欄の場合は未設定として保存されます。',
@@ -1048,7 +1060,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       users: 'User Management',
       newUser: 'Create User',
       passwordResets: 'Reset Requests',
-      phoneNumbers: 'Phone Numbers',
+      phoneNumbers: 'Phone & AI Chat',
       languageSettings: 'Languages',
       settingsMenu: 'Settings',
       userListTitle: 'User Management',
@@ -1102,6 +1114,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
             'Enter each AI phone number in E.164 format.',
           INVALID_CAMPAIGN_URL:
             'Enter a valid HTTPS Campaign URL.',
+          INVALID_VIRTUAL_AGENT_WEB_TAG:
+            'Enter a valid Web Tag issued by Zoom.',
           INVALID_LANGUAGE_SETTINGS:
             'Include each of the five languages exactly once.',
           JAPANESE_REQUIRED: 'Japanese cannot be disabled.',
@@ -1109,9 +1123,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
         },
       },
       contactSettings: {
-        title: 'Phone Number Management',
+        title: 'Phone and AI Chat Management',
         description:
-          'Configure the representative phone and the AI phone and chat destination for each language.',
+          'Configure the representative phone, AI phone, Zoom Virtual Agent Web Tag, and chat destinations.',
         representativeTitle: 'Representative Phone',
         representativeDescription:
           'Configure the number shown in the shared footer and the number used for dialing.',
@@ -1123,6 +1137,12 @@ export const dictionaries: Record<Locale, Dictionary> = {
         aiPhoneDescription:
           'Set the phone number dialed for each selected site language. A blank value is saved as not configured.',
         aiPhoneLabel: 'AI phone number (E.164)',
+        webTagTitle: 'Zoom Virtual Agent Web Tag',
+        webTagDescription:
+          'Paste the complete script shown under Embed Web Tag in the Zoom Campaign settings. Leave it blank to disable the chat launcher on the public site.',
+        webTagLabel: 'Web Tag (script tag)',
+        webTagHelp:
+          'The Zoom HTTPS source, public API key, and environment are validated before saving. Paste the complete script tag, not only the API key.',
         virtualAgentTitle: 'AI Chat Consultation',
         virtualAgentDescription:
           'Set the Zoom Virtual Agent Full-page / Offsite Campaign URL. A blank value is saved as not configured.',
@@ -1456,7 +1476,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       users: '用户管理',
       newUser: '创建用户',
       passwordResets: '重置申请',
-      phoneNumbers: '电话号码管理',
+      phoneNumbers: '电话与AI聊天管理',
       languageSettings: '语言管理',
       settingsMenu: '设置',
       userListTitle: '用户管理',
@@ -1506,14 +1526,17 @@ export const dictionaries: Record<Locale, Dictionary> = {
             '请以E.164格式输入代表电话的拨号号码。',
           INVALID_AI_PHONE_E164: '请以E.164格式输入AI电话号码。',
           INVALID_CAMPAIGN_URL: '请输入有效的HTTPS Campaign URL。',
+          INVALID_VIRTUAL_AGENT_WEB_TAG:
+            '请输入Zoom签发的有效Web Tag。',
           INVALID_LANGUAGE_SETTINGS: '请将5种语言各指定一次且不要重复。',
           JAPANESE_REQUIRED: '不能停用日语。',
           SETTINGS_SAVE_FAILED: '无法保存设置。',
         },
       },
       contactSettings: {
-        title: '电话号码管理',
-        description: '设置代表电话以及各语言的AI电话和AI聊天连接地址。',
+        title: '电话与AI聊天管理',
+        description:
+          '设置代表电话、AI电话、Zoom Virtual Agent Web Tag以及聊天连接地址。',
         representativeTitle: '代表电话',
         representativeDescription:
           '设置在共用页脚中显示的电话号码以及拨号时使用的号码。',
@@ -1525,6 +1548,12 @@ export const dictionaries: Record<Locale, Dictionary> = {
         aiPhoneDescription:
           '按公开网站当前选择的语言设置拨打号码。留空时保存为未设置。',
         aiPhoneLabel: 'AI电话号码（E.164）',
+        webTagTitle: 'Zoom Virtual Agent Web Tag',
+        webTagDescription:
+          '请粘贴Zoom Campaign设置中“Embed Web Tag”显示的完整script标签。留空将停用公开网站上的聊天启动器。',
+        webTagLabel: 'Web Tag（script标签）',
+        webTagHelp:
+          '保存前会验证Zoom HTTPS来源、公共API密钥和环境。请粘贴完整script标签，而不是仅粘贴API密钥。',
         virtualAgentTitle: 'AI 聊天咨询',
         virtualAgentDescription:
           '设置Zoom Virtual Agent的Full-page / Offsite Campaign URL。留空时保存为未设置。',
@@ -1857,7 +1886,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       users: '使用者管理',
       newUser: '建立使用者',
       passwordResets: '重設申請',
-      phoneNumbers: '電話號碼管理',
+      phoneNumbers: '電話與AI聊天管理',
       languageSettings: '語言管理',
       settingsMenu: '設定',
       userListTitle: '使用者管理',
@@ -1907,14 +1936,17 @@ export const dictionaries: Record<Locale, Dictionary> = {
             '請以E.164格式輸入代表電話的撥號號碼。',
           INVALID_AI_PHONE_E164: '請以E.164格式輸入AI電話號碼。',
           INVALID_CAMPAIGN_URL: '請輸入有效的HTTPS Campaign URL。',
+          INVALID_VIRTUAL_AGENT_WEB_TAG:
+            '請輸入Zoom簽發的有效Web Tag。',
           INVALID_LANGUAGE_SETTINGS: '請將5種語言各指定一次且不要重複。',
           JAPANESE_REQUIRED: '不能停用日語。',
           SETTINGS_SAVE_FAILED: '無法儲存設定。',
         },
       },
       contactSettings: {
-        title: '電話號碼管理',
-        description: '設定代表電話以及各語言的AI電話和AI聊天連線位址。',
+        title: '電話與AI聊天管理',
+        description:
+          '設定代表電話、AI電話、Zoom Virtual Agent Web Tag以及聊天連線位址。',
         representativeTitle: '代表電話',
         representativeDescription:
           '設定在共用頁尾顯示的電話號碼以及撥號時使用的號碼。',
@@ -1926,6 +1958,12 @@ export const dictionaries: Record<Locale, Dictionary> = {
         aiPhoneDescription:
           '依公開網站目前選擇的語言設定撥打號碼。留白時儲存為未設定。',
         aiPhoneLabel: 'AI電話號碼（E.164）',
+        webTagTitle: 'Zoom Virtual Agent Web Tag',
+        webTagDescription:
+          '請貼上Zoom Campaign設定中「Embed Web Tag」顯示的完整script標籤。留白將停用公開網站上的聊天啟動器。',
+        webTagLabel: 'Web Tag（script標籤）',
+        webTagHelp:
+          '儲存前會驗證Zoom HTTPS來源、公開API金鑰和環境。請貼上完整script標籤，而不是只貼上API金鑰。',
         virtualAgentTitle: 'AI 聊天諮詢',
         virtualAgentDescription:
           '設定Zoom Virtual Agent的Full-page / Offsite Campaign URL。留白時儲存為未設定。',
@@ -2258,7 +2296,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       users: '사용자 관리',
       newUser: '사용자 생성',
       passwordResets: '재설정 신청',
-      phoneNumbers: '전화번호 관리',
+      phoneNumbers: '전화 및 AI 채팅 관리',
       languageSettings: '언어 관리',
       settingsMenu: '설정',
       userListTitle: '사용자 관리',
@@ -2310,6 +2348,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
             'AI 전화번호를 E.164 형식으로 입력해 주세요.',
           INVALID_CAMPAIGN_URL:
             '유효한 HTTPS Campaign URL을 입력해 주세요.',
+          INVALID_VIRTUAL_AGENT_WEB_TAG:
+            'Zoom에서 발급한 유효한 Web Tag를 입력해 주세요.',
           INVALID_LANGUAGE_SETTINGS:
             '5개 언어를 중복 없이 한 번씩 지정해 주세요.',
           JAPANESE_REQUIRED: '일본어는 비활성화할 수 없습니다.',
@@ -2317,9 +2357,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
         },
       },
       contactSettings: {
-        title: '전화번호 관리',
+        title: '전화 및 AI 채팅 관리',
         description:
-          '대표 전화와 언어별 AI 전화 상담 및 AI 채팅 상담 연결 대상을 설정합니다.',
+          '대표 전화, AI 전화, Zoom Virtual Agent Web Tag 및 채팅 연결 대상을 설정합니다.',
         representativeTitle: '대표 전화',
         representativeDescription:
           '공통 푸터에 표시할 전화번호와 발신에 사용할 번호를 설정합니다.',
@@ -2331,6 +2371,12 @@ export const dictionaries: Record<Locale, Dictionary> = {
         aiPhoneDescription:
           '공개 사이트에서 선택한 언어에 따라 발신할 번호를 설정합니다. 빈칸은 미설정으로 저장됩니다.',
         aiPhoneLabel: 'AI 전화번호(E.164)',
+        webTagTitle: 'Zoom Virtual Agent Web Tag',
+        webTagDescription:
+          'Zoom Campaign 설정의 Embed Web Tag에 표시되는 전체 script 태그를 붙여 넣으세요. 비워 두면 공개 사이트의 채팅 런처가 비활성화됩니다.',
+        webTagLabel: 'Web Tag(script 태그)',
+        webTagHelp:
+          '저장 전에 Zoom HTTPS 소스, 공개 API 키 및 환경을 검증합니다. API 키만이 아니라 전체 script 태그를 붙여 넣으세요.',
         virtualAgentTitle: 'AI 채팅 상담',
         virtualAgentDescription:
           'Zoom Virtual Agent의 Full-page / Offsite Campaign URL을 설정합니다. 빈칸은 미설정으로 저장됩니다.',

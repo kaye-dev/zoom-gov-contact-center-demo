@@ -126,6 +126,7 @@ model SiteContactSetting {
   id                         Int      @id @default(1)
   representativePhoneDisplay String
   representativePhoneE164    String
+  zoomVirtualAgentWebTag     String?
   updatedAt                  DateTime @default(now()) @updatedAt
 
   @@map("site_contact_settings")

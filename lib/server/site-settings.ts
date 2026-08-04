@@ -24,6 +24,7 @@ export const getContactSettings = cache(
         select: {
           representativePhoneDisplay: true,
           representativePhoneE164: true,
+          zoomVirtualAgentWebTag: true,
         },
       }),
       prisma.localizedAiContactSetting.findMany({
@@ -46,6 +47,7 @@ export const getContactSettings = cache(
         display: representativePhone.representativePhoneDisplay,
         e164: representativePhone.representativePhoneE164,
       },
+      zoomVirtualAgentWebTag: representativePhone.zoomVirtualAgentWebTag,
       destinations,
     };
   },
@@ -92,10 +94,12 @@ export async function saveContactSettings(
         id: SITE_CONTACT_SETTING_ID,
         representativePhoneDisplay: settings.representativePhone.display,
         representativePhoneE164: settings.representativePhone.e164,
+        zoomVirtualAgentWebTag: settings.zoomVirtualAgentWebTag,
       },
       update: {
         representativePhoneDisplay: settings.representativePhone.display,
         representativePhoneE164: settings.representativePhone.e164,
+        zoomVirtualAgentWebTag: settings.zoomVirtualAgentWebTag,
       },
     });
 

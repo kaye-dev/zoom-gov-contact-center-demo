@@ -70,6 +70,13 @@ export function PhoneNumbersForm({
     }));
   };
 
+  const updateVirtualAgentWebTag = (value: string) => {
+    setSettings((current) => ({
+      ...current,
+      zoomVirtualAgentWebTag: value,
+    }));
+  };
+
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setFeedback(null);
@@ -167,6 +174,37 @@ export function PhoneNumbersForm({
               </span>
             </label>
           </div>
+        </fieldset>
+
+        <fieldset className="space-y-5 rounded-lg border border-line bg-surface-raised p-5 shadow-sm md:p-6">
+          <legend className="px-2 text-lg font-bold">
+            {t.admin.contactSettings.webTagTitle}
+          </legend>
+          <p className="text-sm leading-6 text-fg-muted">
+            {t.admin.contactSettings.webTagDescription}
+          </p>
+          <label className="block space-y-2">
+            <span className="text-sm font-semibold">
+              {t.admin.contactSettings.webTagLabel}
+            </span>
+            <textarea
+              value={settings.zoomVirtualAgentWebTag ?? ""}
+              onChange={(event) =>
+                updateVirtualAgentWebTag(event.target.value)
+              }
+              rows={5}
+              spellCheck={false}
+              aria-describedby="virtual-agent-web-tag-help"
+              placeholder={'<script type="module" src="https://…zoom.us/…/web-sdk/chat-client.js" data-apikey="…" data-env="us01"></script>'}
+              className="w-full resize-y rounded-md border border-line bg-surface px-3 py-2 font-mono text-sm text-fg outline-none transition-colors focus:border-accent"
+            />
+            <span
+              id="virtual-agent-web-tag-help"
+              className="block text-xs leading-5 text-fg-muted"
+            >
+              {t.admin.contactSettings.webTagHelp}
+            </span>
+          </label>
         </fieldset>
 
         <fieldset className="space-y-5 rounded-lg border border-line bg-surface-raised p-5 shadow-sm md:p-6">
