@@ -105,6 +105,10 @@ function ContentSectionStack({ children }: { children: ReactNode }) {
   return <div className="mt-12 flex max-w-6xl flex-col gap-12">{children}</div>;
 }
 
+function SectionBody({ children }: { children: ReactNode }) {
+  return <div className="mt-8 px-5 md:px-6">{children}</div>;
+}
+
 type ContentsItem = {
   href: string;
   label: string;
@@ -195,7 +199,7 @@ export function LifeIndexView() {
 
       <section aria-labelledby="life-categories" className="mt-12">
         <SectionHeading id="life-categories">{t.contentPages.allCategories}</SectionHeading>
-        <ul className="grid border-l border-t border-line sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="mt-8 grid border-l border-t border-line sm:grid-cols-2 lg:grid-cols-3">
           {lifeCategories.map((category) => {
             const label = t.findInfo.lifeInfo.items[category.id];
             return (
@@ -253,7 +257,7 @@ export function LifeCategoryView({ category }: { category: LifeCategory }) {
               className="scroll-mt-24"
             >
               <SectionHeading id={`topic-${topic.slug}-heading`}>{topicTitle}</SectionHeading>
-              <div className="border-x border-b border-line px-5 py-6 md:px-6">
+              <SectionBody>
                 <p className="leading-8 text-fg">{t.contentPages.lifeTopicSummaries[topic.id]}</p>
                 <Link
                   href={`/life/${category.slug}/${topic.slug}`}
@@ -262,7 +266,7 @@ export function LifeCategoryView({ category }: { category: LifeCategory }) {
                   <ChevronRightIcon className="shrink-0" />
                   <AnimatedLinkLabel>{t.contentPages.readMore}</AnimatedLinkLabel>
                 </Link>
-              </div>
+              </SectionBody>
             </section>
           );
         })}
@@ -310,9 +314,9 @@ export function LifeTopicView({ category, topic }: { category: LifeCategory; top
         <ContentSectionStack>
           <section id="overview" aria-labelledby="overview-heading" className="scroll-mt-24">
             <SectionHeading id="overview-heading">{t.contentPages.overviewHeading}</SectionHeading>
-            <div className="mt-8 px-5 md:px-6">
+            <SectionBody>
               <p className="leading-8 text-fg">{t.contentPages.lifeTopicSummaries[topic.id]}</p>
-            </div>
+            </SectionBody>
           </section>
 
           <section id="check-points" aria-labelledby="check-points-heading" className="scroll-mt-24">
@@ -351,12 +355,12 @@ export function NewsIndexView() {
 
       <section aria-labelledby="all-news" className="mt-12">
         <SectionHeading id="all-news">{t.contentPages.allNews}</SectionHeading>
-        <ul className="border-x border-b border-line">
+        <ul className="mt-8">
           {newsArticles.map((article) => {
             const title = t.news.articles[article.id];
             const categoryLabel = article.category === 'new' ? t.news.category.new : t.news.category.featured;
             return (
-              <li key={article.id} className="border-t border-line first:border-t-0">
+              <li key={article.id} className="border-b border-line">
                 <Link
                   href={`/news/${article.slug}`}
                   className="group grid min-h-14 gap-2 px-5 py-5 transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent md:grid-cols-[10rem_8rem_1fr_auto] md:items-start md:gap-5 md:px-6"
@@ -422,9 +426,9 @@ export function NewsArticleView({ article }: { article: NewsArticle }) {
         <ContentSectionStack>
           <section id="news-overview" aria-labelledby="news-overview-heading" className="scroll-mt-24">
             <SectionHeading id="news-overview-heading">{t.contentPages.overviewHeading}</SectionHeading>
-            <div className="mt-8 px-5 md:px-6">
+            <SectionBody>
               <p className="leading-8 text-fg">{t.contentPages.newsSummaries[article.id]}</p>
-            </div>
+            </SectionBody>
           </section>
 
           <section id="news-check" aria-labelledby="news-check-heading" className="scroll-mt-24">
