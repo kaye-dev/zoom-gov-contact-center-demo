@@ -1,11 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ThemeToggle } from './ThemeToggle';
 import { LanguageMenu } from './LanguageMenu';
 import { MobileMenu } from './MobileMenu';
-import { VoiceChatIcon } from './svg/VoiceChatIcon';
 import { StarEmblem } from './svg/StarEmblemIcon';
 import { PinIcon } from './svg/PinIcon';
 import { MenuIcon } from './svg/MenuIcon';
@@ -13,15 +12,7 @@ import { useI18n } from '../i18n/LanguageProvider';
 
 export function Header() {
   const { t } = useI18n();
-  const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-
-  useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 80);
-    handleScroll();
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
 
   // ロゴ（通常・コンパクト両状態で共通）
   const logo = (
@@ -48,38 +39,21 @@ export function Header() {
 
         {/* デスクトップ（lg 以上）の右側ナビ */}
         <div className="ml-auto hidden items-center lg:flex">
-          {scrolled ? (
-            /* コンパクト表示：右側に「知りたい情報が見つからないとき」＋ AI 相談ボタン */
-            <div className="flex items-center gap-5">
-              <span className="text-sm font-medium text-fg">
-                {t.headerCompact.notFound}
-              </span>
-              <button
-                type="button"
-                className="flex cursor-pointer items-center gap-2 rounded-full bg-blue-800 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-900"
-              >
-                <VoiceChatIcon className="h-5 w-5" />
-                <span className="whitespace-nowrap">{t.headerCompact.consultAi}</span>
-              </button>
-            </div>
-          ) : (
-            /* 通常表示 */
-            <nav className="flex items-center gap-7">
-              <a
-                href="#"
-                className="flex items-center gap-2 text-sm text-fg transition-colors hover:text-accent"
-              >
-                <PinIcon className="h-5 w-5 shrink-0" />
-                <span className="whitespace-nowrap">{t.nav.access}</span>
-              </a>
+          <nav className="flex items-center gap-7">
+            <a
+              href="#"
+              className="flex items-center gap-2 text-sm text-fg transition-colors hover:text-accent"
+            >
+              <PinIcon className="h-5 w-5 shrink-0" />
+              <span className="whitespace-nowrap">{t.nav.access}</span>
+            </a>
 
-              {/* 言語切り替えメニュー */}
-              <LanguageMenu />
+            {/* 言語切り替えメニュー */}
+            <LanguageMenu />
 
-              {/* ライト/ダークモード切り替えスイッチ */}
-              <ThemeToggle />
-            </nav>
-          )}
+            {/* ライト/ダークモード切り替えスイッチ */}
+            <ThemeToggle />
+          </nav>
         </div>
 
         {/* モバイル/タブレット（lg 未満）のハンバーガーボタン */}

@@ -3,24 +3,22 @@ import { Footer } from './components/Footer';
 import { FindInfo } from './components/FindInfo';
 import { HomeHeading } from './components/HomeHeading';
 import { News } from './components/News';
-import { ZoomVirtualAgentWebTag } from './components/ZoomVirtualAgentWebTag';
-import { getContactSettings } from '@/lib/server/site-settings';
+import { ZoomWebChatLauncher } from './components/ZoomWebChatLauncher';
+import { getPhoneSettings } from '@/lib/server/phone-settings';
 
 export default async function Home() {
-  const contactSettings = await getContactSettings();
+  const phoneSettings = await getPhoneSettings();
 
   return (
     <div className="">
       <Header />
       <main className="">
         <HomeHeading />
-        <FindInfo destinations={contactSettings.destinations} />
+        <FindInfo aiPhoneNumbers={phoneSettings.aiPhoneNumbers} />
         <News />
       </main>
       <Footer />
-      <ZoomVirtualAgentWebTag
-        webTag={contactSettings.zoomVirtualAgentWebTag}
-      />
+      <ZoomWebChatLauncher />
     </div>
   );
 }

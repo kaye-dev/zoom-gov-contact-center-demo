@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
-import { Header } from "@/app/components/Header";
-import { Footer } from "@/app/components/Footer";
+import { PublicInformationLayout } from "@/app/components/PublicInformationLayout";
 import { findDocFile, listDocSlugs, normalizeDocSlug } from "../_lib/docs";
 
 type PageProps = {
@@ -41,14 +40,12 @@ export default async function DocPage({ params }: PageProps) {
   }
 
   return (
-    <div>
-      <Header />
-      <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 lg:px-8">
+    <PublicInformationLayout>
+      <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 lg:px-8">
         <article>
           <MdxContent />
         </article>
-      </main>
-      <Footer />
-    </div>
+      </div>
+    </PublicInformationLayout>
   );
 }
