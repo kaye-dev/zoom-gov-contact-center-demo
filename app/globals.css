@@ -1,4 +1,8 @@
-@import "tailwindcss";
+@import "tailwindcss" source(none);
+
+/* Tailwind の探索範囲をUI実装だけに限定し、core dumpなどの生成物を走査しない。 */
+@source ".";
+@source "../mdx-components.tsx";
 
 /* .dark を html に付与して切り替える。初回表示は OS の設定も fallback として使う。 */
 @custom-variant dark (&:where(.dark, .dark *));

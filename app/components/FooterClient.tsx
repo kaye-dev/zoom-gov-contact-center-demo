@@ -7,9 +7,16 @@ import { StarEmblem } from './svg/StarEmblemIcon';
 
 type FooterClientProps = {
   isSignedIn: boolean;
+  representativePhone: {
+    display: string;
+    e164: string;
+  };
 };
 
-export function FooterClient({ isSignedIn }: FooterClientProps) {
+export function FooterClient({
+  isSignedIn,
+  representativePhone,
+}: FooterClientProps) {
   const { t } = useI18n();
   const pathname = usePathname();
 
@@ -59,10 +66,10 @@ export function FooterClient({ isSignedIn }: FooterClientProps) {
             <p className="mt-4">
               {t.footer.phoneLabel}
               <a
-                href="tel:+810312345678"
+                href={`tel:${representativePhone.e164}`}
                 className="underline-offset-4 transition-colors hover:text-accent hover:underline"
               >
-                (03)1234-5678
+                {representativePhone.display}
               </a>
               {t.footer.phoneNote}
             </p>

@@ -14,6 +14,14 @@ enum PasswordResetRequestStatus {
   CONSUMED
 }
 
+enum SiteLocale {
+  JA
+  EN
+  ZH_HANS
+  ZH_HANT
+  KO
+}
+
 model user {
   id                        String    @id
   name                      String
@@ -112,4 +120,32 @@ model PasswordResetRequest {
   @@index([email])
   @@index([status, requestedAt])
   @@map("password_reset_requests")
+}
+
+model SiteContactSetting {
+  id                         Int      @id @default(1)
+  representativePhoneDisplay String
+  representativePhoneE164    String
+  updatedAt                  DateTime @default(now()) @updatedAt
+
+  @@map("site_contact_settings")
+}
+
+model LocalizedAiContactSetting {
+  locale                  SiteLocale @id
+  aiPhoneE164             String?
+  virtualAgentCampaignUrl String?
+  updatedAt               DateTime   @default(now()) @updatedAt
+
+  @@map("localized_ai_contact_settings")
+}
+
+model LocaleDisplaySetting {
+  locale       SiteLocale @id
+  enabled      Boolean    @default(true)
+  displayOrder Int
+  updatedAt    DateTime   @default(now()) @updatedAt
+
+  @@index([displayOrder])
+  @@map("locale_display_settings")
 }

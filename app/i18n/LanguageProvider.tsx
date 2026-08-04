@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  useCallback,
   createContext,
   useContext,
   useEffect,
@@ -10,31 +11,22 @@ import {
 import {
   defaultLocale,
   dictionaries,
-  isLocale,
   type Dictionary,
   type Locale,
 } from './dictionaries';
+import { resolveAvailableLocale } from '@/lib/site-settings';
 
 const STORAGE_KEY = 'locale';
 const LOCALE_CHANGE_EVENT = 'mirai-city-locale-change';
 
 type LanguageContextValue = {
   locale: Locale;
+  availableLocales: readonly Locale[];
   setLocale: (locale: Locale) => void;
   t: Dictionary;
 };
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
-
-function getStoredLocale(): Locale {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored && isLocale(stored)) return stored;
-  } catch {
-    /* localStorage が使えない環境では既定ロケールを使う */
-  }
-  return defaultLocale;
-}
 
 function getServerLocaleSnapshot(): Locale {
   return defaultLocale;
@@ -50,7 +42,24 @@ function subscribeLocaleChange(onStoreChange: () => void) {
   };
 }
 
-export function LanguageProvider({ children }: { children: ReactNode }) {
+export function LanguageProvider({
+  availableLocales,
+  children,
+}: {
+  availableLocales: readonly Locale[];
+  children: ReactNode;
+}) {
+  const getStoredLocale = useCallback((): Locale => {
+    try {
+      return resolveAvailableLocale(
+        localStorage.getItem(STORAGE_KEY),
+        availableLocales,
+      );
+    } catch {
+      return defaultLocale;
+    }
+  }, [availableLocales]);
+
   const locale = useSyncExternalStore(
     subscribeLocaleChange,
     getStoredLocale,
@@ -58,22 +67,43 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    document.documentElement.lang = locale;
-  }, [locale]);
+    let resolved = locale;
 
-  const setLocale = (next: Locale) => {
     try {
-      localStorage.setItem(STORAGE_KEY, next);
+      const stored = localStorage.getItem(STORAGE_KEY);
+      resolved = resolveAvailableLocale(stored, availableLocales);
+      if (stored !== resolved) {
+        localStorage.setItem(STORAGE_KEY, resolved);
+      }
     } catch {
       /* localStorage が使えない環境では無視 */
     }
-    document.documentElement.lang = next;
+
+    document.documentElement.lang = resolved;
+    if (resolved !== locale) {
+      window.dispatchEvent(new Event(LOCALE_CHANGE_EVENT));
+    }
+  }, [availableLocales, locale]);
+
+  const setLocale = (next: Locale) => {
+    const resolved = resolveAvailableLocale(next, availableLocales);
+    try {
+      localStorage.setItem(STORAGE_KEY, resolved);
+    } catch {
+      /* localStorage が使えない環境では無視 */
+    }
+    document.documentElement.lang = resolved;
     window.dispatchEvent(new Event(LOCALE_CHANGE_EVENT));
   };
 
   return (
     <LanguageContext.Provider
-      value={{ locale, setLocale, t: dictionaries[locale] }}
+      value={{
+        locale,
+        availableLocales,
+        setLocale,
+        t: dictionaries[locale],
+      }}
     >
       {children}
     </LanguageContext.Provider>

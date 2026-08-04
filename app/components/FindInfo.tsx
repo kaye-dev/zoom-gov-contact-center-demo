@@ -1,7 +1,10 @@
 'use client';
 
 import Image from 'next/image';
-import type { CSSProperties } from 'react';
+import Link from 'next/link';
+import type { CSSProperties, ReactNode } from 'react';
+import type { ContactSettings } from '@/lib/site-settings';
+import { lifeCategories } from '../content/site-content';
 import { useI18n } from '../i18n/LanguageProvider';
 import { LabeledBox } from './LabeledBox';
 import { useIsDarkTheme } from './theme-store';
@@ -61,42 +64,39 @@ function MaskedIcon({ src, className }: { src: string; className?: string }) {
   );
 }
 
-export function FindInfo() {
-  const { t } = useI18n();
+export function FindInfo({
+  destinations,
+}: {
+  destinations: ContactSettings['destinations'];
+}) {
+  const { locale, t } = useI18n();
+  const destination = destinations[locale];
 
   const cards = [
     {
       title: t.findInfo.call.title,
       description: t.findInfo.call.description,
       icon: '/ai-call-assistant.png',
+      href: destination.aiPhoneE164
+        ? `tel:${destination.aiPhoneE164}`
+        : null,
+      unavailableAlert: t.findInfo.call.unavailableAlert,
+      external: false,
     },
     {
       title: t.findInfo.chat.title,
       description: t.findInfo.chat.description,
       icon: '/ai-chat-assistant.png',
+      href: destination.virtualAgentCampaignUrl,
+      unavailableAlert: t.findInfo.chat.unavailableAlert,
+      external: true,
     },
   ];
 
-  const lifeItems = [
-    { label: t.findInfo.lifeInfo.items.trash, icon: '/life-information/life-trash.png' },
-    { label: t.findInfo.lifeInfo.items.childEducation, icon: '/life-information/life-child-education.png' },
-    { label: t.findInfo.lifeInfo.items.safety, icon: '/life-information/life-safety.png' },
-    { label: t.findInfo.lifeInfo.items.residence, icon: '/life-information/life-residence.png' },
-    { label: t.findInfo.lifeInfo.items.facilities, icon: '/life-information/life-facilities.png' },
-    { label: t.findInfo.lifeInfo.items.event, icon: '/life-information/life-event.png' },
-    { label: t.findInfo.lifeInfo.items.faq, icon: '/life-information/life-faq.png' },
-    { label: t.findInfo.lifeInfo.items.feedback, icon: '/life-information/life-feedback.png' },
-    { label: t.findInfo.lifeInfo.items.welfare, icon: '/life-information/life-welfare.png' },
-    { label: t.findInfo.lifeInfo.items.educationBoard, icon: '/life-information/life-education-board.png' },
-    { label: t.findInfo.lifeInfo.items.myNumber, icon: '/life-information/life-my-number.png' },
-    { label: t.findInfo.lifeInfo.items.consultation, icon: '/life-information/life-consultation.png' },
-    { label: t.findInfo.lifeInfo.items.tax, icon: '/life-information/life-tax.png' },
-    { label: t.findInfo.lifeInfo.items.library, icon: '/life-information/life-library.png' },
-    { label: t.findInfo.lifeInfo.items.openData, icon: '/life-information/life-open-data.png' },
-    { label: t.findInfo.lifeInfo.items.organization, icon: '/life-information/life-organization.png' },
-    { label: t.findInfo.lifeInfo.items.counter, icon: '/life-information/life-counter.png' },
-    { label: t.findInfo.lifeInfo.items.housing, icon: '/life-information/life-housing.png' },
-  ];
+  const lifeItems = lifeCategories.map((category) => ({
+    ...category,
+    label: t.findInfo.lifeInfo.items[category.id],
+  }));
 
   return (
     <section className="mx-auto max-w-7xl px-2.5 pt-13">
@@ -114,12 +114,9 @@ export function FindInfo() {
         {/* カードグリッド（仕切り線で 2 分割。各カードがホバー領域＝枠の半分） */}
         {/* 縦積み時は水平線、md 以上では垂直線で区切る */}
         <div className="grid grid-cols-1 divide-y divide-line-subtle md:grid-cols-2 md:divide-x md:divide-y-0 md:divide-line-subtle">
-          {cards.map((card) => (
-            <a
-              key={card.title}
-              href="#"
-              className="flex items-center gap-5 px-1 py-4 text-fg transition-colors hover:bg-surface-hover md:px-8 md:py-6 lg:gap-6 lg:py-8"
-            >
+          {cards.map((card) => {
+            const content = (
+              <>
               <ThemedIcon
                 light={card.icon}
                 dark={darkIconPath(card.icon)}
@@ -133,8 +130,28 @@ export function FindInfo() {
                   {card.description}
                 </p>
               </div>
-            </a>
-          ))}
+              </>
+            );
+
+            return card.href ? (
+              <a
+                key={card.title}
+                href={card.href}
+                target={card.external ? '_blank' : undefined}
+                rel={card.external ? 'noopener noreferrer' : undefined}
+                className="flex items-center gap-5 px-1 py-4 text-fg transition-colors hover:bg-surface-hover md:px-8 md:py-6 lg:gap-6 lg:py-8"
+              >
+                {content}
+              </a>
+            ) : (
+              <ConsultationUnavailableButton
+                key={card.title}
+                message={card.unavailableAlert}
+              >
+                {content}
+              </ConsultationUnavailableButton>
+            );
+          })}
         </div>
       </LabeledBox>
 
@@ -150,20 +167,38 @@ export function FindInfo() {
         <div className="overflow-hidden">
           <div className="-mr-px -mb-px grid grid-cols-3 md:grid-cols-6">
             {lifeItems.map((item) => (
-              <a
+              <Link
                 key={item.label}
-                href="#"
+                href={`/life/${item.slug}`}
                 className="group relative flex aspect-square flex-col items-center justify-center gap-2 overflow-hidden px-2 text-center text-fg transition-colors before:pointer-events-none before:absolute before:inset-y-2.5 before:right-0 before:w-px before:bg-line-subtle before:content-[''] after:pointer-events-none after:absolute after:inset-x-2.5 after:bottom-0 after:h-px after:bg-line-subtle after:content-[''] hover:bg-surface-hover lg:gap-3"
               >
                 <MaskedIcon src={item.icon} className="h-12 w-12 lg:h-20 lg:w-20" />
                 <span className="text-xs font-semibold leading-snug md:text-sm lg:text-base">
                   {item.label}
                 </span>
-              </a>
+              </Link>
             ))}
           </div>
         </div>
       </LabeledBox>
     </section>
+  );
+}
+
+function ConsultationUnavailableButton({
+  message,
+  children,
+}: {
+  message: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => window.alert(message)}
+      className="flex w-full cursor-pointer items-center gap-5 px-1 py-4 text-left text-fg transition-colors hover:bg-surface-hover md:px-8 md:py-6 lg:gap-6 lg:py-8"
+    >
+      {children}
+    </button>
   );
 }

@@ -2,36 +2,14 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
+import { newsArticles } from '../content/site-content';
 import { useI18n } from '../i18n/LanguageProvider';
-import type { Dictionary } from '../i18n/dictionaries';
 
 /** 1 行あたりの件数。初期表示・「もっと見る」での追加件数に使う */
 const STEP = 4;
 /** 記事画像が未指定のときに使う既定画像 */
 const DEFAULT_IMAGE = '/news/news-default-item.png';
-
-type Article = {
-  id: keyof Dictionary['news']['articles'];
-  date: string; // ISO 形式。表示はロケールに合わせて整形する
-  category: 'new' | 'featured';
-  image?: string;
-};
-
-// ロケール非依存のメタ情報（タイトルは辞書 t.news.articles 側で管理）
-const articles: Article[] = [
-  { id: 'assembly', date: '2026-06-02', category: 'new' },
-  { id: 'construction', date: '2026-06-09', category: 'new' },
-  { id: 'floodBoard', date: '2026-04-02', category: 'new' },
-  { id: 'aircon', date: '2026-05-13', category: 'new' },
-  { id: 'floodDamage', date: '2026-06-03', category: 'featured' },
-  { id: 'myNumberExpress', date: '2026-05-23', category: 'featured' },
-  { id: 'minpaku', date: '2026-06-09', category: 'new' },
-  { id: 'measles', date: '2026-04-30', category: 'new' },
-  { id: 'furigana', date: '2026-05-26', category: 'new' },
-  { id: 'setayell', date: '2026-05-25', category: 'new' },
-  { id: 'childcare', date: '2026-05-27', category: 'new' },
-  { id: 'solar', date: '2026-05-27', category: 'new' },
-];
 
 export function News() {
   const { t, locale } = useI18n();
@@ -55,7 +33,7 @@ export function News() {
 
       {/* 記事カードグリッド（デスクトップ 4 列） */}
       <div className="grid grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-4">
-        {articles.slice(0, visibleCount).map((article) => {
+        {newsArticles.slice(0, visibleCount).map((article, index) => {
           const title = t.news.articles[article.id];
           const categoryLabel =
             article.category === 'new'
@@ -64,12 +42,13 @@ export function News() {
           const formattedDate = dateFormatter.format(new Date(article.date));
 
           return (
-            <a key={article.id} href="#" className="group block">
+            <Link key={article.id} href={`/news/${article.slug}`} className="group block">
               <Image
                 src={article.image ?? DEFAULT_IMAGE}
                 alt={title}
                 width={400}
                 height={240}
+                loading={index < STEP || !article.image ? 'eager' : 'lazy'}
                 className="aspect-[5/3] w-full object-cover"
               />
               {/* テキスト列: 上の区切り線 → カテゴリ → タイトル → 日付 */}
@@ -84,14 +63,14 @@ export function News() {
                   {formattedDate}
                 </p>
               </div>
-            </a>
+            </Link>
           );
         })}
       </div>
 
       {/* 全件表示前は「もっと見る」、表示し切ったら「閉じる」に切り替える */}
       <div className="mt-12 flex justify-center">
-        {visibleCount < articles.length ? (
+        {visibleCount < newsArticles.length ? (
           <button
             type="button"
             onClick={() => setVisibleCount((count) => count + STEP)}
