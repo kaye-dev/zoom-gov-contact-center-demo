@@ -12,6 +12,8 @@ import {
 } from '../content/site-content';
 import { useI18n } from '../i18n/LanguageProvider';
 import styles from './InformationPageViews.module.css';
+import { ChevronLeftIcon } from './svg/ChevronLeftIcon';
+import { ChevronRightIcon } from './svg/ChevronRightIcon';
 
 function interpolate(message: string, name: string) {
   return message.replace('{name}', name);
@@ -49,7 +51,7 @@ function Breadcrumbs({ items }: { items: readonly Breadcrumb[] }) {
       <ol className="flex flex-wrap items-center gap-x-2 gap-y-1">
         {items.map((item, index) => (
           <li key={`${item.label}-${index}`} className="flex items-center gap-2">
-            {index > 0 && <span aria-hidden="true">&gt;</span>}
+            {index > 0 && <ChevronRightIcon className="shrink-0" />}
             {item.href ? (
               <Link href={item.href} className={`${styles.animatedLink} text-accent`}>
                 <AnimatedLinkLabel>{item.label}</AnimatedLinkLabel>
@@ -118,9 +120,7 @@ function ContentsNavigation({ items }: { items: readonly ContentsItem[] }) {
               href={item.href}
               className={`${styles.animatedLink} flex min-h-11 items-start gap-2 py-3 font-semibold leading-7 text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
             >
-              <span aria-hidden="true" className="shrink-0 text-lg font-bold leading-7">
-                &gt;
-              </span>
+              <ChevronRightIcon className="shrink-0" />
               <AnimatedLinkLabel>{item.label}</AnimatedLinkLabel>
             </a>
           </li>
@@ -191,9 +191,7 @@ export function LifeIndexView() {
                 >
                   <CategoryIcon src={category.icon} className="h-10 w-10" />
                   <span className="flex-1 font-bold leading-6 text-fg group-hover:text-accent">{label}</span>
-                  <span aria-hidden="true" className="text-xl text-accent">
-                    ›
-                  </span>
+                  <ChevronRightIcon className="shrink-0 text-accent" />
                 </Link>
               </li>
             );
@@ -246,9 +244,7 @@ export function LifeCategoryView({ category }: { category: LifeCategory }) {
                   href={`/life/${category.slug}/${topic.slug}`}
                   className={`${styles.animatedLink} mt-5 inline-flex items-center gap-2 font-semibold text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
                 >
-                  <span aria-hidden="true" className="shrink-0 text-lg font-bold">
-                    &gt;
-                  </span>
+                  <ChevronRightIcon className="shrink-0" />
                   <AnimatedLinkLabel>{t.contentPages.readMore}</AnimatedLinkLabel>
                 </Link>
               </div>
@@ -315,9 +311,7 @@ export function LifeTopicView({ category, topic }: { category: LifeCategory; top
           href={`/life/${category.slug}`}
           className={`${styles.animatedLink} mt-10 inline-flex items-center gap-2 font-semibold text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
         >
-          <span aria-hidden="true" className="shrink-0 text-lg font-bold">
-            &lt;
-          </span>
+          <ChevronLeftIcon className="shrink-0" />
           <AnimatedLinkLabel>{t.contentPages.backToCategory}</AnimatedLinkLabel>
         </Link>
       </article>
@@ -356,9 +350,7 @@ export function NewsIndexView() {
                   </time>
                   <span className="text-sm font-semibold text-accent">{categoryLabel}</span>
                   <span className="font-bold leading-7 text-fg group-hover:text-accent">{title}</span>
-                  <span aria-hidden="true" className="hidden text-xl text-accent md:block">
-                    ›
-                  </span>
+                  <ChevronRightIcon className="hidden shrink-0 text-accent md:block" />
                 </Link>
               </li>
             );
@@ -429,9 +421,7 @@ export function NewsArticleView({ article }: { article: NewsArticle }) {
           href="/news"
           className={`${styles.animatedLink} mt-10 inline-flex items-center gap-2 font-semibold text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
         >
-          <span aria-hidden="true" className="shrink-0 text-lg font-bold">
-            &lt;
-          </span>
+          <ChevronLeftIcon className="shrink-0" />
           <AnimatedLinkLabel>{t.contentPages.allNews}</AnimatedLinkLabel>
         </Link>
       </article>
