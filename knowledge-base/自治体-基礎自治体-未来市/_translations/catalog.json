@@ -905,13 +905,13 @@
       ]
     },
     {
-      "slug": "nanao-branch-office",
-      "sourceName": "七生支所",
+      "slug": "administrative-service-center",
+      "sourceName": "行政サービスセンター",
       "labels": {
-        "en": "Nanao Branch Office",
-        "zh-Hans": "七生办事处",
-        "zh-Hant": "七生辦事處",
-        "ko": "나나오 지소"
+        "en": "Administrative Service Center",
+        "zh-Hans": "行政服务中心",
+        "zh-Hant": "行政服務中心",
+        "ko": "행정 서비스 센터"
       },
       "organizationSourceName": "市民部",
       "organizationLabels": {
@@ -922,17 +922,17 @@
       },
       "categories": [
         {
-          "slug": "branch-office-services",
-          "sourceFile": "01_支所窓口案内_FAQ.md",
-          "sourceName": "支所窓口案内",
+          "slug": "service-counter-guide",
+          "sourceFile": "01_窓口案内_FAQ.md",
+          "sourceName": "窓口案内",
           "labels": {
-            "en": "Branch Office Services",
-            "zh-Hans": "办事处窗口指南",
-            "zh-Hant": "辦事處服務窗口指南",
-            "ko": "지소 창구 안내"
+            "en": "Service Counter Guide",
+            "zh-Hans": "窗口服务指南",
+            "zh-Hant": "窗口服務指南",
+            "ko": "민원 창구 안내"
           },
           "topicTerms": [
-            "支所窓口案内"
+            "窓口案内"
           ]
         },
         {
@@ -978,17 +978,17 @@
           ]
         },
         {
-          "slug": "branch-office-access",
-          "sourceFile": "05_支所アクセス_FAQ.md",
-          "sourceName": "支所アクセス",
+          "slug": "location-and-access",
+          "sourceFile": "05_所在地・アクセス_FAQ.md",
+          "sourceName": "所在地・アクセス",
           "labels": {
-            "en": "Branch Office Location and Access",
-            "zh-Hans": "办事处交通指南",
-            "zh-Hant": "辦事處交通指南",
-            "ko": "지소 위치 및 오시는 길"
+            "en": "Location and Access",
+            "zh-Hans": "地址与交通指南",
+            "zh-Hant": "地址與交通指南",
+            "ko": "위치 및 교통 안내"
           },
           "topicTerms": [
-            "支所アクセス"
+            "所在地・アクセス"
           ]
         }
       ]
@@ -1802,13 +1802,13 @@
       ]
     },
     {
-      "slug": "safety-net-call-center",
-      "sourceName": "セーフティネットコールセンター",
+      "slug": "welfare-consultation-desk",
+      "sourceName": "福祉総合相談窓口",
       "labels": {
-        "en": "Safety Net Call Center",
-        "zh-Hans": "社会安全网呼叫中心",
-        "zh-Hant": "社會安全網客服中心",
-        "ko": "세이프티넷 콜센터"
+        "en": "Comprehensive Welfare Consultation Desk",
+        "zh-Hans": "综合福利咨询窗口",
+        "zh-Hant": "綜合福利諮詢窗口",
+        "ko": "복지 종합 상담 창구"
       },
       "organizationSourceName": "健康福祉部",
       "organizationLabels": {
@@ -2697,13 +2697,13 @@
       ]
     },
     {
-      "slug": "developmental-education-support",
-      "sourceName": "発達・教育支援課（教育部）",
+      "slug": "education-support",
+      "sourceName": "教育支援課",
       "labels": {
-        "en": "Developmental and Educational Support Division (Education Department)",
-        "zh-Hans": "发展与教育支援课（教育部）",
-        "zh-Hant": "發展與教育支援課（教育部）",
-        "ko": "발달·교육지원과(교육부)"
+        "en": "Education Support Division",
+        "zh-Hans": "教育支援课",
+        "zh-Hant": "教育支援課",
+        "ko": "교육지원과"
       },
       "organizationSourceName": "教育部",
       "organizationLabels": {

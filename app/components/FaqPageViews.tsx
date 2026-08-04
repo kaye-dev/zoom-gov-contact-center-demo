@@ -205,12 +205,18 @@ export function FaqDetailView({
               <li key={item.no} className="border-t border-line">
                 <details className="group">
                   <summary className="flex min-h-16 cursor-pointer list-none items-center gap-4 bg-surface-raised px-5 py-4 font-bold leading-7 text-fg transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
-                    <span className="flex-1">{item.question}</span>
+                    <span className="flex min-w-0 flex-1 items-start gap-2">
+                      <span className="shrink-0">Q{item.no}.</span>
+                      <span>{item.question}</span>
+                    </span>
                     <ChevronDownIcon className="shrink-0 text-accent transition-transform duration-200 group-open:rotate-180 motion-reduce:transition-none" />
                   </summary>
                   <div className="border-t border-line-subtle bg-surface px-5 py-5 md:px-6 md:py-6">
-                    <p className="whitespace-pre-line leading-8 text-fg">
-                      {item.answer}
+                    <p className="flex items-start gap-2 leading-8 text-fg">
+                      <span className="shrink-0 font-bold">A{item.no}.</span>
+                      <span className="min-w-0 whitespace-pre-line">
+                        {item.answer}
+                      </span>
                     </p>
                   </div>
                 </details>

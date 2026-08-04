@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 
+import { FAQ_LEGACY_REDIRECTS } from "../next.config";
 import {
   FAQ_KNOWLEDGE_BASE_ROOT,
   FaqContentError,
@@ -18,6 +19,22 @@ import {
 import { SITE_LOCALES } from "../lib/site-settings";
 
 const repository = loadFaqRepository();
+
+function readKnowledgeBaseTextRecursively(directoryPath: string): string {
+  return readdirSync(directoryPath, { withFileTypes: true })
+    .sort((left, right) => left.name.localeCompare(right.name, "en"))
+    .map((entry) => {
+      const entryPath = join(directoryPath, entry.name);
+      if (entry.isDirectory()) {
+        return `${entryPath}\n${readKnowledgeBaseTextRecursively(entryPath)}`;
+      }
+      if (!entry.name.endsWith(".md") && !entry.name.endsWith(".json")) {
+        return entryPath;
+      }
+      return `${entryPath}\n${readFileSync(entryPath, "utf8")}`;
+    })
+    .join("\n");
+}
 
 function assertThrowsFaqCode(
   action: () => unknown,
@@ -151,6 +168,123 @@ test("department and nested category route slugs are unique", () => {
   for (const slug of [...departmentSlugs, ...categoryRoutes.flatMap((route) => route.split("/"))]) {
     assert.match(slug, /^[a-z0-9]+(?:-[a-z0-9]+)*$/);
   }
+});
+
+test("generic department names and route slugs replace Hino-specific identifiers", () => {
+  const expectedDepartments = [
+    {
+      number: "11",
+      name: "行政サービスセンター",
+      slug: "administrative-service-center",
+    },
+    {
+      number: "21",
+      name: "福祉総合相談窓口",
+      slug: "welfare-consultation-desk",
+    },
+    { number: "31", name: "教育支援課", slug: "education-support" },
+  ];
+
+  for (const expected of expectedDepartments) {
+    const department = repository.departments.find(
+      ({ number }) => number === expected.number,
+    );
+    assert.ok(department, `department ${expected.number} must exist`);
+    assert.equal(department.labels.ja, expected.name);
+    assert.equal(department.slug, expected.slug);
+  }
+
+  const administrativeServiceCenter = repository.departments.find(
+    ({ slug }) => slug === "administrative-service-center",
+  );
+  assert.ok(administrativeServiceCenter);
+  assert.deepEqual(
+    administrativeServiceCenter.categories.map(({ slug }) => slug),
+    [
+      "service-counter-guide",
+      "certificate-issuance",
+      "address-change-notifications",
+      "community-consultations",
+      "location-and-access",
+    ],
+  );
+
+  const knowledgeBaseText = readKnowledgeBaseTextRecursively(
+    FAQ_KNOWLEDGE_BASE_ROOT,
+  );
+  const legacyTerms = [
+    "七生",
+    "Nanao",
+    "nanao-branch-office",
+    "나나오",
+    "支所窓口案内",
+    "branch-office-services",
+    "支所アクセス",
+    "branch-office-access",
+    "セーフティネットコールセンター",
+    "Safety Net Call Center",
+    "safety-net-call-center",
+    "社会安全网呼叫中心",
+    "社會安全網客服中心",
+    "세이프티넷 콜센터",
+    "発達・教育支援課",
+    "Developmental and Educational Support Division (Education Department)",
+    "developmental-education-support",
+    "发展与教育支援课（教育部）",
+    "發展與教育支援課（教育部）",
+    "발달·교육지원과(교육부)",
+  ];
+  for (const legacyTerm of legacyTerms) {
+    assert.equal(
+      knowledgeBaseText.includes(legacyTerm),
+      false,
+      `legacy Hino-specific identifier remains: ${legacyTerm}`,
+    );
+  }
+});
+
+test("legacy FAQ department routes temporarily redirect to generic slugs", () => {
+  const migratedDepartmentRedirects = FAQ_LEGACY_REDIRECTS.filter((redirect) =>
+    /nanao-branch-office|safety-net-call-center|developmental-education-support/.test(
+      redirect.source,
+    ),
+  );
+
+  assert.deepEqual(migratedDepartmentRedirects, [
+    {
+      source:
+        "/life/frequently-asked-questions/nanao-branch-office/branch-office-services",
+      destination:
+        "/life/frequently-asked-questions/administrative-service-center/service-counter-guide",
+      permanent: false,
+    },
+    {
+      source:
+        "/life/frequently-asked-questions/nanao-branch-office/branch-office-access",
+      destination:
+        "/life/frequently-asked-questions/administrative-service-center/location-and-access",
+      permanent: false,
+    },
+    {
+      source: "/life/frequently-asked-questions/nanao-branch-office/:faq*",
+      destination:
+        "/life/frequently-asked-questions/administrative-service-center/:faq*",
+      permanent: false,
+    },
+    {
+      source: "/life/frequently-asked-questions/safety-net-call-center/:faq*",
+      destination:
+        "/life/frequently-asked-questions/welfare-consultation-desk/:faq*",
+      permanent: false,
+    },
+    {
+      source:
+        "/life/frequently-asked-questions/developmental-education-support/:faq*",
+      destination: "/life/frequently-asked-questions/education-support/:faq*",
+      permanent: false,
+    },
+  ]);
+  assert.ok(migratedDepartmentRedirects.every(({ permanent }) => !permanent));
 });
 
 test("public FAQ projections exclude management metadata", () => {
