@@ -1,5 +1,6 @@
 import { cache } from "react";
 
+import type { PrismaClient } from "@/lib/generated/prisma/client";
 import type { PhoneSettings } from "@/lib/phone-settings";
 import {
   SITE_LOCALES,
@@ -9,41 +10,44 @@ import {
   type SiteLocale,
 } from "@/lib/site-settings";
 
-import { prisma } from "./prisma";
+import { withPrisma } from "./prisma";
 
 const SITE_PHONE_SETTING_ID = 1;
 
 export const getPhoneSettings = cache(async (): Promise<PhoneSettings> => {
-  const [sitePhoneSetting, localizedRows] = await Promise.all([
-    prisma.sitePhoneSetting.findUnique({
-      where: { id: SITE_PHONE_SETTING_ID },
-      select: {
-        representativePhoneDisplay: true,
-        representativePhoneE164: true,
-      },
-    }),
-    prisma.localizedAiPhoneSetting.findMany({
-      select: {
-        locale: true,
-        aiPhoneE164: true,
-      },
-    }),
-  ]);
+  return withPrisma(async (prisma) => {
+    const [sitePhoneSetting, localizedRows] = await Promise.all([
+      prisma.sitePhoneSetting.findUnique({
+        where: { id: SITE_PHONE_SETTING_ID },
+        select: {
+          representativePhoneDisplay: true,
+          representativePhoneE164: true,
+        },
+      }),
+      prisma.localizedAiPhoneSetting.findMany({
+        select: {
+          locale: true,
+          aiPhoneE164: true,
+        },
+      }),
+    ]);
 
-  if (!sitePhoneSetting) {
-    throw new Error("Site phone settings have not been initialized.");
-  }
+    if (!sitePhoneSetting) {
+      throw new Error("Site phone settings have not been initialized.");
+    }
 
-  return {
-    representativePhone: {
-      display: sitePhoneSetting.representativePhoneDisplay,
-      e164: sitePhoneSetting.representativePhoneE164,
-    },
-    aiPhoneNumbers: buildAiPhoneNumberRecord(localizedRows),
-  };
+    return {
+      representativePhone: {
+        display: sitePhoneSetting.representativePhoneDisplay,
+        e164: sitePhoneSetting.representativePhoneE164,
+      },
+      aiPhoneNumbers: buildAiPhoneNumberRecord(localizedRows),
+    };
+  });
 });
 
 export async function savePhoneSettings(
+  prisma: PrismaClient,
   settings: PhoneSettings,
 ): Promise<PhoneSettings> {
   await prisma.$transaction(async (transaction) => {

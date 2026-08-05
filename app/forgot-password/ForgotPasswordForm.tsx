@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { fetchWithAwsPayloadHash } from "@/lib/client-fetch";
+
 import { useI18n } from "../i18n/LanguageProvider";
 
 export function ForgotPasswordForm() {
@@ -15,13 +17,16 @@ export function ForgotPasswordForm() {
     setError(null);
     setIsSubmitting(true);
 
-    const response = await fetch("/api/password-reset-requests", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: String(formData.get("email") ?? ""),
-      }),
-    });
+    const response = await fetchWithAwsPayloadHash(
+      "/api/password-reset-requests",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: String(formData.get("email") ?? ""),
+        }),
+      },
+    );
 
     setIsSubmitting(false);
 

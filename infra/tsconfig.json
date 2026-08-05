@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "noEmit": true,
+    "target": "ES2022"
+  },
+  "include": ["bin/**/*.ts", "functions/**/*.ts", "lib/**/*.ts", "test/**/*.ts"]
+}

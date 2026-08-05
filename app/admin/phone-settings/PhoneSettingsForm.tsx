@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { localeNames } from "@/app/i18n/dictionaries";
+import { fetchWithAwsPayloadHash } from "@/lib/client-fetch";
 import type { PhoneSettings } from "@/lib/phone-settings";
 import {
   isSettingsErrorCode,
@@ -71,11 +72,14 @@ export function PhoneSettingsForm({
     setIsSubmitting(true);
 
     try {
-      const response = await fetch("/api/admin/phone-settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(settings),
-      });
+      const response = await fetchWithAwsPayloadHash(
+        "/api/admin/phone-settings",
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(settings),
+        },
+      );
       const body = (await response.json().catch(() => null)) as
         | { settings?: PhoneSettings; error?: unknown }
         | null;

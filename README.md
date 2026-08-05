@@ -81,6 +81,12 @@ curl http://localhost:3000/docs/privacy-policy.md
 
 Vercel にデプロイする場合、`DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` を設定し、Prisma Postgres / Neon / Supabase / Vercel Marketplace の Postgres など `DATABASE_URL` で接続できる PostgreSQL を使ってください。`postinstall` で Prisma Client を生成し、`vercel-build` では `prisma migrate deploy` を実行します。
 
+### AWSへ低コストでデプロイ
+
+AWSでは、CloudFront、IAM認証付きLambda Function URL、ARM64 Lambda、0 ACUまで自動停止するAurora Serverless v2をCDKで構築できます。NAT Gateway、ALB、API Gateway、RDS Proxy、WAFは使用しません。
+
+構成、費用を抑えるための制約、デプロイ・migration・初期管理者・削除手順は [AWS運用スクリプト](scripts/aws/README.md) と [CDKインフラ](infra/README.md) を参照してください。
+
 ### npm で起動
 
 Docker を使わずに開発サーバーを起動する場合は、以下を実行します。
@@ -105,6 +111,14 @@ npm run dev
 | `npm run build` | 本番ビルドを作成 |
 | `npm run start` | 本番サーバーを起動 |
 | `npm run lint` | ESLint を実行 |
+| `npm run typecheck` | アプリのTypeScript型検査を実行 |
+| `npm run audit:runtime` | デプロイ成果物に含まれる依存関係の脆弱性監査を実行 |
+| `npm run test:infra` | CDKテンプレートと運用Lambdaのテストを実行 |
+| `npm run aws:test-scripts` | AWS運用スクリプトのテストを実行 |
+| `npm run aws:deploy` | AWS identity確認後に対話式でCDKデプロイ |
+| `npm run aws:seed-admin` | AWS上の初期管理者を対話式で作成または更新 |
+| `npm run aws:verify-pause` | Auroraが自動停止して0 ACUになったことをCloudWatchで確認 |
+| `npm run aws:destroy` | AWS identity確認後に2スタックを削除・残存監査 |
 | `npm run db:generate` | Prisma Client を生成 |
 | `npm run db:migrate` | Prisma migration を作成し、ローカル DB に適用 |
 | `npm run db:deploy` | Prisma migration をデプロイ先 DB に適用 |

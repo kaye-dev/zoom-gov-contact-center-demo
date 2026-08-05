@@ -1,5 +1,6 @@
 import { cache } from "react";
 
+import type { PrismaClient } from "@/lib/generated/prisma/client";
 import {
   SITE_LOCALES,
   fromDatabaseSiteLocale,
@@ -10,10 +11,11 @@ import {
   type SiteLocale,
 } from "@/lib/site-settings";
 
-import { prisma } from "./prisma";
+import { withPrisma } from "./prisma";
 
 export const getLanguageSettings = cache(
-  async (): Promise<LanguageSettings> => {
+  async (): Promise<LanguageSettings> =>
+    withPrisma(async (prisma) => {
     const rows = await prisma.localeDisplaySetting.findMany({
       orderBy: [{ displayOrder: "asc" }, { locale: "asc" }],
       select: {
@@ -39,11 +41,12 @@ export const getLanguageSettings = cache(
 
     assertEveryLocaleIsPresent(locales.map(({ locale }) => locale));
 
-    return { locales };
-  },
+      return { locales };
+    }),
 );
 
 export async function saveLanguageSettings(
+  prisma: PrismaClient,
   settings: LanguageSettings,
 ): Promise<LanguageSettings> {
   await prisma.$transaction(async (transaction) => {

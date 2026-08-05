@@ -1,5 +1,5 @@
-import { prisma } from "@/lib/server/prisma";
 import { requireAdminSession } from "@/lib/server/auth/server";
+import { withPrisma } from "@/lib/server/prisma";
 
 import { UsersView } from "./UsersView";
 
@@ -27,23 +27,25 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
       }
     : {};
 
-  const [users, total] = await prisma.$transaction([
-    prisma.user.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        mustChangePassword: true,
-        createdAt: true,
-      },
-    }),
-    prisma.user.count({ where }),
-  ]);
+  const [users, total] = await withPrisma((prisma) =>
+    prisma.$transaction([
+      prisma.user.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * PAGE_SIZE,
+        take: PAGE_SIZE,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          mustChangePassword: true,
+          createdAt: true,
+        },
+      }),
+      prisma.user.count({ where }),
+    ]),
+  );
 
   return (
     <UsersView

@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { fetchWithAwsPayloadHash } from "@/lib/client-fetch";
+
 import { formatAdminDateTime } from "../date-format";
 import { useI18n } from "../../i18n/LanguageProvider";
 
@@ -44,7 +46,7 @@ export function PasswordResetRequestsView({
     setIssuedPassword(null);
     setPendingId(request.id);
 
-    const response = await fetch(
+    const response = await fetchWithAwsPayloadHash(
       `/api/admin/password-reset-requests/${request.id}/${action}`,
       {
         method: "POST",

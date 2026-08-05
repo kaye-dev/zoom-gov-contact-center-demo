@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { localeNames } from "@/app/i18n/dictionaries";
+import { fetchWithAwsPayloadHash } from "@/lib/client-fetch";
 import {
   DEFAULT_SITE_LOCALE,
   SITE_LOCALES,
@@ -74,11 +75,14 @@ export function LanguageSettingsForm({
     setIsSubmitting(true);
 
     try {
-      const response = await fetch("/api/admin/language-settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ locales }),
-      });
+      const response = await fetchWithAwsPayloadHash(
+        "/api/admin/language-settings",
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ locales }),
+        },
+      );
       const body = (await response.json().catch(() => null)) as
         | { settings?: LanguageSettings; error?: unknown }
         | null;
