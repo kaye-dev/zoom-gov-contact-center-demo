@@ -19,13 +19,13 @@ import {
   shouldChangePassword,
 } from "@/lib/server/auth/helpers";
 import { prisma } from "@/lib/server/prisma";
-import {
-  saveContactSettings,
-  saveLanguageSettings,
-} from "@/lib/server/site-settings";
+import { saveChatSettings } from "@/lib/server/chat-settings";
+import { savePhoneSettings } from "@/lib/server/phone-settings";
+import { saveLanguageSettings } from "@/lib/server/site-settings";
+import { parseChatSettings } from "@/lib/chat-settings";
+import { parsePhoneSettings } from "@/lib/phone-settings";
 import {
   SETTINGS_ERROR_CODES,
-  parseContactSettings,
   parseLanguageSettings,
 } from "@/lib/site-settings";
 
@@ -300,7 +300,7 @@ app.post("/admin/users", async (c) => {
   }
 });
 
-app.put("/admin/contact-settings", async (c) => {
+app.put("/admin/phone-settings", async (c) => {
   const session = await getAppSession(c.req.raw.headers);
   const unauthorized = rejectNonAdminForSettings(session);
 
@@ -308,17 +308,41 @@ app.put("/admin/contact-settings", async (c) => {
     return c.json(unauthorized.body, unauthorized.status);
   }
 
-  const parsed = parseContactSettings(await readJsonBody(c.req.raw));
+  const parsed = parsePhoneSettings(await readJsonBody(c.req.raw));
   if (!parsed.ok) {
     return c.json({ error: parsed.code }, 400);
   }
 
   try {
-    const settings = await saveContactSettings(parsed.value);
+    const settings = await savePhoneSettings(parsed.value);
     revalidatePath("/", "layout");
     return c.json({ settings });
-  } catch (error) {
-    console.error("Failed to save contact settings.", error);
+  } catch {
+    console.error("Failed to save phone settings.");
+    return c.json({ error: SETTINGS_ERROR_CODES.saveFailed }, 500);
+  }
+});
+
+app.put("/admin/chat-settings", async (c) => {
+  const session = await getAppSession(c.req.raw.headers);
+  const unauthorized = rejectNonAdminForSettings(session);
+
+  if (unauthorized) {
+    return c.json(unauthorized.body, unauthorized.status);
+  }
+
+  const parsed = parseChatSettings(await readJsonBody(c.req.raw));
+  if (!parsed.ok) {
+    return c.json({ error: parsed.code }, 400);
+  }
+
+  try {
+    await saveChatSettings(parsed.value);
+    revalidatePath("/", "layout");
+    return c.json({ saved: true });
+  } catch {
+    // Memo fields may contain copied tags or operational notes. Never log the payload.
+    console.error("Failed to save chat settings.");
     return c.json({ error: SETTINGS_ERROR_CODES.saveFailed }, 500);
   }
 });
@@ -502,6 +526,13 @@ function rejectNonAdminForSettings(
     return {
       status: 403 as const,
       body: { error: SETTINGS_ERROR_CODES.administratorRequired },
+    };
+  }
+
+  if (shouldChangePassword(session)) {
+    return {
+      status: 403 as const,
+      body: { error: SETTINGS_ERROR_CODES.passwordChangeRequired },
     };
   }
 

@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import type { CSSProperties, ReactNode } from 'react';
-import type { ContactSettings } from '@/lib/site-settings';
+import type { PhoneSettings } from '@/lib/phone-settings';
 import { lifeCategories } from '../content/site-content';
 import { useI18n } from '../i18n/LanguageProvider';
 import { LabeledBox } from './LabeledBox';
@@ -65,31 +65,21 @@ function MaskedIcon({ src, className }: { src: string; className?: string }) {
 }
 
 export function FindInfo({
-  destinations,
+  aiPhoneNumbers,
 }: {
-  destinations: ContactSettings['destinations'];
+  aiPhoneNumbers: PhoneSettings['aiPhoneNumbers'];
 }) {
   const { locale, t } = useI18n();
-  const destination = destinations[locale];
 
   const cards = [
     {
       title: t.findInfo.call.title,
       description: t.findInfo.call.description,
       icon: '/ai-call-assistant.png',
-      href: destination.aiPhoneE164
-        ? `tel:${destination.aiPhoneE164}`
+      href: aiPhoneNumbers[locale]
+        ? `tel:${aiPhoneNumbers[locale]}`
         : null,
       unavailableAlert: t.findInfo.call.unavailableAlert,
-      external: false,
-    },
-    {
-      title: t.findInfo.chat.title,
-      description: t.findInfo.chat.description,
-      icon: '/ai-chat-assistant.png',
-      href: destination.virtualAgentCampaignUrl,
-      unavailableAlert: t.findInfo.chat.unavailableAlert,
-      external: true,
     },
   ];
 
@@ -111,9 +101,7 @@ export function FindInfo({
       {/* 枠付きボックス（上辺の枠線に見出しが重なる。角は直角） */}
       {/* contentClassName の余白を全て外し、各カードが枠端まで広がる（ホバー背景が上辺まで届く） */}
       <LabeledBox label={t.findInfo.sectionLabel} contentClassName="p-0">
-        {/* カードグリッド（仕切り線で 2 分割。各カードがホバー領域＝枠の半分） */}
-        {/* 縦積み時は水平線、md 以上では垂直線で区切る */}
-        <div className="grid grid-cols-1 divide-y divide-line-subtle md:grid-cols-2 md:divide-x md:divide-y-0 md:divide-line-subtle">
+        <div className="grid grid-cols-1 divide-y divide-line-subtle">
           {cards.map((card) => {
             const content = (
               <>
@@ -137,8 +125,6 @@ export function FindInfo({
               <a
                 key={card.title}
                 href={card.href}
-                target={card.external ? '_blank' : undefined}
-                rel={card.external ? 'noopener noreferrer' : undefined}
                 className="flex items-center gap-5 px-1 py-4 text-fg transition-colors hover:bg-surface-hover md:px-8 md:py-6 lg:gap-6 lg:py-8"
               >
                 {content}

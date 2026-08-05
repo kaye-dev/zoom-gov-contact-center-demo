@@ -91,16 +91,11 @@ export type Dictionary = {
     light: string;
     dark: string;
   };
-  headerCompact: {
-    notFound: string;
-    consultAi: string;
-  };
   findInfo: {
     title: string;
     subtitle: string;
     sectionLabel: string;
     call: { title: string; description: string; unavailableAlert: string };
-    chat: { title: string; description: string; unavailableAlert: string };
     lifeInfo: {
       sectionLabel: string;
       items: {
@@ -232,7 +227,8 @@ export type Dictionary = {
     users: string;
     newUser: string;
     passwordResets: string;
-    phoneNumbers: string;
+    phoneSettings: string;
+    chatSettings: string;
     languageSettings: string;
     settingsMenu: string;
     userListTitle: string;
@@ -273,7 +269,7 @@ export type Dictionary = {
       saveError: string;
       errors: Record<SettingsErrorCode, string>;
     };
-    contactSettings: {
+    phoneManagement: {
       title: string;
       description: string;
       representativeTitle: string;
@@ -285,14 +281,45 @@ export type Dictionary = {
       aiPhoneTitle: string;
       aiPhoneDescription: string;
       aiPhoneLabel: string;
-      webTagTitle: string;
-      webTagDescription: string;
-      webTagLabel: string;
-      webTagHelp: string;
-      virtualAgentTitle: string;
-      virtualAgentDescription: string;
-      campaignUrlLabel: string;
       hidden: string;
+    };
+    chatManagement: {
+      title: string;
+      description: string;
+      activeModeTitle: string;
+      activeModeDescription: string;
+      active: string;
+      inactive: string;
+      modes: {
+        disabled: {
+          label: string;
+          description: string;
+        };
+        campaign: {
+          label: string;
+          description: string;
+        };
+        contactCenterEntryId: {
+          label: string;
+          description: string;
+        };
+      };
+      campaign: {
+        title: string;
+        description: string;
+        webTagLabel: string;
+        webTagHelp: string;
+        memoLabel: string;
+        memoHelp: string;
+      };
+      contactCenterEntryId: {
+        title: string;
+        description: string;
+        webTagLabel: string;
+        webTagHelp: string;
+        memoLabel: string;
+        memoHelp: string;
+      };
     };
     languageManagement: {
       title: string;
@@ -319,10 +346,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
       light: 'ライト',
       dark: 'ダーク',
     },
-    headerCompact: {
-      notFound: '知りたい情報が見つからないとき',
-      consultAi: 'AI オペレーターに相談',
-    },
     findInfo: {
       title: '情報を探す',
       subtitle: 'Find information',
@@ -332,12 +355,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
         description:
           '相談内容を AI が一次対応を行い、高度なご相談や個人情報に関わるご相談は有人オペレーターにお繋ぎします。',
         unavailableAlert: 'AI 電話相談の電話番号が設定されていません。',
-      },
-      chat: {
-        title: 'AI チャット相談',
-        description:
-          '相談内容を AI がチャット形式でお答えします。高度なご質問や個人情報に関わるご相談は適切な相談先をお繋ぎいたします。',
-        unavailableAlert: 'AI チャット相談の接続先が設定されていません。',
       },
       lifeInfo: {
         sectionLabel: '生活情報',
@@ -628,7 +645,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       users: 'ユーザー管理',
       newUser: 'ユーザー作成',
       passwordResets: '再設定申請',
-      phoneNumbers: '電話・AIチャット管理',
+      phoneSettings: '電話管理',
+      chatSettings: 'AIチャット管理',
       languageSettings: '言語管理',
       settingsMenu: '設定',
       userListTitle: 'ユーザー管理',
@@ -673,6 +691,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
         errors: {
           AUTHENTICATION_REQUIRED: 'ログインが必要です。',
           ADMINISTRATOR_REQUIRED: '管理者権限が必要です。',
+          PASSWORD_CHANGE_REQUIRED:
+            '設定を変更する前にパスワードを変更してください。',
           INVALID_REQUEST: '入力内容を確認してください。',
           INVALID_REPRESENTATIVE_PHONE_DISPLAY:
             '代表電話の表示値に使用できない文字が含まれています。',
@@ -680,20 +700,24 @@ export const dictionaries: Record<Locale, Dictionary> = {
             '代表電話の発信用番号をE.164形式で入力してください。',
           INVALID_AI_PHONE_E164:
             'AI電話番号をE.164形式で入力してください。',
-          INVALID_CAMPAIGN_URL:
-            'Campaign URLには有効なHTTPS URLを入力してください。',
-          INVALID_VIRTUAL_AGENT_WEB_TAG:
-            'Zoomが発行した有効なWeb Tagを入力してください。',
+          INVALID_ZOOM_CAMPAIGN_WEB_TAG:
+            'Campaign欄には、ZoomのCampaign設定から発行された有効なWeb Tagを入力してください。',
+          INVALID_ZOOM_CONTACT_CENTER_WEB_TAG:
+            'Contact Center Entry ID欄には、data-chat-entry-idを含む有効なWeb Tagを入力してください。',
+          ACTIVE_ZOOM_CHAT_TAG_REQUIRED:
+            '選択したチャット方式のWeb Tagを入力してください。',
+          INVALID_CHAT_MEMO:
+            '管理用メモは4,000文字以内で入力してください。',
           INVALID_LANGUAGE_SETTINGS:
             '5言語を重複なく1回ずつ指定してください。',
           JAPANESE_REQUIRED: '日本語は無効にできません。',
           SETTINGS_SAVE_FAILED: '設定を保存できませんでした。',
         },
       },
-      contactSettings: {
-        title: '電話・AIチャット管理',
+      phoneManagement: {
+        title: '電話管理',
         description:
-          '代表電話、AI電話相談、Zoom Virtual AgentのWeb Tagとチャット接続先を設定します。',
+          '代表電話と、公開サイトの言語ごとに利用するAI電話相談番号を設定します。',
         representativeTitle: '代表電話',
         representativeDescription:
           '共通フッターに表示する電話番号と、発信に使用する番号を設定します。',
@@ -705,17 +729,56 @@ export const dictionaries: Record<Locale, Dictionary> = {
         aiPhoneDescription:
           '公開サイトで選択中の言語に応じて発信する電話番号を設定します。空欄の場合は未設定として保存されます。',
         aiPhoneLabel: 'AI電話番号（E.164）',
-        webTagTitle: 'Zoom Virtual Agent Web Tag',
-        webTagDescription:
-          'ZoomのCampaign設定に表示される「Embed Web Tag」のscriptタグ全体を設定します。空欄にすると公開サイトのチャットランチャーを停止します。',
-        webTagLabel: 'Web Tag（scriptタグ）',
-        webTagHelp:
-          'HTTPSのZoom配信元、公開APIキー、環境を検証して保存します。APIキーだけではなくscriptタグ全体を貼り付けてください。',
-        virtualAgentTitle: 'AI チャット相談',
-        virtualAgentDescription:
-          'Zoom Virtual AgentのFull-page / Offsite Campaign URLを設定します。空欄の場合は未設定として保存されます。',
-        campaignUrlLabel: 'Campaign URL（HTTPS）',
         hidden: '非表示中',
+      },
+      chatManagement: {
+        title: 'AIチャット管理',
+        description:
+          '公開サイトで利用するZoomチャット方式と、それぞれのWeb Tagを設定します。非選択側の設定も保存されます。',
+        activeModeTitle: '公開サイトで利用する方式',
+        activeModeDescription:
+          '利用する方式を一つ選択してください。方式を切り替えても、CampaignとEntry IDの入力値は保持されます。',
+        active: '使用中',
+        inactive: '未使用',
+        modes: {
+          disabled: {
+            label: '利用しない',
+            description:
+              '公開サイトでZoomチャットSDKを読み込みません。保存済みのタグは保持されます。',
+          },
+          campaign: {
+            label: 'Campaign',
+            description:
+              'Zoom Campaignで設定した対象URLや配信条件に従ってチャットを表示します。',
+          },
+          contactCenterEntryId: {
+            label: 'Contact Center Entry ID',
+            description:
+              '指定したContact Center FlowのEntry IDを使ってチャットを開始します。',
+          },
+        },
+        campaign: {
+          title: 'Campaign',
+          description:
+            'Zoom管理画面の「Contact Center Management > Campaigns > Embed Web Tag」からコピーしたタグを設定します。',
+          webTagLabel: 'Campaign Web Tag（Embed Web Tag）',
+          webTagHelp:
+            'scriptタグ全体を貼り付けてください。この欄ではdata-chat-entry-idを含むタグは使用できません。',
+          memoLabel: 'Campaign メモ（任意）',
+          memoHelp:
+            '管理者向けの内部メモです。公開サイトの表示や動作には使用されません（最大4,000文字）。',
+        },
+        contactCenterEntryId: {
+          title: 'Contact Center Entry ID',
+          description:
+            '対象Flowの「Start > Manage Entry Point > Import SDK」からコピーしたタグを設定します。',
+          webTagLabel: 'Contact Center Web Tag（Import SDK）',
+          webTagHelp:
+            'scriptタグ全体を貼り付けてください。この欄のタグにはdata-chat-entry-idが必要です。',
+          memoLabel: 'Contact Center メモ（任意）',
+          memoHelp:
+            '管理者向けの内部メモです。公開サイトの表示や動作には使用されません（最大4,000文字）。',
+        },
       },
       languageManagement: {
         title: '言語管理',
@@ -741,10 +804,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
       light: 'Light',
       dark: 'Dark',
     },
-    headerCompact: {
-      notFound: "Can't find what you need?",
-      consultAi: 'Consult an AI Operator',
-    },
     findInfo: {
       title: 'Find Information',
       subtitle: 'Find information',
@@ -755,13 +814,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'AI handles your inquiry first, then connects you to a live operator for complex matters or questions involving personal information.',
         unavailableAlert:
           'A phone number has not been configured for AI phone consultation.',
-      },
-      chat: {
-        title: 'AI Chat Consultation',
-        description:
-          'AI answers your inquiry in a chat format. For advanced questions or matters involving personal information, we connect you to the appropriate contact.',
-        unavailableAlert:
-          'A destination has not been configured for AI chat consultation.',
       },
       lifeInfo: {
         sectionLabel: 'Daily Life',
@@ -1060,7 +1112,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       users: 'User Management',
       newUser: 'Create User',
       passwordResets: 'Reset Requests',
-      phoneNumbers: 'Phone & AI Chat',
+      phoneSettings: 'Phone Management',
+      chatSettings: 'AI Chat Management',
       languageSettings: 'Languages',
       settingsMenu: 'Settings',
       userListTitle: 'User Management',
@@ -1105,6 +1158,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
         errors: {
           AUTHENTICATION_REQUIRED: 'Please sign in.',
           ADMINISTRATOR_REQUIRED: 'Administrator access is required.',
+          PASSWORD_CHANGE_REQUIRED:
+            'Change your password before updating settings.',
           INVALID_REQUEST: 'Please review the entered values.',
           INVALID_REPRESENTATIVE_PHONE_DISPLAY:
             'The representative phone display contains unsupported characters.',
@@ -1112,20 +1167,24 @@ export const dictionaries: Record<Locale, Dictionary> = {
             'Enter the representative dialing number in E.164 format.',
           INVALID_AI_PHONE_E164:
             'Enter each AI phone number in E.164 format.',
-          INVALID_CAMPAIGN_URL:
-            'Enter a valid HTTPS Campaign URL.',
-          INVALID_VIRTUAL_AGENT_WEB_TAG:
-            'Enter a valid Web Tag issued by Zoom.',
+          INVALID_ZOOM_CAMPAIGN_WEB_TAG:
+            'Enter a valid Web Tag issued from Zoom Campaign settings in the Campaign field.',
+          INVALID_ZOOM_CONTACT_CENTER_WEB_TAG:
+            'Enter a valid Web Tag containing data-chat-entry-id in the Contact Center Entry ID field.',
+          ACTIVE_ZOOM_CHAT_TAG_REQUIRED:
+            'Enter a Web Tag for the selected chat method.',
+          INVALID_CHAT_MEMO:
+            'Each administration memo must be 4,000 characters or fewer.',
           INVALID_LANGUAGE_SETTINGS:
             'Include each of the five languages exactly once.',
           JAPANESE_REQUIRED: 'Japanese cannot be disabled.',
           SETTINGS_SAVE_FAILED: 'Unable to save settings.',
         },
       },
-      contactSettings: {
-        title: 'Phone and AI Chat Management',
+      phoneManagement: {
+        title: 'Phone Management',
         description:
-          'Configure the representative phone, AI phone, Zoom Virtual Agent Web Tag, and chat destinations.',
+          'Configure the representative phone and the AI consultation number used for each site language.',
         representativeTitle: 'Representative Phone',
         representativeDescription:
           'Configure the number shown in the shared footer and the number used for dialing.',
@@ -1137,17 +1196,56 @@ export const dictionaries: Record<Locale, Dictionary> = {
         aiPhoneDescription:
           'Set the phone number dialed for each selected site language. A blank value is saved as not configured.',
         aiPhoneLabel: 'AI phone number (E.164)',
-        webTagTitle: 'Zoom Virtual Agent Web Tag',
-        webTagDescription:
-          'Paste the complete script shown under Embed Web Tag in the Zoom Campaign settings. Leave it blank to disable the chat launcher on the public site.',
-        webTagLabel: 'Web Tag (script tag)',
-        webTagHelp:
-          'The Zoom HTTPS source, public API key, and environment are validated before saving. Paste the complete script tag, not only the API key.',
-        virtualAgentTitle: 'AI Chat Consultation',
-        virtualAgentDescription:
-          'Set the Zoom Virtual Agent Full-page / Offsite Campaign URL. A blank value is saved as not configured.',
-        campaignUrlLabel: 'Campaign URL (HTTPS)',
         hidden: 'Hidden',
+      },
+      chatManagement: {
+        title: 'AI Chat Management',
+        description:
+          'Choose the Zoom chat method used on the public site and configure both Web Tags. Settings for the inactive method are also retained.',
+        activeModeTitle: 'Method used on the public site',
+        activeModeDescription:
+          'Select one method. Switching methods does not erase the saved Campaign or Entry ID values.',
+        active: 'Active',
+        inactive: 'Not active',
+        modes: {
+          disabled: {
+            label: 'Do not use',
+            description:
+              'Do not load the Zoom chat SDK on the public site. Saved tags are retained.',
+          },
+          campaign: {
+            label: 'Campaign',
+            description:
+              'Display chat according to the target URLs and delivery rules configured in Zoom Campaigns.',
+          },
+          contactCenterEntryId: {
+            label: 'Contact Center Entry ID',
+            description:
+              'Start chat with the Entry ID for a specific Contact Center flow.',
+          },
+        },
+        campaign: {
+          title: 'Campaign',
+          description:
+            'Paste the tag copied from Contact Center Management > Campaigns > Embed Web Tag in the Zoom admin portal.',
+          webTagLabel: 'Campaign Web Tag (Embed Web Tag)',
+          webTagHelp:
+            'Paste the complete script tag. Tags containing data-chat-entry-id are not valid in this field.',
+          memoLabel: 'Campaign memo (optional)',
+          memoHelp:
+            'Internal memo for administrators. It is not displayed or used on the public site (maximum 4,000 characters).',
+        },
+        contactCenterEntryId: {
+          title: 'Contact Center Entry ID',
+          description:
+            'Paste the tag copied from Start > Manage Entry Point > Import SDK for the target flow.',
+          webTagLabel: 'Contact Center Web Tag (Import SDK)',
+          webTagHelp:
+            'Paste the complete script tag. The tag in this field must contain data-chat-entry-id.',
+          memoLabel: 'Contact Center memo (optional)',
+          memoHelp:
+            'Internal memo for administrators. It is not displayed or used on the public site (maximum 4,000 characters).',
+        },
       },
       languageManagement: {
         title: 'Language Management',
@@ -1173,10 +1271,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
       light: '浅色',
       dark: '深色',
     },
-    headerCompact: {
-      notFound: '找不到想要的信息时',
-      consultAi: '咨询 AI 接线员',
-    },
     findInfo: {
       title: '查找信息',
       subtitle: 'Find information',
@@ -1186,12 +1280,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
         description:
           '由 AI 进行首次应答，高级咨询或涉及个人信息的咨询将转接至人工坐席。',
         unavailableAlert: '尚未设置 AI 电话咨询的电话号码。',
-      },
-      chat: {
-        title: 'AI 聊天咨询',
-        description:
-          '由 AI 以聊天形式解答咨询内容。对于高级问题或涉及个人信息的咨询，将为您转接至合适的咨询窗口。',
-        unavailableAlert: '尚未设置 AI 聊天咨询的连接地址。',
       },
       lifeInfo: {
         sectionLabel: '生活信息',
@@ -1476,7 +1564,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       users: '用户管理',
       newUser: '创建用户',
       passwordResets: '重置申请',
-      phoneNumbers: '电话与AI聊天管理',
+      phoneSettings: '电话管理',
+      chatSettings: 'AI聊天管理',
       languageSettings: '语言管理',
       settingsMenu: '设置',
       userListTitle: '用户管理',
@@ -1519,24 +1608,29 @@ export const dictionaries: Record<Locale, Dictionary> = {
         errors: {
           AUTHENTICATION_REQUIRED: '请先登录。',
           ADMINISTRATOR_REQUIRED: '需要管理员权限。',
+          PASSWORD_CHANGE_REQUIRED: '请先更改密码，再更新设置。',
           INVALID_REQUEST: '请检查输入内容。',
           INVALID_REPRESENTATIVE_PHONE_DISPLAY:
             '代表电话号码的显示值包含不支持的字符。',
           INVALID_REPRESENTATIVE_PHONE_E164:
             '请以E.164格式输入代表电话的拨号号码。',
           INVALID_AI_PHONE_E164: '请以E.164格式输入AI电话号码。',
-          INVALID_CAMPAIGN_URL: '请输入有效的HTTPS Campaign URL。',
-          INVALID_VIRTUAL_AGENT_WEB_TAG:
-            '请输入Zoom签发的有效Web Tag。',
+          INVALID_ZOOM_CAMPAIGN_WEB_TAG:
+            '请在Campaign字段中输入由Zoom Campaign设置签发的有效Web Tag。',
+          INVALID_ZOOM_CONTACT_CENTER_WEB_TAG:
+            '请在Contact Center Entry ID字段中输入包含data-chat-entry-id的有效Web Tag。',
+          ACTIVE_ZOOM_CHAT_TAG_REQUIRED:
+            '请输入所选聊天方式的Web Tag。',
+          INVALID_CHAT_MEMO: '管理备注不能超过4,000个字符。',
           INVALID_LANGUAGE_SETTINGS: '请将5种语言各指定一次且不要重复。',
           JAPANESE_REQUIRED: '不能停用日语。',
           SETTINGS_SAVE_FAILED: '无法保存设置。',
         },
       },
-      contactSettings: {
-        title: '电话与AI聊天管理',
+      phoneManagement: {
+        title: '电话管理',
         description:
-          '设置代表电话、AI电话、Zoom Virtual Agent Web Tag以及聊天连接地址。',
+          '设置代表电话以及公开网站各语言使用的AI电话咨询号码。',
         representativeTitle: '代表电话',
         representativeDescription:
           '设置在共用页脚中显示的电话号码以及拨号时使用的号码。',
@@ -1548,17 +1642,56 @@ export const dictionaries: Record<Locale, Dictionary> = {
         aiPhoneDescription:
           '按公开网站当前选择的语言设置拨打号码。留空时保存为未设置。',
         aiPhoneLabel: 'AI电话号码（E.164）',
-        webTagTitle: 'Zoom Virtual Agent Web Tag',
-        webTagDescription:
-          '请粘贴Zoom Campaign设置中“Embed Web Tag”显示的完整script标签。留空将停用公开网站上的聊天启动器。',
-        webTagLabel: 'Web Tag（script标签）',
-        webTagHelp:
-          '保存前会验证Zoom HTTPS来源、公共API密钥和环境。请粘贴完整script标签，而不是仅粘贴API密钥。',
-        virtualAgentTitle: 'AI 聊天咨询',
-        virtualAgentDescription:
-          '设置Zoom Virtual Agent的Full-page / Offsite Campaign URL。留空时保存为未设置。',
-        campaignUrlLabel: 'Campaign URL（HTTPS）',
         hidden: '已隐藏',
+      },
+      chatManagement: {
+        title: 'AI聊天管理',
+        description:
+          '设置公开网站使用的Zoom聊天方式以及两种方式各自的Web Tag。未选中方式的设置也会保留。',
+        activeModeTitle: '公开网站使用的方式',
+        activeModeDescription:
+          '请选择一种方式。切换方式不会清除已保存的Campaign或Entry ID内容。',
+        active: '使用中',
+        inactive: '未使用',
+        modes: {
+          disabled: {
+            label: '不使用',
+            description:
+              '公开网站不加载Zoom聊天SDK。已保存的标签会继续保留。',
+          },
+          campaign: {
+            label: 'Campaign',
+            description:
+              '按照Zoom Campaign中设置的目标URL和投放条件显示聊天。',
+          },
+          contactCenterEntryId: {
+            label: 'Contact Center Entry ID',
+            description:
+              '使用指定Contact Center流程的Entry ID启动聊天。',
+          },
+        },
+        campaign: {
+          title: 'Campaign',
+          description:
+            '请粘贴从Zoom管理页面的“Contact Center Management > Campaigns > Embed Web Tag”复制的标签。',
+          webTagLabel: 'Campaign Web Tag（Embed Web Tag）',
+          webTagHelp:
+            '请粘贴完整的script标签。此字段不能使用包含data-chat-entry-id的标签。',
+          memoLabel: 'Campaign备注（可选）',
+          memoHelp:
+            '供管理员使用的内部备注，不会在公开网站上显示或用于其运行（最多4,000个字符）。',
+        },
+        contactCenterEntryId: {
+          title: 'Contact Center Entry ID',
+          description:
+            '请粘贴从目标流程的“Start > Manage Entry Point > Import SDK”复制的标签。',
+          webTagLabel: 'Contact Center Web Tag（Import SDK）',
+          webTagHelp:
+            '请粘贴完整的script标签。此字段中的标签必须包含data-chat-entry-id。',
+          memoLabel: 'Contact Center备注（可选）',
+          memoHelp:
+            '供管理员使用的内部备注，不会在公开网站上显示或用于其运行（最多4,000个字符）。',
+        },
       },
       languageManagement: {
         title: '语言管理',
@@ -1583,10 +1716,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
       light: '淺色',
       dark: '深色',
     },
-    headerCompact: {
-      notFound: '找不到想要的資訊時',
-      consultAi: '諮詢 AI 客服員',
-    },
     findInfo: {
       title: '尋找資訊',
       subtitle: 'Find information',
@@ -1596,12 +1725,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
         description:
           '由 AI 進行初次應答，高度諮詢或涉及個人資訊的諮詢將轉接至真人客服。',
         unavailableAlert: '尚未設定 AI 電話諮詢的電話號碼。',
-      },
-      chat: {
-        title: 'AI 聊天諮詢',
-        description:
-          '由 AI 以聊天形式回覆諮詢內容。對於高度問題或涉及個人資訊的諮詢，將為您轉接至合適的諮詢窗口。',
-        unavailableAlert: '尚未設定 AI 聊天諮詢的連線位址。',
       },
       lifeInfo: {
         sectionLabel: '生活資訊',
@@ -1886,7 +2009,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       users: '使用者管理',
       newUser: '建立使用者',
       passwordResets: '重設申請',
-      phoneNumbers: '電話與AI聊天管理',
+      phoneSettings: '電話管理',
+      chatSettings: 'AI聊天管理',
       languageSettings: '語言管理',
       settingsMenu: '設定',
       userListTitle: '使用者管理',
@@ -1929,24 +2053,29 @@ export const dictionaries: Record<Locale, Dictionary> = {
         errors: {
           AUTHENTICATION_REQUIRED: '請先登入。',
           ADMINISTRATOR_REQUIRED: '需要管理員權限。',
+          PASSWORD_CHANGE_REQUIRED: '請先變更密碼，再更新設定。',
           INVALID_REQUEST: '請檢查輸入內容。',
           INVALID_REPRESENTATIVE_PHONE_DISPLAY:
             '代表電話號碼的顯示值包含不支援的字元。',
           INVALID_REPRESENTATIVE_PHONE_E164:
             '請以E.164格式輸入代表電話的撥號號碼。',
           INVALID_AI_PHONE_E164: '請以E.164格式輸入AI電話號碼。',
-          INVALID_CAMPAIGN_URL: '請輸入有效的HTTPS Campaign URL。',
-          INVALID_VIRTUAL_AGENT_WEB_TAG:
-            '請輸入Zoom簽發的有效Web Tag。',
+          INVALID_ZOOM_CAMPAIGN_WEB_TAG:
+            '請在Campaign欄位中輸入由Zoom Campaign設定簽發的有效Web Tag。',
+          INVALID_ZOOM_CONTACT_CENTER_WEB_TAG:
+            '請在Contact Center Entry ID欄位中輸入包含data-chat-entry-id的有效Web Tag。',
+          ACTIVE_ZOOM_CHAT_TAG_REQUIRED:
+            '請輸入所選聊天方式的Web Tag。',
+          INVALID_CHAT_MEMO: '管理備註不能超過4,000個字元。',
           INVALID_LANGUAGE_SETTINGS: '請將5種語言各指定一次且不要重複。',
           JAPANESE_REQUIRED: '不能停用日語。',
           SETTINGS_SAVE_FAILED: '無法儲存設定。',
         },
       },
-      contactSettings: {
-        title: '電話與AI聊天管理',
+      phoneManagement: {
+        title: '電話管理',
         description:
-          '設定代表電話、AI電話、Zoom Virtual Agent Web Tag以及聊天連線位址。',
+          '設定代表電話以及公開網站各語言使用的AI電話諮詢號碼。',
         representativeTitle: '代表電話',
         representativeDescription:
           '設定在共用頁尾顯示的電話號碼以及撥號時使用的號碼。',
@@ -1958,17 +2087,56 @@ export const dictionaries: Record<Locale, Dictionary> = {
         aiPhoneDescription:
           '依公開網站目前選擇的語言設定撥打號碼。留白時儲存為未設定。',
         aiPhoneLabel: 'AI電話號碼（E.164）',
-        webTagTitle: 'Zoom Virtual Agent Web Tag',
-        webTagDescription:
-          '請貼上Zoom Campaign設定中「Embed Web Tag」顯示的完整script標籤。留白將停用公開網站上的聊天啟動器。',
-        webTagLabel: 'Web Tag（script標籤）',
-        webTagHelp:
-          '儲存前會驗證Zoom HTTPS來源、公開API金鑰和環境。請貼上完整script標籤，而不是只貼上API金鑰。',
-        virtualAgentTitle: 'AI 聊天諮詢',
-        virtualAgentDescription:
-          '設定Zoom Virtual Agent的Full-page / Offsite Campaign URL。留白時儲存為未設定。',
-        campaignUrlLabel: 'Campaign URL（HTTPS）',
         hidden: '已隱藏',
+      },
+      chatManagement: {
+        title: 'AI聊天管理',
+        description:
+          '設定公開網站使用的Zoom聊天方式以及兩種方式各自的Web Tag。未選取方式的設定也會保留。',
+        activeModeTitle: '公開網站使用的方式',
+        activeModeDescription:
+          '請選擇一種方式。切換方式不會清除已儲存的Campaign或Entry ID內容。',
+        active: '使用中',
+        inactive: '未使用',
+        modes: {
+          disabled: {
+            label: '不使用',
+            description:
+              '公開網站不載入Zoom聊天SDK。已儲存的標籤會繼續保留。',
+          },
+          campaign: {
+            label: 'Campaign',
+            description:
+              '依照Zoom Campaign中設定的目標URL和投放條件顯示聊天。',
+          },
+          contactCenterEntryId: {
+            label: 'Contact Center Entry ID',
+            description:
+              '使用指定Contact Center流程的Entry ID啟動聊天。',
+          },
+        },
+        campaign: {
+          title: 'Campaign',
+          description:
+            '請貼上從Zoom管理頁面的「Contact Center Management > Campaigns > Embed Web Tag」複製的標籤。',
+          webTagLabel: 'Campaign Web Tag（Embed Web Tag）',
+          webTagHelp:
+            '請貼上完整的script標籤。此欄位不能使用包含data-chat-entry-id的標籤。',
+          memoLabel: 'Campaign備註（選填）',
+          memoHelp:
+            '供管理員使用的內部備註，不會在公開網站上顯示或用於其運作（最多4,000個字元）。',
+        },
+        contactCenterEntryId: {
+          title: 'Contact Center Entry ID',
+          description:
+            '請貼上從目標流程的「Start > Manage Entry Point > Import SDK」複製的標籤。',
+          webTagLabel: 'Contact Center Web Tag（Import SDK）',
+          webTagHelp:
+            '請貼上完整的script標籤。此欄位中的標籤必須包含data-chat-entry-id。',
+          memoLabel: 'Contact Center備註（選填）',
+          memoHelp:
+            '供管理員使用的內部備註，不會在公開網站上顯示或用於其運作（最多4,000個字元）。',
+        },
       },
       languageManagement: {
         title: '語言管理',
@@ -1993,10 +2161,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
       light: '라이트',
       dark: '다크',
     },
-    headerCompact: {
-      notFound: '원하는 정보를 찾지 못할 때',
-      consultAi: 'AI 오퍼레이터 상담',
-    },
     findInfo: {
       title: '정보 찾기',
       subtitle: 'Find information',
@@ -2006,12 +2170,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
         description:
           '상담 내용을 AI가 1차 응대하며, 고도의 상담이나 개인정보와 관련된 상담은 상담원에게 연결해 드립니다.',
         unavailableAlert: 'AI 전화 상담 전화번호가 설정되어 있지 않습니다.',
-      },
-      chat: {
-        title: 'AI 채팅 상담',
-        description:
-          '상담 내용을 AI가 채팅 형식으로 답변해 드립니다. 고도의 질문이나 개인정보와 관련된 상담은 적절한 상담처로 연결해 드립니다.',
-        unavailableAlert: 'AI 채팅 상담 연결 주소가 설정되어 있지 않습니다.',
       },
       lifeInfo: {
         sectionLabel: '생활 정보',
@@ -2296,7 +2454,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       users: '사용자 관리',
       newUser: '사용자 생성',
       passwordResets: '재설정 신청',
-      phoneNumbers: '전화 및 AI 채팅 관리',
+      phoneSettings: '전화 관리',
+      chatSettings: 'AI 채팅 관리',
       languageSettings: '언어 관리',
       settingsMenu: '설정',
       userListTitle: '사용자 관리',
@@ -2339,6 +2498,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
         errors: {
           AUTHENTICATION_REQUIRED: '로그인이 필요합니다.',
           ADMINISTRATOR_REQUIRED: '관리자 권한이 필요합니다.',
+          PASSWORD_CHANGE_REQUIRED:
+            '설정을 변경하기 전에 비밀번호를 변경해 주세요.',
           INVALID_REQUEST: '입력 내용을 확인해 주세요.',
           INVALID_REPRESENTATIVE_PHONE_DISPLAY:
             '대표 전화번호 표시값에 지원되지 않는 문자가 포함되어 있습니다.',
@@ -2346,20 +2507,24 @@ export const dictionaries: Record<Locale, Dictionary> = {
             '대표 전화 발신 번호를 E.164 형식으로 입력해 주세요.',
           INVALID_AI_PHONE_E164:
             'AI 전화번호를 E.164 형식으로 입력해 주세요.',
-          INVALID_CAMPAIGN_URL:
-            '유효한 HTTPS Campaign URL을 입력해 주세요.',
-          INVALID_VIRTUAL_AGENT_WEB_TAG:
-            'Zoom에서 발급한 유효한 Web Tag를 입력해 주세요.',
+          INVALID_ZOOM_CAMPAIGN_WEB_TAG:
+            'Campaign 필드에 Zoom Campaign 설정에서 발급한 유효한 Web Tag를 입력해 주세요.',
+          INVALID_ZOOM_CONTACT_CENTER_WEB_TAG:
+            'Contact Center Entry ID 필드에 data-chat-entry-id가 포함된 유효한 Web Tag를 입력해 주세요.',
+          ACTIVE_ZOOM_CHAT_TAG_REQUIRED:
+            '선택한 채팅 방식의 Web Tag를 입력해 주세요.',
+          INVALID_CHAT_MEMO:
+            '관리 메모는 4,000자 이내로 입력해 주세요.',
           INVALID_LANGUAGE_SETTINGS:
             '5개 언어를 중복 없이 한 번씩 지정해 주세요.',
           JAPANESE_REQUIRED: '일본어는 비활성화할 수 없습니다.',
           SETTINGS_SAVE_FAILED: '설정을 저장할 수 없습니다.',
         },
       },
-      contactSettings: {
-        title: '전화 및 AI 채팅 관리',
+      phoneManagement: {
+        title: '전화 관리',
         description:
-          '대표 전화, AI 전화, Zoom Virtual Agent Web Tag 및 채팅 연결 대상을 설정합니다.',
+          '대표 전화와 공개 사이트의 각 언어에서 사용할 AI 전화 상담 번호를 설정합니다.',
         representativeTitle: '대표 전화',
         representativeDescription:
           '공통 푸터에 표시할 전화번호와 발신에 사용할 번호를 설정합니다.',
@@ -2371,17 +2536,56 @@ export const dictionaries: Record<Locale, Dictionary> = {
         aiPhoneDescription:
           '공개 사이트에서 선택한 언어에 따라 발신할 번호를 설정합니다. 빈칸은 미설정으로 저장됩니다.',
         aiPhoneLabel: 'AI 전화번호(E.164)',
-        webTagTitle: 'Zoom Virtual Agent Web Tag',
-        webTagDescription:
-          'Zoom Campaign 설정의 Embed Web Tag에 표시되는 전체 script 태그를 붙여 넣으세요. 비워 두면 공개 사이트의 채팅 런처가 비활성화됩니다.',
-        webTagLabel: 'Web Tag(script 태그)',
-        webTagHelp:
-          '저장 전에 Zoom HTTPS 소스, 공개 API 키 및 환경을 검증합니다. API 키만이 아니라 전체 script 태그를 붙여 넣으세요.',
-        virtualAgentTitle: 'AI 채팅 상담',
-        virtualAgentDescription:
-          'Zoom Virtual Agent의 Full-page / Offsite Campaign URL을 설정합니다. 빈칸은 미설정으로 저장됩니다.',
-        campaignUrlLabel: 'Campaign URL(HTTPS)',
         hidden: '숨김',
+      },
+      chatManagement: {
+        title: 'AI 채팅 관리',
+        description:
+          '공개 사이트에서 사용할 Zoom 채팅 방식과 각 방식의 Web Tag를 설정합니다. 선택하지 않은 방식의 설정도 유지됩니다.',
+        activeModeTitle: '공개 사이트에서 사용할 방식',
+        activeModeDescription:
+          '한 가지 방식을 선택하세요. 방식을 전환해도 저장된 Campaign 및 Entry ID 값은 삭제되지 않습니다.',
+        active: '사용 중',
+        inactive: '사용 안 함',
+        modes: {
+          disabled: {
+            label: '사용하지 않음',
+            description:
+              '공개 사이트에서 Zoom 채팅 SDK를 로드하지 않습니다. 저장된 태그는 유지됩니다.',
+          },
+          campaign: {
+            label: 'Campaign',
+            description:
+              'Zoom Campaign에 설정된 대상 URL 및 노출 조건에 따라 채팅을 표시합니다.',
+          },
+          contactCenterEntryId: {
+            label: 'Contact Center Entry ID',
+            description:
+              '지정한 Contact Center 플로의 Entry ID를 사용해 채팅을 시작합니다.',
+          },
+        },
+        campaign: {
+          title: 'Campaign',
+          description:
+            'Zoom 관리 화면의 Contact Center Management > Campaigns > Embed Web Tag에서 복사한 태그를 붙여 넣으세요.',
+          webTagLabel: 'Campaign Web Tag(Embed Web Tag)',
+          webTagHelp:
+            '전체 script 태그를 붙여 넣으세요. 이 필드에서는 data-chat-entry-id가 포함된 태그를 사용할 수 없습니다.',
+          memoLabel: 'Campaign 메모(선택 사항)',
+          memoHelp:
+            '관리자용 내부 메모입니다. 공개 사이트에 표시되거나 동작에 사용되지 않습니다(최대 4,000자).',
+        },
+        contactCenterEntryId: {
+          title: 'Contact Center Entry ID',
+          description:
+            '대상 플로의 Start > Manage Entry Point > Import SDK에서 복사한 태그를 붙여 넣으세요.',
+          webTagLabel: 'Contact Center Web Tag(Import SDK)',
+          webTagHelp:
+            '전체 script 태그를 붙여 넣으세요. 이 필드의 태그에는 data-chat-entry-id가 필요합니다.',
+          memoLabel: 'Contact Center 메모(선택 사항)',
+          memoHelp:
+            '관리자용 내부 메모입니다. 공개 사이트에 표시되거나 동작에 사용되지 않습니다(최대 4,000자).',
+        },
       },
       languageManagement: {
         title: '언어 관리',

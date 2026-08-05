@@ -22,6 +22,12 @@ enum SiteLocale {
   KO
 }
 
+enum ZoomChatMode {
+  DISABLED
+  CAMPAIGN
+  CONTACT_CENTER_ENTRY_ID
+}
+
 model user {
   id                        String    @id
   name                      String
@@ -122,23 +128,33 @@ model PasswordResetRequest {
   @@map("password_reset_requests")
 }
 
-model SiteContactSetting {
+model SitePhoneSetting {
   id                         Int      @id @default(1)
   representativePhoneDisplay String
   representativePhoneE164    String
-  zoomVirtualAgentWebTag     String?
   updatedAt                  DateTime @default(now()) @updatedAt
 
-  @@map("site_contact_settings")
+  @@map("site_phone_settings")
 }
 
-model LocalizedAiContactSetting {
-  locale                  SiteLocale @id
-  aiPhoneE164             String?
-  virtualAgentCampaignUrl String?
-  updatedAt               DateTime   @default(now()) @updatedAt
+model LocalizedAiPhoneSetting {
+  locale      SiteLocale @id
+  aiPhoneE164 String?
+  updatedAt   DateTime   @default(now()) @updatedAt
 
-  @@map("localized_ai_contact_settings")
+  @@map("localized_ai_phone_settings")
+}
+
+model SiteChatSetting {
+  id                         Int          @id @default(1)
+  activeMode                 ZoomChatMode @default(DISABLED)
+  campaignWebTag             String?
+  campaignMemo               String?
+  contactCenterEntryIdWebTag String?
+  contactCenterEntryIdMemo   String?
+  updatedAt                  DateTime     @default(now()) @updatedAt
+
+  @@map("site_chat_settings")
 }
 
 model LocaleDisplaySetting {
