@@ -203,6 +203,8 @@ configure_web_access() {
   local local_origin="http://localhost:${host_port}"
   local lan_ip=""
   local lan_origin=""
+  local tunnel_origin="https://zoom.keien.dev"
+  local tunnel_hostname="zoom.keien.dev"
   local answer
   local tty_fd
 
@@ -230,7 +232,8 @@ configure_web_access() {
           print -r -- "  2) Same network: unavailable (LAN IPv4 not detected)"
         fi
 
-        printf "Select [1/2]: "
+        print -r -- "  3) Cloudflare Tunnel: ${tunnel_origin}"
+        printf "Select [1/2/3]: "
       } >&${tty_fd}; then
         exec {tty_fd}>&-
         print -u2 "Could not display the web access selection. Aborting before compose startup."
@@ -256,8 +259,16 @@ configure_web_access() {
           fi
           break
           ;;
+        3)
+          if [[ "${host_port}" != "3000" ]]; then
+            exec {tty_fd}>&-
+            print -u2 "Cloudflare Tunnel requires HOST_PORT=3000 to match ~/.cloudflared/config.yml."
+            return 1
+          fi
+          break
+          ;;
         *)
-          print -u2 "Enter 1 or 2."
+          print -u2 "Enter 1, 2, or 3."
           ;;
       esac
     done
@@ -269,6 +280,10 @@ configure_web_access() {
     export WEB_BIND_ADDRESS="0.0.0.0"
     export WEB_ORIGIN="${lan_origin}"
     export NEXT_ALLOWED_DEV_ORIGIN="${lan_ip}"
+  elif [[ "${answer}" == "3" ]]; then
+    export WEB_BIND_ADDRESS="127.0.0.1"
+    export WEB_ORIGIN="${tunnel_origin}"
+    export NEXT_ALLOWED_DEV_ORIGIN="${tunnel_hostname}"
   else
     export WEB_BIND_ADDRESS="127.0.0.1"
     export WEB_ORIGIN="${local_origin}"
