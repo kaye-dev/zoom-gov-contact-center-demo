@@ -1,57 +1,57 @@
 {
-  "sourceDigest": "c616e7affed9c14686b527dfb38fe0f996010e70fb95f552c015ffe9346a4100",
+  "sourceDigest": "13b9c56c50892a6d81544a4dfe26d11d8e86d8dd0612ae3f93fdd1e2f93f1c72",
   "translations": {
     "en": {
       "items": [
         {
           "no": 1,
-          "question": "Can I get advice about Bulky Waste?",
-          "answer": "The Zero Waste Promotion Division of Mirai City provides information about Bulky Waste. The main topics are Bulky Waste. You can find an overview of the program, available service counters, application procedures, required documents, and important points."
+          "question": "What kinds of items are treated as bulky waste?",
+          "answer": "The main topic is bulky waste. Large furniture and durable household goods from a home may be treated as bulky waste, but classification varies by item, material, and size. Check the item on Mirai City's official website or with the Zero Waste Promotion Division before putting it out as ordinary waste."
         },
         {
           "no": 2,
-          "question": "Who or what situations are eligible for Bulky Waste?",
-          "answer": "Eligibility varies by program or procedure. It may include people connected with Bulky Waste, registered residents of Mirai City, and people connected with facilities, roads, projects, or schools in the city."
+          "question": "What should I check before applying for bulky-waste collection?",
+          "answer": "Check the item name, dimensions, quantity, and set-out location. Measuring the longest side and the second-longest side in advance helps the application proceed smoothly."
         },
         {
           "no": 3,
-          "question": "What do I need for the Bulky Waste procedure?",
-          "answer": "You may need an application form, identity verification documents, materials that describe the matter, contact information, and, when necessary, a power of attorney or other supporting documents."
+          "question": "Do I need to apply before putting out bulky waste for collection?",
+          "answer": "Apply for collection through a reception method designated by Mirai City before putting out bulky waste. Do not put it at a collection point before applying, and follow the instructions provided during the application."
         },
         {
           "no": 4,
-          "question": "Where can I complete the Bulky Waste procedure?",
-          "answer": "Depending on the location and nature of the matter, use the official website guidance, a dedicated reception channel, an online application, telephone, or a request for an on-site inspection."
+          "question": "Where should bulky waste be placed at an apartment or condominium?",
+          "answer": "The building manager or management association may specify the set-out location. Confirm the designated place before applying and state the location during the application. Do not leave bulky waste inside the building or in a shared corridor."
         },
         {
           "no": 5,
-          "question": "Are there any deadlines or application periods for Bulky Waste?",
-          "answer": "An application, recruitment, lottery, or renewal period may be specified. Check the latest schedule on Mirai City's official website or with the responsible department."
+          "question": "What is the standard process for putting out bulky waste?",
+          "answer": "Check the item, dimensions, quantity, and set-out location, then apply for collection. Confirm the collection date and fee provided during the application, pay as instructed or buy a disposal ticket, enter the required information, attach it to the item, and put the item at the designated time and place."
         },
         {
           "no": 6,
-          "question": "Are there any fees for Bulky Waste?",
-          "answer": "Usage, service, processing, medical, or cancellation fees may apply. Charges vary by program, facility, and user category."
+          "question": "When will I learn the bulky-waste collection date and fee?",
+          "answer": "The collection date and fee are provided during the application after the item and dimensions have been checked. This FAQ cannot confirm an exact fee or collection availability, so check the information provided by the official application channel."
         },
         {
           "no": 7,
-          "question": "Can a representative or family member complete the Bulky Waste procedure?",
-          "answer": "A representative or family member may be able to complete the procedure. However, identity verification documents, a power of attorney, and documents showing the relationship to the person concerned may be required. A procedure that requires confirmation of the person's intent may not be completed by a representative."
+          "question": "How should I pay and obtain a bulky-waste disposal ticket?",
+          "answer": "Follow the payment method provided during the application. If a disposal ticket is required, buy Mirai City-designated tickets for the amount stated in the instructions from an authorized retailer. Confirm the ticket type and required amount before paying."
         },
         {
           "no": 8,
-          "question": "What should I do if I need to change information or request reissuance for Bulky Waste?",
-          "answer": "If you need to make a change, request reissuance, cancel, withdraw, or submit additional material, prepare the reference number, notice, identity verification documents, and materials describing the change, then contact the responsible department."
+          "question": "Where should I attach the disposal ticket, and when should I put out the item?",
+          "answer": "Enter the required information specified during the application on the disposal ticket and attach it where collection staff can easily see it and it will not come off. Put the item at the designated set-out location by the date and time specified during the application."
         },
         {
           "no": 9,
-          "question": "Can I complete an application or reservation for Bulky Waste through this chat?",
-          "answer": "This chat can provide general guidance, but it cannot finalize an application or reservation, issue a certificate, conduct an individual review, verify identity, or determine eligibility for a benefit. Complete the formal procedure through the designated service counter, online application, postal mail, or reservation system."
+          "question": "Can this chat finalize my bulky-waste collection application?",
+          "answer": "This chat can explain the standard disposal process, but it cannot confirm a reservation, calculate a fee, issue an application number, or send an application-completion email. Apply through an official reception method designated by Mirai City."
         },
         {
           "no": 10,
-          "question": "What should I do if the chat response does not answer my question about Bulky Waste?",
-          "answer": "If the referenced knowledge does not provide enough information, do not make assumptions. Check the latest main telephone number in the footer of the Mirai City official website (zoom-gov-contact-center-demo) and ask to be connected to the Zero Waste Promotion Division. Programs and application status may change. Check with the responsible department or on the official website for current information, decisions on individual cases, confirmed reservations, and review results."
+          "question": "Can I receive help if I cannot carry bulky waste out of my home?",
+          "answer": "This FAQ does not contain the eligibility requirements or information needed for an individual decision about carry-out assistance. Do not guess. Check the latest main telephone number in the footer of the Mirai City official website (zoom-gov-contact-center-demo) and ask to be connected to the Zero Waste Promotion Division."
         }
       ]
     },
@@ -59,53 +59,53 @@
       "items": [
         {
           "no": 1,
-          "question": "可以咨询有关大件垃圾的问题吗？",
-          "answer": "未来市的零废弃物推进课提供大件垃圾相关信息。主要内容包括大件垃圾。您可以确认制度概要、可利用的服务窗口、申请方法、所需材料及注意事项。"
+          "question": "哪些物品属于大件垃圾？",
+          "answer": "主要内容是大件垃圾。家庭产生的大型家具和耐用消费品等可能属于大件垃圾，但会根据品目、材质和尺寸等进行判断。作为普通垃圾投放前，请在未来市官方网站或向零废弃物推进课确认品目。"
         },
         {
           "no": 2,
-          "question": "请告诉我哪些人员或情况属于大件垃圾的适用对象。",
-          "answer": "适用对象因制度或手续而异。与大件垃圾有关的人员、在未来市办理居民登记的人员，以及与市内设施、道路、项目或学校等有关的人员，可能属于适用对象。"
+          "question": "申请大件垃圾收集前应确认哪些信息？",
+          "answer": "请确认品目名称、尺寸、数量和投放地点。事先测量最长边和第二长边，可以使申请时的确认更加顺利。"
         },
         {
           "no": 3,
-          "question": "办理大件垃圾需要准备什么？",
-          "answer": "可能需要申请表、身份证明材料、能够说明相关事项的资料、联系方式，以及视情况所需的委托书或其他相关资料。"
+          "question": "投放大件垃圾前需要事先申请收集吗？",
+          "answer": "请在投放大件垃圾前，通过未来市指定的受理方式申请收集。申请前请勿将物品放到垃圾投放点，并按照申请时提供的步骤办理。"
         },
         {
           "no": 4,
-          "question": "可以在哪里办理大件垃圾？",
-          "answer": "可根据相关地点和事项内容，使用官方网站指引、专用受理渠道、在线申请、电话或现场确认申请等方式。"
+          "question": "公寓或集合住宅的大件垃圾应放在哪里？",
+          "answer": "管理人员或业主管理组织可能已经指定投放地点。请在申请前确认指定地点，并在申请时说明投放地点。请勿放在室内或共用走廊。"
         },
         {
           "no": 5,
-          "question": "大件垃圾有办理期限或受理期间吗？",
-          "answer": "可能设有受理期间、招募期间、抽签期间或更新时期。请在未来市官方网站或向主管部门确认最新日程。"
+          "question": "投放大件垃圾的标准流程是什么？",
+          "answer": "请确认品目、尺寸、数量和投放地点后申请收集。确认申请时告知的收集日期和手续费，按指定方式付款或购买处理券，在处理券上填写必要信息并贴在物品上，再于指定日期时间放到指定地点。"
         },
         {
           "no": 6,
-          "question": "办理大件垃圾需要付费吗？",
-          "answer": "可能收取使用费、服务费、手续费、医疗费或取消费用等。费用因制度、设施和使用类别而异。"
+          "question": "何时可以知道大件垃圾的收集日期和手续费？",
+          "answer": "受理方会在确认品目和尺寸等信息后，于申请时告知收集日期和手续费。本FAQ无法确认准确费用或收集名额，请以正式申请渠道提供的信息为准。"
         },
         {
           "no": 7,
-          "question": "代理人或家属也可以办理“大件垃圾”吗？",
-          "answer": "代理人或家属有时可以办理相关手续，但可能需要身份证明材料、委托书及能够确认与当事人关系的资料。需要确认本人意愿的手续，可能无法由代理人完成。"
+          "question": "大件垃圾应如何付款和购买处理券？",
+          "answer": "请按照申请时告知的付款方式办理。需要使用处理券时，请在指定销售点购买申请指引所告知金额的未来市指定处理券。付款前请确认处理券种类和所需金额。"
         },
         {
           "no": 8,
-          "question": "如需变更大件垃圾的内容或重新补发，应如何办理？",
-          "answer": "如需变更、补发、取消、撤回或补交资料，请准备受理编号、通知书、身份证明材料及能够说明变更内容的资料，并向主管部门确认。"
+          "question": "处理券应贴在哪里，何时投放大件垃圾？",
+          "answer": "请在处理券上填写申请时告知的必要信息，并贴在收集人员容易看到且不易脱落的位置。请在申请时指定的日期时间前，将物品放到指定投放地点。"
         },
         {
           "no": 9,
-          "question": "可以通过聊天完成“大件垃圾”的申请或预约吗？",
-          "answer": "本聊天可提供一般性指引，但无法完成申请或预约确认、开具证明、个别审查、身份核实或补助资格判定。正式手续请通过指定窗口、在线申请、邮寄或预约系统办理。"
+          "question": "可以仅通过本聊天完成大件垃圾收集申请吗？",
+          "answer": "本聊天可以说明标准投放方法，但无法确认预约、计算费用、签发受理编号或发送申请完成邮件。请通过未来市指定的正式受理方式申请。"
         },
         {
           "no": 10,
-          "question": "如果聊天回复未能解答我关于大件垃圾的问题，该怎么办？",
-          "answer": "如果所参考的知识库没有足够信息，请勿自行判断。请在未来市官方网站（zoom-gov-contact-center-demo）页面底部确认最新总机号码，并要求转接至零废弃物推进课。制度或受理情况可能发生变化。最新信息、个别情况判断、预约确认及审查结果，请向主管部门或通过官方网站确认。"
+          "question": "无法将大件垃圾搬出室内时，可以获得协助吗？",
+          "answer": "本FAQ不包含搬出协助的适用条件或进行个别判断所需的信息，请勿自行推测。请在未来市官方网站（zoom-gov-contact-center-demo）页面底部确认最新总机号码，并要求转接零废弃物推进课。"
         }
       ]
     },
@@ -113,53 +113,53 @@
       "items": [
         {
           "no": 1,
-          "question": "可以諮詢有關大型垃圾的問題嗎？",
-          "answer": "未來市的零廢棄物推進課提供大型垃圾相關資訊。主要內容包括大型垃圾。您可以確認制度概要、可利用的服務窗口、申請方法、所需文件及注意事項。"
+          "question": "哪些物品屬於大型垃圾？",
+          "answer": "主要內容是大型垃圾。家庭產生的大型家具和耐用消費品等可能屬於大型垃圾，但會根據品目、材質和尺寸等進行判斷。作為一般垃圾投放前，請在未來市官方網站或向零廢棄物推進課確認品目。"
         },
         {
           "no": 2,
-          "question": "請告訴我哪些人員或情況屬於大型垃圾的適用對象。",
-          "answer": "適用對象因制度或手續而異。與大型垃圾有關的人員、在未來市辦理居民登記的人員，以及與市內設施、道路、計畫或學校等有關的人員，可能屬於適用對象。"
+          "question": "申請大型垃圾收集前應確認哪些資訊？",
+          "answer": "請確認品目名稱、尺寸、數量和投放地點。事先測量最長邊和第二長邊，可以使申請時的確認更加順利。"
         },
         {
           "no": 3,
-          "question": "辦理大型垃圾需要準備什麼？",
-          "answer": "可能需要申請表、身分證明文件、能夠說明相關事項的資料、聯絡方式，以及視情況所需的委任書或其他相關資料。"
+          "question": "投放大型垃圾前需要事先申請收集嗎？",
+          "answer": "請在投放大型垃圾前，透過未來市指定的受理方式申請收集。申請前請勿將物品放到垃圾投放點，並按照申請時提供的步驟辦理。"
         },
         {
           "no": 4,
-          "question": "可以在哪裡辦理大型垃圾？",
-          "answer": "可依相關地點和事項內容，使用官方網站指引、專用受理管道、線上申請、電話或現場確認申請等方式。"
+          "question": "公寓或集合住宅的大型垃圾應放在哪裡？",
+          "answer": "管理人員或管理委員會可能已經指定投放地點。請在申請前確認指定地點，並在申請時說明投放地點。請勿放在室內或共用走廊。"
         },
         {
           "no": 5,
-          "question": "大型垃圾有辦理期限或受理期間嗎？",
-          "answer": "可能設有受理期間、招募期間、抽籤期間或更新時期。請在未來市官方網站或向主管部門確認最新日程。"
+          "question": "投放大型垃圾的標準流程是什麼？",
+          "answer": "請確認品目、尺寸、數量和投放地點後申請收集。確認申請時告知的收集日期和手續費，按指定方式付款或購買處理券，在處理券上填寫必要資訊並貼在物品上，再於指定日期時間放到指定地點。"
         },
         {
           "no": 6,
-          "question": "辦理大型垃圾需要付費嗎？",
-          "answer": "可能收取使用費、服務費、手續費、醫療費或取消費用等。費用因制度、設施和使用類別而異。"
+          "question": "何時可以知道大型垃圾的收集日期和手續費？",
+          "answer": "受理方會在確認品目和尺寸等資訊後，於申請時告知收集日期和手續費。本FAQ無法確認準確費用或收集名額，請以正式申請管道提供的資訊為準。"
         },
         {
           "no": 7,
-          "question": "代理人或家屬也可以辦理「大型垃圾」嗎？",
-          "answer": "代理人或家屬有時可以辦理相關手續，但可能需要身分證明文件、委任書及能夠確認與當事人關係的資料。需要確認本人意願的手續，可能無法由代理人完成。"
+          "question": "大型垃圾應如何付款和購買處理券？",
+          "answer": "請按照申請時告知的付款方式辦理。需要使用處理券時，請在指定銷售點購買申請指引所告知金額的未來市指定處理券。付款前請確認處理券種類和所需金額。"
         },
         {
           "no": 8,
-          "question": "如需變更大型垃圾的內容或重新補發，應如何辦理？",
-          "answer": "如需變更、補發、取消、撤回或補交資料，請準備受理編號、通知書、身分證明文件及能夠說明變更內容的資料，並向主管部門確認。"
+          "question": "處理券應貼在哪裡，何時投放大型垃圾？",
+          "answer": "請在處理券上填寫申請時告知的必要資訊，並貼在收集人員容易看到且不易脫落的位置。請在申請時指定的日期時間前，將物品放到指定投放地點。"
         },
         {
           "no": 9,
-          "question": "可以透過聊天完成「大型垃圾」的申請或預約嗎？",
-          "answer": "本聊天可提供一般性指引，但無法完成申請或預約確認、核發證明、個別審查、身分核實或補助資格判定。正式手續請透過指定窗口、線上申請、郵寄或預約系統辦理。"
+          "question": "可以僅透過本聊天完成大型垃圾收集申請嗎？",
+          "answer": "本聊天可以說明標準投放方法，但無法確認預約、計算費用、核發受理編號或寄送申請完成郵件。請透過未來市指定的正式受理方式申請。"
         },
         {
           "no": 10,
-          "question": "如果聊天回覆未能解答我關於大型垃圾的問題，該怎麼辦？",
-          "answer": "如果所參考的知識庫沒有足夠資訊，請勿自行判斷。請在未來市官方網站（zoom-gov-contact-center-demo）頁面底部確認最新總機號碼，並要求轉接至零廢棄物推進課。制度或受理狀況可能發生變化。最新資訊、個別情況判斷、預約確認及審查結果，請向主管部門或透過官方網站確認。"
+          "question": "無法將大型垃圾搬出室內時，可以獲得協助嗎？",
+          "answer": "本FAQ不包含搬出協助的適用條件或進行個別判斷所需的資訊，請勿自行推測。請在未來市官方網站（zoom-gov-contact-center-demo）頁面底部確認最新總機號碼，並要求轉接零廢棄物推進課。"
         }
       ]
     },
@@ -167,53 +167,53 @@
       "items": [
         {
           "no": 1,
-          "question": "대형 폐기물에 대해 상담할 수 있나요?",
-          "answer": "미래시의 쓰레기 제로 추진과에서는 대형 폐기물에 관한 안내를 제공합니다. 주요 내용은 대형 폐기물입니다. 제도의 개요, 이용 가능한 창구, 신청 방법, 필요 서류 및 유의 사항을 확인할 수 있습니다."
+          "question": "어떤 물건이 대형 폐기물에 해당하나요?",
+          "answer": "주요 내용은 대형 폐기물입니다. 가정에서 나오는 큰 가구나 내구 소비재 등이 대형 폐기물에 해당할 수 있지만 품목, 재질, 크기 등에 따라 판단이 달라집니다. 일반 쓰레기로 배출하기 전에 미래시 공식 웹사이트나 쓰레기 제로 추진과에서 품목을 확인하세요."
         },
         {
           "no": 2,
-          "question": "대형 폐기물의 대상자나 해당 사례를 알려 주세요.",
-          "answer": "대상은 제도나 절차에 따라 다릅니다. 대형 폐기물와 관련된 분, 미래시에 주민등록이 되어 있는 분, 시내 시설·도로·사업·학교 등과 관련된 분이 대상이 될 수 있습니다."
+          "question": "대형 폐기물 수거를 신청하기 전에 무엇을 확인해야 하나요?",
+          "answer": "품목명, 크기, 수량 및 배출 장소를 확인하세요. 가장 긴 변과 두 번째로 긴 변을 미리 측정해 두면 신청할 때 원활하게 확인할 수 있습니다."
         },
         {
           "no": 3,
-          "question": "대형 폐기물 절차에는 무엇이 필요한가요?",
-          "answer": "신청서, 본인 확인 서류, 대상 내용을 확인할 수 있는 자료, 연락처와 필요에 따라 위임장이나 관계 자료 등이 필요할 수 있습니다."
+          "question": "대형 폐기물은 배출 전에 수거 신청이 필요한가요?",
+          "answer": "대형 폐기물을 배출하기 전에 미래시가 안내하는 접수 방법으로 수거를 신청하세요. 신청 전에 집하장에 내놓지 말고 신청할 때 안내받은 절차를 따르세요."
         },
         {
           "no": 4,
-          "question": "대형 폐기물 절차는 어디에서 진행할 수 있나요?",
-          "answer": "대상 장소와 내용에 따라 공식 웹사이트 안내, 전용 접수 창구, 온라인 신청, 전화 또는 현장 확인 요청 등의 방법을 이용합니다."
+          "question": "공동주택에서는 대형 폐기물을 어디에 내놓아야 하나요?",
+          "answer": "관리자나 관리 조합이 배출 장소를 정해 두었을 수 있습니다. 신청 전에 지정 장소를 확인하고 신청할 때 배출 장소를 알려 주세요. 실내나 공용 복도에는 내놓지 마세요."
         },
         {
           "no": 5,
-          "question": "대형 폐기물에 기한이나 접수 기간이 있나요?",
-          "answer": "접수 기간, 모집 기간, 추첨 기간 또는 갱신 시기가 정해져 있을 수 있습니다. 최신 일정은 미래시 공식 웹사이트나 담당 부서에서 확인하세요."
+          "question": "대형 폐기물을 배출하는 표준 절차를 알려 주세요.",
+          "answer": "품목, 크기, 수량 및 배출 장소를 확인한 후 수거를 신청합니다. 신청할 때 안내받은 수거일과 수수료를 확인하고 지정된 방법으로 결제하거나 처리권을 구입합니다. 처리권에 필요한 사항을 적어 물건에 붙이고 지정된 일시와 장소에 내놓습니다."
         },
         {
           "no": 6,
-          "question": "대형 폐기물에 비용이 드나요?",
-          "answer": "이용료, 사용료, 처리 수수료, 진료비 또는 취소 수수료 등이 발생할 수 있습니다. 요금은 제도, 시설 및 이용 구분에 따라 다릅니다."
+          "question": "대형 폐기물의 수거일과 수수료는 언제 알 수 있나요?",
+          "answer": "품목과 크기 등을 확인한 후 신청할 때 수거일과 수수료가 안내됩니다. 이 FAQ에서는 정확한 요금이나 수거 가능 여부를 확인할 수 없으므로 공식 신청 채널에서 제공하는 안내를 확인하세요."
         },
         {
           "no": 7,
-          "question": "대리인이나 가족도 '대형 폐기물' 절차를 진행할 수 있나요?",
-          "answer": "대리인이나 가족이 절차를 진행할 수 있는 경우가 있습니다. 다만 본인 확인 서류, 위임장, 대상자와의 관계를 확인할 수 있는 서류가 필요할 수 있습니다. 본인의 의사 확인이 필요한 절차는 대리로 완료할 수 없는 경우가 있습니다."
+          "question": "대형 폐기물 요금 결제와 처리권 구입은 어떻게 하나요?",
+          "answer": "신청할 때 안내받은 결제 방법을 따르세요. 처리권을 사용하는 경우 안내받은 금액만큼의 미래시 지정 처리권을 취급점에서 구입합니다. 결제하기 전에 처리권 종류와 필요한 금액을 확인하세요."
         },
         {
           "no": 8,
-          "question": "대형 폐기물의 내용 변경이나 재발급이 필요한 경우 어떻게 해야 하나요?",
-          "answer": "변경, 재발급, 취소, 철회 또는 추가 제출이 필요한 경우 접수 번호, 통지서, 본인 확인 서류와 변경 내용을 확인할 수 있는 자료를 준비하여 담당 부서에 문의하세요."
+          "question": "처리권은 어디에 붙이고 대형 폐기물은 언제 내놓아야 하나요?",
+          "answer": "처리권에 신청할 때 안내받은 필요한 사항을 적고 수거하는 사람이 보기 쉽고 떨어지지 않는 곳에 붙이세요. 신청할 때 지정된 일시까지 지정 배출 장소에 내놓으세요."
         },
         {
           "no": 9,
-          "question": "채팅으로 '대형 폐기물' 신청이나 예약을 완료할 수 있나요?",
-          "answer": "이 채팅에서는 일반적인 안내를 제공할 수 있지만 신청 확정, 예약 확정, 증명서 발급, 개별 심사, 본인 확인 또는 지급 가능 여부 판단은 할 수 없습니다. 정식 절차는 지정된 창구, 온라인 신청, 우편 또는 예약 시스템을 이용하세요."
+          "question": "이 채팅만으로 대형 폐기물 수거 신청을 확정할 수 있나요?",
+          "answer": "이 채팅에서는 표준 배출 방법을 안내할 수 있지만 예약 확정, 요금 계산, 접수 번호 발급 또는 신청 완료 이메일 발송은 할 수 없습니다. 미래시가 안내하는 공식 접수 방법으로 신청하세요."
         },
         {
           "no": 10,
-          "question": "대형 폐기물에 관한 채팅 답변으로 궁금증이 해결되지 않으면 어떻게 해야 하나요?",
-          "answer": "참조한 지식에 충분한 정보가 없으면 무리하게 판단하지 마세요. 미래시 공식 웹사이트(zoom-gov-contact-center-demo) 하단에서 최신 대표 전화번호를 확인한 후 쓰레기 제로 추진과 연결을 요청하세요. 제도나 접수 상황은 변경될 수 있습니다. 최신 정보, 개별 판단, 예약 확정 및 심사 결과는 담당 부서나 공식 웹사이트에서 확인하세요."
+          "question": "대형 폐기물을 실내에서 운반해 낼 수 없으면 지원을 받을 수 있나요?",
+          "answer": "이 FAQ에는 운반 지원의 대상 조건이나 개별 판단에 필요한 정보가 없습니다. 추측하지 말고 미래시 공식 웹사이트(zoom-gov-contact-center-demo) 하단에서 최신 대표 전화번호를 확인한 후 쓰레기 제로 추진과 연결을 요청하세요."
         }
       ]
     }
