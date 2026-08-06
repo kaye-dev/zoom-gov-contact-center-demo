@@ -205,6 +205,7 @@ configure_web_access() {
   local lan_origin=""
   local tunnel_origin="https://zoom.keien.dev"
   local tunnel_hostname="zoom.keien.dev"
+  local ngrok_domain="${NGROK_DOMAIN:-}"
   local answer
   local tty_fd
 
@@ -233,7 +234,8 @@ configure_web_access() {
         fi
 
         print -r -- "  3) Cloudflare Tunnel: ${tunnel_origin}"
-        printf "Select [1/2/3]: "
+        print -r -- "  4) ngrok Free: assigned *.ngrok-free.app domain"
+        printf "Select [1/2/3/4]: "
       } >&${tty_fd}; then
         exec {tty_fd}>&-
         print -u2 "Could not display the web access selection. Aborting before compose startup."
@@ -267,8 +269,39 @@ configure_web_access() {
           fi
           break
           ;;
+        4)
+          if ! command -v ngrok >/dev/null 2>&1; then
+            exec {tty_fd}>&-
+            print -u2 "ngrok is not installed or is unavailable on PATH. Install ngrok and retry."
+            return 1
+          fi
+
+          if [[ -z "${ngrok_domain}" ]]; then
+            if ! printf "ngrok Dev Domain (example.ngrok-free.app): " >&${tty_fd}; then
+              exec {tty_fd}>&-
+              print -u2 "Could not display the ngrok domain prompt. Aborting before compose startup."
+              return 1
+            fi
+
+            if ! IFS= read -r -u ${tty_fd} ngrok_domain; then
+              exec {tty_fd}>&-
+              print -u2 "Could not read the ngrok domain. Aborting before compose startup."
+              return 1
+            fi
+          fi
+
+          ngrok_domain="${ngrok_domain:l}"
+
+          if [[ ! "${ngrok_domain}" =~ "^[a-z0-9]([a-z0-9-]*[a-z0-9])?\\.ngrok-free\\.app$" ]]; then
+            print -u2 "Enter the assigned ngrok Free Dev Domain without https:// or a path."
+            ngrok_domain=""
+            continue
+          fi
+
+          break
+          ;;
         *)
-          print -u2 "Enter 1, 2, or 3."
+          print -u2 "Enter 1, 2, 3, or 4."
           ;;
       esac
     done
@@ -284,6 +317,10 @@ configure_web_access() {
     export WEB_BIND_ADDRESS="127.0.0.1"
     export WEB_ORIGIN="${tunnel_origin}"
     export NEXT_ALLOWED_DEV_ORIGIN="${tunnel_hostname}"
+  elif [[ "${answer}" == "4" ]]; then
+    export WEB_BIND_ADDRESS="127.0.0.1"
+    export WEB_ORIGIN="https://${ngrok_domain}"
+    export NEXT_ALLOWED_DEV_ORIGIN="${ngrok_domain}"
   else
     export WEB_BIND_ADDRESS="127.0.0.1"
     export WEB_ORIGIN="${local_origin}"
