@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 import createMDX from "@next/mdx";
 
+const allowedDevOrigin = process.env.NEXT_ALLOWED_DEV_ORIGIN?.trim();
+
 export const FAQ_LEGACY_REDIRECTS = [
   {
     source: '/life/frequently-asked-questions/procedure-faq',
@@ -47,6 +49,7 @@ export const FAQ_LEGACY_REDIRECTS = [
 ];
 
 const nextConfig: NextConfig = {
+  ...(allowedDevOrigin ? { allowedDevOrigins: [allowedDevOrigin] } : {}),
   // content/docs 配下の .mdx をダイナミックインポートしてレンダリングする。
   // .mdx をルーティング対象（page.mdx）として使う予定はないが、@next/mdx の
   // 標準構成に合わせて拡張子を許可しておく（content/ は app/ 外なのでルートにはならない）。

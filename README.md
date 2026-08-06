@@ -30,7 +30,19 @@ Zoom 製品のデモ用に作成した、架空の市区町村ホームページ
 ./dev-compose.sh
 ```
 
-[http://localhost:3000](http://localhost:3000) をブラウザで開くと表示されます。
+Web を起動する場合は、起動時にアクセス範囲を選択します。Enter のみ、または `1` を入力すると、この Mac だけでアクセスできる [http://localhost:3000](http://localhost:3000) を使用します。`2` を入力すると、Mac の LAN 内 IPv4 アドレスを自動検出し、同じネットワーク上のスマートフォンなどから開ける `http://192.168.x.x:3000` 形式の URL を表示します。
+
+```text
+Web access:
+  1) This Mac only: http://localhost:3000 (default)
+  2) Same network: http://192.168.x.x:3000
+Select [1/2]:
+```
+
+LAN 内 IPv4 アドレスは起動のたびに検出されるため、接続先の Wi-Fi などが変わると URL も変わる場合があります。スマートフォンは Mac と同じネットワークへ接続してください。VPN、ゲスト Wi-Fi の端末間通信制限、macOS Firewall などにより接続できない場合があります。
+
+LAN 向けの起動は、開発サーバーを平文 HTTP で同じネットワークへ公開します。信頼できるネットワーク上で開発用データだけを使用し、確認後は Compose を停止してください。PostgreSQL と Prisma Studio はアクセス方式にかかわらず、この Mac からだけ接続できます。
+
 Prisma Studio は [http://localhost:5555](http://localhost:5555) で開けます。ブラウザ上で各テーブルのレコードを確認し、作成・更新・削除できます。
 既に `3000` 番ポートを使っている場合は、外側のポートを変えて起動できます。
 
@@ -44,7 +56,7 @@ Prisma Studio の外側ポートを変える場合は、`STUDIO_PORT` を指定�
 STUDIO_PORT=5556 ./dev-compose.sh
 ```
 
-`./dev-compose.sh` は Colima が停止している場合に自動起動します。`web` または `studio` を起動する前に Prisma migration の状態を確認し、未適用 migration がある場合だけ `db:deploy` を実行するか確認します。直接 `docker compose` を実行する場合は、事前に `colima start` を実行してください。
+`./dev-compose.sh` は Colima が停止している場合に自動起動します。Web を含む `up` の場合だけアクセス範囲を確認し、`up db`、`up studio`、`down`、`logs`、`ps` などでは確認しません。`web` または `studio` を起動する前に Prisma migration の状態を確認し、未適用 migration がある場合だけ `db:deploy` を実行するか確認します。直接 `docker compose` を実行する場合は localhost 限定で起動するため、事前に `colima start` を実行してください。
 
 初回起動後、別ターミナルで初期管理者 seed を実行します。
 
@@ -98,7 +110,7 @@ npm run dev
 
 | コマンド | 説明 |
 | --- | --- |
-| `./dev-compose.sh` | Colima と Prisma migration 状態を確認して Docker で開発サーバーを起動 |
+| `./dev-compose.sh` | Web のアクセス範囲、Colima、Prisma migration 状態を確認して Docker で開発サーバーを起動 |
 | `docker compose down -v` | Docker volume を含めて停止・削除 |
 | `./dev-compose.sh up studio` | Prisma Studio を Docker 上で起動 |
 | `npm run dev` | 開発サーバーを起動 |
