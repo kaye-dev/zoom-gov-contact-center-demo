@@ -66,7 +66,7 @@ Web access:
   1) This Mac only: http://localhost:3000 (default)
   2) Same network: http://192.168.x.x:3000
   3) Cloudflare Tunnel: https://zoom.keien.dev
-  4) ngrok Free: assigned *.ngrok-free.app domain
+  4) ngrok Free: assigned Dev Domain
 Select [1/2/3/4]: 3
 ```
 

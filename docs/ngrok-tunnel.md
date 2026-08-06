@@ -3,7 +3,7 @@
 ## 1. 初回設定
 
 1. [ngrok Dashboard](https://dashboard.ngrok.com/signup)で無料アカウントを作成する。
-2. Dashboardで`Authtoken`と割り当て済みの`*.ngrok-free.app` Dev Domainを確認する。
+2. Dashboardで`Authtoken`と割り当て済みのDev Domainを確認する。`*.ngrok-free.app`と`*.ngrok-free.dev`の両方に対応する。
 3. 次を実行する。
 
 ```bash
@@ -43,7 +43,8 @@ chmod 600 ~/.config/ngrok/zoom-gov-demo-basic-auth.yml
 ### 3.1 Webを起動する
 
 ```bash
-export NGROK_DOMAIN='your-assigned-name.ngrok-free.app'
+export HOST_PORT=3000
+export NGROK_DOMAIN='your-assigned-name.ngrok-free.dev'
 ./dev-compose.sh up -d --build web
 ```
 
@@ -54,7 +55,7 @@ Web access:
   1) This Mac only: http://localhost:3000 (default)
   2) Same network: http://192.168.x.x:3000
   3) Cloudflare Tunnel: https://zoom.keien.dev
-  4) ngrok Free: assigned *.ngrok-free.app domain
+  4) ngrok Free: assigned Dev Domain
 Select [1/2/3/4]: 4
 ```
 
@@ -62,7 +63,7 @@ Select [1/2/3/4]: 4
 docker compose exec -T web printenv BETTER_AUTH_URL
 docker compose exec -T web printenv BETTER_AUTH_TRUSTED_ORIGINS
 docker compose exec -T web printenv NEXT_ALLOWED_DEV_ORIGIN
-curl -fsS http://127.0.0.1:3000/api/health
+curl -fsS "http://127.0.0.1:${HOST_PORT}/api/health"
 ```
 
 ### 3.2 ngrokを起動する
@@ -70,16 +71,14 @@ curl -fsS http://127.0.0.1:3000/api/health
 別のターミナルで実行する。
 
 ```bash
-ngrok http 3000 \
+ngrok http "${HOST_PORT}" \
   --traffic-policy-file "$HOME/.config/ngrok/zoom-gov-demo-basic-auth.yml"
 ```
-
-`HOST_PORT`を変更した場合は、`3000`を同じポート番号へ置き換える。
 
 ### 3.3 ブラウザで開く
 
 ```text
-https://your-assigned-name.ngrok-free.app
+https://your-assigned-name.ngrok-free.dev
 ```
 
 1. ngrokの案内画面で`Visit`を押す。
@@ -92,7 +91,7 @@ https://your-assigned-name.ngrok-free.app
 
 ```bash
 ./dev-compose.sh down
-unset NGROK_DOMAIN
+unset HOST_PORT NGROK_DOMAIN
 ```
 
 3. 一時パスワードを変更する。

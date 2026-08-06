@@ -234,7 +234,7 @@ configure_web_access() {
         fi
 
         print -r -- "  3) Cloudflare Tunnel: ${tunnel_origin}"
-        print -r -- "  4) ngrok Free: assigned *.ngrok-free.app domain"
+        print -r -- "  4) ngrok Free: assigned Dev Domain"
         printf "Select [1/2/3/4]: "
       } >&${tty_fd}; then
         exec {tty_fd}>&-
@@ -277,7 +277,7 @@ configure_web_access() {
           fi
 
           if [[ -z "${ngrok_domain}" ]]; then
-            if ! printf "ngrok Dev Domain (example.ngrok-free.app): " >&${tty_fd}; then
+            if ! printf "ngrok Dev Domain (example.ngrok-free.dev): " >&${tty_fd}; then
               exec {tty_fd}>&-
               print -u2 "Could not display the ngrok domain prompt. Aborting before compose startup."
               return 1
@@ -292,7 +292,7 @@ configure_web_access() {
 
           ngrok_domain="${ngrok_domain:l}"
 
-          if [[ ! "${ngrok_domain}" =~ "^[a-z0-9]([a-z0-9-]*[a-z0-9])?\\.ngrok-free\\.app$" ]]; then
+          if [[ ! "${ngrok_domain}" =~ "^[a-z0-9]([a-z0-9-]*[a-z0-9])?\\.ngrok-free\\.(app|dev)$" ]]; then
             print -u2 "Enter the assigned ngrok Free Dev Domain without https:// or a path."
             ngrok_domain=""
             continue
