@@ -79,12 +79,11 @@ const multilingualScenarios = [
     locale: "en",
     localeCode: "en",
     withoutTransferPatterns: [
-      /office chair/iu,
-      /120\s*cm/iu,
-      /70\s*cm/iu,
-      /one office chair/iu,
-      /bulky waste/iu,
-      /process from applying for collection to putting it out/iu,
+      /(?=.*office chair)(?=.*(?:casters|wheels))(?=.*before (?:applying|submitting an application))/iu,
+      /(?=.*120\s*cm)(?=.*70\s*cm)(?=.*collection date)(?=.*(?:(?:pay|payment).*(?:fee)|fee.*(?:pay|payment)))/iu,
+      /(?=.*(?:disposal|processing) (?:ticket|sticker))(?=.*(?:attach|stick))(?=.*when and where.*(?:put|set).*(?:out|collection))/iu,
+      /(?=.*(?:apartment|condominium|multi-unit))(?=.*where.*(?:put|set).*(?:out|collection))/iu,
+      /(?=.*(?:reservation|booking))(?=.*(?:complete|confirm|finali[sz]e))(?=.*(?:this )?chat)/iu,
     ],
     withTransferPatterns: [
       /one chest of drawers/iu,
@@ -94,6 +93,8 @@ const multilingualScenarios = [
       /carry-out assistance/iu,
     ],
     consentPattern: /Please share these details and transfer me to a human agent/iu,
+    optionalHandoffQuestionPattern:
+      /can(?:not|['’]t) determine in this chat whether .*eligible for (?:carry-out )?assistance/iu,
     unsafeLanguagePatterns: [
       /\b(?:booking|reservation|application)\b.{0,30}\b(?:confirmed|completed|accepted)\b/iu,
       /\b(?:confirmation|reference|receipt) number\s*(?:is|:)\s*[A-Z0-9]/iu,
@@ -108,12 +109,11 @@ const multilingualScenarios = [
     locale: "zh-Hans",
     localeCode: "zh-Hans",
     withoutTransferPatterns: [
-      /办公椅/u,
-      /120厘米/u,
-      /70厘米/u,
-      /1把/u,
-      /大件垃圾/u,
-      /从申请到投放/u,
+      /(?=.*(?:带脚轮|有轮子).*办公椅)(?=.*申请前)(?=.*确认)/u,
+      /(?=.*120\s*厘米)(?=.*70\s*厘米)(?=.*收集日期)(?=.*(?:费用|支付))/u,
+      /(?=.*处理券)(?=.*贴在?哪里)(?=.*什么时候)(?=.*放到?哪里)/u,
+      /(?=.*(?:公寓楼|集合住宅|公寓))(?=.*放在哪里)/u,
+      /(?=.*聊天)(?=.*(?:完成|确认).*(?:收集)?预约)/u,
     ],
     withTransferPatterns: [
       /一个.*衣柜/u,
@@ -123,6 +123,8 @@ const multilingualScenarios = [
       /搬出协助/u,
     ],
     consentPattern: /请共享以上内容，并将我转接给人工客服/u,
+    optionalHandoffQuestionPattern:
+      /(?:无法|不能).*通过.*聊天.*判断.*(?:符合|属于).*协助.*(?:条件|对象)/u,
     unsafeLanguagePatterns: [
       /(?:预约|申请)(?:已|已经)?(?:确认|完成|受理)/u,
       /(?:受理|预约)编号\s*(?:是|：|:)?\s*[A-Z0-9]/u,
@@ -140,12 +142,11 @@ const multilingualScenarios = [
     locale: "ko",
     localeCode: "ko",
     withoutTransferPatterns: [
-      /사무용 의자/u,
-      /120cm/u,
-      /70cm/u,
-      /1개/u,
-      /대형 폐기물/u,
-      /신청부터 배출/u,
+      /(?=.*(?:바퀴 달린|바퀴가 있는).*사무용 의자)(?=.*신청.*전)(?=.*확인)/u,
+      /(?=.*120\s*cm)(?=.*70\s*cm)(?=.*수거일)(?=.*(?:(?:수수료|요금).*(?:납부|지불)))/iu,
+      /(?=.*(?:처리권|처리 스티커|스티커))(?=.*어디에 붙)(?=.*언제 어디에)/u,
+      /(?=.*(?:공동주택|아파트|집합주택))(?=.*어디에 내놓)/u,
+      /(?=.*채팅)(?=.*(?:수거 )?예약)(?=.*확정)/u,
     ],
     withTransferPatterns: [
       /장롱 1개/u,
@@ -155,8 +156,10 @@ const multilingualScenarios = [
       /운반 지원/u,
     ],
     consentPattern: /이 내용을 공유하고 상담원에게 연결해 주세요/u,
+    optionalHandoffQuestionPattern:
+      /채팅에서는?.*지원 대상인지.*판단할 수 없/u,
     unsafeLanguagePatterns: [
-      /(?:예약|신청)(?:이|을|가)?\s*(?:확정|완료|접수)/u,
+      /(?:예약|신청)(?:이|을|가)?\s*(?:확정|완료|접수)(?:되었|됐|했습니다|되었습니다)/u,
       /(?:접수|예약) 번호\s*(?:는|은|:)?\s*[A-Z0-9]/u,
       /(?:개인번호|비밀번호).{0,15}(?:알려|입력|제공)/u,
     ],
@@ -169,12 +172,11 @@ const multilingualScenarios = [
     locale: "pt",
     localeCode: "pt",
     withoutTransferPatterns: [
-      /cadeira de escritório/iu,
-      /120\s*cm/iu,
-      /70\s*cm/iu,
-      /uma cadeira/iu,
-      /lixo de grande porte/iu,
-      /desde a solicitação até o descarte/iu,
+      /(?=.*cadeira de escritório)(?=.*(?:rodízios|rodas))(?=.*antes de.*solicitação)(?=.*verificar)/iu,
+      /(?=.*120\s*cm)(?=.*70\s*cm)(?=.*data da coleta)(?=.*(?:(?:pagamento|pagar).*(?:taxa|tarifa)|(?:taxa|tarifa).*(?:pagamento|pagar)))/iu,
+      /(?=.*(?:etiqueta|selo|bilhete).*(?:descarte|resíduo))(?=.*(?:colar|fixar))(?=.*quando e onde)/iu,
+      /(?=.*(?:condomínio|apartamento|prédio residencial))(?=.*onde.*(?:colocar|deixar))/iu,
+      /(?=.*(?:chat|conversa))(?=.*reserva.*(?:coleta|recolha))(?=.*(?:confirmar|finalizar|concluir))/iu,
     ],
     withTransferPatterns: [
       /um guarda-roupa/iu,
@@ -185,6 +187,8 @@ const multilingualScenarios = [
     ],
     consentPattern:
       /Por favor, compartilhe essas informações e transfira a conversa para um atendente humano/iu,
+    optionalHandoffQuestionPattern:
+      /não é possível.*(?:determinar|verificar).*por (?:este|esse) chat.*(?:direito|elegív).*(?:assistência|apoio)/iu,
     unsafeLanguagePatterns: [
       /(?:reserva|solicitação).{0,30}(?:confirmad[ao]|concluíd[ao]|aceita)/iu,
       /número de (?:protocolo|atendimento|reserva)\s*(?:é|:)?\s*[A-Z0-9]/iu,
@@ -199,12 +203,11 @@ const multilingualScenarios = [
     locale: "vi",
     localeCode: "vi",
     withoutTransferPatterns: [
-      /ghế văn phòng/iu,
-      /120\s*cm/iu,
-      /70\s*cm/iu,
-      /một chiếc/iu,
-      /rác cồng kềnh/iu,
-      /đăng ký.*điểm thu gom/isu,
+      /(?=.*ghế văn phòng)(?=.*(?:bánh xe|bánh lăn))(?=.*trước khi đăng ký)(?=.*xác nhận)/iu,
+      /(?=.*120\s*cm)(?=.*70\s*cm)(?=.*ngày thu gom)(?=.*(?:(?:thanh toán|trả).*(?:phí|lệ phí)))/iu,
+      /(?=.*phiếu.*(?:xử lý|thu gom))(?=.*dán.*(?:ở|vào) đâu)(?=.*(?:khi nào|lúc nào).*(?:ở đâu|tại đâu|đâu))/iu,
+      /(?=.*(?:khu chung cư|chung cư|tòa nhà căn hộ))(?=.*(?:mang|đặt).*(?:ra )?đâu)/iu,
+      /(?=.*(?:trò chuyện|chat))(?=.*đăng ký thu gom)(?=.*hoàn tất)(?=.*xác nhận)/iu,
     ],
     withTransferPatterns: [
       /một chiếc tủ/iu,
@@ -215,8 +218,10 @@ const multilingualScenarios = [
     ],
     consentPattern:
       /Xin hãy chia sẻ những thông tin này và chuyển cuộc trò chuyện cho nhân viên hỗ trợ/iu,
+    optionalHandoffQuestionPattern:
+      /qua.*(?:trò chuyện|chat).*(?:không thể|không).*xác định.*(?:thuộc diện|đủ điều kiện).*(?:hỗ trợ)/iu,
     unsafeLanguagePatterns: [
-      /(?:đặt lịch|đăng ký).{0,30}(?:đã )?(?:xác nhận|hoàn tất|tiếp nhận)/iu,
+      /(?:đặt lịch|đăng ký).{0,20}(?:đã\s+)?(?:được\s+)?(?:xác nhận|hoàn tất|tiếp nhận)(?:\s+(?:rồi|thành công)|[.!。]\s*$)/imu,
       /mã (?:tiếp nhận|đăng ký|đặt lịch)\s*(?:là|:)?\s*[A-Z0-9]/iu,
       /(?:cho biết|nhập|cung cấp|chia sẻ).{0,30}(?:mã số cá nhân|mật khẩu|mã PIN)/iu,
     ],
@@ -225,6 +230,30 @@ const multilingualScenarios = [
     ...localizedScenarioPaths("チャット-粗大ごみの出し方_収集申込み", "vi"),
   },
 ] as const;
+
+const japaneseChatRallyScenario = {
+  locale: "ja",
+  withoutTransfer: scenarioPaths.chat.withoutTransfer,
+  withTransfer: scenarioPaths.chat.withTransfer,
+  withoutTransferPatterns: [
+    /(?=.*キャスター付き.*事務用椅子)(?=.*申込み前)(?=.*確認)/u,
+    /(?=.*120\s*(?:センチ|cm))(?=.*70\s*(?:センチ|cm))(?=.*収集日)(?=.*支払い)/iu,
+    /(?=.*処理券)(?=.*どこに貼)(?=.*いつどこへ)/u,
+    /(?=.*集合住宅)(?=.*どこに出)/u,
+    /(?=.*チャット)(?=.*予約確定)/u,
+  ],
+  withTransferPatterns: [
+    /タンス/u,
+    /180\s*(?:センチ|cm)/iu,
+    /120\s*(?:センチ|cm)/iu,
+    /高齢の母/u,
+    /運び出し支援/u,
+  ],
+  consentPattern: /この内容を共有して、有人担当へ引き継いでください/u,
+  optionalHandoffQuestionPattern:
+    /このチャットでは.*支援の対象になるか判断できない/u,
+  marker: "【有人チャットへ転送】",
+} as const;
 
 function read(filePath: string) {
   return readFileSync(filePath, "utf8");
@@ -244,6 +273,34 @@ function icebreakerLines(content: string) {
   const match = content.match(/アイスブレイク:\s*\n([\s\S]*?)\n\s*メイン:/u);
   assert.ok(match, "voice flow must separate icebreaker and main prompts");
   return match[1].split("\n").filter((line) => line.startsWith("> "));
+}
+
+function progressCells(content: string, stage: string, filePath: string) {
+  const rowPrefix = `| ${stage} |`;
+  const rows = content
+    .split("\n")
+    .filter((line) => line.startsWith(rowPrefix));
+
+  assert.equal(
+    rows.length,
+    1,
+    `${filePath} must contain exactly one ${stage} progress row`,
+  );
+
+  const row = rows[0];
+  const cells = row
+    .slice(1, -1)
+    .split("|")
+    .map((cell) => cell.trim());
+
+  assert.equal(cells.length, 4, `${filePath} ${stage} must have four cells`);
+
+  return {
+    row,
+    operator: cells[1],
+    aiAction: cells[2],
+    nextCondition: cells[3],
+  };
 }
 
 test("voice and chat premises use the same compact demo structure", () => {
@@ -277,6 +334,169 @@ test("demo flows use semantic progress tables instead of fixed AI scripts", () =
     const content = read(filePath);
     assert.match(content, /\| 段階 \| デモ担当者 \| 確認するAI動作 \| 次へ進む条件 \|/);
     assert.doesNotMatch(content, /^AI(?:エージェント)?：/mu);
+  }
+});
+
+test("bulky-waste chat flows support required and optional conversation rallies", () => {
+  const chatRallyScenarios: Array<{
+    locale: string;
+    withoutTransfer: string;
+    withTransfer: string;
+    withoutTransferPatterns: readonly RegExp[];
+    withTransferPatterns: readonly RegExp[];
+    consentPattern: RegExp;
+    optionalHandoffQuestionPattern: RegExp;
+    marker: string;
+  }> = [japaneseChatRallyScenario];
+
+  for (const scenario of multilingualScenarios) {
+    if (scenario.channel === "chat") {
+      chatRallyScenarios.push(scenario);
+    }
+  }
+
+  const withoutTransferStages = [
+    "1（必須）",
+    "2（必須）",
+    "3（必須）",
+    "4（任意）",
+    "5（任意）",
+  ];
+  const withoutTransferAiPatterns = [
+    /(?=.*品目)(?=.*(?:大きさ|寸法))(?=.*数量)(?=.*排出場所)/u,
+    /(?=.*収集日)(?=.*手数料)(?=.*申込み時)(?=.*(?:支払|処理券))/u,
+    /(?=.*処理券)(?=.*見やす)(?=.*はがれ)(?=.*指定.*日時)(?=.*指定場所)/u,
+    /(?=.*(?:管理者|管理組合|建物のルール|指定))(?=.*(?:排出場所|指定場所|場所へ出す))(?=.*(?:室内|共用通路|建物のルール))/u,
+    /(?=.*予約確定)(?=.*(?:料金算定|正確な料金))(?=.*受付番号発行)(?=.*メール送信)(?=.*(?:できない|行わない))/u,
+  ];
+
+  for (const scenario of chatRallyScenarios) {
+    const withoutTransfer = read(scenario.withoutTransfer);
+
+    assert.equal(
+      scenario.withoutTransferPatterns.length,
+      withoutTransferStages.length,
+      `${scenario.locale} must define one prompt pattern per chat turn`,
+    );
+
+    let previousRowIndex = -1;
+    for (const [index, stage] of withoutTransferStages.entries()) {
+      const cells = progressCells(
+        withoutTransfer,
+        stage,
+        scenario.withoutTransfer,
+      );
+
+      assert.match(
+        cells.operator,
+        scenario.withoutTransferPatterns[index],
+        `${scenario.locale} ${stage} must keep the intended resident question`,
+      );
+      assert.match(
+        cells.aiAction,
+        withoutTransferAiPatterns[index],
+        `${scenario.locale} ${stage} must keep the intended AI behavior`,
+      );
+
+      const rowIndex = withoutTransfer.indexOf(cells.row);
+      assert.ok(
+        rowIndex > previousRowIndex,
+        `${scenario.locale} without-transfer turns must stay in order`,
+      );
+      previousRowIndex = rowIndex;
+    }
+
+    assert.match(withoutTransfer, /3ターン目(?:の回答後)?(?:で|に)?終了してよい/u);
+    assert.match(withoutTransfer, /(?:4〜5|4・5)ターン目/u);
+    assert.match(withoutTransfer, /有人転送せず/u);
+
+    const withTransfer = read(scenario.withTransfer);
+    const firstTurn = progressCells(
+      withTransfer,
+      "1（基本）",
+      scenario.withTransfer,
+    );
+    const optionalTurn = progressCells(
+      withTransfer,
+      "2（任意）",
+      scenario.withTransfer,
+    );
+    const consentTurn = progressCells(
+      withTransfer,
+      "2または3（基本）",
+      scenario.withTransfer,
+    );
+
+    const withTransferAiPortion = withTransfer.split(scenario.marker)[0];
+    for (const pattern of scenario.withTransferPatterns) {
+      assert.match(
+        withTransferAiPortion,
+        pattern,
+        `${scenario.locale} handoff turn 1 must keep ${pattern}`,
+      );
+    }
+    assert.match(firstTurn.aiAction, /支援の対象可否を推測しない/u);
+    assert.match(firstTurn.nextCondition, /有人転送の同意を求める/u);
+    assert.match(optionalTurn.operator, scenario.optionalHandoffQuestionPattern);
+    assert.match(
+      optionalTurn.aiAction,
+      /(?=.*(?:チャット|このチャット))(?=.*対象可否.*(?:判断できず|判断できない|推測できない))(?=.*個別(?:確認|判断))/u,
+    );
+    assert.match(
+      optionalTurn.nextCondition,
+      /(?=.*(?:転送を実行していない|有人転送))(?=.*明示.*同意)/u,
+    );
+    assert.match(consentTurn.operator, scenario.consentPattern);
+    assert.match(consentTurn.aiAction, /要約する/u);
+    assert.match(
+      consentTurn.nextCondition,
+      /明示的な同意後に有人転送を一度だけ実行する/u,
+    );
+
+    assert.ok(
+      withTransfer.indexOf(firstTurn.row) < withTransfer.indexOf(optionalTurn.row),
+      `${scenario.locale} optional handoff question must follow the first turn`,
+    );
+    assert.ok(
+      withTransfer.indexOf(optionalTurn.row) < withTransfer.indexOf(consentTurn.row),
+      `${scenario.locale} optional handoff question must precede consent`,
+    );
+    assert.match(
+      withTransfer,
+      /(?=.*(?:基本は|省略した場合は)2ターン)(?=.*3ターン)/u,
+    );
+
+    const postTransferHeadingIndex = withTransfer.indexOf("## 転送後の操作");
+    const markerIndex = withTransfer.indexOf(scenario.marker);
+    assert.ok(
+      postTransferHeadingIndex > withTransfer.indexOf(consentTurn.row),
+      `${scenario.locale} transfer wait must follow all conversation turns`,
+    );
+    assert.ok(
+      markerIndex > postTransferHeadingIndex,
+      `${scenario.locale} post-transfer operation must precede the human script`,
+    );
+    const postTransferSection = withTransfer
+      .slice(postTransferHeadingIndex, markerIndex)
+      .trim();
+    const postTransferLines = postTransferSection
+      .split("\n")
+      .filter((line) => line.trim().length > 0);
+    assert.equal(
+      postTransferLines.length,
+      2,
+      `${scenario.locale} transfer wait must be one sentence outside the turn table`,
+    );
+    assert.equal(postTransferLines[0], "## 転送後の操作");
+    assert.doesNotMatch(postTransferSection, /^\|/mu);
+    assert.doesNotMatch(
+      withTransfer.slice(0, postTransferHeadingIndex),
+      /接続中は追加入力せず待/u,
+    );
+    assert.match(
+      postTransferSection,
+      /接続中は追加入力せず待/u,
+    );
   }
 });
 
