@@ -55,18 +55,23 @@ const multilingualScenarios = [
     locale: "en",
     localeCode: "en-US",
     withoutTransferPatterns: [
-      /My Number Card/iu,
-      /iPhone/iu,
-      /smartphone case/iu,
-      /MynaPortal/iu,
+      /(?=.*My Number Card)(?=.*iPhone)(?=.*MynaPortal)(?=.*smartphone case)(?=.*(?:related|reason|affect|caus))/iu,
+      /(?=.*(?:removed|taken off) the case)(?=.*where.*iPhone)(?=.*card)/iu,
+      /(?=.*top)(?=.*card)(?=.*iPhone)(?=.*(?:keep|remain).*(?:still|in place))(?=.*(?:reading|scan).*(?:finish|complete))/iu,
+      /(?=.*(?:log in|login))(?=.*four-digit)(?=.*PIN)/iu,
+      /(?=.*electronic certificate)(?=.*expir)(?=.*MynaPortal)(?=.*(?:can(?:not|['’]t)|unable).*(?:log in|login))/iu,
     ],
     withTransferPatterns: [
       /four-digit PIN/iu,
-      /three times/iu,
+      /three times in a row/iu,
+      /(?:locked|locked out)/iu,
       /what I need to bring/iu,
-      /handled today/iu,
+      /unlock(?:ed)? today/iu,
     ],
-    consentPattern: /Yes, please transfer me/iu,
+    consentPattern:
+      /Yes[,.]?\s*Please share (?:these details|this information) and transfer me to (?:a )?human agent/iu,
+    optionalHandoffQuestionPattern:
+      /(?=.*(?:can(?:not|['’]t)|unable))(?=.*(?:this (?:call|phone)|over the phone))(?=.*(?:what I need to bring|items I need to bring))(?=.*unlock(?:ed)?.*(?:today|same day))/iu,
     unsafeLanguagePatterns: [
       /\b(?:tell|give|enter|provide|share)\b.{0,40}\b(?:Individual Number|My Number|PIN|password)\b/iu,
     ],
@@ -255,6 +260,29 @@ const japaneseChatRallyScenario = {
   marker: "【有人チャットへ転送】",
 } as const;
 
+const japaneseVoiceRallyScenario = {
+  locale: "ja",
+  withoutTransfer: scenarioPaths.voice.withoutTransfer,
+  withTransfer: scenarioPaths.voice.withTransfer,
+  withoutTransferPatterns: [
+    /(?=.*iPhone)(?=.*マイナンバーカード)(?=.*マイナポータル)(?=.*スマートフォンのケース)(?=.*関係)/iu,
+    /(?=.*ケースを外)(?=.*カード)(?=.*iPhone)(?=.*どこに当て)/iu,
+    /(?=.*上部に当て)(?=.*カード)(?=.*iPhone)(?=.*動かさず)(?=.*読み取り.*終)/iu,
+    /(?=.*ログイン)(?=.*暗証番号)(?=.*数字4桁)/u,
+    /(?=.*電子証明書)(?=.*期限が切)(?=.*マイナポータル)(?=.*ログインでき(?:ない|ません))/u,
+  ],
+  withTransferPatterns: [
+    /数字4桁の暗証番号/u,
+    /3回連続/u,
+    /解除手続きに必要な持ち物/u,
+    /今日中に対応/u,
+  ],
+  consentPattern: /はい、この内容を共有して、有人担当へ転送してください/u,
+  optionalHandoffQuestionPattern:
+    /(?=.*解除に必要な持ち物)(?=.*今日中に対応)(?=.*この電話)(?=.*分からない)/u,
+  marker: "【有人担当へ転送】",
+} as const;
+
 function read(filePath: string) {
   return readFileSync(filePath, "utf8");
 }
@@ -267,12 +295,6 @@ function fromMarker(content: string, marker: string) {
   const markerIndex = content.indexOf(marker);
   assert.notEqual(markerIndex, -1, `${marker} must exist`);
   return content.slice(markerIndex);
-}
-
-function icebreakerLines(content: string) {
-  const match = content.match(/アイスブレイク:\s*\n([\s\S]*?)\n\s*メイン:/u);
-  assert.ok(match, "voice flow must separate icebreaker and main prompts");
-  return match[1].split("\n").filter((line) => line.startsWith("> "));
 }
 
 function progressCells(content: string, stage: string, filePath: string) {
@@ -334,6 +356,223 @@ test("demo flows use semantic progress tables instead of fixed AI scripts", () =
     const content = read(filePath);
     assert.match(content, /\| 段階 \| デモ担当者 \| 確認するAI動作 \| 次へ進む条件 \|/);
     assert.doesNotMatch(content, /^AI(?:エージェント)?：/mu);
+  }
+});
+
+test("My Number voice flows support required and optional conversation rallies", () => {
+  const voiceRallyScenarios: Array<{
+    locale: string;
+    withoutTransfer: string;
+    withTransfer: string;
+    withoutTransferPatterns: readonly RegExp[];
+    withTransferPatterns: readonly RegExp[];
+    consentPattern: RegExp;
+    optionalHandoffQuestionPattern: RegExp;
+    marker: string;
+  }> = [japaneseVoiceRallyScenario];
+
+  for (const scenario of multilingualScenarios) {
+    if (scenario.channel === "voice") {
+      voiceRallyScenarios.push(scenario);
+    }
+  }
+
+  const withoutTransferStages = [
+    "1（必須）",
+    "2（必須）",
+    "3（必須）",
+    "4（任意）",
+    "5（任意）",
+  ];
+  const withoutTransferAiPatterns = [
+    /(?=.*ケース)(?=.*(?:外す|外して))(?=.*読取)/u,
+    /(?=.*カード(?:の)?(?:中心|中央))(?=.*iPhone(?:の)?上部)(?=.*当て)/iu,
+    /(?=.*カード)(?=.*iPhone)(?=.*(?:ずらさず|動かさず))(?=.*待)/iu,
+    /(?=.*利用者証明用電子証明書)(?=.*数字4桁)(?=.*暗証番号)/u,
+    /(?=.*電子証明書)(?=.*(?:期限(?:が)?切|期限切れ))(?=.*ログインでき(?:ない|ず))/u,
+  ];
+
+  for (const scenario of voiceRallyScenarios) {
+    const withoutTransfer = read(scenario.withoutTransfer);
+    const withoutTransferActions: string[] = [];
+
+    assert.equal(
+      scenario.withoutTransferPatterns.length,
+      withoutTransferStages.length,
+      `${scenario.locale} must define one prompt pattern per voice turn`,
+    );
+
+    let previousRowIndex = -1;
+    for (const [index, stage] of withoutTransferStages.entries()) {
+      const cells = progressCells(
+        withoutTransfer,
+        stage,
+        scenario.withoutTransfer,
+      );
+
+      assert.match(
+        cells.operator,
+        scenario.withoutTransferPatterns[index],
+        `${scenario.locale} ${stage} must keep the intended resident utterance`,
+      );
+      assert.match(
+        cells.aiAction,
+        withoutTransferAiPatterns[index],
+        `${scenario.locale} ${stage} must keep the intended AI behavior`,
+      );
+
+      const rowIndex = withoutTransfer.indexOf(cells.row);
+      assert.ok(
+        rowIndex > previousRowIndex,
+        `${scenario.locale} without-transfer voice turns must stay in order`,
+      );
+      previousRowIndex = rowIndex;
+      withoutTransferActions.push(cells.aiAction);
+    }
+
+    assert.match(
+      withoutTransfer,
+      /3ターン目(?:の回答後)?(?:で|に)?終了(?:してよい|できる)/u,
+    );
+    assert.match(
+      withoutTransfer,
+      /(?:デモ時間.*(?:4〜5|4・5)ターン目|(?:4〜5|4・5)ターン目.*(?:任意|時間))/u,
+    );
+    assert.match(withoutTransfer, /有人転送(?:を実行)?せず/u);
+
+    const withTransfer = read(scenario.withTransfer);
+    const firstTurn = progressCells(
+      withTransfer,
+      "1（基本）",
+      scenario.withTransfer,
+    );
+    const optionalTurn = progressCells(
+      withTransfer,
+      "2（任意）",
+      scenario.withTransfer,
+    );
+    const consentTurn = progressCells(
+      withTransfer,
+      "2または3（基本）",
+      scenario.withTransfer,
+    );
+
+    for (const pattern of scenario.withTransferPatterns) {
+      assert.match(
+        firstTurn.operator,
+        pattern,
+        `${scenario.locale} handoff turn 1 must keep ${pattern}`,
+      );
+    }
+    assert.match(firstTurn.aiAction, /3回連続(?:の)?誤入力.*ロック/u);
+    assert.match(
+      firstTurn.aiAction,
+      /持ち物.*当日対応.*推測しない/u,
+    );
+    assert.match(
+      firstTurn.nextCondition,
+      /(?=.*個別確認.*必要)(?=.*有人転送.*同意)/u,
+    );
+
+    assert.match(optionalTurn.operator, scenario.optionalHandoffQuestionPattern);
+    assert.match(
+      optionalTurn.aiAction,
+      /(?=.*持ち物)(?=.*当日対応)(?=.*(?:回答|判断)でき(?:ない|ず))(?=.*個別確認)/u,
+    );
+    assert.match(
+      optionalTurn.nextCondition,
+      /(?=.*転送を実行していない)(?=.*明示.*同意)/u,
+    );
+
+    assert.match(consentTurn.operator, scenario.consentPattern);
+    assert.match(consentTurn.aiAction, /ログイン(?:できない|不能).*要約/u);
+    assert.match(
+      consentTurn.aiAction,
+      /(?=.*数字4桁.*3回)(?=.*持ち物)(?=.*当日対応)/u,
+    );
+    assert.match(
+      consentTurn.nextCondition,
+      /(?=.*個人番号.*暗証番号.*聞かず)(?=.*明示的な同意後に(?:有人)?転送を一度だけ実行する)/u,
+    );
+
+    assert.ok(
+      withTransfer.indexOf(firstTurn.row) < withTransfer.indexOf(optionalTurn.row),
+      `${scenario.locale} optional voice question must follow the first turn`,
+    );
+    assert.ok(
+      withTransfer.indexOf(optionalTurn.row) < withTransfer.indexOf(consentTurn.row),
+      `${scenario.locale} optional voice question must precede consent`,
+    );
+    assert.match(
+      withTransfer,
+      /(?=.*(?:基本は|省略した場合は)2ターン)(?=.*3ターン)/u,
+    );
+
+    const withTransferAiPortion = withTransfer.split(scenario.marker)[0];
+    assert.equal(
+      count(withTransferAiPortion, "転送を一度だけ実行する"),
+      1,
+      `${scenario.locale} voice transfer must be executed once after consent`,
+    );
+    assert.equal(count(withoutTransfer, scenario.marker), 0);
+    assert.equal(count(withTransfer, scenario.marker), 1);
+
+    const postTransferHeadingIndex = withTransfer.indexOf("## 転送後の操作");
+    const markerIndex = withTransfer.indexOf(scenario.marker);
+    assert.ok(
+      postTransferHeadingIndex > withTransfer.indexOf(consentTurn.row),
+      `${scenario.locale} transfer wait must follow all voice turns`,
+    );
+    assert.ok(
+      markerIndex > postTransferHeadingIndex,
+      `${scenario.locale} transfer wait must precede the human script`,
+    );
+    const postTransferSection = withTransfer
+      .slice(postTransferHeadingIndex, markerIndex)
+      .trim();
+    const postTransferLines = postTransferSection
+      .split("\n")
+      .filter((line) => line.trim().length > 0);
+    assert.equal(
+      postTransferLines.length,
+      2,
+      `${scenario.locale} transfer wait must be one sentence outside the turn table`,
+    );
+    assert.equal(postTransferLines[0], "## 転送後の操作");
+    assert.doesNotMatch(postTransferSection, /^\|/mu);
+    assert.doesNotMatch(
+      withTransfer.slice(0, postTransferHeadingIndex),
+      /接続中は(?:追加入力せず|そのまま)待/u,
+    );
+    assert.match(
+      postTransferSection,
+      /接続中は(?:追加入力せず|そのまま)待/u,
+    );
+
+    const aiActions = [
+      ...withoutTransferActions,
+      firstTurn.aiAction,
+      optionalTurn.aiAction,
+      consentTurn.aiAction,
+    ].join("\n");
+    assert.doesNotMatch(
+      aiActions,
+      /(?:個人番号|暗証番号(?:そのもの)?)(?:を|は).{0,24}(?:教えて|伝えて|入力して|提供して|共有して|開示して|読み上げて|聞く|聞きます|尋ねる|尋ねます|要求する|要求します)/u,
+    );
+    assert.doesNotMatch(aiActions, /1007/u);
+    assert.doesNotMatch(aiActions, /内線(?:番号)?\s*[:：]?\s*\d{2,}/u);
+    assert.doesNotMatch(
+      aiActions,
+      /(?:0\d{9,10}|(?:\+?81[- ]?)?0\d{1,4}[- ]\d{1,4}[- ]\d{3,4})/u,
+    );
+    assert.doesNotMatch(
+      aiActions,
+      /(?:(?:必要な持ち物|持ち物)(?:は|として).{1,50}(?:です|必要|持参|用意)|.{1,50}(?:が|を)(?:必要な持ち物|持ち物)(?:です|になります))/u,
+    );
+    assert.doesNotMatch(
+      aiActions,
+      /(?:(?:今日|本日|当日)(?:中)?(?:に|の)?(?:対応|解除).{0,12}(?:できます|可能です|行えます|受けられます)|(?:今日|本日|当日)(?:中)?(?:に|の)?.{0,20}(?:対応可能|解除可能))/u,
+    );
   }
 });
 
@@ -628,55 +867,6 @@ test("multilingual handoff flows preserve the existing human-agent section", () 
     assert.match(aiPortion, /転送を一度だけ実行する/);
     assert.doesNotMatch(aiPortion, /1007/);
   }
-});
-
-test("English voice files mirror the current Japanese icebreaker prompts", () => {
-  const pairs = [
-    [
-      scenarioPaths.voice.withoutTransfer,
-      localizedScenarioPaths("音声-マイナポータルログイン", "en")
-        .withoutTransfer,
-    ],
-    [
-      scenarioPaths.voice.withTransfer,
-      localizedScenarioPaths("音声-マイナポータルログイン", "en").withTransfer,
-    ],
-  ] as const;
-
-  for (const [sourcePath, englishPath] of pairs) {
-    const sourceIcebreakers = icebreakerLines(read(sourcePath));
-    const englishIcebreakers = icebreakerLines(read(englishPath));
-
-    assert.equal(
-      englishIcebreakers.length,
-      sourceIcebreakers.length,
-      `${englishPath} must translate every current Japanese icebreaker`,
-    );
-    assert.ok(
-      englishIcebreakers.every((line) => /[A-Za-z]/u.test(line)),
-      `${englishPath} icebreakers must be written in English`,
-    );
-  }
-
-  const englishVoice = localizedScenarioPaths(
-    "音声-マイナポータルログイン",
-    "en",
-  );
-  const withoutTransfer = read(englishVoice.withoutTransfer);
-  const withTransfer = read(englishVoice.withTransfer);
-
-  assert.match(
-    withoutTransfer,
-    /link my driver’s license to my My Number Card/iu,
-  );
-  assert.match(withoutTransfer, /change my MynaPortal password/iu);
-  assert.match(withTransfer, /only twice today/iu);
-  assert.match(withTransfer, /failed attempts from before today also count/iu);
-  assert.match(withTransfer, /city office see how many times/iu);
-  assert.match(
-    withTransfer,
-    /city office check whether my MynaPortal login PIN is currently locked/iu,
-  );
 });
 
 test("multilingual bulky-waste AI portions do not invent transactions", () => {
