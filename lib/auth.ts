@@ -11,6 +11,7 @@ import {
 
 const LOCAL_BASE_URL = "http://localhost:3000";
 const LOCAL_SECRET = "local-development-secret-change-me";
+const EXAMPLE_SECRET = "replace-with-a-long-random-secret";
 const defaultTrustedOrigins = [
   "http://localhost:3000",
   "http://localhost:3001",
@@ -31,8 +32,16 @@ export function createAuth(
   const production = env.NODE_ENV === "production";
   const configuredSecret = env.BETTER_AUTH_SECRET?.trim();
 
-  if (production && !configuredSecret) {
-    throw new Error("BETTER_AUTH_SECRET is required in production.");
+  if (
+    production &&
+    (!configuredSecret ||
+      configuredSecret.length < 32 ||
+      configuredSecret === LOCAL_SECRET ||
+      configuredSecret === EXAMPLE_SECRET)
+  ) {
+    throw new Error(
+      "BETTER_AUTH_SECRET must be a non-placeholder value of at least 32 characters in production.",
+    );
   }
 
   return betterAuth({
@@ -69,9 +78,8 @@ export function createAuth(
     },
     trustedOrigins: getTrustedOrigins(env),
     advanced: {
-      // The Lambda Function URL is reachable only through the signed
-      // CloudFront origin. CloudFront preserves the viewer host in
-      // x-forwarded-host, so Better Auth can safely construct HTTPS URLs.
+      // Vercel forwards the public host through trusted proxy headers.
+      // The dynamic base URL below still restricts it to exact known hosts.
       trustedProxyHeaders: readBoolean(
         env.BETTER_AUTH_TRUST_PROXY_HEADERS,
         production,
@@ -106,46 +114,62 @@ function resolveBaseURL(
   env: NodeJS.ProcessEnv,
   override: string | undefined,
 ) {
-  const staticBaseURL = override ?? env.BETTER_AUTH_URL?.trim();
-
-  if (staticBaseURL) {
-    return staticBaseURL;
+  if (override) {
+    return override;
   }
 
   if (env.NODE_ENV !== "production") {
-    return LOCAL_BASE_URL;
+    return env.BETTER_AUTH_URL?.trim() || LOCAL_BASE_URL;
   }
 
-  const allowedHosts = readCommaSeparated(env.BETTER_AUTH_ALLOWED_HOSTS);
-  if (allowedHosts.length === 0) {
-    throw new Error("BETTER_AUTH_ALLOWED_HOSTS is required in production.");
-  }
+  const canonicalOrigin = readRequiredProductionOrigin(
+    env.BETTER_AUTH_URL,
+    "BETTER_AUTH_URL",
+  );
+  const allowedHosts = unique([
+    new URL(canonicalOrigin).host,
+    ...readVercelHosts(env),
+  ]);
 
   return {
     allowedHosts,
     protocol: "https" as const,
-    ...(env.BETTER_AUTH_FALLBACK_URL?.trim()
-      ? { fallback: env.BETTER_AUTH_FALLBACK_URL.trim() }
-      : {}),
   };
 }
 
 function getTrustedOrigins(env: NodeJS.ProcessEnv) {
-  const configuredOrigins = readCommaSeparated(
-    env.BETTER_AUTH_TRUSTED_ORIGINS,
-  );
-
-  if (configuredOrigins.length > 0) {
-    return configuredOrigins;
+  if (env.NODE_ENV !== "production") {
+    const configuredOrigins = readCommaSeparated(
+      env.BETTER_AUTH_TRUSTED_ORIGINS,
+    );
+    return configuredOrigins.length > 0
+      ? configuredOrigins
+      : defaultTrustedOrigins;
   }
 
-  if (env.NODE_ENV === "production") {
-    return readCommaSeparated(env.BETTER_AUTH_ALLOWED_HOSTS).map(
-      (host) => `https://${host}`,
+  const canonicalOrigin = readRequiredProductionOrigin(
+    env.BETTER_AUTH_URL,
+    "BETTER_AUTH_URL",
+  );
+  const configuredOrigins = readCommaSeparated(
+    env.BETTER_AUTH_TRUSTED_ORIGINS,
+  ).map((origin) =>
+    readRequiredProductionOrigin(origin, "BETTER_AUTH_TRUSTED_ORIGINS"),
+  );
+
+  if (
+    configuredOrigins.length !== 1 ||
+    configuredOrigins[0] !== canonicalOrigin
+  ) {
+    throw new Error(
+      "BETTER_AUTH_TRUSTED_ORIGINS must contain only BETTER_AUTH_URL in production.",
     );
   }
 
-  return defaultTrustedOrigins;
+  return unique([
+    canonicalOrigin,
+    ...readVercelHosts(env).map((host) => `https://${host}`),
+  ]);
 }
 
 function readCommaSeparated(value: string | undefined) {
@@ -153,6 +177,88 @@ function readCommaSeparated(value: string | undefined) {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function readRequiredProductionOrigin(
+  value: string | undefined,
+  name: string,
+) {
+  const configuredValue = value?.trim();
+  if (!configuredValue) {
+    throw new Error(`${name} is required in production.`);
+  }
+
+  let url: URL;
+  try {
+    url = new URL(configuredValue);
+  } catch {
+    throw new Error(`${name} must be a valid HTTPS origin.`);
+  }
+
+  if (
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    url.port ||
+    url.pathname !== "/" ||
+    url.search ||
+    url.hash ||
+    configuredValue.includes("*") ||
+    configuredValue.includes("?")
+  ) {
+    throw new Error(
+      `${name} must be an exact HTTPS origin without a wildcard, path, query, or fragment.`,
+    );
+  }
+
+  return url.origin;
+}
+
+function readVercelHosts(env: NodeJS.ProcessEnv) {
+  return unique(
+    [
+      ["VERCEL_URL", env.VERCEL_URL],
+      ["VERCEL_PROJECT_PRODUCTION_URL", env.VERCEL_PROJECT_PRODUCTION_URL],
+    ].flatMap(([name, value]) => {
+      const configuredValue = value?.trim();
+      if (!configuredValue) {
+        return [];
+      }
+
+      if (configuredValue.includes("*") || configuredValue.includes("?")) {
+        throw new Error(`${name} must be an exact Vercel host.`);
+      }
+
+      let url: URL;
+      try {
+        url = new URL(
+          configuredValue.includes("://")
+            ? configuredValue
+            : `https://${configuredValue}`,
+        );
+      } catch {
+        throw new Error(`${name} must be an exact Vercel host.`);
+      }
+
+      if (
+        url.protocol !== "https:" ||
+        url.username ||
+        url.password ||
+        url.port ||
+        url.pathname !== "/" ||
+        url.search ||
+        url.hash
+      ) {
+        throw new Error(`${name} must be an exact HTTPS Vercel host.`);
+      }
+
+      return [url.host.toLowerCase()];
+    }),
+  );
+}
+
+function unique(values: string[]) {
+  return [...new Set(values)];
 }
 
 function readBoolean(value: string | undefined, fallback: boolean) {

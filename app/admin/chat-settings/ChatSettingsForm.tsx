@@ -7,7 +7,6 @@ import {
   MAX_CHAT_MEMO_LENGTH,
   type ChatSettings,
 } from "@/lib/chat-settings";
-import { fetchWithAwsPayloadHash } from "@/lib/client-fetch";
 import {
   SETTINGS_ERROR_CODES,
   isSettingsErrorCode,
@@ -100,7 +99,7 @@ export function ChatSettingsForm({
     setIsSubmitting(true);
 
     try {
-      const response = await fetchWithAwsPayloadHash(
+      const response = await fetch(
         "/api/admin/chat-settings",
         {
           method: "PUT",

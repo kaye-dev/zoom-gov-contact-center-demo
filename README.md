@@ -94,13 +94,47 @@ curl http://localhost:3000/docs/privacy-policy.md
 
 この構成では `app/api/[[...route]]/route.ts` の Route Handler 上で Hono を動かし、アプリ固有 API は Prisma Client 経由で PostgreSQL に書き込みます。Better Auth は `app/api/auth/[...all]/route.ts` に専用 mount しています。
 
-Vercel にデプロイする場合、`DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` を設定し、Prisma Postgres / Neon / Supabase / Vercel Marketplace の Postgres など `DATABASE_URL` で接続できる PostgreSQL を使ってください。`postinstall` で Prisma Client を生成し、`vercel-build` では `prisma migrate deploy` を実行します。
+### Vercel Hobby + Neon Freeへデプロイ
 
-### AWSへ低コストでデプロイ
+公開はリポジトリルートの対話式スクリプトだけから行います。VercelのGit自動デプロイは使用しません。
 
-AWSでは、CloudFront、IAM認証付きLambda Function URL、ARM64 Lambda、0 ACUまで自動停止するAurora Serverless v2をCDKで構築できます。NAT Gateway、ALB、API Gateway、RDS Proxy、WAFは使用しません。
+```bash
+./deploy.sh
+```
 
-構成、費用を抑えるための制約、デプロイ・migration・初期管理者・削除手順は [AWS運用スクリプト](scripts/aws/README.md) と [CDKインフラ](infra/README.md) を参照してください。
+事前に次を用意してください。
+
+- Node.js 24と`package-lock.json`を使うnpm環境
+- personal Hobby scopeのVercel project（System Environment Variablesを有効化し、Git repositoryは接続しない）
+- Singapore regionで手動作成したNeon Free project
+- canonical Production URL
+
+この手順は、Vercel Hobbyの対象となる個人・非商用利用であり、本番データや日本国内のデータ所在要件がないデモだけを対象とします。業務・商用利用ではHobbyを使わず、適合するVercel planを選んでください。Neonのscale-to-zeroを妨げる常時health監視は設定しません。
+
+Vercel CLIまたはNeon CLIがない場合、`deploy.sh`は自動インストールせず、次の候補を表示して停止します。
+
+```bash
+npm install -g vercel@latest
+npm install -g neon@latest
+# NeonはmacOSなら次も選択可
+brew install neonctl
+```
+
+スクリプトはclean worktree、認証、project/scope/region/plan、pooled/direct URLの対応関係を確認し、品質gateとmigration計画を通過したcandidateだけをstaged Productionとして作成します。migrationはcandidate buildから分離され、Neon direct URLをプロセス内で一時利用した明示確認後の`prisma migrate deploy`だけで適用されます。smoke test成功後にも確認し、承認されたcandidateだけをcanonical URLへpromoteします。障害時に自動rollbackやDB restoreは行いません。
+
+canonical Productionの受入成功後に限り、固定したAWS account `686112929630`／`ap-northeast-1`の旧CDK resourceを再列挙します。確認済みresourceと実行直前hashが一致し、typed confirmationが入力された場合だけ順番に削除します。想定外resourceや削除失敗を検出した場合は強い削除手段へ切り替えず停止し、AWS CLI profile／SSO設定は削除しません。
+
+Vercel Productionへ保存する環境変数は次の5つだけです。`DATABASE_URL_UNPOOLED`はmigration中だけ入力し、Vercelやファイルには保存しません。
+
+| 環境変数 | 用途 |
+| --- | --- |
+| `DATABASE_URL` | Neon pooled URL（Sensitive） |
+| `BETTER_AUTH_SECRET` | 初回に生成し、以後のデプロイでも維持する認証secret |
+| `BETTER_AUTH_URL` | canonical Production URL |
+| `BETTER_AUTH_TRUSTED_ORIGINS` | canonical Production URL |
+| `BETTER_AUTH_TRUST_PROXY_HEADERS` | `true` |
+
+`postinstall`と`vercel-build`はPrisma Clientを生成しますが、Vercel build中にmigrationは実行しません。
 
 ### npm で起動
 
@@ -128,12 +162,8 @@ npm run dev
 | `npm run lint` | ESLint を実行 |
 | `npm run typecheck` | アプリのTypeScript型検査を実行 |
 | `npm run audit:runtime` | デプロイ成果物に含まれる依存関係の脆弱性監査を実行 |
-| `npm run test:infra` | CDKテンプレートと運用Lambdaのテストを実行 |
-| `npm run aws:test-scripts` | AWS運用スクリプトのテストを実行 |
-| `npm run aws:deploy` | AWS identity確認後に対話式でCDKデプロイ |
-| `npm run aws:seed-admin` | AWS上の初期管理者を対話式で作成または更新 |
-| `npm run aws:verify-pause` | Auroraが自動停止して0 ACUになったことをCloudWatchで確認 |
-| `npm run aws:destroy` | AWS identity確認後に2スタックを削除・残存監査 |
+| `npm run test:deploy` | Vercel/Neonデプロイの安全ゲートをstubで検証 |
+| `./deploy.sh` | Vercel/Neonのpreflight、migration、staged smoke、promotionを対話式で実行 |
 | `npm run db:generate` | Prisma Client を生成 |
 | `npm run db:migrate` | Prisma migration を作成し、ローカル DB に適用 |
 | `npm run db:deploy` | Prisma migration をデプロイ先 DB に適用 |

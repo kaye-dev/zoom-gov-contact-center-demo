@@ -5,6 +5,7 @@ import type { PrismaClient } from "../lib/generated/prisma/client";
 import {
   connectDatabaseWithRetry,
   createDatabaseContext,
+  hasDatabaseConfiguration,
   resolveDatabasePoolConfig,
   runWithDatabaseContext,
   type DatabaseContext,
@@ -23,62 +24,63 @@ test("local database config uses the development fallback and bounded pool", () 
   assert.equal(config.ssl, undefined);
 });
 
-test("structured AWS database config enables verified RDS TLS", () => {
+test("production database config uses only the pooled DATABASE_URL", () => {
   const config = resolveDatabasePoolConfig({
     NODE_ENV: "production",
-    DB_HOST: "database.cluster-example.ap-northeast-1.rds.amazonaws.com",
-    DB_PORT: "5432",
-    DB_NAME: "zoom_demo",
-    DB_USER: "app_user",
-    DB_PASSWORD: "secret",
+    DATABASE_URL:
+      "postgresql://app:secret@ep-example-pooler.ap-southeast-1.aws.neon.tech/zoom_demo?sslmode=require",
+    DATABASE_URL_UNPOOLED:
+      "postgresql://app:secret@ep-example.ap-southeast-1.aws.neon.tech/zoom_demo?sslmode=require",
   });
 
-  assert.equal(config.host, "database.cluster-example.ap-northeast-1.rds.amazonaws.com");
-  assert.equal(config.port, 5432);
-  assert.equal(config.database, "zoom_demo");
-  assert.equal(config.user, "app_user");
-  assert.equal(config.password, "secret");
+  assert.equal(
+    config.connectionString,
+    "postgresql://app:secret@ep-example-pooler.ap-southeast-1.aws.neon.tech/zoom_demo?sslmode=require",
+  );
   assert.equal(config.max, 2);
   assert.equal(config.application_name, "zoom-gov-demo-app");
   assert.equal(config.connectionTimeoutMillis, 45_000);
-  assert.ok(config.ssl && typeof config.ssl === "object");
-  assert.equal(config.ssl.rejectUnauthorized, true);
-  assert.ok(Array.isArray(config.ssl.ca));
-  assert.ok(config.ssl.ca.length > 0);
+  assert.equal(config.ssl, undefined);
 });
 
-test("production rejects missing, partial, and invalid database config", () => {
+test("production rejects a missing pooled DATABASE_URL", () => {
   assert.throws(
     () => resolveDatabasePoolConfig({ NODE_ENV: "production" }),
-    /Database configuration is required in production/,
+    /DATABASE_URL is required in production/,
   );
   assert.throws(
     () =>
       resolveDatabasePoolConfig({
         NODE_ENV: "production",
-        DB_HOST: "database.example",
+        DATABASE_URL_UNPOOLED: "postgresql://direct.example/zoom_demo",
       }),
-    /must be set together/,
-  );
-  assert.throws(
-    () =>
-      resolveDatabasePoolConfig({
-        NODE_ENV: "production",
-        DATABASE_URL: "postgresql://example",
-        DB_SSL: "sometimes",
-      }),
-    /DB_SSL must be true or false/,
+    /DATABASE_URL is required in production/,
   );
 });
 
-test("Aurora connection preflight retries at most three times", async () => {
+test("runtime configuration never treats the unpooled URL as DATABASE_URL", () => {
+  assert.equal(
+    hasDatabaseConfiguration({
+      DATABASE_URL_UNPOOLED: "postgresql://direct.example/zoom_demo",
+    }),
+    false,
+  );
+  assert.equal(
+    hasDatabaseConfiguration({
+      DATABASE_URL: "postgresql://pooled.example/zoom_demo",
+    }),
+    true,
+  );
+});
+
+test("database connection preflight retries at most three times", async () => {
   let attempts = 0;
   const waits: number[] = [];
   const prisma = {
     async $queryRawUnsafe() {
       attempts += 1;
       if (attempts < 3) {
-        throw new Error("Aurora is resuming");
+        throw new Error("Neon is resuming");
       }
       return [{ value: 1 }];
     },

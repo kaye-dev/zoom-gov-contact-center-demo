@@ -50,20 +50,10 @@ export const FAQ_LEGACY_REDIRECTS = [
 
 const nextConfig: NextConfig = {
   ...(allowedDevOrigin ? { allowedDevOrigins: [allowedDevOrigin] } : {}),
-  output: process.env.AWS_LAMBDA_BUILD === "1" ? "standalone" : undefined,
-  deploymentId: process.env.DEPLOYMENT_VERSION,
   // content/docs 配下の .mdx をダイナミックインポートしてレンダリングする。
   // .mdx をルーティング対象（page.mdx）として使う予定はないが、@next/mdx の
   // 標準構成に合わせて拡張子を許可しておく（content/ は app/ 外なのでルートにはならない）。
   pageExtensions: ["js", "jsx", "ts", "tsx", "md", "mdx"],
-  images: {
-    // 開発時は画像最適化キャッシュ（.next/cache/images）を通さず
-    // public/ から直接配信し、画像を上書きしたら即反映されるようにする。
-    // 本番（next build / start）では従来どおり最適化を有効にする。
-    unoptimized:
-      process.env.NODE_ENV === "development" ||
-      process.env.AWS_LAMBDA_BUILD === "1",
-  },
   experimental: {
     // dev セッション間の Turbopack 永続キャッシュを無効化し、
     // 毎回クリーンな状態でホットリロードさせる

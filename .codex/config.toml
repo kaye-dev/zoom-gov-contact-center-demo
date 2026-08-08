@@ -1,8 +1,5 @@
 # model = "gpt-5.5"
 # model_reasoning_effort = "xhigh"
 
-[mcp_servers."aws-knowledge"]
-url = "https://knowledge-mcp.global.api.aws"
-
 [mcp_servers."openaiDeveloperDocs"]
 url = "https://developers.openai.com/mcp"

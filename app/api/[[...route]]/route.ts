@@ -88,8 +88,8 @@ app.get("/demo-records", async (c) => {
 
 app.post("/demo-records", async (c) => {
   // This endpoint is only a local database-development aid. Keeping an
-  // unauthenticated production writer would allow arbitrary Aurora storage and
-  // I/O growth, so fail before opening a database connection in production.
+  // unauthenticated production writer would allow arbitrary database growth,
+  // so fail before opening a database connection in production.
   if (process.env.NODE_ENV === "production") {
     return c.json({ error: "Not found." }, 404);
   }
@@ -116,16 +116,6 @@ app.post("/demo-records", async (c) => {
   }
 
   return c.json({ record: await createDemoRecord(prisma, message) }, 201);
-});
-
-app.post("/oac-payload-probe", async (c) => {
-  const body = await readJsonBody(c.req.raw);
-
-  if (!isOacPayloadProbe(body)) {
-    return c.json({ error: "Invalid OAC payload probe." }, 400);
-  }
-
-  return c.json({ ok: true });
 });
 
 app.post("/password-reset-requests", async (c) => {
@@ -504,19 +494,6 @@ function isDemoRecordPayload(value: unknown): value is { message: string } {
   );
 }
 
-function isOacPayloadProbe(
-  value: unknown,
-): value is { oacPayloadHashProbe: true } {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value) &&
-    Object.keys(value).length === 1 &&
-    "oacPayloadHashProbe" in value &&
-    value.oacPayloadHashProbe === true
-  );
-}
-
 function isDatabaseFreeRequest(request: Request): boolean {
   if (request.method.toUpperCase() !== "POST") {
     return false;
@@ -524,9 +501,8 @@ function isDatabaseFreeRequest(request: Request): boolean {
 
   const pathname = new URL(request.url).pathname;
   return (
-    pathname === "/api/oac-payload-probe" ||
-    (process.env.NODE_ENV === "production" &&
-      pathname === "/api/demo-records")
+    process.env.NODE_ENV === "production" &&
+    pathname === "/api/demo-records"
   );
 }
 

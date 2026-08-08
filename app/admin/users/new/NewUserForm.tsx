@@ -2,8 +2,6 @@
 
 import { useState } from "react";
 
-import { fetchWithAwsPayloadHash } from "@/lib/client-fetch";
-
 import { useI18n } from "../../../i18n/LanguageProvider";
 
 type CreatedUser = {
@@ -22,7 +20,7 @@ export function NewUserForm() {
     setCreatedUser(null);
     setIsSubmitting(true);
 
-    const response = await fetchWithAwsPayloadHash(
+    const response = await fetch(
       "/api/admin/users",
       {
         method: "POST",

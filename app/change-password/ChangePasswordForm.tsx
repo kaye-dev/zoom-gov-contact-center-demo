@@ -3,8 +3,6 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { fetchWithAwsPayloadHash } from "@/lib/client-fetch";
-
 import { useI18n } from "../i18n/LanguageProvider";
 
 export function ChangePasswordForm() {
@@ -19,7 +17,7 @@ export function ChangePasswordForm() {
     setSuccess(false);
     setIsSubmitting(true);
 
-    const response = await fetchWithAwsPayloadHash(
+    const response = await fetch(
       "/api/account/change-password",
       {
         method: "POST",
