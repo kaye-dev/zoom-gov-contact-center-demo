@@ -1,0 +1,221 @@
+{
+  "sourceDigest": "2cc26f1eb18cc6f6c720b817090c95cbb3db7e8a86ed7ac903f7eba5534174a9",
+  "translations": {
+    "en": {
+      "items": [
+        {
+          "no": 1,
+          "question": "Which PIN should I use to log in to MynaPortal?",
+          "answer": "The main topic is My Number (Individual Number). When logging in to MynaPortal with a My Number Card, use the four-digit numeric PIN for the user authentication electronic certificate. Never disclose your Individual Number or PIN in a chat or over the telephone."
+        },
+        {
+          "no": 2,
+          "question": "If I forget my login PIN, can it be checked or reset through this chat?",
+          "answer": "This chat cannot check your PIN, verify your identity, or reset the PIN. Do not enter your Individual Number or PIN. Consult MynaPortal's official guidance or the service counter of the municipality where your resident record is registered."
+        },
+        {
+          "no": 3,
+          "question": "Will the four-digit PIN be locked if I enter it incorrectly several times?",
+          "answer": "The four-digit numeric PIN for the user authentication electronic certificate is locked after three consecutive incorrect entries. Stop trying after it is locked and consult the service counter of the municipality where your resident record is registered. Ask the Resident Services Division for details of Mirai City's procedure."
+        },
+        {
+          "no": 4,
+          "question": "Where should I place my My Number Card when reading it with an iPhone?",
+          "answer": "Press the center of the My Number Card against the top of the iPhone and wait for a while without moving it. Do not shift the card or iPhone while it is being read."
+        },
+        {
+          "no": 5,
+          "question": "Where should I place my My Number Card when reading it with an Android phone?",
+          "answer": "Press the center of the My Number Card against the mobile contactless IC communication mark on the back of the Android device and wait for a while without moving it. The mark's location varies by model, so also check the guidance shown on the device."
+        },
+        {
+          "no": 6,
+          "question": "Can I read the card while my smartphone case is still attached?",
+          "answer": "A case may interfere with card reading. If the card cannot be read, remove the smartphone case and press the center of the card against the correct position again."
+        },
+        {
+          "no": 7,
+          "question": "No error appears, but card reading does not finish. What should I do?",
+          "answer": "Align the center of the card with the top of an iPhone or with the mobile contactless IC communication mark on the back of an Android device. Remove the smartphone case, keep the card pressed in place without moving it, and wait for a while."
+        },
+        {
+          "no": 8,
+          "question": "Can I log in to MynaPortal after the electronic certificate expires?",
+          "answer": "You cannot log in to MynaPortal after the electronic certificate recorded on the My Number Card expires. Regardless of age, the electronic certificate is valid until the fifth birthday after its issue date."
+        },
+        {
+          "no": 9,
+          "question": "When and where can I renew the electronic certificate?",
+          "answer": "An expiration notice is generally sent about two to three months before the expiration date. Renewal is available from three months before expiration at the service counter of the municipality where your resident record is registered. Contact the Resident Services Division for details in Mirai City."
+        },
+        {
+          "no": 10,
+          "question": "What should I do if this FAQ does not resolve my MynaPortal login problem?",
+          "answer": "If the referenced knowledge is insufficient, do not guess. Check the latest main telephone number in the footer of the Mirai City official website (zoom-gov-contact-center-demo) and ask to be connected to the Resident Services Division. Do not disclose your Individual Number or PIN; confirm matters requiring identity verification through an official service counter or telephone channel."
+        }
+      ]
+    },
+    "zh-Hans": {
+      "items": [
+        {
+          "no": 1,
+          "question": "登录MynaPortal时应使用哪个密码？",
+          "answer": "主要内容是个人编号（My Number）。使用个人编号卡登录MynaPortal时，应使用用户证明用电子证书的4位数字密码。请勿在聊天或电话中透露个人编号或密码。"
+        },
+        {
+          "no": 2,
+          "question": "忘记登录密码时，可以通过聊天查询或重新设置吗？",
+          "answer": "本聊天无法查询密码、核实本人身份或重新设置密码。请勿输入个人编号或密码，并通过MynaPortal官方指引或居民登记所在地的市区町村窗口咨询。"
+        },
+        {
+          "no": 3,
+          "question": "多次输错4位数字密码会被锁定吗？",
+          "answer": "用户证明用电子证书的4位数字密码连续输错3次后会被锁定。锁定后请勿继续尝试，并向居民登记所在地的市区町村窗口咨询。未来市的具体手续请向市民窗口课确认。"
+        },
+        {
+          "no": 4,
+          "question": "使用iPhone读取个人编号卡时，应把卡放在哪里？",
+          "answer": "请将个人编号卡的中心贴在iPhone顶部，保持不动并等待片刻。读取期间请勿移动卡片或iPhone的位置。"
+        },
+        {
+          "no": 5,
+          "question": "使用Android手机读取个人编号卡时，应把卡放在哪里？",
+          "answer": "请将个人编号卡的中心贴在Android设备背面的移动设备非接触式IC通信标志处，保持不动并等待片刻。不同机型的标志位置可能不同，也请确认设备画面上的指引。"
+        },
+        {
+          "no": 6,
+          "question": "手机装着保护壳时也能读取个人编号卡吗？",
+          "answer": "手机壳可能妨碍读取。无法读取时，请取下手机壳，将卡片中心贴在正确位置后再次尝试。"
+        },
+        {
+          "no": 7,
+          "question": "没有显示错误，但一直无法完成读卡，该怎么办？",
+          "answer": "请将卡片中心对准iPhone顶部，或Android设备背面的移动设备非接触式IC通信标志。取下手机壳，贴住卡片后不要移动，并等待片刻。"
+        },
+        {
+          "no": 8,
+          "question": "电子证书过期后还能登录MynaPortal吗？",
+          "answer": "个人编号卡中记录的电子证书过期后，将无法登录MynaPortal。无论年龄大小，电子证书的有效期均截至签发日后的第5个生日。"
+        },
+        {
+          "no": 9,
+          "question": "电子证书可以在何时、何处更新？",
+          "answer": "通常会在有效期届满前约2至3个月寄送有效期通知书。自有效期届满前3个月起，可在居民登记所在地的市区町村窗口办理更新。未来市的详细手续请向市民窗口课确认。"
+        },
+        {
+          "no": 10,
+          "question": "如果本FAQ无法解决MynaPortal登录问题，该怎么办？",
+          "answer": "如果所参考的知识库信息不足，请勿自行推测。请在未来市官方网站（zoom-gov-contact-center-demo）页面底部确认最新总机号码，并要求转接市民窗口课。请勿透露个人编号或密码；需要核实身份的事项请通过官方窗口或电话渠道确认。"
+        }
+      ]
+    },
+    "zh-Hant": {
+      "items": [
+        {
+          "no": 1,
+          "question": "登入MynaPortal時應使用哪個密碼？",
+          "answer": "主要內容是個人編號（My Number）。使用個人編號卡登入MynaPortal時，應使用使用者證明用電子憑證的4位數字密碼。請勿在聊天或電話中透露個人編號或密碼。"
+        },
+        {
+          "no": 2,
+          "question": "忘記登入密碼時，可以透過聊天查詢或重新設定嗎？",
+          "answer": "本聊天無法查詢密碼、核實本人身分或重新設定密碼。請勿輸入個人編號或密碼，並透過MynaPortal官方指引或居民登記所在地的市區町村窗口諮詢。"
+        },
+        {
+          "no": 3,
+          "question": "多次輸錯4位數字密碼會被鎖定嗎？",
+          "answer": "使用者證明用電子憑證的4位數字密碼連續輸錯3次後會被鎖定。鎖定後請勿繼續嘗試，並向居民登記所在地的市區町村窗口諮詢。未來市的具體手續請向市民窗口課確認。"
+        },
+        {
+          "no": 4,
+          "question": "使用iPhone讀取個人編號卡時，應把卡放在哪裡？",
+          "answer": "請將個人編號卡的中心貼在iPhone頂部，保持不動並等待片刻。讀取期間請勿移動卡片或iPhone的位置。"
+        },
+        {
+          "no": 5,
+          "question": "使用Android手機讀取個人編號卡時，應把卡放在哪裡？",
+          "answer": "請將個人編號卡的中心貼在Android裝置背面的行動裝置非接觸式IC通訊標誌處，保持不動並等待片刻。不同機型的標誌位置可能不同，也請確認裝置畫面上的指引。"
+        },
+        {
+          "no": 6,
+          "question": "手機裝著保護殼時也能讀取個人編號卡嗎？",
+          "answer": "手機殼可能妨礙讀取。無法讀取時，請取下手機殼，將卡片中心貼在正確位置後再次嘗試。"
+        },
+        {
+          "no": 7,
+          "question": "沒有顯示錯誤，但一直無法完成讀卡，該怎麼辦？",
+          "answer": "請將卡片中心對準iPhone頂部，或Android裝置背面的行動裝置非接觸式IC通訊標誌。取下手機殼，貼住卡片後不要移動，並等待片刻。"
+        },
+        {
+          "no": 8,
+          "question": "電子憑證過期後還能登入MynaPortal嗎？",
+          "answer": "個人編號卡中記錄的電子憑證過期後，將無法登入MynaPortal。無論年齡大小，電子憑證的有效期均截至簽發日後的第5個生日。"
+        },
+        {
+          "no": 9,
+          "question": "電子憑證可以在何時、何處更新？",
+          "answer": "通常會在有效期屆滿前約2至3個月寄送有效期通知書。自有效期屆滿前3個月起，可在居民登記所在地的市區町村窗口辦理更新。未來市的詳細手續請向市民窗口課確認。"
+        },
+        {
+          "no": 10,
+          "question": "如果本FAQ無法解決MynaPortal登入問題，該怎麼辦？",
+          "answer": "如果所參考的知識庫資訊不足，請勿自行推測。請在未來市官方網站（zoom-gov-contact-center-demo）頁面底部確認最新總機號碼，並要求轉接市民窗口課。請勿透露個人編號或密碼；需要核實身分的事項請透過官方窗口或電話管道確認。"
+        }
+      ]
+    },
+    "ko": {
+      "items": [
+        {
+          "no": 1,
+          "question": "MynaPortal 로그인에는 어떤 비밀번호를 사용하나요?",
+          "answer": "주요 내용은 마이넘버(개인번호)입니다. 마이넘버 카드로 MynaPortal에 로그인할 때는 이용자 증명용 전자증명서의 숫자 4자리 비밀번호를 사용합니다. 채팅이나 전화로 개인번호 또는 비밀번호를 알려 주지 마세요."
+        },
+        {
+          "no": 2,
+          "question": "로그인 비밀번호를 잊었을 때 채팅으로 확인하거나 재설정할 수 있나요?",
+          "answer": "이 채팅에서는 비밀번호 확인, 본인 확인 또는 재설정을 할 수 없습니다. 개인번호나 비밀번호를 입력하지 말고 MynaPortal 공식 안내 또는 주민등록이 있는 지방자치단체 창구에 문의하세요."
+        },
+        {
+          "no": 3,
+          "question": "숫자 4자리 비밀번호를 여러 번 틀리면 잠기나요?",
+          "answer": "이용자 증명용 전자증명서의 숫자 4자리 비밀번호를 3회 연속 잘못 입력하면 잠깁니다. 잠긴 후에는 입력을 계속하지 말고 주민등록이 있는 지방자치단체 창구에 문의하세요. 미래시의 구체적인 절차는 시민창구과에 확인하세요."
+        },
+        {
+          "no": 4,
+          "question": "iPhone으로 마이넘버 카드를 읽을 때 카드를 어디에 대야 하나요?",
+          "answer": "마이넘버 카드의 중앙을 iPhone 상단에 대고 움직이지 않은 채 잠시 기다리세요. 읽는 동안 카드나 iPhone의 위치를 옮기지 마세요."
+        },
+        {
+          "no": 5,
+          "question": "Android 휴대전화로 마이넘버 카드를 읽을 때 카드를 어디에 대야 하나요?",
+          "answer": "마이넘버 카드의 중앙을 Android 기기 뒷면의 모바일 비접촉 IC 통신 마크에 대고 움직이지 않은 채 잠시 기다리세요. 기종에 따라 마크 위치가 다르므로 기기 화면의 안내도 확인하세요."
+        },
+        {
+          "no": 6,
+          "question": "스마트폰 케이스를 씌운 채로 카드를 읽을 수 있나요?",
+          "answer": "케이스가 카드 읽기를 방해할 수 있습니다. 읽히지 않을 때는 스마트폰 케이스를 벗기고 카드 중앙을 올바른 위치에 댄 후 다시 시도하세요."
+        },
+        {
+          "no": 7,
+          "question": "오류는 표시되지 않지만 카드 읽기가 끝나지 않습니다. 어떻게 해야 하나요?",
+          "answer": "카드 중앙을 iPhone 상단 또는 Android 기기 뒷면의 모바일 비접촉 IC 통신 마크에 맞추세요. 스마트폰 케이스를 벗기고 카드를 댄 채 움직이지 말고 잠시 기다리세요."
+        },
+        {
+          "no": 8,
+          "question": "전자증명서 유효기간이 지나도 MynaPortal에 로그인할 수 있나요?",
+          "answer": "마이넘버 카드에 기록된 전자증명서의 유효기간이 지나면 MynaPortal에 로그인할 수 없습니다. 전자증명서의 유효기간은 연령과 관계없이 발급일 후 다섯 번째 생일까지입니다."
+        },
+        {
+          "no": 9,
+          "question": "전자증명서는 언제, 어디에서 갱신할 수 있나요?",
+          "answer": "보통 유효기간 약 2~3개월 전에 유효기간 통지서가 발송됩니다. 유효기간 3개월 전부터 주민등록이 있는 지방자치단체 창구에서 갱신할 수 있습니다. 미래시의 자세한 절차는 시민창구과에 확인하세요."
+        },
+        {
+          "no": 10,
+          "question": "이 FAQ로 MynaPortal 로그인 문제가 해결되지 않으면 어떻게 해야 하나요?",
+          "answer": "참조한 지식에 충분한 정보가 없으면 추측하지 마세요. 미래시 공식 웹사이트(zoom-gov-contact-center-demo) 하단에서 최신 대표 전화번호를 확인한 후 시민창구과 연결을 요청하세요. 개인번호나 비밀번호를 알려 주지 말고 본인 확인이 필요한 사항은 공식 창구 또는 전화 채널에서 확인하세요."
+        }
+      ]
+    }
+  }
+}

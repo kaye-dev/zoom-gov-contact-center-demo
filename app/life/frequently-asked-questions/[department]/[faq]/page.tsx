@@ -12,7 +12,7 @@ type FaqDetailPageProps = {
   params: Promise<{ department: string; faq: string }>;
 };
 
-export const dynamicParams = false;
+export const dynamicParams = true;
 
 export function generateStaticParams() {
   return getFaqCategoryStaticParams();

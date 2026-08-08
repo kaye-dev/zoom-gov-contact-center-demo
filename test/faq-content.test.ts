@@ -149,6 +149,244 @@ test("every department, organization, category, question, and answer has all fiv
   }
 });
 
+test("FAQ loader uses the tracked docs knowledge-base root", () => {
+  assert.equal(
+    FAQ_KNOWLEDGE_BASE_ROOT,
+    join(
+      process.cwd(),
+      "docs",
+      "knowledge-base",
+      "自治体-基礎自治体-未来市",
+    ),
+  );
+});
+
+test("My Number and bulky-waste demo FAQs are localized without filling handoff gaps", () => {
+  const myNumber = repository.departments
+    .find(({ slug }) => slug === "resident-services")
+    ?.categories.find(({ slug }) => slug === "my-number");
+  const bulkyWaste = repository.departments
+    .find(({ slug }) => slug === "zero-waste-promotion")
+    ?.categories.find(({ slug }) => slug === "bulky-waste");
+  assert.ok(myNumber);
+  assert.ok(bulkyWaste);
+
+  const myNumberTerms: Record<(typeof SITE_LOCALES)[number], readonly RegExp[]> = {
+    ja: [
+      /数字4桁/u,
+      /3回連続/u,
+      /iPhoneの上部/u,
+      /モバイル非接触IC通信マーク/u,
+      /ケース/u,
+      /動かさず/u,
+      /有効期限/u,
+    ],
+    en: [
+      /four-digit/u,
+      /three consecutive/u,
+      /top of the iPhone/u,
+      /mobile contactless IC communication mark/u,
+      /case/u,
+      /without moving/u,
+      /expir/u,
+    ],
+    "zh-Hans": [
+      /4位数字/u,
+      /连续输错3次/u,
+      /iPhone顶部/u,
+      /非接触式IC通信标志/u,
+      /手机壳/u,
+      /保持不动|不要移动/u,
+      /有效期/u,
+    ],
+    "zh-Hant": [
+      /4位數字/u,
+      /連續輸錯3次/u,
+      /iPhone頂部/u,
+      /非接觸式IC通訊標誌/u,
+      /手機殼/u,
+      /保持不動|不要移動/u,
+      /有效期/u,
+    ],
+    ko: [
+      /숫자 4자리/u,
+      /3회 연속/u,
+      /iPhone 상단/u,
+      /모바일 비접촉 IC 통신 마크/u,
+      /케이스/u,
+      /움직이지/u,
+      /유효기간/u,
+    ],
+  };
+  const bulkyWasteTerms: Record<(typeof SITE_LOCALES)[number], readonly RegExp[]> = {
+    ja: [/品目/u, /大きさ/u, /数量/u, /排出場所/u, /収集日/u, /手数料/u, /処理券/u],
+    en: [
+      /item/u,
+      /dimensions/u,
+      /quantity/u,
+      /set-out location/u,
+      /collection date/u,
+      /fee/u,
+      /disposal ticket/u,
+    ],
+    "zh-Hans": [/品目/u, /尺寸/u, /数量/u, /投放地点/u, /收集日期/u, /手续费/u, /处理券/u],
+    "zh-Hant": [/品目/u, /尺寸/u, /數量/u, /投放地點/u, /收集日期/u, /手續費/u, /處理券/u],
+    ko: [/품목/u, /크기/u, /수량/u, /배출 장소/u, /수거일/u, /수수료/u, /처리권/u],
+  };
+
+  for (const locale of SITE_LOCALES) {
+    assert.equal(myNumber.items[locale].length, 10);
+    assert.equal(bulkyWaste.items[locale].length, 10);
+    const myNumberText = myNumber.items[locale]
+      .map(({ question, answer }) => `${question}\n${answer}`)
+      .join("\n");
+    const bulkyWasteText = bulkyWaste.items[locale]
+      .map(({ question, answer }) => `${question}\n${answer}`)
+      .join("\n");
+    for (const term of myNumberTerms[locale]) {
+      assert.match(myNumberText, term, `${locale} My Number guidance is incomplete`);
+    }
+    for (const term of bulkyWasteTerms[locale]) {
+      assert.match(bulkyWasteText, term, `${locale} bulky-waste guidance is incomplete`);
+    }
+  }
+
+  const myNumberHandoffGapProhibitions: Record<
+    (typeof SITE_LOCALES)[number],
+    readonly RegExp[]
+  > = {
+    ja: [
+      /ロック解除.{0,20}(?:持ち物|必要書類|本人確認書類)/u,
+      /コンビニ(?:エンスストア)?.{0,20}(?:初期化|再設定)/u,
+      /当日(?:中)?.{0,20}(?:対応|解除|手続き)/u,
+    ],
+    en: [
+      /(?:documents?|items?) (?:required|needed).{0,30}(?:unlock|reset)/iu,
+      /convenience store.{0,40}(?:initiali[sz]e|reset)/iu,
+      /(?:same[- ]day|completed today).{0,30}(?:service|reset|unlock|procedure)?/iu,
+    ],
+    "zh-Hans": [
+      /解除锁定.{0,20}(?:携带物品|所需材料|身份证明)/u,
+      /便利店.{0,20}(?:初始化|重置)/u,
+      /(?:当天|当日).{0,20}(?:办理|处理|解除)/u,
+    ],
+    "zh-Hant": [
+      /解除鎖定.{0,20}(?:攜帶物品|所需文件|身分證明)/u,
+      /便利商店.{0,20}(?:初始化|重設)/u,
+      /(?:當天|當日).{0,20}(?:辦理|處理|解除)/u,
+    ],
+    ko: [
+      /잠금 해제.{0,20}(?:준비물|필요 서류|신분증)/u,
+      /편의점.{0,20}(?:초기화|재설정)/u,
+      /당일.{0,20}(?:처리|해제|완료)/u,
+    ],
+  };
+  for (const locale of SITE_LOCALES) {
+    const localizedText = myNumber.items[locale]
+      .map(({ question, answer }) => `${question}\n${answer}`)
+      .join("\n");
+    for (const unsupportedDetail of myNumberHandoffGapProhibitions[locale]) {
+      assert.doesNotMatch(
+        localizedText,
+        unsupportedDetail,
+        `${locale} My Number knowledge must preserve the handoff gap`,
+      );
+    }
+  }
+
+  const bulkyWasteAllLocales = SITE_LOCALES.flatMap((locale) =>
+    bulkyWaste.items[locale].map(({ question, answer }) => `${question}\n${answer}`),
+  ).join("\n");
+  assert.doesNotMatch(
+    bulkyWasteAllLocales,
+    /(?:¥|￥)\s*\d|\d[\d,.]*\s*(?:円|yen|yuan|won|元|원)/iu,
+    "bulky-waste knowledge must not invent an exact fee",
+  );
+  const bulkyWasteGapIndicators: Record<
+    (typeof SITE_LOCALES)[number],
+    readonly RegExp[]
+  > = {
+    ja: [/正確な料金や空き状況を確認できない/u, /対象条件や個別判断に必要な情報がありません/u],
+    en: [/cannot confirm an exact fee or collection availability/iu, /does not contain the eligibility requirements or information needed for an individual decision/iu],
+    "zh-Hans": [/无法确认准确费用或收集名额/u, /不包含搬出协助的适用条件或进行个别判断所需的信息/u],
+    "zh-Hant": [/無法確認準確費用或收集名額/u, /不包含搬出協助的適用條件或進行個別判斷所需的資訊/u],
+    ko: [/정확한 요금이나 수거 가능 여부를 확인할 수 없/u, /운반 지원의 대상 조건이나 개별 판단에 필요한 정보가 없습니다/u],
+  };
+  const bulkyWasteHandoffGapProhibitions: Record<
+    (typeof SITE_LOCALES)[number],
+    readonly RegExp[]
+  > = {
+    ja: [
+      /\d{1,2}月\d{1,2}日/u,
+      /(?:空き|予約可能)(?:があります|です)/u,
+      /予約(?:を|が)?確定(?:しました|済みです)/u,
+      /(?:要介護|障害者手帳|高齢者のみ|65歳以上)/u,
+    ],
+    en: [
+      /(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}/iu,
+      /\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?/u,
+      /(?:slot|collection date) (?:is|remains) available/iu,
+      /(?:reservation|booking) (?:is|has been) confirmed/iu,
+      /(?:care level|disability certificate|aged? 65|65 years? or older)/iu,
+    ],
+    "zh-Hans": [
+      /\d{1,2}月\d{1,2}日/u,
+      /(?:有空位|有空档|可以预约)/u,
+      /预约(?:已经|已)?确认/u,
+      /(?:护理等级|残疾人证|仅限老年人|65岁以上)/u,
+    ],
+    "zh-Hant": [
+      /\d{1,2}月\d{1,2}日/u,
+      /(?:有空位|有空檔|可以預約)/u,
+      /預約(?:已經|已)?確認/u,
+      /(?:照護等級|身心障礙手冊|僅限高齡者|65歲以上)/u,
+    ],
+    ko: [
+      /\d{1,2}월\s*\d{1,2}일/u,
+      /(?:빈자리|예약 가능)(?:이 있습니다|합니다)/u,
+      /예약(?:이|을)? 확정(?:했습니다|되었습니다)/u,
+      /(?:요양 등급|장애인 수첩|고령자만|65세 이상)/u,
+    ],
+  };
+  for (const locale of SITE_LOCALES) {
+    const collectionAnswer = bulkyWaste.items[locale][5].answer;
+    const carryOutAnswer = bulkyWaste.items[locale][9].answer;
+    for (const indicator of bulkyWasteGapIndicators[locale]) {
+      assert.match(
+        `${collectionAnswer}\n${carryOutAnswer}`,
+        indicator,
+        `${locale} bulky-waste knowledge must state its handoff gap`,
+      );
+    }
+    const localizedText = bulkyWaste.items[locale]
+      .map(({ question, answer }) => `${question}\n${answer}`)
+      .join("\n");
+    for (const unsupportedDetail of bulkyWasteHandoffGapProhibitions[locale]) {
+      assert.doesNotMatch(
+        localizedText,
+        unsupportedDetail,
+        `${locale} bulky-waste knowledge must not fill booking or assistance gaps`,
+      );
+    }
+  }
+
+  for (const category of [myNumber, bulkyWaste]) {
+    const translationPath = join(
+      FAQ_KNOWLEDGE_BASE_ROOT,
+      "_translations",
+      "faqs",
+      repository.departments.find((department) =>
+        department.categories.some(({ slug }) => slug === category.slug),
+      )?.slug ?? "",
+      `${category.slug}.json`,
+    );
+    const translation = JSON.parse(readFileSync(translationPath, "utf8")) as {
+      sourceDigest: string;
+    };
+    assert.equal(translation.sourceDigest, category.sourceDigest);
+  }
+});
+
 test("department and nested category route slugs are unique", () => {
   const departmentSlugs = repository.departments.map(({ slug }) => slug);
   const categoryRoutes = repository.departments.flatMap((department) =>

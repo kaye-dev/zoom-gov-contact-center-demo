@@ -67,12 +67,12 @@ const nextConfig: NextConfig = {
   },
   outputFileTracingIncludes: {
     '/life/frequently-asked-questions': [
-      './knowledge-base/自治体-基礎自治体-未来市/**/*.md',
-      './knowledge-base/自治体-基礎自治体-未来市/_translations/**/*.json',
+      './docs/knowledge-base/自治体-基礎自治体-未来市/**/*.md',
+      './docs/knowledge-base/自治体-基礎自治体-未来市/_translations/**/*.json',
     ],
     '/life/frequently-asked-questions/**': [
-      './knowledge-base/自治体-基礎自治体-未来市/**/*.md',
-      './knowledge-base/自治体-基礎自治体-未来市/_translations/**/*.json',
+      './docs/knowledge-base/自治体-基礎自治体-未来市/**/*.md',
+      './docs/knowledge-base/自治体-基礎自治体-未来市/_translations/**/*.json',
     ],
   },
   async redirects() {

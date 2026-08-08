@@ -6,6 +6,7 @@ import type { SiteLocale } from "./site-settings";
 
 export const FAQ_KNOWLEDGE_BASE_ROOT = join(
   process.cwd(),
+  "docs",
   "knowledge-base",
   "自治体-基礎自治体-未来市",
 );
