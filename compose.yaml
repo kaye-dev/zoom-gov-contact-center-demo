@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -26,14 +26,15 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/zoom_demo
       BETTER_AUTH_SECRET: local-development-secret-change-me
-      BETTER_AUTH_URL: http://localhost:${HOST_PORT:-3000}
-      BETTER_AUTH_TRUSTED_ORIGINS: http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003
+      BETTER_AUTH_URL: ${WEB_ORIGIN:-http://localhost:${HOST_PORT:-3000}}
+      BETTER_AUTH_TRUSTED_ORIGINS: ${WEB_ORIGIN:-http://localhost:${HOST_PORT:-3000}}
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@example.local}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-ChangeMe12345!}
       SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-Demo Admin}
+      NEXT_ALLOWED_DEV_ORIGIN: ${NEXT_ALLOWED_DEV_ORIGIN:-}
       NEXT_TELEMETRY_DISABLED: "1"
     ports:
-      - "${HOST_PORT:-3000}:3000"
+      - "${WEB_BIND_ADDRESS:-127.0.0.1}:${HOST_PORT:-3000}:3000"
     ulimits:
       core:
         soft: 0
@@ -54,7 +55,7 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/zoom_demo
       NEXT_TELEMETRY_DISABLED: "1"
     ports:
-      - "${STUDIO_PORT:-5555}:5555"
+      - "127.0.0.1:${STUDIO_PORT:-5555}:5555"
 
 volumes:
   node_modules:

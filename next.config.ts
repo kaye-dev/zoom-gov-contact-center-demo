@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 import createMDX from "@next/mdx";
 
+const allowedDevOrigin = process.env.NEXT_ALLOWED_DEV_ORIGIN?.trim();
+
 export const FAQ_LEGACY_REDIRECTS = [
   {
     source: '/life/frequently-asked-questions/procedure-faq',
@@ -47,6 +49,7 @@ export const FAQ_LEGACY_REDIRECTS = [
 ];
 
 const nextConfig: NextConfig = {
+  ...(allowedDevOrigin ? { allowedDevOrigins: [allowedDevOrigin] } : {}),
   output: process.env.AWS_LAMBDA_BUILD === "1" ? "standalone" : undefined,
   deploymentId: process.env.DEPLOYMENT_VERSION,
   // content/docs 配下の .mdx をダイナミックインポートしてレンダリングする。
@@ -70,12 +73,12 @@ const nextConfig: NextConfig = {
     '/docs/**': ['./content/docs/**/*'],
     '/api/docs-md/**': ['./content/docs/**/*'],
     '/life/frequently-asked-questions': [
-      './knowledge-base/自治体-基礎自治体-未来市/**/*.md',
-      './knowledge-base/自治体-基礎自治体-未来市/_translations/**/*.json',
+      './docs/knowledge-base/自治体-基礎自治体-未来市/**/*.md',
+      './docs/knowledge-base/自治体-基礎自治体-未来市/_translations/**/*.json',
     ],
     '/life/frequently-asked-questions/**': [
-      './knowledge-base/自治体-基礎自治体-未来市/**/*.md',
-      './knowledge-base/自治体-基礎自治体-未来市/_translations/**/*.json',
+      './docs/knowledge-base/自治体-基礎自治体-未来市/**/*.md',
+      './docs/knowledge-base/自治体-基礎自治体-未来市/_translations/**/*.json',
     ],
   },
   async redirects() {

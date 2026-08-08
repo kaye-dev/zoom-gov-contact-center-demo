@@ -39,7 +39,7 @@ while IFS= read -r -d '' tracked_file; do
     exit 1
   fi
   TRACKED_FAQ_COUNT=$((TRACKED_FAQ_COUNT + 1))
-done < <(git ls-files -z -- 'knowledge-base/自治体-基礎自治体-未来市')
+done < <(git ls-files -z -- 'docs/knowledge-base/自治体-基礎自治体-未来市')
 if (( TRACKED_FAQ_COUNT != 342 )); then
   echo "Expected 342 tracked FAQ runtime files, found ${TRACKED_FAQ_COUNT}." >&2
   exit 1
@@ -91,12 +91,14 @@ rm -rf -- \
   "${STAGING_DIRECTORY}/.next/static" \
   "${STAGING_DIRECTORY}/public" \
   "${STAGING_DIRECTORY}/content" \
-  "${STAGING_DIRECTORY}/knowledge-base"
-mkdir -p "${STAGING_DIRECTORY}/.next"
+  "${STAGING_DIRECTORY}/docs/knowledge-base"
+mkdir -p "${STAGING_DIRECTORY}/.next" "${STAGING_DIRECTORY}/docs"
 cp -R "${BUILD_CONTEXT}/.next/static" "${STAGING_DIRECTORY}/.next/static"
 cp -R "${BUILD_CONTEXT}/public" "${STAGING_DIRECTORY}/public"
 cp -R "${BUILD_CONTEXT}/content" "${STAGING_DIRECTORY}/content"
-cp -R "${BUILD_CONTEXT}/knowledge-base" "${STAGING_DIRECTORY}/knowledge-base"
+cp -R \
+  "${BUILD_CONTEXT}/docs/knowledge-base" \
+  "${STAGING_DIRECTORY}/docs/knowledge-base"
 cp "${SCRIPT_DIRECTORY}/run.sh" "${STAGING_DIRECTORY}/run.sh"
 chmod 755 "${STAGING_DIRECTORY}/run.sh"
 find "${STAGING_DIRECTORY}" -type f -name '.DS_Store' -delete
@@ -107,7 +109,7 @@ for required_path in \
   ".next/static" \
   "public" \
   "content/docs" \
-  "knowledge-base/自治体-基礎自治体-未来市"; do
+  "docs/knowledge-base/自治体-基礎自治体-未来市"; do
   if [[ ! -e "${STAGING_DIRECTORY}/${required_path}" ]]; then
     echo "Required Lambda asset path is missing: ${required_path}" >&2
     exit 1
@@ -140,7 +142,7 @@ fi
 
 if ! unzip -p \
   "${ASSET_PATH}" \
-  'knowledge-base/自治体-基礎自治体-未来市/_translations/catalog.json' \
+  'docs/knowledge-base/自治体-基礎自治体-未来市/_translations/catalog.json' \
   >/dev/null; then
   echo "FAQ runtime files could not be read from the Lambda zip." >&2
   exit 1
