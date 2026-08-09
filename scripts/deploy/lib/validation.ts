@@ -16,6 +16,11 @@ export type VercelLink = {
   projectId: string;
 };
 
+export type DeploymentCommandOutput = {
+  id?: string;
+  url: URL;
+};
+
 export type VercelProjectApi = {
   id: string;
   accountId: string;
@@ -380,12 +385,67 @@ export function assertMinimumVersion(
   }
 }
 
-export function parseDeploymentUrl(output: string): URL {
+export function parseDeploymentOutput(output: string): DeploymentCommandOutput {
   const value = stripAnsi(output).trim();
-  if (!/^https:\/\/[A-Za-z0-9-]+\.vercel\.app\/?$/.test(value)) {
+  if (/^https:\/\/[A-Za-z0-9-]+\.vercel\.app\/?$/.test(value)) {
+    return { url: parseDeploymentOrigin(value) };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value) as unknown;
+  } catch {
     throw new Error(
-      "Vercel deploy stdout must contain exactly one staged deployment URL.",
+      "Vercel deploy stdout must contain one URL or the documented JSON deployment result.",
     );
+  }
+
+  if (!isRecord(parsed)) {
+    throw new Error(
+      "Vercel deploy JSON did not report one READY Production deployment.",
+    );
+  }
+  const deployment =
+    "status" in parsed
+      ? parsed.status === "ok" &&
+        !("error" in parsed) &&
+        isRecord(parsed.deployment)
+        ? parsed.deployment
+        : undefined
+      : parsed;
+  if (
+    !deployment ||
+    "error" in deployment ||
+    typeof deployment.id !== "string" ||
+    !/^dpl_[A-Za-z0-9]+$/.test(deployment.id) ||
+    typeof deployment.url !== "string" ||
+    deployment.readyState !== "READY" ||
+    deployment.target !== "production"
+  ) {
+    throw new Error(
+      "Vercel deploy JSON did not report one READY Production deployment.",
+    );
+  }
+  return {
+    id: deployment.id,
+    url: parseDeploymentOrigin(deployment.url),
+  };
+}
+
+export function assertDeploymentOutputMatchesCandidate(
+  output: DeploymentCommandOutput,
+  candidateId: string,
+): void {
+  if (output.id !== undefined && output.id !== candidateId) {
+    throw new Error(
+      "Vercel deploy JSON deployment ID does not match inspect and API evidence.",
+    );
+  }
+}
+
+function parseDeploymentOrigin(value: string): URL {
+  if (!/^https:\/\/[A-Za-z0-9-]+\.vercel\.app\/?$/.test(value)) {
+    throw new Error("Vercel staged deployment URL is not an HTTPS origin.");
   }
   const url = new URL(value);
   if (url.pathname !== "/" || url.search || url.hash) {

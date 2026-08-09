@@ -39,8 +39,9 @@ import {
 } from "../lib/process";
 import { runSmokeChecks, verifyIdleRecovery } from "../lib/smoke";
 import {
+  assertDeploymentOutputMatchesCandidate,
   assertNeonEndpointMatches,
-  parseDeploymentUrl,
+  parseDeploymentOutput,
   parseVercelProjectApi,
   validateDatabaseUrls,
 } from "../lib/validation";
@@ -504,17 +505,130 @@ test("Neon project inspection uses the project ID API without an organization li
   );
 });
 
-test("staged URL parser accepts only one stdout origin", () => {
+test("staged URL parser supports legacy URL and non-interactive JSON output", () => {
   assert.equal(
-    parseDeploymentUrl("https://candidate.vercel.app\n").origin,
+    parseDeploymentOutput("https://candidate.vercel.app\n").url.origin,
     "https://candidate.vercel.app",
   );
   assert.throws(
     () =>
-      parseDeploymentUrl(
+      parseDeploymentOutput(
         "https://candidate.vercel.app\nhttps://other.vercel.app",
       ),
-    /exactly one/,
+    /one URL/,
+  );
+  const wrapped = parseDeploymentOutput(
+    JSON.stringify({
+      status: "ok",
+      deployment: {
+        id: "dpl_candidate123",
+        url: "https://candidate.vercel.app",
+        readyState: "READY",
+        target: "production",
+      },
+    }),
+  );
+  assert.equal(wrapped.url.origin, "https://candidate.vercel.app");
+  assert.equal(wrapped.id, "dpl_candidate123");
+  assert.equal(
+    parseDeploymentOutput(
+      JSON.stringify({
+        id: "dpl_candidate123",
+        url: "https://candidate.vercel.app",
+        readyState: "READY",
+        target: "production",
+      }),
+    ).id,
+    "dpl_candidate123",
+  );
+  for (const [field, value] of [
+    ["status", "error"],
+    ["readyState", "BUILDING"],
+    ["target", "preview"],
+  ] as const) {
+    const output = {
+      status: "ok",
+      deployment: {
+        id: "dpl_candidate123",
+        url: "https://candidate.vercel.app",
+        readyState: "READY",
+        target: "production",
+      },
+    };
+    if (field === "status") {
+      output.status = value;
+    } else {
+      output.deployment[field] = value;
+    }
+    assert.throws(
+      () => parseDeploymentOutput(JSON.stringify(output)),
+      /READY Production/,
+    );
+  }
+  for (const output of [
+    "[]",
+    "{not-json}",
+    JSON.stringify({
+      url: "https://candidate.vercel.app",
+      readyState: "READY",
+      target: "production",
+    }),
+    JSON.stringify({
+      id: "dpl_candidate123",
+      readyState: "READY",
+      target: "production",
+    }),
+    JSON.stringify({
+      id: "invalid",
+      url: "https://candidate.vercel.app",
+      readyState: "READY",
+      target: "production",
+    }),
+    JSON.stringify({
+      id: "dpl_candidate123",
+      url: "https://candidate.vercel.app/path",
+      readyState: "READY",
+      target: "production",
+    }),
+    JSON.stringify({
+      id: "dpl_candidate123",
+      url: "https://candidate.vercel.app",
+      readyState: "READY",
+      target: "production",
+      error: "build failed",
+    }),
+    JSON.stringify({
+      status: "ok",
+      error: "build failed",
+      deployment: {
+        id: "dpl_candidate123",
+        url: "https://candidate.vercel.app",
+        readyState: "READY",
+        target: "production",
+      },
+    }),
+  ]) {
+    assert.throws(() => parseDeploymentOutput(output));
+  }
+
+  const legacy = parseDeploymentOutput("https://candidate.vercel.app");
+  assert.doesNotThrow(() =>
+    assertDeploymentOutputMatchesCandidate(legacy, "dpl_candidate123"),
+  );
+  assert.throws(
+    () =>
+      assertDeploymentOutputMatchesCandidate(
+        parseDeploymentOutput(
+          JSON.stringify({
+            id: "dpl_other",
+            url: "https://candidate.vercel.app",
+            readyState: "READY",
+            target: "production",
+          }),
+        ),
+        "dpl_candidate123",
+      ),
+    /does not match/,
   );
 });
 
@@ -871,7 +985,7 @@ test("Vercel help exit code 2 is accepted only with every required flag", () => 
     if (command === "vercel") {
       const helpByCommand = new Map<string, string>([
         ["--help", "--scope"],
-        ["deploy --help", "--prod --skip-domain --yes --meta --project"],
+        ["deploy --help", "--prod --skip-domain --yes --json --meta --project"],
         ["api --help", "--raw"],
         [
           "env add --help",

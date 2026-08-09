@@ -46,9 +46,10 @@ import {
   type SmokeCredentials,
 } from "./lib/smoke";
 import {
+  assertDeploymentOutputMatchesCandidate,
   assertMinimumVersion,
   assertNeonEndpointMatches,
-  parseDeploymentUrl,
+  parseDeploymentOutput,
   parseNeonProjectApi,
   parseVercelProjectApi,
   parseVersion,
@@ -360,6 +361,7 @@ export async function runDeploymentWorkflow(
         "--prod",
         "--skip-domain",
         "--yes",
+        "--json",
         "--meta",
         `deployCommitSha=${git.commitSha}`,
         "--scope",
@@ -370,7 +372,8 @@ export async function runDeploymentWorkflow(
       { env: { ...process.env, NO_COLOR: "1" } },
     );
     assertCommandSucceeded(deployment, "Vercel staged Production deployment");
-    const candidateUrl = parseDeploymentUrl(deployment.stdout);
+    const deploymentOutput = parseDeploymentOutput(deployment.stdout);
+    const candidateUrl = deploymentOutput.url;
     state.candidateUrl = candidateUrl;
     const candidate = inspectCandidateDeployment(
       runner,
@@ -379,6 +382,7 @@ export async function runDeploymentWorkflow(
       candidateUrl,
       git.commitSha,
     );
+    assertDeploymentOutputMatchesCandidate(deploymentOutput, candidate.id);
     state.candidateId = candidate.id;
     console.log(`Staged URL: ${candidateUrl.origin}`);
     console.log(`Deployment ID: ${candidate.id}`);
@@ -732,7 +736,7 @@ export function ensureCliTools(runner: CommandRunner): void {
 
   const probes: Array<[string, string[], RegExp, string]> = [
     ["vercel", ["--help"], /--scope/, "vercel global --scope"],
-    ["vercel", ["deploy", "--help"], /(?=[\s\S]*--prod)(?=[\s\S]*--skip-domain)(?=[\s\S]*--yes)(?=[\s\S]*--meta)(?=[\s\S]*--project)/, "vercel deploy prod/skip-domain/yes/meta/project"],
+    ["vercel", ["deploy", "--help"], /(?=[\s\S]*--prod)(?=[\s\S]*--skip-domain)(?=[\s\S]*--yes)(?=[\s\S]*--json)(?=[\s\S]*--meta)(?=[\s\S]*--project)/, "vercel deploy prod/skip-domain/yes/json/meta/project"],
     ["vercel", ["api", "--help"], /--raw/, "vercel api --raw"],
     ["vercel", ["env", "add", "--help"], /(?=[\s\S]*--sensitive)(?=[\s\S]*--no-sensitive)(?=[\s\S]*--force)(?=[\s\S]*--project)/, "vercel env add sensitive/no-sensitive/force/project"],
     ["vercel", ["inspect", "--help"], /(?=[\s\S]*--wait)(?=[\s\S]*--timeout)(?=[\s\S]*--json)/, "vercel inspect wait/timeout/json"],
