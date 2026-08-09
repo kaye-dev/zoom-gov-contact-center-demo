@@ -12,7 +12,7 @@ git status --short
 node --version
 ```
 
-`git status --short`は何も表示されない状態にします。Vercelのlink先、Git未接続、System Environment Variables、Fluid Compute、Production domainに加え、Framework Presetが`Next.js`、Build CommandとOutput Directoryが未上書き、`Settings > Deployment Protection`が`None`のまま変わっていないことも確認します。`Protection Bypass for Automation`は作成しません。認証切れは`deploy.sh`が検出し、loginを実行する前に確認します。
+`git status --short`は何も表示されない状態にします。Vercelのlink先、Git未接続、System Environment Variables、Fluid Compute、Production domainに加え、Build Command、Output Directory、Root Directoryが未上書き、`Settings > Deployment Protection`が`None`のまま変わっていないことも確認します。Framework Presetが`Other`と表示されても、リポジトリの[`vercel.json`](../../../vercel.json)が`Next.js`を指定するため変更しません。`Protection Bypass for Automation`は作成しません。認証切れは`deploy.sh`が検出し、loginを実行する前に確認します。
 
 fresh cloneなどで`.vercel/project.json`がない場合は`vercel link`を実行し、新規作成せず既存projectへlinkします。
 
@@ -24,15 +24,21 @@ Neon Project Dashboardの`Connect`を開き、同じbranch・database・roleで�
 - `Connection pooling`を無効にしたdirect URL
 
 pooled URLはhostに`-pooler`が付き、direct URLには付きません。両方とも`sslmode=require`を含むことを確認します。URLは毎回入力し、ファイルやVercelへdirect URLを保存しません。
+Connect画面の表示形式は`Connection string`を選び、`postgresql://`から始まるURL本体だけをコピーします。`DATABASE_URL=`、引用符、`psql`コマンドは含めず、hostnameの`.c-2.`などのproxy部分も編集しません。
 
 ## 3. 旧AWS accountへ認証する
 
 現行スクリプトは旧AWSを削除済みでも最後にAWS監査へ進むため、毎回認証が必要です。
 
 ```bash
-aws sso login --profile <profile>
+export PATH="$PATH:/usr/local/bin:/opt/homebrew/bin"
+hash -r
+command -v aws
+aws --version
+
+aws sso login --profile splai-dev
 aws sts get-caller-identity \
-  --profile <profile> \
+  --profile splai-dev \
   --region ap-northeast-1 \
   --query Account \
   --output text
@@ -45,7 +51,7 @@ aws sts get-caller-identity \
 対話可能なターミナルから直接実行します。
 
 ```bash
-AWS_PROFILE=<profile> ./deploy.sh
+AWS_PROFILE=splai-dev ./deploy.sh
 ```
 
 スクリプトはtest、lint、typecheck、audit、Production buildを自動実行します。表示された対象が想定と違う場合は承認せず、停止します。
@@ -57,8 +63,8 @@ AWS_PROFILE=<profile> ./deploy.sh
 3. 非表示プロンプトへpooled URL、direct URLの順に貼り付ける。
 4. 対象を確認し、環境変数更新へ`y`と入力する。既存の`BETTER_AUTH_SECRET`は維持される。
 5. migrationがup-to-dateならそのまま進む。pendingが表示された場合だけ、計画を確認して`y`、実行直前に`migrate`と入力する。
-6. 通常は管理者作成・更新でEnterを押し、既存管理者のemailとpasswordを入力する。管理者を更新する場合だけ`y`を選び、表示された変更内容を再確認する。
-7. staged candidateのsmoke test後、5分間の無通信と管理APIの反映待ち（最大約5分追加）の間はcandidate、Production URL、Neon SQL Editorへアクセスせずに待つ。確認が完了したら、promotionへ`y`と入力する。
+6. 通常は管理者作成・更新でEnterを押し、既存管理者のemailに`admin@keien.dev`、続けて保存したpasswordを入力する。管理者を更新する場合だけ`y`を選び、表示された変更内容を再確認する。
+7. staged candidateのsmoke test後、5分間の無通信と、Neon管理APIのidle／active反映待ち（各最大約5分、合計最大約15分）の間はcandidate、Production URL、Neon SQL Editorへアクセスせずに待つ。確認が完了したら、promotionへ`y`と入力する。
 8. 旧AWSを残す場合はAWS削除確認でEnterを押す。削除する場合だけ、表示された対象を確認して`delete AWS 686112929630 ap-northeast-1`と入力する。
 
 `Canonical smoke passed`が表示されれば、Productionの再デプロイは完了です。

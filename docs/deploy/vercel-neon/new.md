@@ -36,7 +36,7 @@ vercel project add zoom-gov-contact-center-demo --scope "<Hobby scope>"
 vercel link --yes --scope "<Hobby scope>" --project zoom-gov-contact-center-demo
 ```
 
-コマンドの仕様は[`vercel project`](https://vercel.com/docs/cli/project)と[`vercel link`](https://vercel.com/docs/cli/link)を参照してください。`vercel link`が`.env.local`へ`VERCEL_OIDC_TOKEN`をダウンロードした場合は、値を表示せず、想定したkeyだけを含む通常ファイルであることを確認して削除します。次の確認が失敗した場合は削除せず停止してください。
+コマンドの仕様は[`vercel project`](https://vercel.com/docs/cli/project)と[`vercel link`](https://vercel.com/docs/cli/link)を参照してください。`vercel link`が`.env.local`へ`VERCEL_OIDC_TOKEN`をダウンロードした場合だけ、次のblockを実行します。`.env.local`がなければ飛ばしてください。値を表示せず、想定したkeyだけを含む通常ファイルであることを確認して削除し、確認が失敗した場合は削除せず停止します。
 
 ```bash
 (
@@ -80,7 +80,7 @@ Vercel Dashboardで、linkしたprojectを次の状態にします。
 
 1. `Settings > Environment Variables`で[System Environment Variables](https://vercel.com/docs/environment-variables/system-environment-variables)の`Enable access to System Environment Variables`を有効にする。公式ドキュメントでは旧表示名`Automatically expose System Environment Variables`と記載されている。
 2. `Settings > Functions`の[Fluid Compute](https://vercel.com/docs/fluid-compute)を`Enabled`にして保存する。
-3. `Settings > Build and Deployment`でFramework Presetを`Next.js`にし、Build CommandとOutput Directoryは上書きしない。
+3. `Settings > Build and Deployment`でBuild Command、Output Directory、Root Directoryを上書きしない。Framework Presetが`Other`と表示されても変更せず、リポジトリの[`vercel.json`](../../../vercel.json)にある`"framework": "nextjs"`を使用する。
 4. `Settings > Deployment Protection`でProtection levelを`None`にする。`Standard Protection`はstaged candidateの生成URLをVercel Authenticationへ302 redirectするため使用しない。`Protection Bypass for Automation`も作成しない。
 5. `Settings > Git`の`Connected Git Repository` sectionにrepository名がなく、`This Project is not connected to a Git repository.`とGitHub／GitLab接続ボタンだけが表示されることを確認する。接続済みなら[Disconnect](https://vercel.com/docs/project-configuration/git-settings)する。
 6. `Settings > Domains`で、設定エラーやredirectがなく`Production`と表示されるdomainを確認し、`https://...`形式のcanonical URLを控える。既存domainを追加する現行UIは`Add Existing`、新規購入は`Buy`である。初回デプロイ前の自動生成`*.vercel.app` domainには`No Deployment`と表示されてもよい。
@@ -108,6 +108,7 @@ Project Dashboardの`Connect`を開き、同じbranch・database・roleで[次�
 - `Connection pooling`を無効にしたURL: `DATABASE_URL_UNPOOLED`。hostに`-pooler`が付かない。
 
 両方とも`sslmode=require`を含むことを確認します。URLは秘密情報のため、ファイルやチャットへ保存せず、後述の非表示プロンプトへだけ貼り付けます。
+Connect画面の表示形式は`Connection string`を選び、`postgresql://`から始まるURL本体だけをコピーします。`DATABASE_URL=`、引用符、`psql`コマンドは含めず、hostnameの`.c-2.`などのproxy部分も編集しません。
 NeonのVercel Integrationは使用しません。
 
 ## 4. 旧AWS accountへ認証する
@@ -115,12 +116,15 @@ NeonのVercel Integrationは使用しません。
 AWS削除をスキップする場合も、Production受入後のread-only監査にAWS CLIと認証が必要です。
 
 ```bash
-aws --version
 # AWS CLIがないmacOSの場合: brew install awscli
+export PATH="$PATH:/usr/local/bin:/opt/homebrew/bin"
+hash -r
+command -v aws
+aws --version
 
-aws sso login --profile <profile>
+aws sso login --profile splai-dev
 aws sts get-caller-identity \
-  --profile <profile> \
+  --profile splai-dev \
   --region ap-northeast-1 \
   --query Account \
   --output text
@@ -133,7 +137,7 @@ aws sts get-caller-identity \
 対話可能なターミナルから直接実行します。pipeや`tee`は使用しません。
 
 ```bash
-AWS_PROFILE=<profile> ./deploy.sh
+AWS_PROFILE=splai-dev ./deploy.sh
 ```
 
 スクリプトはtest、lint、typecheck、audit、Production buildを自動実行します。表示された対象が想定と違う場合は承認せず、停止します。
@@ -147,22 +151,24 @@ AWS_PROFILE=<profile> ./deploy.sh
 5. 非表示プロンプトへpooled URL、direct URLの順に貼り付ける。
 6. 対象project・domain・DB hostを確認し、環境変数更新へ`y`と入力する。
 7. 4件のmigration計画が表示されたら内容を確認し、計画作成へ`y`、実行直前に`migrate`と入力する。
-8. 管理者作成へ`y`と入力し、email、name、12〜128文字のpasswordを2回入力する。変更内容を確認し、作成へ`y`と入力する。
-9. staged candidateのsmoke test後、5分間の無通信と管理APIの反映待ち（最大約5分追加）の間はcandidate、Production URL、Neon SQL Editorへアクセスせずに待つ。確認が完了したら、promotionへ`y`と入力する。
+8. 管理者作成へ`y`と入力し、emailに`admin@keien.dev`、任意のname、12〜128文字のpasswordを2回入力する。passwordはpassword managerへ保存し、変更内容を確認して作成へ`y`と入力する。
+9. staged candidateのsmoke test後、5分間の無通信と、Neon管理APIのidle／active反映待ち（各最大約5分、合計最大約15分）の間はcandidate、Production URL、Neon SQL Editorへアクセスせずに待つ。確認が完了したら、promotionへ`y`と入力する。
 10. 旧AWSを残す場合はAWS削除確認でEnterを押す。削除する場合だけ、表示された対象を確認して`delete AWS 686112929630 ap-northeast-1`と入力する。
 
 認証やlinkの確認が表示された場合は、対象account／projectを確認してから`y`と入力します。
+`docker compose exec web npm run db:seed-admin`とcompose既定の`admin@example.local`はローカルDB専用で、Neon Productionには反映されません。
 
 `Canonical smoke passed`が表示されたら、canonical URLをブラウザで開き、次の最終確認を行います。
 
 1. `/`が正常に表示され、内部リンクを操作できる。
-2. `/login`から作成した管理者でログインできる。
+2. `/login`から`admin@keien.dev`と保存したpasswordでログインできる。
 3. `/docs/privacy-policy`と`/life/frequently-asked-questions`が表示される。
 4. `/admin/users`で管理画面とユーザー一覧が表示される。
 5. 管理画面の`ログアウト`を操作すると`/login`へ戻り、再び`/admin/users`を開いても未認証で保護される。
 6. Vercelの`Settings > Domains`でcanonical domainの`No Deployment`が消え、`Production`として割り当てられている。
 
 ここまで確認できればProductionの受入は完了です。継続して再デプロイする間は、現行スクリプトの制約により旧AWS削除をEnterでスキップしてください。旧AWSを削除すると、次回以降はProduction受入後のAWS監査だけがエラー終了します。
+`Canonical smoke passed`後の`[8/8] AWS retirement`だけで停止した場合もProductionは公開済みです。そのAWSエラーだけを理由に`deploy.sh`を再実行しません。
 
 現行`deploy.sh`が扱えるmigrationは、リポジトリにある既存4件だけです。migrationを追加した場合は、デプロイスクリプトとテストを先に更新します。
 
