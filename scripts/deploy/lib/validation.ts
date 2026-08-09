@@ -246,16 +246,14 @@ export function parseVercelProjectApi(
       "The Vercel project has a Git integration. Disconnect it before using deploy.sh.",
     );
   }
-  if (parsed.ssoProtection !== null && parsed.ssoProtection !== undefined) {
+  if (parsed.ssoProtection !== null) {
     throw new Error(
       "Vercel Authentication protects the generated staged URL. Set Project Settings > Deployment Protection to None before using deploy.sh.",
     );
   }
   if (
-    parsed.protectionBypass !== null &&
-    parsed.protectionBypass !== undefined &&
-    (!isRecord(parsed.protectionBypass) ||
-      Object.keys(parsed.protectionBypass).length !== 0)
+    !isRecord(parsed.protectionBypass) ||
+    Object.keys(parsed.protectionBypass).length !== 0
   ) {
     throw new Error(
       "Vercel Protection Bypass for Automation must not be configured. Revoke it under Project Settings > Deployment Protection before using deploy.sh.",

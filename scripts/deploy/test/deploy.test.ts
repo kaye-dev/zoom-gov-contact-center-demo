@@ -730,6 +730,17 @@ test("Vercel project API requires an unprotected, Git-unlinked target", () => {
       ),
     /Deployment Protection to None/,
   );
+  for (const invalid of [
+    { ...base, ssoProtection: undefined },
+    { ...base, protectionBypass: undefined },
+    { ...base, protectionBypass: null },
+    { ...base, protectionBypass: [] },
+  ]) {
+    assert.throws(
+      () => parseVercelProjectApi(JSON.stringify(invalid), link),
+      /Deployment Protection to None|Protection Bypass for Automation/,
+    );
+  }
   assert.throws(
     () =>
       parseVercelProjectApi(
