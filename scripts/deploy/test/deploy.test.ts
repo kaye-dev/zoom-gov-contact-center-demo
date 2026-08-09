@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createHash, randomBytes } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -90,6 +92,193 @@ const success = (stdout = ""): CommandResult => ({
 });
 
 const link = { orgId: "team_abc123", projectId: "prj_abc123" };
+const tmuxAvailable =
+  process.platform === "darwin" &&
+  spawnSync("tmux", ["-V"], { encoding: "utf8" }).status === 0;
+
+type HiddenPromptPty = {
+  fixturePid: number;
+  paste(value: string): void;
+  sendKey(key: string): void;
+  signal(signal: NodeJS.Signals): void;
+};
+
+async function runHiddenPromptPty(
+  interact: (pty: HiddenPromptPty) => void | Promise<void>,
+): Promise<{ pane: string; raw: string }> {
+  const fixture = new URL("./hidden-prompt-fixture.ts", import.meta.url).pathname;
+  const temporaryRoot = mkdtempSync(join(tmpdir(), "zoom-hidden-pty-"));
+  const gatePath = join(temporaryRoot, "start");
+  const rawLogPath = join(temporaryRoot, "raw.log");
+  const socketName = `deploy-hidden-${process.pid}-${randomBytes(6).toString("hex")}`;
+  const sessionName = "hidden-prompt";
+  const paneTarget = `${sessionName}:0.0`;
+  const runTmux = (arguments_: readonly string[], input?: string) =>
+    spawnSync("tmux", ["-L", socketName, ...arguments_], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      input,
+    });
+  const capturePane = (): string => {
+    const result = runTmux([
+      "capture-pane",
+      "-p",
+      "-S",
+      "-",
+      "-t",
+      paneTarget,
+    ]);
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout;
+  };
+  const waitForPane = async (marker: string): Promise<string> => {
+    let transcript = "";
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      transcript = capturePane();
+      if (transcript.includes(marker)) {
+        return transcript;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error(`Timed out waiting for PTY marker '${marker}'.`);
+  };
+
+  try {
+    const started = runTmux([
+      "new-session",
+      "-d",
+      "-s",
+      sessionName,
+      "-x",
+      "120",
+      "-y",
+      "40",
+      process.execPath,
+      "--import",
+      "tsx",
+      fixture,
+      gatePath,
+    ]);
+    assert.equal(started.status, 0, started.stderr);
+    const retained = runTmux([
+      "set-option",
+      "-p",
+      "-t",
+      paneTarget,
+      "remain-on-exit",
+      "on",
+    ]);
+    assert.equal(retained.status, 0, retained.stderr);
+    const quotedRawLog = `'${rawLogPath.replaceAll("'", `'\\''`)}'`;
+    const piped = runTmux([
+      "pipe-pane",
+      "-O",
+      "-t",
+      paneTarget,
+      `exec cat > ${quotedRawLog}`,
+    ]);
+    assert.equal(piped.status, 0, piped.stderr);
+    writeFileSync(gatePath, "ready", "utf8");
+
+    const promptTranscript = await waitForPane("SECRET_PROMPT>");
+    const pidMatch = /FIXTURE_PID=(\d+)/.exec(promptTranscript);
+    assert.ok(pidMatch?.[1], "PTY fixture PID is missing.");
+    const fixturePid = Number(pidMatch[1]);
+    await interact({
+      fixturePid,
+      paste(value) {
+        const loaded = runTmux(
+          ["load-buffer", "-b", "secret-input", "-"],
+          `${value}\n`,
+        );
+        assert.equal(loaded.status, 0, loaded.stderr);
+        const pasted = runTmux([
+          "paste-buffer",
+          "-d",
+          "-b",
+          "secret-input",
+          "-t",
+          paneTarget,
+        ]);
+        assert.equal(pasted.status, 0, pasted.stderr);
+      },
+      sendKey(key) {
+        const sent = runTmux(["send-keys", "-t", paneTarget, key]);
+        assert.equal(sent.status, 0, sent.stderr);
+      },
+      signal(signal) {
+        process.kill(fixturePid, signal);
+      },
+    });
+
+    const pane = await waitForPane("TTY_STATE_RESTORED=");
+    let raw = "";
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      raw = existsSync(rawLogPath) ? readFileSync(rawLogPath, "utf8") : "";
+      if (raw.includes("TTY_STATE_RESTORED=")) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.match(raw, /TTY_STATE_RESTORED=/);
+    return { pane, raw };
+  } finally {
+    runTmux(["kill-server"]);
+    rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+}
+
+test(
+  "hidden prompt never exposes pasted input in raw PTY output and restores exact mode",
+  { skip: !tmuxAvailable, timeout: 10_000 },
+  async () => {
+    const secret = `synthetic-pty-secret-${randomBytes(24).toString("hex")}`;
+    const expectedHash = createHash("sha256").update(secret).digest("hex");
+    const transcripts = await runHiddenPromptPty((pty) => pty.paste(secret));
+
+    for (const transcript of [transcripts.pane, transcripts.raw]) {
+      assert.equal(transcript.includes(secret), false);
+      assert.match(transcript, /FIXTURE_RESULT=success/);
+      assert.match(transcript, new RegExp(`ANSWER_SHA256=${expectedHash}`));
+      assert.match(transcript, /TTY_STATE_RESTORED=true/);
+    }
+  },
+);
+
+test(
+  "hidden prompt restores exact PTY mode after Ctrl-D EOF",
+  { skip: !tmuxAvailable, timeout: 10_000 },
+  async () => {
+    const transcripts = await runHiddenPromptPty((pty) => pty.sendKey("C-d"));
+    for (const transcript of [transcripts.pane, transcripts.raw]) {
+      assert.match(transcript, /FIXTURE_RESULT=error/);
+      assert.match(transcript, /Secret input ended before a complete line/);
+      assert.match(transcript, /TTY_STATE_RESTORED=true/);
+    }
+  },
+);
+
+for (const scenario of [
+  { name: "SIGINT", act: (pty: HiddenPromptPty) => pty.sendKey("C-c") },
+  { name: "SIGTERM", act: (pty: HiddenPromptPty) => pty.signal("SIGTERM") },
+  { name: "SIGTSTP", act: (pty: HiddenPromptPty) => pty.sendKey("C-z") },
+] as const) {
+  test(
+    `hidden prompt turns ${scenario.name} into a safe stop after exact PTY restore`,
+    { skip: !tmuxAvailable, timeout: 10_000 },
+    async () => {
+      const transcripts = await runHiddenPromptPty(scenario.act);
+      for (const transcript of [transcripts.pane, transcripts.raw]) {
+        assert.match(transcript, /FIXTURE_RESULT=error/);
+        assert.match(
+          transcript,
+          new RegExp(`Secret input was interrupted by ${scenario.name}`),
+        );
+        assert.match(transcript, /TTY_STATE_RESTORED=true/);
+      }
+    },
+  );
+}
 
 test("deploy.sh rejects non-TTY execution and missing CLIs with install guidance", () => {
   const deployScript = new URL("../../../deploy.sh", import.meta.url).pathname;
