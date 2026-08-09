@@ -25,6 +25,7 @@ import {
   classifyPrismaStatus,
   createMigrationPlan,
   findDestructiveStatements,
+  normalizePrismaDiff,
   readLocalMigrations,
   renderMigrationPlan,
   validateMigrationHistory,
@@ -1133,6 +1134,31 @@ test("failed, rolled-back, diverged, checksum, status, and drift states fail clo
       inspect: async () => database,
     }),
     /Schema drift exists/,
+  );
+
+  const synchronizedRunner = new RecordingRunner((_command, arguments_) =>
+    arguments_.includes("status")
+      ? success("Database schema is up to date")
+      : success("-- This is an empty migration."),
+  );
+  const synchronized = await createMigrationPlan({
+    projectRoot: process.cwd(),
+    directUrl: "postgresql://redacted.invalid/database",
+    runner: synchronizedRunner,
+    inspect: async () => database,
+  });
+  assert.equal(synchronized.state, "up-to-date");
+  assert.equal(synchronized.predictedDiff, "");
+});
+
+test("Prisma empty migration sentinel is not reported as schema drift", () => {
+  assert.equal(normalizePrismaDiff("\n-- This is an empty migration.\n"), "");
+  assert.equal(normalizePrismaDiff("  \n"), "");
+  assert.equal(
+    normalizePrismaDiff(
+      '-- This is an empty migration.\nALTER TABLE "user" ADD COLUMN "x" TEXT;',
+    ),
+    '-- This is an empty migration.\nALTER TABLE "user" ADD COLUMN "x" TEXT;',
   );
 });
 

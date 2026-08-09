@@ -96,7 +96,7 @@ export async function createMigrationPlan(
   if (diff.status !== 0 && diff.status !== 2) {
     assertCommandSucceeded(diff, "Prisma schema diff");
   }
-  const predictedDiff = diff.stdout.trim();
+  const predictedDiff = normalizePrismaDiff(diff.stdout);
 
   if (pending.length === 0) {
     if (statusState !== "up-to-date") {
@@ -246,6 +246,14 @@ export function classifyPrismaStatus(
   throw new Error(
     "Prisma migration status was neither verified up-to-date nor confirmed pending. Connection errors, failed history, and drift are never auto-repaired.",
   );
+}
+
+export function normalizePrismaDiff(output: string): string {
+  const trimmed = output.trim();
+  if (trimmed === "-- This is an empty migration.") {
+    return "";
+  }
+  return trimmed;
 }
 
 export function renderMigrationPlan(plan: MigrationPlan): string {
