@@ -49,7 +49,7 @@ import {
   assertMinimumVersion,
   assertNeonEndpointMatches,
   parseDeploymentUrl,
-  parseNeonProjectList,
+  parseNeonProjectApi,
   parseVercelProjectApi,
   parseVersion,
   readNeonEndpointState,
@@ -190,24 +190,16 @@ export async function runDeploymentWorkflow(
     assertCanonicalDomain(runner, link, canonicalUrl);
 
     console.log("[2/8] Neon target and secret input");
-    const neonProjectId = validateIdentifier(
+    const neonProjectId = validateNeonProjectId(
       await prompter.ask("Neon project ID: "),
-      "Neon project ID",
     );
     assertAmbientNeonTarget(neonProjectId);
     const neonProjectName = validateIdentifier(
       await prompter.ask("Neon project name: "),
       "Neon project name",
     );
-    const neonProjects = runChecked(
+    const neonProject = inspectNeonProject(
       runner,
-      "neon",
-      ["projects", "list", "--output", "json"],
-      "Neon projects list",
-      { ...process.env, CI: "1" },
-    );
-    const neonProject = parseNeonProjectList(
-      neonProjects.stdout,
       neonProjectId,
       neonProjectName,
     );
@@ -748,7 +740,6 @@ export function ensureCliTools(runner: CommandRunner): void {
     ["vercel", ["rollback", "--help"], /--yes/, "vercel rollback --yes"],
     ["vercel", ["project", "inspect", "--help"], /inspect/i, "vercel project inspect"],
     ["neon", ["me", "--help"], /me|current user/i, "neon me"],
-    ["neon", ["projects", "list", "--help"], /--output/, "neon projects list --output"],
     ["neon", ["api", "--help"], /api|endpoint/i, "neon api"],
     ["neon", ["auth", "--help"], /auth/i, "neon auth"],
   ];
@@ -868,6 +859,21 @@ async function verifyNeonFreePlan(
       "The selected Neon project's organization is not proven to be on the Free plan.",
     );
   }
+}
+
+export function inspectNeonProject(
+  runner: CommandRunner,
+  projectId: string,
+  expectedName: string,
+): ReturnType<typeof parseNeonProjectApi> {
+  const result = runChecked(
+    runner,
+    "neon",
+    ["api", `/projects/${projectId}`, "--output", "json"],
+    "Neon project API",
+    { ...process.env, CI: "1" },
+  );
+  return parseNeonProjectApi(result.stdout, projectId, expectedName);
 }
 
 async function waitForNeonEndpointState(
@@ -1597,6 +1603,14 @@ function validateIdentifier(value: string, description: string): string {
   const normalized = value.trim();
   if (!normalized || /[\s\0]/.test(normalized) || normalized.length > 128) {
     throw new Error(`${description} is invalid.`);
+  }
+  return normalized;
+}
+
+function validateNeonProjectId(value: string): string {
+  const normalized = value.trim();
+  if (!/^[a-z0-9-]{1,60}$/.test(normalized)) {
+    throw new Error("Neon project ID is invalid.");
   }
   return normalized;
 }

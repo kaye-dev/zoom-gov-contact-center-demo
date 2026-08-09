@@ -28,28 +28,71 @@ npm install -g neon@latest
 
 ## 2. Vercel projectを準備する
 
-リポジトリルートで認証し、Git連携を使わずに自分だけのHobby teamへprojectを[作成・link](https://vercel.com/docs/projects/deploy-from-cli)します。
+Vercel Dashboardの`New Project`はGit repository、template、uploadからの作成画面です。この手順では使用せず、リポジトリルートで認証して、自分だけのHobby scopeへGit未接続の空projectをCLIで作成します。`<Hobby scope>`はDashboard左上に`Hobby`と表示されるscopeのslugへ置き換えてください。
 
 ```bash
 vercel login
-vercel link
+vercel project add zoom-gov-contact-center-demo --scope "<Hobby scope>"
+vercel link --yes --scope "<Hobby scope>" --project zoom-gov-contact-center-demo
+```
+
+コマンドの仕様は[`vercel project`](https://vercel.com/docs/cli/project)と[`vercel link`](https://vercel.com/docs/cli/link)を参照してください。`vercel link`が`.env.local`へ`VERCEL_OIDC_TOKEN`をダウンロードした場合は、値を表示せず、想定したkeyだけを含む通常ファイルであることを確認して削除します。次の確認が失敗した場合は削除せず停止してください。
+
+```bash
+(
+  set -euo pipefail
+  repo_root="$(git rev-parse --show-toplevel)"
+  current_dir="$(pwd -P)"
+  origin_url="$(git remote get-url origin)"
+  [ -n "$repo_root" ] &&
+    [ "$repo_root" = "$current_dir" ] &&
+    [ "$(basename "$repo_root")" = zoom-gov-contact-center-demo ] &&
+    printf '%s\n' "$origin_url" | grep -Eq '^((git@|https://)github\.com[:/])kaye-dev/zoom-gov-contact-center-demo(\.git)?$' || {
+    echo "Unexpected repository path; .env.local was not removed." >&2
+    exit 1
+  }
+
+  env_file="${repo_root:?}/.env.local"
+  [ -f "${env_file:?}" ] && [ ! -L "${env_file:?}" ] || {
+    echo ".env.local is not a regular non-symlink file; it was not removed." >&2
+    exit 1
+  }
+
+  oidc_key_count="$(awk '/^VERCEL_OIDC_TOKEN=/{count++} END{print count+0}' "${env_file:?}")"
+  unexpected_line_count="$(awk '
+    /^[[:space:]]*($|#)/ { next }
+    /^VERCEL_OIDC_TOKEN=/ { next }
+    { count++ }
+    END { print count+0 }
+  ' "${env_file:?}")"
+  [ "$oidc_key_count" = 1 ] && [ "$unexpected_line_count" = 0 ] || {
+    echo "Unexpected .env.local contents; it was not removed." >&2
+    exit 1
+  }
+
+  echo "Confirmed key: VERCEL_OIDC_TOKEN"
+  rm -- "${env_file:?}"
+  [ ! -e "$env_file" ] && [ ! -L "$env_file" ]
+)
 ```
 
 Vercel Dashboardで、linkしたprojectを次の状態にします。
 
-1. `Settings > Environment Variables`で[System Environment Variables](https://vercel.com/docs/environment-variables/system-environment-variables)の`Automatically expose System Environment Variables`を有効にする。
+1. `Settings > Environment Variables`で[System Environment Variables](https://vercel.com/docs/environment-variables/system-environment-variables)の`Enable access to System Environment Variables`を有効にする。公式ドキュメントでは旧表示名`Automatically expose System Environment Variables`と記載されている。
 2. `Settings > Functions`の[Fluid Compute](https://vercel.com/docs/fluid-compute)を`Enabled`にして保存する。
-3. `Settings > Git`で`Connected Git Repository`がないことを確認する。接続済みなら[Disconnect](https://vercel.com/docs/project-configuration/git-settings)する。
-4. `Settings > Domains`で、verified・非redirect・Production割り当てのdomainを確認し、`https://...`形式のURLを控える。存在しなければ`Add Domain`で追加する。
+3. `Settings > Git`の`Connected Git Repository` sectionにrepository名がなく、`This Project is not connected to a Git repository.`とGitHub／GitLab接続ボタンだけが表示されることを確認する。接続済みなら[Disconnect](https://vercel.com/docs/project-configuration/git-settings)する。
+4. `Settings > Domains`で、設定エラーやredirectがなく`Production`と表示されるdomainを確認し、`https://...`形式のcanonical URLを控える。既存domainを追加する現行UIは`Add Existing`、新規購入は`Buy`である。初回デプロイ前の自動生成`*.vercel.app` domainには`No Deployment`と表示されてもよい。
 
 環境変数は手動で作成しません。`deploy.sh`がProductionへ必要な5項目だけを設定します。
 
 ## 3. Neon projectを準備する
 
-[Neon Console](https://console.neon.tech/)でFree organizationを選び、`New Project`から[projectを作成](https://neon.com/docs/manage/projects)します。
+[Neon Console](https://console.neon.tech/)で名前の横に`Free`と表示されるorganizationを選び、`New project`から`Create project`画面を開いて[projectを作成](https://neon.com/docs/manage/projects)します。
 
-- Cloud service provider: `AWS`
+- Project name: `zoom-gov-contact-center-demo`
 - Region: `AWS Asia Pacific 1 (Singapore)`（`aws-ap-southeast-1`）
+
+現行画面に独立したCloud service provider欄はありません。`Region`の選択肢に含まれる`AWS`を確認します。
 
 project IDとproject nameを控え、CLIを認証します。
 
@@ -108,7 +151,16 @@ AWS_PROFILE=<profile> ./deploy.sh
 
 認証やlinkの確認が表示された場合は、対象account／projectを確認してから`y`と入力します。
 
-`Canonical smoke passed`が表示されればProductionの受入は完了です。継続して再デプロイする間は、現行スクリプトの制約により旧AWS削除をEnterでスキップしてください。旧AWSを削除すると、次回以降はProduction受入後のAWS監査だけがエラー終了します。
+`Canonical smoke passed`が表示されたら、canonical URLをブラウザで開き、次の最終確認を行います。
+
+1. `/`が正常に表示され、内部リンクを操作できる。
+2. `/login`から作成した管理者でログインできる。
+3. `/docs/privacy-policy`と`/life/frequently-asked-questions`が表示される。
+4. `/admin/users`で管理画面とユーザー一覧が表示される。
+5. 管理画面の`ログアウト`を操作すると`/login`へ戻り、再び`/admin/users`を開いても未認証で保護される。
+6. Vercelの`Settings > Domains`でcanonical domainの`No Deployment`が消え、`Production`として割り当てられている。
+
+ここまで確認できればProductionの受入は完了です。継続して再デプロイする間は、現行スクリプトの制約により旧AWS削除をEnterでスキップしてください。旧AWSを削除すると、次回以降はProduction受入後のAWS監査だけがエラー終了します。
 
 現行`deploy.sh`が扱えるmigrationは、リポジトリにある既存4件だけです。migrationを追加した場合は、デプロイスクリプトとテストを先に更新します。
 

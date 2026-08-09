@@ -50,6 +50,7 @@ import {
   createBuildEnvironment,
   ensureCliTools,
   ensureVercelLink,
+  inspectNeonProject,
   parseProductionEnvironmentAudit,
   PromotionGuard,
   setVercelEnvironment,
@@ -211,6 +212,45 @@ test("database URLs require one sslmode=require and the exact Neon endpoint", ()
         "project-safe",
       ),
     /host does not match/,
+  );
+});
+
+test("Neon project inspection uses the project ID API without an organization list", () => {
+  const projectId = "green-star-22081727";
+  const runner = new RecordingRunner((command, arguments_, options) => {
+    assert.equal(command, "neon");
+    assert.deepEqual(arguments_, [
+      "api",
+      `/projects/${projectId}`,
+      "--output",
+      "json",
+    ]);
+    assert.equal(options?.env?.CI, "1");
+    return success(
+      JSON.stringify({
+        project: {
+          id: projectId,
+          name: "zoom-gov-contact-center-demo",
+          region_id: "aws-ap-southeast-1",
+          org_id: "org-polished-bonus-27326276",
+        },
+      }),
+    );
+  });
+
+  assert.deepEqual(
+    inspectNeonProject(runner, projectId, "zoom-gov-contact-center-demo"),
+    {
+      id: projectId,
+      name: "zoom-gov-contact-center-demo",
+      regionId: "aws-ap-southeast-1",
+      orgId: "org-polished-bonus-27326276",
+    },
+  );
+  assert.equal(runner.calls.length, 1);
+  assert.equal(
+    runner.calls.some((call) => call.arguments_.includes("projects")),
+    false,
   );
 });
 

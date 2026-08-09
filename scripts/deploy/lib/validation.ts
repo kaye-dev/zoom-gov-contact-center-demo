@@ -243,7 +243,7 @@ export function parseVercelProjectApi(
   };
 }
 
-export function parseNeonProjectList(
+export function parseNeonProjectApi(
   output: string,
   projectId: string,
   expectedName: string,
@@ -252,24 +252,21 @@ export function parseNeonProjectList(
   try {
     parsed = JSON.parse(output) as unknown;
   } catch {
-    throw new Error("Neon projects list did not return valid JSON.");
+    throw new Error("Neon project API did not return valid JSON.");
   }
 
-  const candidates = Array.isArray(parsed)
-    ? parsed
-    : isRecord(parsed) && Array.isArray(parsed.projects)
-      ? parsed.projects
-      : [];
-  const project = candidates.find(
-    (candidate) => isRecord(candidate) && candidate.id === projectId,
-  );
-  if (!isRecord(project)) {
-    throw new Error(`Neon project '${projectId}' was not found for this account.`);
+  if (!isRecord(parsed) || !isRecord(parsed.project)) {
+    throw new Error("Neon project API response is missing the project object.");
   }
+  const project = parsed.project;
 
+  const id = project.id;
   const name = project.name;
   const regionId = project.region_id ?? project.regionId;
   const orgId = project.org_id ?? project.orgId;
+  if (id !== projectId) {
+    throw new Error("The Neon API project ID does not match the selected project ID.");
+  }
   if (typeof name !== "string" || name !== expectedName) {
     throw new Error("The selected Neon project name does not match the project ID.");
   }
@@ -281,7 +278,7 @@ export function parseNeonProjectList(
   if (typeof orgId !== "string" || !orgId) {
     throw new Error("The selected Neon project organization ID is missing.");
   }
-  return { id: projectId, name, regionId, orgId };
+  return { id, name, regionId, orgId };
 }
 
 export function assertNeonEndpointMatches(
