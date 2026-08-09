@@ -148,7 +148,7 @@ AWS_PROFILE=<profile> ./deploy.sh
 6. 対象project・domain・DB hostを確認し、環境変数更新へ`y`と入力する。
 7. 4件のmigration計画が表示されたら内容を確認し、計画作成へ`y`、実行直前に`migrate`と入力する。
 8. 管理者作成へ`y`と入力し、email、name、12〜128文字のpasswordを2回入力する。変更内容を確認し、作成へ`y`と入力する。
-9. staged candidateのsmoke test後、5分間のidle復帰確認中はcandidate、Production URL、Neon SQL Editorへアクセスせずに待つ。確認が完了したら、promotionへ`y`と入力する。
+9. staged candidateのsmoke test後、5分間の無通信と管理APIの反映待ち（最大約5分追加）の間はcandidate、Production URL、Neon SQL Editorへアクセスせずに待つ。確認が完了したら、promotionへ`y`と入力する。
 10. 旧AWSを残す場合はAWS削除確認でEnterを押す。削除する場合だけ、表示された対象を確認して`delete AWS 686112929630 ap-northeast-1`と入力する。
 
 認証やlinkの確認が表示された場合は、対象account／projectを確認してから`y`と入力します。

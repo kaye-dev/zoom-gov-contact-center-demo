@@ -67,6 +67,8 @@ const SCRIPT_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(SCRIPT_DIRECTORY, "../..");
 const VERCEL_MINIMUM = [54, 17, 2] as const;
 const NEON_MINIMUM = [2, 43, 0] as const;
+const NEON_ENDPOINT_STATE_MAX_ATTEMPTS = 31;
+const NEON_ENDPOINT_STATE_POLL_INTERVAL_MS = 10_000;
 const PRODUCTION_ENV_ALLOWLIST = new Set([
   "DATABASE_URL",
   "BETTER_AUTH_SECRET",
@@ -479,7 +481,7 @@ export async function runDeploymentWorkflow(
     const stagedSmoke = await runSmokeChecks(candidateUrl, credentials);
     console.log(`Staged smoke passed: ${stagedSmoke.checks.join(", ")}`);
     console.log(
-      "Waiting 5 minutes without polling so Neon can scale to zero before one health wake-up check...",
+      "Waiting at least 5 minutes without polling, then allowing up to 5 minutes for the Neon management API to report idle before one health wake-up check...",
     );
     await verifyIdleRecovery(
       candidateUrl,
@@ -880,13 +882,28 @@ export function inspectNeonProject(
   return parseNeonProjectApi(result.stdout, projectId, expectedName);
 }
 
-async function waitForNeonEndpointState(
+export async function waitForNeonEndpointState(
   runner: CommandRunner,
   projectId: string,
   target: DatabaseTarget,
   expected: "idle" | "active",
+  options: {
+    attempts?: number;
+    intervalMs?: number;
+    wait?: (delayMs: number) => Promise<void>;
+  } = {},
 ): Promise<void> {
-  const attempts = 6;
+  const attempts =
+    options.attempts ?? NEON_ENDPOINT_STATE_MAX_ATTEMPTS;
+  const intervalMs =
+    options.intervalMs ?? NEON_ENDPOINT_STATE_POLL_INTERVAL_MS;
+  const wait =
+    options.wait ??
+    ((delayMs: number) =>
+      new Promise<void>((resolveDelay) => setTimeout(resolveDelay, delayMs)));
+  if (!Number.isInteger(attempts) || attempts < 1 || intervalMs < 0) {
+    throw new Error("Neon endpoint state polling options are invalid.");
+  }
   let lastState = "unknown";
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     const result = runChecked(
@@ -901,7 +918,7 @@ async function waitForNeonEndpointState(
       return;
     }
     if (attempt < attempts) {
-      await new Promise((resolveDelay) => setTimeout(resolveDelay, 10_000));
+      await wait(intervalMs);
     }
   }
   throw new Error(

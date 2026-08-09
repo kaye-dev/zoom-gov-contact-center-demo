@@ -58,7 +58,7 @@ AWS_PROFILE=<profile> ./deploy.sh
 4. 対象を確認し、環境変数更新へ`y`と入力する。既存の`BETTER_AUTH_SECRET`は維持される。
 5. migrationがup-to-dateならそのまま進む。pendingが表示された場合だけ、計画を確認して`y`、実行直前に`migrate`と入力する。
 6. 通常は管理者作成・更新でEnterを押し、既存管理者のemailとpasswordを入力する。管理者を更新する場合だけ`y`を選び、表示された変更内容を再確認する。
-7. staged candidateのsmoke test後、5分間のidle復帰確認中はcandidate、Production URL、Neon SQL Editorへアクセスせずに待つ。確認が完了したら、promotionへ`y`と入力する。
+7. staged candidateのsmoke test後、5分間の無通信と管理APIの反映待ち（最大約5分追加）の間はcandidate、Production URL、Neon SQL Editorへアクセスせずに待つ。確認が完了したら、promotionへ`y`と入力する。
 8. 旧AWSを残す場合はAWS削除確認でEnterを押す。削除する場合だけ、表示された対象を確認して`delete AWS 686112929630 ap-northeast-1`と入力する。
 
 `Canonical smoke passed`が表示されれば、Productionの再デプロイは完了です。

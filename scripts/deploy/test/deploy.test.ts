@@ -60,6 +60,7 @@ import {
   setVercelEnvironment,
   shouldCreateAuthSecret,
   validateCandidateDeploymentEvidence,
+  waitForNeonEndpointState,
 } from "../main";
 
 class RecordingRunner implements CommandRunner {
@@ -1785,4 +1786,80 @@ test("idle recovery observes idle, wakes once, then proves active", async () => 
   );
   assert.deepEqual(states, ["idle", "active"]);
   assert.equal(healthCalls, 1);
+});
+
+test("Neon state polling allows management API grace beyond the first minute", async () => {
+  const target = validateDatabaseUrls(
+    "postgresql://demo:secret@ep-safe-pooler.c-2.ap-southeast-1.aws.neon.tech/app?sslmode=require",
+    "postgresql://demo:secret@ep-safe.c-2.ap-southeast-1.aws.neon.tech/app?sslmode=require",
+  );
+  let calls = 0;
+  const waits: number[] = [];
+  const runner = new RecordingRunner(() => {
+    calls += 1;
+    return success(
+      JSON.stringify({
+        endpoints: [
+          {
+            id: "ep-safe",
+            project_id: "project-safe",
+            branch_id: "br-safe",
+            host: "ep-safe.c-2.ap-southeast-1.aws.neon.tech",
+            region_id: "aws-ap-southeast-1",
+            type: "read_write",
+            current_state: calls < 7 ? "active" : "idle",
+          },
+        ],
+      }),
+    );
+  });
+
+  await waitForNeonEndpointState(
+    runner,
+    "project-safe",
+    target,
+    "idle",
+    {
+      wait: async (delayMs) => {
+        waits.push(delayMs);
+      },
+    },
+  );
+
+  assert.equal(calls, 7);
+  assert.deepEqual(waits, Array(6).fill(10_000));
+});
+
+test("Neon state polling remains bounded and fail-closed", async () => {
+  const target = validateDatabaseUrls(
+    "postgresql://demo:secret@ep-safe-pooler.c-2.ap-southeast-1.aws.neon.tech/app?sslmode=require",
+    "postgresql://demo:secret@ep-safe.c-2.ap-southeast-1.aws.neon.tech/app?sslmode=require",
+  );
+  const runner = new RecordingRunner(() =>
+    success(
+      JSON.stringify({
+        endpoints: [
+          {
+            id: "ep-safe",
+            project_id: "project-safe",
+            branch_id: "br-safe",
+            host: "ep-safe.c-2.ap-southeast-1.aws.neon.tech",
+            region_id: "aws-ap-southeast-1",
+            type: "read_write",
+            current_state: "active",
+          },
+        ],
+      }),
+    ),
+  );
+
+  await assert.rejects(
+    waitForNeonEndpointState(runner, "project-safe", target, "idle", {
+      attempts: 2,
+      intervalMs: 0,
+      wait: async () => undefined,
+    }),
+    /did not reach 'idle'.*last state: 'active'/,
+  );
+  assert.equal(runner.calls.length, 2);
 });
