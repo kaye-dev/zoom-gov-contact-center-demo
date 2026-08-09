@@ -96,45 +96,12 @@ curl http://localhost:3000/docs/privacy-policy.md
 
 ### Vercel Hobby + Neon Freeへデプロイ
 
-公開はリポジトリルートの対話式スクリプトだけから行います。VercelのGit自動デプロイは使用しません。
+公開はリポジトリルートの`./deploy.sh`だけから行い、VercelのGit自動デプロイは使用しません。手順は次を参照してください。
 
-```bash
-./deploy.sh
-```
+- [新規デプロイ](docs/deploy/vercel-neon/new.md)
+- [2回目以降の再デプロイ](docs/deploy/vercel-neon/re-deploy.md)
 
-事前に次を用意してください。
-
-- Node.js 24と`package-lock.json`を使うnpm環境
-- personal Hobby scopeのVercel project（System Environment Variablesを有効化し、Git repositoryは接続しない）
-- Singapore regionで手動作成したNeon Free project
-- canonical Production URL
-
-この手順は、Vercel Hobbyの対象となる個人・非商用利用であり、本番データや日本国内のデータ所在要件がないデモだけを対象とします。業務・商用利用ではHobbyを使わず、適合するVercel planを選んでください。Neonのscale-to-zeroを妨げる常時health監視は設定しません。
-
-Vercel CLIまたはNeon CLIがない場合、`deploy.sh`は自動インストールせず、次の候補を表示して停止します。
-
-```bash
-npm install -g vercel@latest
-npm install -g neon@latest
-# NeonはmacOSなら次も選択可
-brew install neonctl
-```
-
-スクリプトはclean worktree、認証、project/scope/region/plan、pooled/direct URLの対応関係を確認し、品質gateとmigration計画を通過したcandidateだけをstaged Productionとして作成します。migrationはcandidate buildから分離され、Neon direct URLをプロセス内で一時利用した明示確認後の`prisma migrate deploy`だけで適用されます。smoke test成功後にも確認し、承認されたcandidateだけをcanonical URLへpromoteします。障害時に自動rollbackやDB restoreは行いません。
-
-canonical Productionの受入成功後に限り、固定したAWS account `686112929630`／`ap-northeast-1`の旧CDK resourceを再列挙します。確認済みresourceと実行直前hashが一致し、typed confirmationが入力された場合だけ順番に削除します。想定外resourceや削除失敗を検出した場合は強い削除手段へ切り替えず停止し、AWS CLI profile／SSO設定は削除しません。
-
-Vercel Productionへ保存する環境変数は次の5つだけです。`DATABASE_URL_UNPOOLED`はmigration中だけ入力し、Vercelやファイルには保存しません。
-
-| 環境変数 | 用途 |
-| --- | --- |
-| `DATABASE_URL` | Neon pooled URL（Sensitive） |
-| `BETTER_AUTH_SECRET` | 初回に生成し、以後のデプロイでも維持する認証secret |
-| `BETTER_AUTH_URL` | canonical Production URL |
-| `BETTER_AUTH_TRUSTED_ORIGINS` | canonical Production URL |
-| `BETTER_AUTH_TRUST_PROXY_HEADERS` | `true` |
-
-`postinstall`と`vercel-build`はPrisma Clientを生成しますが、Vercel build中にmigrationは実行しません。
+Vercel Hobbyの対象となる個人・非商用利用であり、本番データや日本国内のデータ所在要件がないデモだけを対象とします。業務・商用利用では適合するVercel planを選んでください。
 
 ### npm で起動
 
