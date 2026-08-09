@@ -12,7 +12,7 @@ git status --short
 node --version
 ```
 
-`git status --short`は何も表示されない状態にします。Vercelのlink先、Git未接続、System Environment Variables、Fluid Compute、Production domainが初回から変わっていないことも確認します。認証切れは`deploy.sh`が検出し、loginを実行する前に確認します。
+`git status --short`は何も表示されない状態にします。Vercelのlink先、Git未接続、System Environment Variables、Fluid Compute、Production domainに加え、`Settings > Deployment Protection`が`None`のまま変わっていないことも確認します。`Protection Bypass for Automation`は作成しません。認証切れは`deploy.sh`が検出し、loginを実行する前に確認します。
 
 fresh cloneなどで`.vercel/project.json`がない場合は`vercel link`を実行し、新規作成せず既存projectへlinkします。
 

@@ -80,8 +80,9 @@ Vercel Dashboardで、linkしたprojectを次の状態にします。
 
 1. `Settings > Environment Variables`で[System Environment Variables](https://vercel.com/docs/environment-variables/system-environment-variables)の`Enable access to System Environment Variables`を有効にする。公式ドキュメントでは旧表示名`Automatically expose System Environment Variables`と記載されている。
 2. `Settings > Functions`の[Fluid Compute](https://vercel.com/docs/fluid-compute)を`Enabled`にして保存する。
-3. `Settings > Git`の`Connected Git Repository` sectionにrepository名がなく、`This Project is not connected to a Git repository.`とGitHub／GitLab接続ボタンだけが表示されることを確認する。接続済みなら[Disconnect](https://vercel.com/docs/project-configuration/git-settings)する。
-4. `Settings > Domains`で、設定エラーやredirectがなく`Production`と表示されるdomainを確認し、`https://...`形式のcanonical URLを控える。既存domainを追加する現行UIは`Add Existing`、新規購入は`Buy`である。初回デプロイ前の自動生成`*.vercel.app` domainには`No Deployment`と表示されてもよい。
+3. `Settings > Deployment Protection`でProtection levelを`None`にする。`Standard Protection`はstaged candidateの生成URLをVercel Authenticationへ302 redirectするため使用しない。`Protection Bypass for Automation`も作成しない。
+4. `Settings > Git`の`Connected Git Repository` sectionにrepository名がなく、`This Project is not connected to a Git repository.`とGitHub／GitLab接続ボタンだけが表示されることを確認する。接続済みなら[Disconnect](https://vercel.com/docs/project-configuration/git-settings)する。
+5. `Settings > Domains`で、設定エラーやredirectがなく`Production`と表示されるdomainを確認し、`https://...`形式のcanonical URLを控える。既存domainを追加する現行UIは`Add Existing`、新規購入は`Buy`である。初回デプロイ前の自動生成`*.vercel.app` domainには`No Deployment`と表示されてもよい。
 
 環境変数は手動で作成しません。`deploy.sh`がProductionへ必要な5項目だけを設定します。
 

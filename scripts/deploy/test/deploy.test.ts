@@ -690,14 +690,19 @@ test("candidate evidence rejects every identity, state, region, and SHA mismatch
   }
 });
 
-test("Vercel project API requires system variables and rejects Git links", () => {
+test("Vercel project API requires an unprotected, Git-unlinked target", () => {
   const base = {
     id: link.projectId,
     accountId: link.orgId,
     name: "demo",
     autoExposeSystemEnvs: true,
+    ssoProtection: null,
+    protectionBypass: {},
   };
-  assert.equal(parseVercelProjectApi(JSON.stringify(base), link).gitLink, null);
+  const project = parseVercelProjectApi(JSON.stringify(base), link);
+  assert.equal(project.gitLink, null);
+  assert.equal(project.deploymentProtection, null);
+  assert.equal(project.automationBypass, null);
   assert.throws(
     () =>
       parseVercelProjectApi(
@@ -713,6 +718,30 @@ test("Vercel project API requires system variables and rejects Git links", () =>
         link,
       ),
     /System Environment Variables/,
+  );
+  assert.throws(
+    () =>
+      parseVercelProjectApi(
+        JSON.stringify({
+          ...base,
+          ssoProtection: { deploymentType: "all_except_custom_domains" },
+        }),
+        link,
+      ),
+    /Deployment Protection to None/,
+  );
+  assert.throws(
+    () =>
+      parseVercelProjectApi(
+        JSON.stringify({
+          ...base,
+          protectionBypass: {
+            syntheticSecret: { scope: "automation-bypass" },
+          },
+        }),
+        link,
+      ),
+    /Protection Bypass for Automation/,
   );
   assert.throws(
     () =>
