@@ -31,8 +31,10 @@ export type NeonProject = {
   orgId: string;
 };
 
-const NEON_HOST_PATTERN =
-  /^(ep-[a-z0-9-]+?)(-pooler)?\.([a-z0-9-]+)\.aws\.neon\.tech$/i;
+const NEON_DIRECT_HOST_PATTERN =
+  /^(ep-[a-z0-9-]+)\.(?:(c-[1-9][0-9]*)\.)?([a-z0-9-]+)\.aws\.neon\.tech$/i;
+const NEON_POOLED_HOST_PATTERN =
+  /^(ep-[a-z0-9-]+)-pooler\.(?:(c-[1-9][0-9]*)\.)?([a-z0-9-]+)\.aws\.neon\.tech$/i;
 const FORBIDDEN_POSTGRES_QUERY_KEYS = new Set([
   "host",
   "hostaddr",
@@ -57,15 +59,15 @@ export function validateDatabaseUrls(
 ): DatabaseTarget {
   const pooled = parsePostgresUrl(pooledValue, "pooled");
   const direct = parsePostgresUrl(directValue, "direct");
-  const pooledHostMatch = NEON_HOST_PATTERN.exec(pooled.hostname);
-  const directHostMatch = NEON_HOST_PATTERN.exec(direct.hostname);
+  const pooledHostMatch = NEON_POOLED_HOST_PATTERN.exec(pooled.hostname);
+  const directHostMatch = NEON_DIRECT_HOST_PATTERN.exec(direct.hostname);
 
-  if (!pooledHostMatch?.[2]) {
+  if (!pooledHostMatch) {
     throw new Error(
       "DATABASE_URL must use a Neon pooled hostname containing '-pooler'.",
     );
   }
-  if (!directHostMatch || directHostMatch[2]) {
+  if (!directHostMatch) {
     throw new Error(
       "DATABASE_URL_UNPOOLED must use the matching non-pooler Neon hostname.",
     );
@@ -73,11 +75,14 @@ export function validateDatabaseUrls(
 
   const pooledEndpoint = pooledHostMatch[1]?.toLowerCase();
   const directEndpoint = directHostMatch[1]?.toLowerCase();
+  const pooledProxy = pooledHostMatch[2]?.toLowerCase();
+  const directProxy = directHostMatch[2]?.toLowerCase();
   const pooledRegion = pooledHostMatch[3]?.toLowerCase();
   const directRegion = directHostMatch[3]?.toLowerCase();
   if (
     !pooledEndpoint ||
     pooledEndpoint !== directEndpoint ||
+    pooledProxy !== directProxy ||
     !pooledRegion ||
     pooledRegion !== directRegion
   ) {

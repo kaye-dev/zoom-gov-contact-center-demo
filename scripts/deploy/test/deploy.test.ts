@@ -336,9 +336,9 @@ test("deploy.sh rejects a dirty Git worktree before deployment", () => {
 
 test("database URLs require one sslmode=require and the exact Neon endpoint", () => {
   const pooled =
-    "postgresql://demo:p%40ss@ep-safe-pooler.ap-southeast-1.aws.neon.tech/app?sslmode=require&channel_binding=require";
+    "postgresql://demo:p%40ss@ep-safe-pooler.c-2.ap-southeast-1.aws.neon.tech/app?sslmode=require&channel_binding=require";
   const direct =
-    "postgresql://demo:p%40ss@ep-safe.ap-southeast-1.aws.neon.tech/app?sslmode=require&channel_binding=require";
+    "postgresql://demo:p%40ss@ep-safe.c-2.ap-southeast-1.aws.neon.tech/app?sslmode=require&channel_binding=require";
   const target = validateDatabaseUrls(pooled, direct);
   assert.equal(target.endpointId, "ep-safe");
   assert.doesNotThrow(() =>
@@ -349,7 +349,7 @@ test("database URLs require one sslmode=require and the exact Neon endpoint", ()
             id: "ep-safe",
             project_id: "project-safe",
             branch_id: "br-safe",
-            host: "ep-safe.ap-southeast-1.aws.neon.tech",
+            host: "ep-safe.c-2.ap-southeast-1.aws.neon.tech",
             region_id: "aws-ap-southeast-1",
             type: "read_write",
             current_state: "active",
@@ -402,6 +402,67 @@ test("database URLs require one sslmode=require and the exact Neon endpoint", ()
       ),
     /host does not match/,
   );
+});
+
+test("database URLs accept matching legacy hosts and reject proxy mismatches", () => {
+  const legacyPooled =
+    "postgresql://demo:secret@ep-safe-pooler.ap-southeast-1.aws.neon.tech/app?sslmode=require";
+  const legacyDirect =
+    "postgresql://demo:secret@ep-safe.ap-southeast-1.aws.neon.tech/app?sslmode=require";
+  assert.equal(
+    validateDatabaseUrls(legacyPooled, legacyDirect).endpointId,
+    "ep-safe",
+  );
+
+  const currentPooled = legacyPooled.replace("-pooler.", "-pooler.c-2.");
+  const currentDirect = legacyDirect.replace("ep-safe.", "ep-safe.c-2.");
+  assert.equal(
+    validateDatabaseUrls(currentPooled, currentDirect).endpointId,
+    "ep-safe",
+  );
+
+  for (const [pooled, direct] of [
+    [currentPooled, currentDirect.replace(".c-2.", ".c-3.")],
+    [legacyPooled, currentDirect],
+    [currentPooled, legacyDirect],
+    [currentPooled, currentDirect.replace("ep-safe", "ep-other")],
+    [currentPooled, currentDirect.replace("ap-southeast-1", "us-east-1")],
+  ]) {
+    assert.throws(
+      () => validateDatabaseUrls(pooled, direct),
+      /same Neon endpoint/,
+    );
+  }
+
+  for (const proxy of ["c-0", "c-01", "c-x", "proxy", "c-2.extra"]) {
+    assert.throws(
+      () =>
+        validateDatabaseUrls(
+          legacyPooled.replace("-pooler.", `-pooler.${proxy}.`),
+          legacyDirect.replace("ep-safe.", `ep-safe.${proxy}.`),
+        ),
+      /Neon pooled hostname/,
+    );
+  }
+
+  assert.throws(
+    () =>
+      validateDatabaseUrls(
+        currentPooled.replace("ap-southeast-1", "us-east-1"),
+        currentDirect.replace("ap-southeast-1", "us-east-1"),
+      ),
+    /Singapore/,
+  );
+
+  assert.throws(
+    () =>
+      validateDatabaseUrls(
+        currentPooled.replace(".aws.neon.tech/", ".aws.neon.tech./"),
+        currentDirect.replace(".aws.neon.tech/", ".aws.neon.tech./"),
+      ),
+    /Neon pooled hostname/,
+  );
+
 });
 
 test("Neon project inspection uses the project ID API without an organization list", () => {
