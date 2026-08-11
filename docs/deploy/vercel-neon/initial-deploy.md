@@ -1,6 +1,6 @@
 # Vercel / Neonへ新規デプロイ
 
-この手順は、[Vercel Hobby](https://vercel.com/docs/plans/hobby)の対象となる個人・非商用のデモ環境向けです。本番データや、日本国内に保存する必要があるデータには使用しません。2回目以降は[再デプロイ](re-deploy.md)を参照してください。
+この手順は、[Vercel Hobby](https://vercel.com/docs/plans/hobby)の対象となる個人・非商用のデモ環境向けです。本番データや、日本国内に保存する必要があるデータには使用しません。2回目以降は[再デプロイ](redeploy.md)を参照してください。
 
 ## 1. ローカル環境を準備する
 
@@ -92,9 +92,7 @@ Vercel Dashboardで、linkしたprojectを次の状態にします。
 [Neon Console](https://console.neon.tech/)で名前の横に`Free`と表示されるorganizationを選び、`New project`から`Create project`画面を開いて[projectを作成](https://neon.com/docs/manage/projects)します。
 
 - Project name: `zoom-gov-contact-center-demo`
-- Region: `AWS Asia Pacific 1 (Singapore)`（`aws-ap-southeast-1`）
-
-現行画面に独立したCloud service provider欄はありません。`Region`の選択肢に含まれる`AWS`を確認します。
+- Region: `Singapore`
 
 project IDとproject nameを控え、CLIを認証します。
 
@@ -111,33 +109,12 @@ Project Dashboardの`Connect`を開き、同じbranch・database・roleで[次�
 Connect画面の表示形式は`Connection string`を選び、`postgresql://`から始まるURL本体だけをコピーします。`DATABASE_URL=`、引用符、`psql`コマンドは含めず、hostnameの`.c-2.`などのproxy部分も編集しません。
 NeonのVercel Integrationは使用しません。
 
-## 4. 旧AWS accountへ認証する
-
-AWS削除をスキップする場合も、Production受入後のread-only監査にAWS CLIと認証が必要です。
-
-```bash
-# AWS CLIがないmacOSの場合: brew install awscli
-export PATH="$PATH:/usr/local/bin:/opt/homebrew/bin"
-hash -r
-command -v aws
-aws --version
-
-aws sso login --profile splai-dev
-aws sts get-caller-identity \
-  --profile splai-dev \
-  --region ap-northeast-1 \
-  --query Account \
-  --output text
-```
-
-出力が`686112929630`であることを確認します。
-
-## 5. デプロイする
+## 4. デプロイする
 
 対話可能なターミナルから直接実行します。pipeや`tee`は使用しません。
 
 ```bash
-AWS_PROFILE=splai-dev ./deploy.sh
+./deploy.sh
 ```
 
 スクリプトはtest、lint、typecheck、audit、Production buildを自動実行します。表示された対象が想定と違う場合は承認せず、停止します。
@@ -153,7 +130,6 @@ AWS_PROFILE=splai-dev ./deploy.sh
 7. 4件のmigration計画が表示されたら内容を確認し、計画作成へ`y`、実行直前に`migrate`と入力する。
 8. 管理者作成へ`y`と入力し、emailに`admin@keien.dev`、任意のname、12〜128文字のpasswordを2回入力する。passwordはpassword managerへ保存し、変更内容を確認して作成へ`y`と入力する。
 9. staged candidateのsmoke test後、5分間の無通信と、Neon管理APIのidle／active反映待ち（各最大約5分、合計最大約15分）の間はcandidate、Production URL、Neon SQL Editorへアクセスせずに待つ。確認が完了したら、promotionへ`y`と入力する。
-10. 旧AWSを残す場合はAWS削除確認でEnterを押す。削除する場合だけ、表示された対象を確認して`delete AWS 686112929630 ap-northeast-1`と入力する。
 
 認証やlinkの確認が表示された場合は、対象account／projectを確認してから`y`と入力します。
 `docker compose exec web npm run db:seed-admin`とcompose既定の`admin@example.local`はローカルDB専用で、Neon Productionには反映されません。
@@ -167,8 +143,7 @@ AWS_PROFILE=splai-dev ./deploy.sh
 5. 管理画面の`ログアウト`を操作すると`/login`へ戻り、再び`/admin/users`を開いても未認証で保護される。
 6. Vercelの`Settings > Domains`でcanonical domainの`No Deployment`が消え、`Production`として割り当てられている。
 
-ここまで確認できればProductionの受入は完了です。継続して再デプロイする間は、現行スクリプトの制約により旧AWS削除をEnterでスキップしてください。旧AWSを削除すると、次回以降はProduction受入後のAWS監査だけがエラー終了します。
-`Canonical smoke passed`後の`[8/8] AWS retirement`だけで停止した場合もProductionは公開済みです。そのAWSエラーだけを理由に`deploy.sh`を再実行しません。
+ここまで確認できればProductionの受入は完了です。
 
 現行`deploy.sh`が扱えるmigrationは、リポジトリにある既存4件だけです。migrationを追加した場合は、デプロイスクリプトとテストを先に更新します。
 

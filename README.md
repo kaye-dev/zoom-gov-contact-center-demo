@@ -98,8 +98,8 @@ curl http://localhost:3000/docs/privacy-policy.md
 
 公開はリポジトリルートの`./deploy.sh`だけから行い、VercelのGit自動デプロイは使用しません。手順は次を参照してください。
 
-- [新規デプロイ](docs/deploy/vercel-neon/new.md)
-- [2回目以降の再デプロイ](docs/deploy/vercel-neon/re-deploy.md)
+- [新規デプロイ](docs/deploy/vercel-neon/initial-deploy.md)
+- [2回目以降の再デプロイ](docs/deploy/vercel-neon/redeploy.md)
 
 Vercel Hobbyの対象となる個人・非商用利用であり、本番データや日本国内のデータ所在要件がないデモだけを対象とします。業務・商用利用では適合するVercel planを選んでください。
 
