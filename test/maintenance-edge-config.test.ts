@@ -7,6 +7,7 @@ import type {
 } from "../lib/maintenance-config";
 import {
   MAINTENANCE_EDGE_CONFIG_CLIENT_OPTIONS,
+  MAINTENANCE_EDGE_CONFIG_READ_TIMEOUT_MS,
   MaintenanceEdgeConfigReadError,
   MaintenanceEdgeConfigWriteError,
   readMaintenanceEdgeConfigItem,
@@ -50,6 +51,9 @@ test("SDK reads disable stale and development caches without mutating values", a
   let receivedConnectionString: string | undefined;
   let receivedOptions: unknown;
   let receivedKey: string | undefined;
+  let receivedTimeoutMs: number | undefined;
+  let clearedTimeouts = 0;
+  const timeoutHandle = {};
 
   const result = await readMaintenanceEdgeConfigItem(PRODUCTION_KEY, {
     env: { EDGE_CONFIG: `  ${CONNECTION_STRING}  ` },
@@ -63,6 +67,14 @@ test("SDK reads disable stale and development caches without mutating values", a
         },
       };
     },
+    scheduleTimeoutImpl(_callback, delayMs) {
+      receivedTimeoutMs = delayMs;
+      return timeoutHandle;
+    },
+    clearTimeoutImpl(handle) {
+      assert.equal(handle, timeoutHandle);
+      clearedTimeouts += 1;
+    },
   });
 
   assert.equal(receivedConnectionString, CONNECTION_STRING);
@@ -73,6 +85,11 @@ test("SDK reads disable stale and development caches without mutating values", a
   });
   assert.deepEqual(receivedOptions, MAINTENANCE_EDGE_CONFIG_CLIENT_OPTIONS);
   assert.equal(receivedKey, PRODUCTION_KEY);
+  assert.equal(
+    receivedTimeoutMs,
+    MAINTENANCE_EDGE_CONFIG_READ_TIMEOUT_MS,
+  );
+  assert.equal(clearedTimeouts, 1);
   assert.equal(result, raw);
   assert.deepEqual(raw, currentConfig);
 });
@@ -82,6 +99,9 @@ test("SDK read setup and upstream failures are sanitized", async () => {
     readMaintenanceEdgeConfigItem(PRODUCTION_KEY, { env: {} }),
     (error: unknown) => sanitizedError(error, MaintenanceEdgeConfigReadError),
   );
+
+  let clearedTimeouts = 0;
+  const timeoutHandle = {};
   await assert.rejects(
     readMaintenanceEdgeConfigItem(PRODUCTION_KEY, {
       env: { EDGE_CONFIG: CONNECTION_STRING },
@@ -101,9 +121,65 @@ test("SDK read setup and upstream failures are sanitized", async () => {
           },
         };
       },
+      scheduleTimeoutImpl() {
+        return timeoutHandle;
+      },
+      clearTimeoutImpl(handle) {
+        assert.equal(handle, timeoutHandle);
+        clearedTimeouts += 1;
+      },
     }),
     (error: unknown) => sanitizedError(error, MaintenanceEdgeConfigReadError),
   );
+  assert.equal(clearedTimeouts, 1);
+});
+
+test("SDK read timeout is sanitized and reaches fail-closed state", async () => {
+  const timeoutHandle = {};
+  let scheduledTimeouts = 0;
+  let clearedTimeouts = 0;
+
+  const timedRead = (key: MaintenanceConfigKey) =>
+    readMaintenanceEdgeConfigItem(key, {
+      env: { EDGE_CONFIG: CONNECTION_STRING },
+      readTimeoutMs: 25,
+      createClientImpl() {
+        return {
+          get: () => new Promise<never>(() => undefined),
+        };
+      },
+      scheduleTimeoutImpl(callback, delayMs) {
+        assert.equal(delayMs, 25);
+        scheduledTimeouts += 1;
+        queueMicrotask(callback);
+        return timeoutHandle;
+      },
+      clearTimeoutImpl(handle) {
+        assert.equal(handle, timeoutHandle);
+        clearedTimeouts += 1;
+      },
+    });
+
+  await assert.rejects(
+    timedRead(PRODUCTION_KEY),
+    (error: unknown) => sanitizedError(error, MaintenanceEdgeConfigReadError),
+  );
+
+  const snapshot = await getMaintenanceSettingsSnapshot({
+    requestHostname: "city.example.jp",
+    env: productionEnv,
+    now: new Date("2026-08-11T00:00:00.000Z"),
+    readItem: timedRead,
+  });
+
+  assert.equal(scheduledTimeouts, 2);
+  assert.equal(clearedTimeouts, 2);
+  assert.equal(snapshot.readStatus, "ERROR");
+  assert.deepEqual(snapshot.effective, {
+    active: true,
+    reason: "FAIL_CLOSED",
+    retryAfter: null,
+  });
 });
 
 test("REST write performs exactly one scoped upsert with token only in header", async () => {

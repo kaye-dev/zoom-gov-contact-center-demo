@@ -16,6 +16,8 @@ export const MAINTENANCE_EDGE_CONFIG_CLIENT_OPTIONS = {
   cache: "no-store",
 } as const;
 
+export const MAINTENANCE_EDGE_CONFIG_READ_TIMEOUT_MS = 2_000;
+
 const VERCEL_EDGE_CONFIG_API_ROOT =
   "https://api.vercel.com/v1/edge-config";
 const EDGE_CONFIG_ID_PATTERN = /^ecfg_[A-Za-z0-9_-]+$/;
@@ -34,9 +36,19 @@ type EdgeConfigClientFactory = (
   options: typeof MAINTENANCE_EDGE_CONFIG_CLIENT_OPTIONS,
 ) => MaintenanceEdgeConfigClient;
 
+type MaintenanceTimeoutScheduler = (
+  callback: () => void,
+  delayMs: number,
+) => unknown;
+
+type MaintenanceTimeoutClearer = (handle: unknown) => void;
+
 type MaintenanceEdgeConfigReadOptions = {
   env?: MaintenanceEnvironmentVariables;
   createClientImpl?: EdgeConfigClientFactory;
+  readTimeoutMs?: number;
+  scheduleTimeoutImpl?: MaintenanceTimeoutScheduler;
+  clearTimeoutImpl?: MaintenanceTimeoutClearer;
 };
 
 type MaintenanceEdgeConfigWriteOptions = {
@@ -70,21 +82,52 @@ export async function readMaintenanceEdgeConfigItem(
   const env = options.env ?? process.env;
   const connectionString = env.EDGE_CONFIG?.trim();
   const createClientImpl = options.createClientImpl ?? createClient;
+  const readTimeoutMs =
+    options.readTimeoutMs ?? MAINTENANCE_EDGE_CONFIG_READ_TIMEOUT_MS;
+  const scheduleTimeoutImpl =
+    options.scheduleTimeoutImpl ??
+    ((callback: () => void, delayMs: number) =>
+      setTimeout(callback, delayMs));
+  const clearTimeoutImpl =
+    options.clearTimeoutImpl ??
+    ((handle: unknown) =>
+      clearTimeout(handle as ReturnType<typeof setTimeout>));
 
-  if (!connectionString || !isMaintenanceConfigKey(key)) {
+  if (
+    !connectionString ||
+    !isMaintenanceConfigKey(key) ||
+    !Number.isSafeInteger(readTimeoutMs) ||
+    readTimeoutMs <= 0
+  ) {
     throw new MaintenanceEdgeConfigReadError();
   }
+
+  let timeoutHandle: unknown;
+  let timeoutScheduled = false;
 
   try {
     const client = createClientImpl(
       connectionString,
       MAINTENANCE_EDGE_CONFIG_CLIENT_OPTIONS,
     );
-    return await client.get(key);
+    return await new Promise<unknown>((resolve, reject) => {
+      timeoutHandle = scheduleTimeoutImpl(
+        () => reject(new MaintenanceEdgeConfigReadError()),
+        readTimeoutMs,
+      );
+      timeoutScheduled = true;
+      Promise.resolve()
+        .then(() => client.get(key))
+        .then(resolve, reject);
+    });
   } catch {
     // SDK errors can contain connection details. Replace them rather than
     // attaching a cause or logging the original error.
     throw new MaintenanceEdgeConfigReadError();
+  } finally {
+    if (timeoutScheduled) {
+      clearTimeoutImpl(timeoutHandle);
+    }
   }
 }
 
