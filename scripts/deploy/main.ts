@@ -4,15 +4,6 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
-  AWS_CLEANUP_ACCOUNT,
-  AWS_CLEANUP_REGION,
-  captureAwsCleanupPlan,
-  executeAwsCleanup,
-  inspectLocalAwsArtifacts,
-  removeLocalAwsArtifacts,
-  renderAwsCleanupPlan,
-} from "./lib/aws-cleanup";
-import {
   inspectAdmin,
   provisionAdmin,
   renderAdminChanges,
@@ -162,7 +153,7 @@ export async function runDeploymentWorkflow(
 
   try {
     assertInteractiveTerminal();
-    console.log("[1/8] Local and CLI preflight");
+    console.log("[1/7] Local and CLI preflight");
     const git = inspectGit(runner, projectRoot);
     validateLocalDeploymentConfig(projectRoot);
     ensureCliTools(runner);
@@ -192,7 +183,7 @@ export async function runDeploymentWorkflow(
     state.canonicalUrl = canonicalUrl;
     assertCanonicalDomain(runner, link, canonicalUrl);
 
-    console.log("[2/8] Neon target and secret input");
+    console.log("[2/7] Neon target and secret input");
     const neonProjectId = validateNeonProjectId(
       await prompter.ask("Neon project ID: "),
     );
@@ -307,7 +298,7 @@ export async function runDeploymentWorkflow(
     const resultingEnvironment = listProductionEnvironment(runner, link);
     assertExactProductionEnvironment(resultingEnvironment);
 
-    console.log("[3/8] Quality gates");
+    console.log("[3/7] Quality gates");
     const buildAuthSecret =
       generatedAuthSecret ?? randomBytes(48).toString("base64url");
     secrets.add(buildAuthSecret);
@@ -320,7 +311,7 @@ export async function runDeploymentWorkflow(
     runQualityGates(runner, projectRoot, buildEnvironment);
     assertGitClean(runner, projectRoot, "after quality gates");
 
-    console.log("[4/8] Migration preflight");
+    console.log("[4/7] Migration preflight");
     const promotionGuard = new PromotionGuard();
     let migrationPlan = await createMigrationPlan({
       projectRoot,
@@ -337,7 +328,7 @@ export async function runDeploymentWorkflow(
       );
     }
 
-    console.log("[5/8] Staged Production candidate");
+    console.log("[5/7] Staged Production candidate");
     const deploymentGit = inspectGit(runner, projectRoot);
     if (
       deploymentGit.branch !== git.branch ||
@@ -471,7 +462,7 @@ export async function runDeploymentWorkflow(
     }
     promotionGuard.markMigrationVerified();
 
-    console.log("[6/8] Administrator and staged smoke tests");
+    console.log("[6/7] Administrator and staged smoke tests");
     const credentials = await prepareAdminCredentials(
       prompter,
       secrets,
@@ -498,7 +489,7 @@ export async function runDeploymentWorkflow(
     console.log("Staged five-minute idle recovery health check passed.");
     promotionGuard.markSmokeVerified();
 
-    console.log("[7/8] Promotion");
+    console.log("[7/7] Promotion");
     console.log(`Commit: ${git.commitSha}`);
     console.log(`Candidate: ${candidateUrl.origin}`);
     console.log(`Canonical: ${canonicalUrl.origin}`);
@@ -562,46 +553,6 @@ export async function runDeploymentWorkflow(
     const canonicalSmoke = await runSmokeChecks(canonicalUrl, credentials);
     console.log(`Canonical smoke passed: ${canonicalSmoke.checks.join(", ")}`);
     state.productionAcceptanceComplete = true;
-
-    console.log("[8/8] AWS retirement");
-    ensureAwsCli(runner);
-    const awsPlan = captureAwsCleanupPlan(runner);
-    const localAwsArtifacts = inspectLocalAwsArtifacts(projectRoot);
-    console.log(renderAwsCleanupPlan(awsPlan));
-    console.log(
-      `Validated local AWS artifact directories: ${localAwsArtifacts.join(", ") || "none present"}`,
-    );
-    const cleanupConfirmation = await prompter.ask(
-      `AWSを不可逆に削除する場合は 'delete AWS ${AWS_CLEANUP_ACCOUNT} ${AWS_CLEANUP_REGION}' と入力してください。\n> `,
-    );
-    const expectedCleanupConfirmation = `delete AWS ${AWS_CLEANUP_ACCOUNT} ${AWS_CLEANUP_REGION}`;
-    if (cleanupConfirmation.trim() !== expectedCleanupConfirmation) {
-      console.log(
-        "AWS cleanup was skipped. Vercel Production is live, but the reviewed AWS resources remain.",
-      );
-      return;
-    }
-    const finalAwsPlan = captureAwsCleanupPlan(runner);
-    if (finalAwsPlan.hash !== awsPlan.hash) {
-      throw new Error(
-        "AWS cleanup targets changed after review. No AWS deletion was started.",
-      );
-    }
-    const finalLocalAwsArtifacts = inspectLocalAwsArtifacts(projectRoot);
-    if (
-      JSON.stringify(finalLocalAwsArtifacts) !==
-      JSON.stringify(localAwsArtifacts)
-    ) {
-      throw new Error(
-        "Local AWS artifact targets changed after review. No AWS deletion was started.",
-      );
-    }
-    executeAwsCleanup(runner, finalAwsPlan);
-    const removedArtifacts = removeLocalAwsArtifacts(projectRoot);
-    console.log("AWS retirement completed and residual audit passed.");
-    console.log(
-      `Local AWS artifacts removed (not recoverable): ${removedArtifacts.join(", ") || "none present"}`,
-    );
     console.log(
       `Deployment completed: ${canonicalUrl.origin} (${git.commitSha})`,
     );
@@ -761,18 +712,6 @@ export function ensureCliTools(runner: CommandRunner): void {
       );
     }
   }
-}
-
-export function ensureAwsCli(runner: CommandRunner): void {
-  let result: CommandResult;
-  try {
-    result = runner.run("aws", ["--version"]);
-  } catch {
-    throw new Error(
-      "AWS CLI is required only for the optional post-acceptance retirement step. Production remains promoted; install AWS CLI and rerun the audited retirement separately.",
-    );
-  }
-  assertCommandSucceeded(result, "AWS CLI version check");
 }
 
 export async function authenticateVercel(

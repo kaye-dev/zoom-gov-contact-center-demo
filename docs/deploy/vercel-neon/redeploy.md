@@ -14,6 +14,15 @@ node --version
 
 `git status --short`は何も表示されない状態にします。Vercelのlink先、Git未接続、System Environment Variables、Fluid Compute、Production domainに加え、Build Command、Output Directory、Root Directoryが未上書き、`Settings > Deployment Protection`が`None`のまま変わっていないことも確認します。Framework Presetが`Other`と表示されても、リポジトリの[`vercel.json`](../../../vercel.json)が`Next.js`を指定するため変更しません。`Protection Bypass for Automation`は作成しません。認証切れは`deploy.sh`が検出し、loginを実行する前に確認します。
 
+`node --version`が`v24.x`でない場合は、HomebrewのNode.js 24を選択してから再確認します。
+
+```bash
+brew install node@24
+export PATH="/opt/homebrew/opt/node@24/bin:$PATH"
+hash -r
+node --version
+```
+
 fresh cloneなどで`.vercel/project.json`がない場合は`vercel link`を実行し、新規作成せず既存projectへlinkします。
 
 ## 2. Neonの接続URLを用意する
