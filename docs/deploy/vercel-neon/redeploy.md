@@ -54,7 +54,7 @@ Connect画面の表示形式は`Connection string`を選び、`postgresql://`か
 5. migrationがup-to-dateならそのまま進む。pendingが表示された場合だけ、計画を確認して`y`、実行直前に`migrate`と入力する。
 6. 通常は管理者作成・更新でEnterを押し、既存管理者のemailに`admin@keien.dev`、続けて保存したpasswordを入力する。管理者を更新する場合だけ`y`を選び、表示された変更内容を再確認する。
 7. staged candidateのsmoke test後、5分間の無通信と、Neon管理APIのidle／active反映待ち（各最大約5分、合計最大約15分）の間はcandidate、Production URL、Neon SQL Editorへアクセスせずに待つ。確認が完了したら、promotionへ`y`と入力する。
-`Canonical smoke passed`が表示されれば、Productionの再デプロイは完了です。
+`Canonical smoke passed`に続いて`Deployment completed: <Production URL> (<commit SHA>)`が表示されれば、Productionの再デプロイは完了です。
 
 現行`deploy.sh`が扱えるmigrationは、リポジトリにある既存4件だけです。5件目以降を追加した場合は、デプロイスクリプトとテストを先に更新し、この手順では実行しません。
 
