@@ -1,28 +1,31 @@
-import type { DemoRecord } from "@/lib/generated/prisma/client";
-import { prisma } from "@/lib/server/prisma";
+import type {
+  DemoRecord,
+  PrismaClient,
+} from "@/lib/generated/prisma/client";
 
 export const MAX_DEMO_RECORD_MESSAGE_LENGTH = 500;
 
-export function hasDatabaseUrl() {
-  return Boolean(process.env.DATABASE_URL);
-}
-
-export async function ensureDatabase() {
+export async function ensureDatabase(prisma: PrismaClient) {
   await prisma.$queryRaw`SELECT 1`;
 }
 
-export async function listDemoRecords(): Promise<DemoRecord[]> {
+export async function listDemoRecords(
+  prisma: PrismaClient,
+): Promise<DemoRecord[]> {
   return prisma.demoRecord.findMany({
     orderBy: { id: "desc" },
     take: 50,
   });
 }
 
-export async function countDemoRecords() {
+export async function countDemoRecords(prisma: PrismaClient) {
   return prisma.demoRecord.count();
 }
 
-export async function createDemoRecord(message: string): Promise<DemoRecord> {
+export async function createDemoRecord(
+  prisma: PrismaClient,
+  message: string,
+): Promise<DemoRecord> {
   return prisma.demoRecord.create({
     data: { message },
   });

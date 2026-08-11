@@ -71,11 +71,14 @@ export function PhoneSettingsForm({
     setIsSubmitting(true);
 
     try {
-      const response = await fetch("/api/admin/phone-settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(settings),
-      });
+      const response = await fetch(
+        "/api/admin/phone-settings",
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(settings),
+        },
+      );
       const body = (await response.json().catch(() => null)) as
         | { settings?: PhoneSettings; error?: unknown }
         | null;

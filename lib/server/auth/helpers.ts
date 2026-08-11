@@ -1,13 +1,13 @@
-import { auth } from "@/lib/auth";
+import type { AppAuth } from "@/lib/auth";
 
-export type AppSession = Awaited<ReturnType<typeof auth.api.getSession>>;
+export type AppSession = Awaited<ReturnType<AppAuth["api"]["getSession"]>>;
 
 type AppSessionUser = NonNullable<AppSession>["user"] & {
   mustChangePassword?: boolean | null;
   role?: string | null;
 };
 
-export async function getAppSession(headers: Headers) {
+export async function getAppSession(auth: AppAuth, headers: Headers) {
   return auth.api.getSession({ headers });
 }
 

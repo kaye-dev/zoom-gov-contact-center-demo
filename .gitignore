@@ -32,7 +32,6 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
 /core
 /core.*
 /*.core
@@ -41,7 +40,7 @@ yarn-error.log*
 .env*
 !.env.example
 
-# vercel
+# Vercel CLI project link (local metadata only)
 .vercel
 
 # typescript

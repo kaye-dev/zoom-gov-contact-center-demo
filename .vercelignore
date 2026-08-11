@@ -1,0 +1,11 @@
+# Never upload local environment files with a CLI deployment.
+.env
+.env.*
+!.env.example
+
+# Local-only tooling and generated artifacts.
+.vercel
+.playwright-cli
+plans
+core
+core.*

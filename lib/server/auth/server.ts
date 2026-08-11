@@ -1,18 +1,23 @@
+import { cache } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { auth } from "@/lib/auth";
+import { withAuth } from "@/lib/auth";
 import {
   getSessionUser,
   isAdminSession,
   shouldChangePassword,
 } from "@/lib/server/auth/helpers";
 
-export async function getCurrentSession() {
-  return auth.api.getSession({
-    headers: await headers(),
-  });
-}
+export const getCurrentSession = cache(async () => {
+  const requestHeaders = await headers();
+
+  return withAuth((auth) =>
+    auth.api.getSession({
+      headers: requestHeaders,
+    }),
+  );
+});
 
 export async function requireSession(callbackURL = "/admin") {
   const session = await getCurrentSession();

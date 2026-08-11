@@ -1,24 +1,26 @@
-import { prisma } from "@/lib/server/prisma";
 import { requireAdminSession } from "@/lib/server/auth/server";
+import { withPrisma } from "@/lib/server/prisma";
 
 import { PasswordResetRequestsView } from "./PasswordResetRequestsView";
 
 export default async function PasswordResetRequestsPage() {
   await requireAdminSession("/admin/password-reset-requests");
 
-  const requests = await prisma.passwordResetRequest.findMany({
-    orderBy: { requestedAt: "desc" },
-    take: 100,
-    include: {
-      user: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
+  const requests = await withPrisma((prisma) =>
+    prisma.passwordResetRequest.findMany({
+      orderBy: { requestedAt: "desc" },
+      take: 100,
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
         },
       },
-    },
-  });
+    }),
+  );
 
   return (
     <PasswordResetRequestsView

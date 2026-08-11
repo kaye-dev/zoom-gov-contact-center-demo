@@ -1,14 +1,13 @@
 import { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { handle } from "hono/vercel";
-import { revalidatePath } from "next/cache";
 
-import { auth } from "@/lib/auth";
+import { createAuth, type AppAuth } from "@/lib/auth";
+import type { PrismaClient } from "@/lib/generated/prisma/client";
 import {
   countDemoRecords,
   createDemoRecord,
   ensureDatabase,
-  hasDatabaseUrl,
   listDemoRecords,
   MAX_DEMO_RECORD_MESSAGE_LENGTH,
 } from "@/lib/server/db";
@@ -18,10 +17,15 @@ import {
   isAdminSession,
   shouldChangePassword,
 } from "@/lib/server/auth/helpers";
-import { prisma } from "@/lib/server/prisma";
+import {
+  connectDatabaseWithRetry,
+  createDatabaseContext,
+  hasDatabaseConfiguration,
+} from "@/lib/server/prisma";
 import { saveChatSettings } from "@/lib/server/chat-settings";
 import { savePhoneSettings } from "@/lib/server/phone-settings";
 import { saveLanguageSettings } from "@/lib/server/site-settings";
+import { createBoundedPasswordResetRequest } from "@/lib/server/password-reset-requests";
 import { parseChatSettings } from "@/lib/chat-settings";
 import { parsePhoneSettings } from "@/lib/phone-settings";
 import {
@@ -31,31 +35,66 @@ import {
 
 export const runtime = "nodejs";
 
-const app = new Hono().basePath("/api");
+type AppEnvironment = {
+  Variables: {
+    auth: AppAuth;
+    prisma: PrismaClient;
+  };
+};
+
+const app = new Hono<AppEnvironment>().basePath("/api");
+
+app.use("*", async (c, next) => {
+  if (isDatabaseFreeRequest(c.req.raw)) {
+    await next();
+    return;
+  }
+
+  const database = createDatabaseContext();
+
+  try {
+    await connectDatabaseWithRetry(database.prisma);
+    c.set("prisma", database.prisma);
+    c.set("auth", createAuth(database.prisma));
+    await next();
+  } finally {
+    await database.close();
+  }
+});
 
 const USER_ROLES = ["user", "admin"] as const;
 
 app.get("/health", async (c) => {
-  await ensureDatabase();
+  const prisma = c.get("prisma");
+  await ensureDatabase(prisma);
 
   return c.json({
     status: "ok",
     database: {
       driver: "postgresql",
       orm: "prisma",
-      configured: hasDatabaseUrl(),
-      demoRecordCount: await countDemoRecords(),
+      configured: hasDatabaseConfiguration(),
+      demoRecordCount: await countDemoRecords(prisma),
     },
   });
 });
 
 app.get("/demo-records", async (c) => {
+  const prisma = c.get("prisma");
   return c.json({
-    records: await listDemoRecords(),
+    records: await listDemoRecords(prisma),
   });
 });
 
 app.post("/demo-records", async (c) => {
+  // This endpoint is only a local database-development aid. Keeping an
+  // unauthenticated production writer would allow arbitrary database growth,
+  // so fail before opening a database connection in production.
+  if (process.env.NODE_ENV === "production") {
+    return c.json({ error: "Not found." }, 404);
+  }
+
+  const prisma = c.get("prisma");
   const body = await readJsonBody(c.req.raw);
 
   if (!isDemoRecordPayload(body)) {
@@ -76,10 +115,11 @@ app.post("/demo-records", async (c) => {
     );
   }
 
-  return c.json({ record: await createDemoRecord(message) }, 201);
+  return c.json({ record: await createDemoRecord(prisma, message) }, 201);
 });
 
 app.post("/password-reset-requests", async (c) => {
+  const prisma = c.get("prisma");
   const body = await readJsonBody(c.req.raw);
 
   if (!isEmailPayload(body)) {
@@ -91,23 +131,15 @@ app.post("/password-reset-requests", async (c) => {
     return c.json({ error: "Email address is invalid." }, 400);
   }
 
-  const user = await prisma.user.findUnique({
-    where: { email },
-    select: { id: true },
-  });
-
-  await prisma.passwordResetRequest.create({
-    data: {
-      email,
-      userId: user?.id,
-    },
-  });
+  await createBoundedPasswordResetRequest(prisma, email);
 
   return c.json({ ok: true });
 });
 
 app.get("/admin/password-reset-requests", async (c) => {
-  const session = await getAppSession(c.req.raw.headers);
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const session = await getAppSession(auth, c.req.raw.headers);
   const unauthorized = rejectNonAdmin(session);
 
   if (unauthorized) {
@@ -141,7 +173,9 @@ app.get("/admin/password-reset-requests", async (c) => {
 });
 
 app.post("/admin/password-reset-requests/:id/approve", async (c) => {
-  const session = await getAppSession(c.req.raw.headers);
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const session = await getAppSession(auth, c.req.raw.headers);
   const unauthorized = rejectNonAdmin(session);
 
   if (unauthorized) {
@@ -200,7 +234,9 @@ app.post("/admin/password-reset-requests/:id/approve", async (c) => {
 });
 
 app.post("/admin/password-reset-requests/:id/reject", async (c) => {
-  const session = await getAppSession(c.req.raw.headers);
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const session = await getAppSession(auth, c.req.raw.headers);
   const unauthorized = rejectNonAdmin(session);
 
   if (unauthorized) {
@@ -229,7 +265,9 @@ app.post("/admin/password-reset-requests/:id/reject", async (c) => {
 });
 
 app.post("/admin/users", async (c) => {
-  const session = await getAppSession(c.req.raw.headers);
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const session = await getAppSession(auth, c.req.raw.headers);
   const unauthorized = rejectNonAdmin(session);
 
   if (unauthorized) {
@@ -301,7 +339,9 @@ app.post("/admin/users", async (c) => {
 });
 
 app.put("/admin/phone-settings", async (c) => {
-  const session = await getAppSession(c.req.raw.headers);
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const session = await getAppSession(auth, c.req.raw.headers);
   const unauthorized = rejectNonAdminForSettings(session);
 
   if (unauthorized) {
@@ -314,8 +354,7 @@ app.put("/admin/phone-settings", async (c) => {
   }
 
   try {
-    const settings = await savePhoneSettings(parsed.value);
-    revalidatePath("/", "layout");
+    const settings = await savePhoneSettings(prisma, parsed.value);
     return c.json({ settings });
   } catch {
     console.error("Failed to save phone settings.");
@@ -324,7 +363,9 @@ app.put("/admin/phone-settings", async (c) => {
 });
 
 app.put("/admin/chat-settings", async (c) => {
-  const session = await getAppSession(c.req.raw.headers);
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const session = await getAppSession(auth, c.req.raw.headers);
   const unauthorized = rejectNonAdminForSettings(session);
 
   if (unauthorized) {
@@ -337,8 +378,7 @@ app.put("/admin/chat-settings", async (c) => {
   }
 
   try {
-    await saveChatSettings(parsed.value);
-    revalidatePath("/", "layout");
+    await saveChatSettings(prisma, parsed.value);
     return c.json({ saved: true });
   } catch {
     // Memo fields may contain copied tags or operational notes. Never log the payload.
@@ -348,7 +388,9 @@ app.put("/admin/chat-settings", async (c) => {
 });
 
 app.put("/admin/language-settings", async (c) => {
-  const session = await getAppSession(c.req.raw.headers);
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const session = await getAppSession(auth, c.req.raw.headers);
   const unauthorized = rejectNonAdminForSettings(session);
 
   if (unauthorized) {
@@ -361,8 +403,7 @@ app.put("/admin/language-settings", async (c) => {
   }
 
   try {
-    const settings = await saveLanguageSettings(parsed.value);
-    revalidatePath("/", "layout");
+    const settings = await saveLanguageSettings(prisma, parsed.value);
     return c.json({ settings });
   } catch (error) {
     console.error("Failed to save language settings.", error);
@@ -371,7 +412,9 @@ app.put("/admin/language-settings", async (c) => {
 });
 
 app.post("/account/change-password", async (c) => {
-  const session = await getAppSession(c.req.raw.headers);
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const session = await getAppSession(auth, c.req.raw.headers);
   const user = getSessionUser(session);
 
   if (!user) {
@@ -448,6 +491,18 @@ function isDemoRecordPayload(value: unknown): value is { message: string } {
     value !== null &&
     "message" in value &&
     typeof value.message === "string"
+  );
+}
+
+function isDatabaseFreeRequest(request: Request): boolean {
+  if (request.method.toUpperCase() !== "POST") {
+    return false;
+  }
+
+  const pathname = new URL(request.url).pathname;
+  return (
+    process.env.NODE_ENV === "production" &&
+    pathname === "/api/demo-records"
   );
 }
 

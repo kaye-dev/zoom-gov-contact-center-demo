@@ -94,7 +94,14 @@ curl http://localhost:3000/docs/privacy-policy.md
 
 この構成では `app/api/[[...route]]/route.ts` の Route Handler 上で Hono を動かし、アプリ固有 API は Prisma Client 経由で PostgreSQL に書き込みます。Better Auth は `app/api/auth/[...all]/route.ts` に専用 mount しています。
 
-Vercel にデプロイする場合、`DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` を設定し、Prisma Postgres / Neon / Supabase / Vercel Marketplace の Postgres など `DATABASE_URL` で接続できる PostgreSQL を使ってください。`postinstall` で Prisma Client を生成し、`vercel-build` では `prisma migrate deploy` を実行します。
+### Vercel Hobby + Neon Freeへデプロイ
+
+公開はリポジトリルートの`./deploy.sh`だけから行い、VercelのGit自動デプロイは使用しません。手順は次を参照してください。
+
+- [新規デプロイ](docs/deploy/vercel-neon/initial-deploy.md)
+- [2回目以降の再デプロイ](docs/deploy/vercel-neon/redeploy.md)
+
+Vercel Hobbyの対象となる個人・非商用利用であり、本番データや日本国内のデータ所在要件がないデモだけを対象とします。業務・商用利用では適合するVercel planを選んでください。
 
 ### npm で起動
 
@@ -120,6 +127,10 @@ npm run dev
 | `npm run build` | 本番ビルドを作成 |
 | `npm run start` | 本番サーバーを起動 |
 | `npm run lint` | ESLint を実行 |
+| `npm run typecheck` | アプリのTypeScript型検査を実行 |
+| `npm run audit:runtime` | デプロイ成果物に含まれる依存関係の脆弱性監査を実行 |
+| `npm run test:deploy` | Vercel/Neonデプロイの安全ゲートをstubで検証 |
+| `./deploy.sh` | Vercel/Neonのpreflight、migration、staged smoke、promotionを対話式で実行 |
 | `npm run db:generate` | Prisma Client を生成 |
 | `npm run db:migrate` | Prisma migration を作成し、ローカル DB に適用 |
 | `npm run db:deploy` | Prisma migration をデプロイ先 DB に適用 |

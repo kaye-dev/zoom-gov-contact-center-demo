@@ -74,11 +74,14 @@ export function LanguageSettingsForm({
     setIsSubmitting(true);
 
     try {
-      const response = await fetch("/api/admin/language-settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ locales }),
-      });
+      const response = await fetch(
+        "/api/admin/language-settings",
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ locales }),
+        },
+      );
       const body = (await response.json().catch(() => null)) as
         | { settings?: LanguageSettings; error?: unknown }
         | null;

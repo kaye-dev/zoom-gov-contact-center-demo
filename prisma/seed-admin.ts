@@ -1,5 +1,8 @@
-import { auth } from "../lib/auth";
-import { prisma } from "../lib/server/prisma";
+import { createAuth } from "../lib/auth";
+import {
+  connectDatabaseWithRetry,
+  createDatabaseContext,
+} from "../lib/server/prisma";
 
 const requiredEnv = [
   "SEED_ADMIN_EMAIL",
@@ -18,49 +21,56 @@ async function main() {
   const password = process.env.SEED_ADMIN_PASSWORD!;
   const name = process.env.SEED_ADMIN_NAME!.trim();
   const passwordChangedAt = new Date();
-  const existingUser = await prisma.user.findUnique({
-    where: { email },
-    select: { id: true },
-  });
+  const database = createDatabaseContext();
 
-  if (existingUser) {
-    await prisma.user.update({
-      where: { id: existingUser.id },
-      data: {
+  try {
+    await connectDatabaseWithRetry(database.prisma);
+    const auth = createAuth(database.prisma, {
+      baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+    });
+    const existingUser = await database.prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+
+    if (existingUser) {
+      await database.prisma.user.update({
+        where: { id: existingUser.id },
+        data: {
+          name,
+          role: "admin",
+          banned: false,
+          banReason: null,
+          banExpires: null,
+          mustChangePassword: false,
+          passwordChangedAt,
+        },
+      });
+      console.log(`Seed admin exists: ${email}`);
+      return;
+    }
+
+    await auth.api.createUser({
+      body: {
         name,
+        email,
+        password,
         role: "admin",
-        banned: false,
-        banReason: null,
-        banExpires: null,
-        mustChangePassword: false,
-        passwordChangedAt,
+        data: {
+          mustChangePassword: false,
+          passwordChangedAt,
+        },
       },
     });
-    console.log(`Seed admin exists: ${email}`);
-    return;
+
+    console.log(`Seed admin created: ${email}`);
+  } finally {
+    await database.close();
   }
-
-  await auth.api.createUser({
-    body: {
-      name,
-      email,
-      password,
-      role: "admin",
-      data: {
-        mustChangePassword: false,
-        passwordChangedAt,
-      },
-    },
-  });
-
-  console.log(`Seed admin created: ${email}`);
 }
 
 main()
   .catch((error) => {
     console.error(error);
     process.exitCode = 1;
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
   });

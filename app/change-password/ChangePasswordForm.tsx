@@ -17,14 +17,17 @@ export function ChangePasswordForm() {
     setSuccess(false);
     setIsSubmitting(true);
 
-    const response = await fetch("/api/account/change-password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        currentPassword: String(formData.get("currentPassword") ?? ""),
-        newPassword: String(formData.get("newPassword") ?? ""),
-      }),
-    });
+    const response = await fetch(
+      "/api/account/change-password",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentPassword: String(formData.get("currentPassword") ?? ""),
+          newPassword: String(formData.get("newPassword") ?? ""),
+        }),
+      },
+    );
 
     setIsSubmitting(false);
 

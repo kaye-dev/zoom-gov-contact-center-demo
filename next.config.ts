@@ -54,18 +54,14 @@ const nextConfig: NextConfig = {
   // .mdx をルーティング対象（page.mdx）として使う予定はないが、@next/mdx の
   // 標準構成に合わせて拡張子を許可しておく（content/ は app/ 外なのでルートにはならない）。
   pageExtensions: ["js", "jsx", "ts", "tsx", "md", "mdx"],
-  images: {
-    // 開発時は画像最適化キャッシュ（.next/cache/images）を通さず
-    // public/ から直接配信し、画像を上書きしたら即反映されるようにする。
-    // 本番（next build / start）では従来どおり最適化を有効にする。
-    unoptimized: process.env.NODE_ENV === "development",
-  },
   experimental: {
     // dev セッション間の Turbopack 永続キャッシュを無効化し、
     // 毎回クリーンな状態でホットリロードさせる
     turbopackFileSystemCacheForDev: false,
   },
   outputFileTracingIncludes: {
+    '/docs/**': ['./content/docs/**/*'],
+    '/api/docs-md/**': ['./content/docs/**/*'],
     '/life/frequently-asked-questions': [
       './docs/knowledge-base/自治体-基礎自治体-未来市/**/*.md',
       './docs/knowledge-base/自治体-基礎自治体-未来市/_translations/**/*.json',

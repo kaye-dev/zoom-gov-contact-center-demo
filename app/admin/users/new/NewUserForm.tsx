@@ -20,15 +20,18 @@ export function NewUserForm() {
     setCreatedUser(null);
     setIsSubmitting(true);
 
-    const response = await fetch("/api/admin/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: String(formData.get("name") ?? ""),
-        email: String(formData.get("email") ?? ""),
-        role: String(formData.get("role") ?? "user"),
-      }),
-    });
+    const response = await fetch(
+      "/api/admin/users",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: String(formData.get("name") ?? ""),
+          email: String(formData.get("email") ?? ""),
+          role: String(formData.get("role") ?? "user"),
+        }),
+      },
+    );
 
     setIsSubmitting(false);
 
