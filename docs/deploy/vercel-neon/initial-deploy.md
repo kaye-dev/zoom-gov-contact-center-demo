@@ -36,6 +36,17 @@ vercel project add zoom-gov-contact-center-demo --scope "<Hobby scope>"
 vercel link --yes --scope "<Hobby scope>" --project zoom-gov-contact-center-demo
 ```
 
+最後の`vercel link`が`.vercel/project.json`を作成し、ローカルのdirectoryを選択したVercel projectとscopeへ紐づけます。以降のVercel CLIと`deploy.sh`はこのlink情報を使って同じprojectを選択します。次のコマンドでファイルの生成と実際のlink先を確認してください。
+
+```bash
+test -f .vercel/project.json && echo ".vercel/project.json created"
+vercel project inspect --no-color
+```
+
+`Name`が`zoom-gov-contact-center-demo`、`Owner`が選択したHobby scopeであることを確認します。想定と異なる場合はデプロイへ進まず、正しいscopeと既存projectを指定して`vercel link`をやり直してください。
+
+`.vercel/project.json`はproject IDとowner IDを保持するlocal metadataです。`.vercel`directory全体が`.gitignore`の対象であり、手動作成・編集・commit・他の利用者との共有はしません。新しいcloneやworktreeではファイルが存在しないため、既存projectに対する`vercel link`だけを再実行します。既存projectがある場合は`vercel project add`を再実行しないでください。
+
 コマンドの仕様は[`vercel project`](https://vercel.com/docs/cli/project)と[`vercel link`](https://vercel.com/docs/cli/link)を参照してください。`vercel link`が`.env.local`へ`VERCEL_OIDC_TOKEN`をダウンロードした場合だけ、次のblockを実行します。`.env.local`がなければ飛ばしてください。値を表示せず、想定したkeyだけを含む通常ファイルであることを確認して削除し、確認が失敗した場合は削除せず停止します。
 
 ```bash
