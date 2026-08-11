@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { connection } from "next/server";
+import {
+  MAINTENANCE_REWRITE_HEADER,
+  MAINTENANCE_REWRITE_HEADER_VALUE,
+} from "@/lib/maintenance-request";
 import { getLanguageSettings } from "@/lib/server/site-settings";
+import { SITE_LOCALES } from "@/lib/site-settings";
 import "./globals.css";
 import { ThemeSync } from "./components/ThemeSync";
 import { LanguageProvider } from "./i18n/LanguageProvider";
@@ -16,11 +22,19 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  await connection();
-  const languageSettings = await getLanguageSettings();
-  const availableLocales = languageSettings.locales
-    .filter(({ locale, enabled }) => enabled || locale === "ja")
-    .map(({ locale }) => locale);
+  const requestHeaders = await headers();
+  const isMaintenanceRewrite =
+    requestHeaders.get(MAINTENANCE_REWRITE_HEADER) ===
+    MAINTENANCE_REWRITE_HEADER_VALUE;
+  let availableLocales: readonly (typeof SITE_LOCALES)[number][] = SITE_LOCALES;
+
+  if (!isMaintenanceRewrite) {
+    await connection();
+    const languageSettings = await getLanguageSettings();
+    availableLocales = languageSettings.locales
+      .filter(({ locale, enabled }) => enabled || locale === "ja")
+      .map(({ locale }) => locale);
+  }
 
   return (
     <html lang="ja" className="h-full antialiased" suppressHydrationWarning>

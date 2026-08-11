@@ -82,6 +82,10 @@ export function AdminShell({ children, isAdmin }: AdminShellProps) {
         { href: "/admin/phone-settings", label: t.admin.phoneSettings },
         { href: "/admin/chat-settings", label: t.admin.chatSettings },
         { href: "/admin/languages", label: t.admin.languageSettings },
+        {
+          href: "/admin/maintenance-settings",
+          label: t.admin.maintenanceSettings,
+        },
       ],
     },
   ];

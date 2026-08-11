@@ -91,6 +91,10 @@ export type Dictionary = {
     light: string;
     dark: string;
   };
+  maintenance: {
+    title: string;
+    description: string;
+  };
   findInfo: {
     title: string;
     subtitle: string;
@@ -230,6 +234,7 @@ export type Dictionary = {
     phoneSettings: string;
     chatSettings: string;
     languageSettings: string;
+    maintenanceSettings: string;
     settingsMenu: string;
     userListTitle: string;
     searchPlaceholder: string;
@@ -329,6 +334,50 @@ export type Dictionary = {
       moveUp: string;
       moveDown: string;
     };
+    maintenanceManagement: {
+      title: string;
+      description: string;
+      environmentLabel: string;
+      environments: {
+        production: string;
+        preview: string;
+        development: string;
+      };
+      effectiveStateTitle: string;
+      effectiveActive: string;
+      effectiveInactive: string;
+      effectiveUnknown: string;
+      currentValueUnavailableTitle: string;
+      currentValueUnavailableDescription: string;
+      modeTitle: string;
+      modeDescription: string;
+      modes: {
+        disabled: {
+          label: string;
+          description: string;
+        };
+        enabled: {
+          label: string;
+          description: string;
+        };
+        scheduled: {
+          label: string;
+          description: string;
+        };
+      };
+      scheduleTitle: string;
+      scheduleDescription: string;
+      scheduledStartLabel: string;
+      scheduledEndLabel: string;
+      timeZoneNote: string;
+      scheduleRequired: string;
+      scheduleOrderError: string;
+      scheduleEndFutureError: string;
+      warningTitle: string;
+      warningDescription: string;
+      propagationNote: string;
+      updatedAtLabel: string;
+    };
   };
 };
 
@@ -345,6 +394,11 @@ export const dictionaries: Record<Locale, Dictionary> = {
     theme: {
       light: 'ライト',
       dark: 'ダーク',
+    },
+    maintenance: {
+      title: 'Web サイト メンテナンス中',
+      description:
+        'この Web サイトは現在、予定メンテナンス中です。間もなく復旧いたします。',
     },
     findInfo: {
       title: '情報を探す',
@@ -648,6 +702,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       phoneSettings: '電話管理',
       chatSettings: 'AIチャット管理',
       languageSettings: '言語管理',
+      maintenanceSettings: 'メンテナンス管理',
       settingsMenu: '設定',
       userListTitle: 'ユーザー管理',
       searchPlaceholder: '氏名またはメールアドレスで検索',
@@ -789,6 +844,58 @@ export const dictionaries: Record<Locale, Dictionary> = {
         moveUp: '上へ',
         moveDown: '下へ',
       },
+      maintenanceManagement: {
+        title: 'メンテナンス管理',
+        description:
+          '公開サイトの表示を、通常公開・即時メンテナンス・日時予約から選択します。',
+        environmentLabel: '対象環境',
+        environments: {
+          production: '本番',
+          preview: 'プレビュー',
+          development: '開発',
+        },
+        effectiveStateTitle: '現在の実効状態',
+        effectiveActive: 'メンテナンス中',
+        effectiveInactive: '通常公開中',
+        effectiveUnknown: '判定できません',
+        currentValueUnavailableTitle: '現在の設定を取得できません',
+        currentValueUnavailableDescription:
+          '誤った設定で公開状態を変更しないよう、入力と保存を無効にしています。時間をおいて再読み込みしてください。',
+        modeTitle: '公開モード',
+        modeDescription:
+          '公開サイトに適用するモードを一つ選択してください。',
+        modes: {
+          disabled: {
+            label: '通常公開',
+            description: '公開サイトの通常コンテンツを表示します。',
+          },
+          enabled: {
+            label: '今すぐメンテナンス',
+            description:
+              '保存後、公開サイトをメンテナンス画面へ切り替えます。',
+          },
+          scheduled: {
+            label: '日時予約',
+            description:
+              '指定した開始日時から終了日時までメンテナンス画面を表示します。',
+          },
+        },
+        scheduleTitle: '予約日時',
+        scheduleDescription:
+          '日時予約を選択した場合に使用します。別のモードへ切り替えても保存済みの日時は保持されます。',
+        scheduledStartLabel: '開始日時（JST）',
+        scheduledEndLabel: '終了日時（JST）',
+        timeZoneNote: '日時は日本標準時（JST）で入力してください。',
+        scheduleRequired: '開始日時と終了日時を入力してください。',
+        scheduleOrderError: '終了日時は開始日時より後にしてください。',
+        scheduleEndFutureError: '終了日時は現在より後にしてください。',
+        warningTitle: '公開サイトの表示が切り替わります',
+        warningDescription:
+          'メンテナンス中は公開サイトの通常コンテンツ、ヘッダー、フッター、AIチャットを利用できません。管理画面と認証画面は引き続き利用できます。',
+        propagationNote:
+          '保存した設定がすべての公開リクエストへ反映されるまで、最大10秒かかる場合があります。',
+        updatedAtLabel: '最終更新',
+      },
     },
   },
   en: {
@@ -803,6 +910,11 @@ export const dictionaries: Record<Locale, Dictionary> = {
     theme: {
       light: 'Light',
       dark: 'Dark',
+    },
+    maintenance: {
+      title: 'Website Under Maintenance',
+      description:
+        'This website is currently undergoing scheduled maintenance. Service will be restored shortly.',
     },
     findInfo: {
       title: 'Find Information',
@@ -1115,6 +1227,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       phoneSettings: 'Phone Management',
       chatSettings: 'AI Chat Management',
       languageSettings: 'Languages',
+      maintenanceSettings: 'Maintenance',
       settingsMenu: 'Settings',
       userListTitle: 'User Management',
       searchPlaceholder: 'Search by name or email',
@@ -1256,6 +1369,58 @@ export const dictionaries: Record<Locale, Dictionary> = {
         moveUp: 'Move up',
         moveDown: 'Move down',
       },
+      maintenanceManagement: {
+        title: 'Maintenance Management',
+        description:
+          'Choose whether the public site is available normally, enters maintenance immediately, or follows a schedule.',
+        environmentLabel: 'Target environment',
+        environments: {
+          production: 'Production',
+          preview: 'Preview',
+          development: 'Development',
+        },
+        effectiveStateTitle: 'Current effective state',
+        effectiveActive: 'Under maintenance',
+        effectiveInactive: 'Available normally',
+        effectiveUnknown: 'Unable to determine',
+        currentValueUnavailableTitle: 'Current settings are unavailable',
+        currentValueUnavailableDescription:
+          'Inputs and saving are disabled to prevent an unintended availability change. Reload this page later.',
+        modeTitle: 'Publication mode',
+        modeDescription: 'Select one mode to apply to the public site.',
+        modes: {
+          disabled: {
+            label: 'Normal availability',
+            description: 'Show the regular public-site content.',
+          },
+          enabled: {
+            label: 'Start maintenance now',
+            description:
+              'Switch the public site to the maintenance page after saving.',
+          },
+          scheduled: {
+            label: 'Scheduled maintenance',
+            description:
+              'Show the maintenance page between the specified start and end times.',
+          },
+        },
+        scheduleTitle: 'Schedule',
+        scheduleDescription:
+          'Used when scheduled maintenance is selected. Saved times are retained when you switch to another mode.',
+        scheduledStartLabel: 'Start date and time (JST)',
+        scheduledEndLabel: 'End date and time (JST)',
+        timeZoneNote: 'Enter dates and times in Japan Standard Time (JST).',
+        scheduleRequired: 'Enter both a start and an end date and time.',
+        scheduleOrderError: 'The end date and time must be after the start.',
+        scheduleEndFutureError:
+          'The end date and time must be in the future.',
+        warningTitle: 'The public-site display will change',
+        warningDescription:
+          'During maintenance, regular public content, the header, footer, and AI chat are unavailable. Admin and authentication pages remain available.',
+        propagationNote:
+          'Saved settings may take up to 10 seconds to reach every public request.',
+        updatedAtLabel: 'Last updated',
+      },
     },
   },
   'zh-Hans': {
@@ -1270,6 +1435,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
     theme: {
       light: '浅色',
       dark: '深色',
+    },
+    maintenance: {
+      title: '网站维护中',
+      description: '本网站目前正在进行计划维护，将很快恢复服务。',
     },
     findInfo: {
       title: '查找信息',
@@ -1567,6 +1736,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       phoneSettings: '电话管理',
       chatSettings: 'AI聊天管理',
       languageSettings: '语言管理',
+      maintenanceSettings: '维护管理',
       settingsMenu: '设置',
       userListTitle: '用户管理',
       searchPlaceholder: '按姓名或电子邮件搜索',
@@ -1701,6 +1871,54 @@ export const dictionaries: Record<Locale, Dictionary> = {
         moveUp: '上移',
         moveDown: '下移',
       },
+      maintenanceManagement: {
+        title: '维护管理',
+        description:
+          '选择公开网站正常开放、立即进入维护或按预约时间进入维护。',
+        environmentLabel: '目标环境',
+        environments: {
+          production: '生产',
+          preview: '预览',
+          development: '开发',
+        },
+        effectiveStateTitle: '当前实际状态',
+        effectiveActive: '维护中',
+        effectiveInactive: '正常开放中',
+        effectiveUnknown: '无法判断',
+        currentValueUnavailableTitle: '无法获取当前设置',
+        currentValueUnavailableDescription:
+          '为防止意外更改公开状态，输入和保存功能已停用。请稍后重新加载此页面。',
+        modeTitle: '公开模式',
+        modeDescription: '请选择一种应用于公开网站的模式。',
+        modes: {
+          disabled: {
+            label: '正常开放',
+            description: '显示公开网站的常规内容。',
+          },
+          enabled: {
+            label: '立即开始维护',
+            description: '保存后将公开网站切换为维护页面。',
+          },
+          scheduled: {
+            label: '预约时间',
+            description: '在指定的开始时间至结束时间显示维护页面。',
+          },
+        },
+        scheduleTitle: '预约时间',
+        scheduleDescription:
+          '选择预约时间模式时使用。切换到其他模式后，已保存的时间仍会保留。',
+        scheduledStartLabel: '开始日期和时间（JST）',
+        scheduledEndLabel: '结束日期和时间（JST）',
+        timeZoneNote: '请按日本标准时间（JST）输入日期和时间。',
+        scheduleRequired: '请输入开始日期和时间以及结束日期和时间。',
+        scheduleOrderError: '结束日期和时间必须晚于开始日期和时间。',
+        scheduleEndFutureError: '结束日期和时间必须晚于当前时间。',
+        warningTitle: '公开网站的显示将会切换',
+        warningDescription:
+          '维护期间无法使用公开网站的常规内容、页眉、页脚和AI聊天。管理页面和认证页面仍可使用。',
+        propagationNote: '保存的设置最多可能需要10秒才会应用到所有公开请求。',
+        updatedAtLabel: '最后更新',
+      },
     },
   },
   'zh-Hant': {
@@ -1715,6 +1933,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
     theme: {
       light: '淺色',
       dark: '深色',
+    },
+    maintenance: {
+      title: '網站維護中',
+      description: '本網站目前正在進行計畫維護，將很快恢復服務。',
     },
     findInfo: {
       title: '尋找資訊',
@@ -2012,6 +2234,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       phoneSettings: '電話管理',
       chatSettings: 'AI聊天管理',
       languageSettings: '語言管理',
+      maintenanceSettings: '維護管理',
       settingsMenu: '設定',
       userListTitle: '使用者管理',
       searchPlaceholder: '依姓名或電子郵件搜尋',
@@ -2146,6 +2369,54 @@ export const dictionaries: Record<Locale, Dictionary> = {
         moveUp: '上移',
         moveDown: '下移',
       },
+      maintenanceManagement: {
+        title: '維護管理',
+        description:
+          '選擇公開網站正常開放、立即進入維護或依預約時間進入維護。',
+        environmentLabel: '目標環境',
+        environments: {
+          production: '正式',
+          preview: '預覽',
+          development: '開發',
+        },
+        effectiveStateTitle: '目前實際狀態',
+        effectiveActive: '維護中',
+        effectiveInactive: '正常開放中',
+        effectiveUnknown: '無法判斷',
+        currentValueUnavailableTitle: '無法取得目前設定',
+        currentValueUnavailableDescription:
+          '為防止意外變更公開狀態，輸入與儲存功能已停用。請稍後重新載入此頁面。',
+        modeTitle: '公開模式',
+        modeDescription: '請選擇一種套用於公開網站的模式。',
+        modes: {
+          disabled: {
+            label: '正常開放',
+            description: '顯示公開網站的一般內容。',
+          },
+          enabled: {
+            label: '立即開始維護',
+            description: '儲存後將公開網站切換為維護頁面。',
+          },
+          scheduled: {
+            label: '預約時間',
+            description: '在指定的開始時間至結束時間顯示維護頁面。',
+          },
+        },
+        scheduleTitle: '預約時間',
+        scheduleDescription:
+          '選擇預約時間模式時使用。切換至其他模式後，已儲存的時間仍會保留。',
+        scheduledStartLabel: '開始日期與時間（JST）',
+        scheduledEndLabel: '結束日期與時間（JST）',
+        timeZoneNote: '請依日本標準時間（JST）輸入日期與時間。',
+        scheduleRequired: '請輸入開始日期與時間以及結束日期與時間。',
+        scheduleOrderError: '結束日期與時間必須晚於開始日期與時間。',
+        scheduleEndFutureError: '結束日期與時間必須晚於目前時間。',
+        warningTitle: '公開網站的顯示將會切換',
+        warningDescription:
+          '維護期間無法使用公開網站的一般內容、頁首、頁尾與AI聊天。管理頁面與驗證頁面仍可使用。',
+        propagationNote: '儲存的設定最多可能需要10秒才會套用至所有公開請求。',
+        updatedAtLabel: '最後更新',
+      },
     },
   },
   ko: {
@@ -2160,6 +2431,11 @@ export const dictionaries: Record<Locale, Dictionary> = {
     theme: {
       light: '라이트',
       dark: '다크',
+    },
+    maintenance: {
+      title: '웹사이트 점검 중',
+      description:
+        '현재 이 웹사이트는 예정된 점검을 진행하고 있습니다. 곧 서비스를 재개하겠습니다.',
     },
     findInfo: {
       title: '정보 찾기',
@@ -2457,6 +2733,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       phoneSettings: '전화 관리',
       chatSettings: 'AI 채팅 관리',
       languageSettings: '언어 관리',
+      maintenanceSettings: '점검 관리',
       settingsMenu: '설정',
       userListTitle: '사용자 관리',
       searchPlaceholder: '이름 또는 이메일로 검색',
@@ -2595,6 +2872,55 @@ export const dictionaries: Record<Locale, Dictionary> = {
         japaneseRequired: '필수',
         moveUp: '위로',
         moveDown: '아래로',
+      },
+      maintenanceManagement: {
+        title: '점검 관리',
+        description:
+          '공개 사이트를 정상 공개, 즉시 점검 또는 예약 점검으로 설정합니다.',
+        environmentLabel: '대상 환경',
+        environments: {
+          production: '프로덕션',
+          preview: '프리뷰',
+          development: '개발',
+        },
+        effectiveStateTitle: '현재 적용 상태',
+        effectiveActive: '점검 중',
+        effectiveInactive: '정상 공개 중',
+        effectiveUnknown: '확인할 수 없음',
+        currentValueUnavailableTitle: '현재 설정을 불러올 수 없습니다',
+        currentValueUnavailableDescription:
+          '의도하지 않은 공개 상태 변경을 방지하기 위해 입력과 저장을 비활성화했습니다. 잠시 후 페이지를 새로고침하세요.',
+        modeTitle: '공개 모드',
+        modeDescription: '공개 사이트에 적용할 모드를 하나 선택하세요.',
+        modes: {
+          disabled: {
+            label: '정상 공개',
+            description: '공개 사이트의 일반 콘텐츠를 표시합니다.',
+          },
+          enabled: {
+            label: '지금 점검 시작',
+            description: '저장 후 공개 사이트를 점검 화면으로 전환합니다.',
+          },
+          scheduled: {
+            label: '일시 예약',
+            description: '지정한 시작 시각부터 종료 시각까지 점검 화면을 표시합니다.',
+          },
+        },
+        scheduleTitle: '예약 일시',
+        scheduleDescription:
+          '예약 점검을 선택한 경우 사용합니다. 다른 모드로 전환해도 저장된 시각은 유지됩니다.',
+        scheduledStartLabel: '시작 날짜 및 시간(JST)',
+        scheduledEndLabel: '종료 날짜 및 시간(JST)',
+        timeZoneNote: '날짜와 시간은 일본 표준시(JST)로 입력하세요.',
+        scheduleRequired: '시작 날짜 및 시간과 종료 날짜 및 시간을 입력하세요.',
+        scheduleOrderError: '종료 날짜 및 시간은 시작보다 이후여야 합니다.',
+        scheduleEndFutureError: '종료 날짜 및 시간은 현재보다 이후여야 합니다.',
+        warningTitle: '공개 사이트 표시가 전환됩니다',
+        warningDescription:
+          '점검 중에는 공개 사이트의 일반 콘텐츠, 헤더, 푸터 및 AI 채팅을 사용할 수 없습니다. 관리 및 인증 화면은 계속 사용할 수 있습니다.',
+        propagationNote:
+          '저장한 설정이 모든 공개 요청에 적용되기까지 최대 10초가 걸릴 수 있습니다.',
+        updatedAtLabel: '마지막 업데이트',
       },
     },
   },

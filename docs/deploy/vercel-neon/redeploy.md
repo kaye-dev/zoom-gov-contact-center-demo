@@ -35,7 +35,11 @@ Neon Project Dashboardの`Connect`を開き、同じbranch・database・roleで�
 pooled URLはhostに`-pooler`が付き、direct URLには付きません。両方とも`sslmode=require`を含むことを確認します。URLは毎回入力し、ファイルやVercelへdirect URLを保存しません。
 Connect画面の表示形式は`Connection string`を選び、`postgresql://`から始まるURL本体だけをコピーします。`DATABASE_URL=`、引用符、`psql`コマンドは含めず、hostnameの`.c-2.`などのproxy部分も編集しません。
 
-## 3. 再デプロイする
+## 3. Edge Configの接続情報を用意する
+
+対象ProjectのEdge Configを開き、3項目`site_maintenance_production`、`site_maintenance_preview`、`site_maintenance_development`が存在することを確認します。read connection string、Edge Config ID、同じVercel scopeへの書き込み権限を持つREST API access tokenをpassword managerから用意します。秘密値はファイル、shell履歴、コマンド引数、ログ、チャットへ保存しません。Team IDは`deploy.sh`が検証済みのproject linkから取得するため入力しません。
+
+## 4. 再デプロイする
 
 対話可能なターミナルから直接実行します。
 
@@ -50,10 +54,11 @@ Connect画面の表示形式は`Connection string`を選び、`postgresql://`か
 1. `hobby`、Production URL、Neon project ID／nameを入力する。
 2. Neon planをAPIで確認できない場合だけ、ConsoleでFreeであることを確認して`free`と入力する。
 3. 非表示プロンプトへpooled URL、direct URLの順に貼り付ける。
-4. 対象を確認し、環境変数更新へ`y`と入力する。既存の`BETTER_AUTH_SECRET`は維持される。
-5. migrationがup-to-dateならそのまま進む。pendingが表示された場合だけ、計画を確認して`y`、実行直前に`migrate`と入力する。
-6. 通常は管理者作成・更新でEnterを押し、既存管理者のemailに`admin@keien.dev`、続けて保存したpasswordを入力する。管理者を更新する場合だけ`y`を選び、表示された変更内容を再確認する。
-7. staged candidateのsmoke test後、5分間の無通信と、Neon管理APIのidle／active反映待ち（各最大約5分、合計最大約15分）の間はcandidate、Production URL、Neon SQL Editorへアクセスせずに待つ。確認が完了したら、promotionへ`y`と入力する。
+4. 非表示プロンプトへEdge Configのread connection stringを貼り付け、Edge Config IDを入力し、続く非表示プロンプトへVercel REST API access tokenを貼り付ける。
+5. Edge Configのowner、management/read接続、3項目の形式が検証されたことと対象を確認し、環境変数更新へ`y`と入力する。既存の`BETTER_AUTH_SECRET`は維持され、設定値自体は表示されない。
+6. migrationがup-to-dateならそのまま進む。pendingが表示された場合だけ、計画を確認して`y`、実行直前に`migrate`と入力する。
+7. 通常は管理者作成・更新でEnterを押し、既存管理者のemailに`admin@keien.dev`、続けて保存したpasswordを入力する。管理者を更新する場合だけ`y`を選び、表示された変更内容を再確認する。
+8. staged candidateのsmoke test後、5分間の無通信と、Neon管理APIのidle／active反映待ち（各最大約5分、合計最大約15分）の間はcandidate、Production URL、Neon SQL Editorへアクセスせずに待つ。candidateはpreview key、promotion後のcanonicalはproduction keyの実効値に応じて、公開HTMLが200または503であることを検証する。確認が完了したらpromotionへ`y`と入力する。
 `Canonical smoke passed`に続いて`Deployment completed: <Production URL> (<commit SHA>)`が表示されれば、Productionの再デプロイは完了です。
 
 現行`deploy.sh`が扱えるmigrationは、リポジトリにある既存4件だけです。5件目以降を追加した場合は、デプロイスクリプトとテストを先に更新し、この手順では実行しません。

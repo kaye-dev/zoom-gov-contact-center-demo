@@ -24,6 +24,14 @@ import {
   type MigrationPlan,
 } from "./lib/migrations";
 import {
+  createMaintenancePublicExpectation,
+  readMaintenanceEdgeConfig,
+  validateMaintenanceEdgeConfigCredentials,
+  verifyMaintenanceEdgeConfig,
+  type MaintenanceEdgeConfigCredentials,
+  type MaintenanceEdgeConfigKey,
+} from "./lib/maintenance";
+import {
   assertCommandSucceeded,
   combinedOutput,
   SecretRegistry,
@@ -66,6 +74,10 @@ const PRODUCTION_ENV_ALLOWLIST = new Set([
   "BETTER_AUTH_URL",
   "BETTER_AUTH_TRUSTED_ORIGINS",
   "BETTER_AUTH_TRUST_PROXY_HEADERS",
+  "EDGE_CONFIG",
+  "MAINTENANCE_EDGE_CONFIG_ID",
+  "MAINTENANCE_EDGE_CONFIG_TEAM_ID",
+  "MAINTENANCE_EDGE_CONFIG_WRITE_TOKEN",
 ]);
 
 class CliUnavailableError extends Error {}
@@ -125,6 +137,7 @@ type WorkflowState = {
   vercelLink?: VercelLink;
   previousProductionId?: string;
   smokeCredentials?: SmokeCredentials;
+  maintenanceEdgeConfig?: MaintenanceEdgeConfigCredentials;
   promoted: boolean;
   promotionAttempted: boolean;
   productionAcceptanceComplete: boolean;
@@ -183,7 +196,7 @@ export async function runDeploymentWorkflow(
     state.canonicalUrl = canonicalUrl;
     assertCanonicalDomain(runner, link, canonicalUrl);
 
-    console.log("[2/7] Neon target and secret input");
+    console.log("[2/7] Neon and Edge Config targets and secret input");
     const neonProjectId = validateNeonProjectId(
       await prompter.ask("Neon project ID: "),
     );
@@ -233,12 +246,43 @@ export async function runDeploymentWorkflow(
     );
     assertNeonEndpointMatches(endpoints.stdout, database, neonProject.id);
 
+    const edgeConfigConnectionRaw = await prompter.hidden(
+      "EDGE_CONFIG (read connection string): ",
+    );
+    secrets.add(edgeConfigConnectionRaw);
+    const maintenanceEdgeConfigId = await prompter.ask(
+      "MAINTENANCE_EDGE_CONFIG_ID: ",
+    );
+    const maintenanceWriteTokenRaw = await prompter.hidden(
+      "MAINTENANCE_EDGE_CONFIG_WRITE_TOKEN: ",
+    );
+    secrets.add(maintenanceWriteTokenRaw);
+    const maintenanceEdgeConfig = validateMaintenanceEdgeConfigCredentials({
+      connectionString: edgeConfigConnectionRaw,
+      edgeConfigId: maintenanceEdgeConfigId,
+      writeToken: maintenanceWriteTokenRaw,
+    });
+    secrets.add(
+      maintenanceEdgeConfig.connectionString,
+      maintenanceEdgeConfig.readToken,
+      maintenanceEdgeConfig.writeToken,
+    );
+    state.maintenanceEdgeConfig = maintenanceEdgeConfig;
+    await verifyMaintenanceEdgeConfig(
+      maintenanceEdgeConfig,
+      link.orgId,
+    );
+    console.log(
+      "Edge Config connection, owner, management access, and three maintenance keys verified.",
+    );
+
     const currentEnvironment = listProductionEnvironment(runner, link);
     assertAllowedProductionEnvironment(currentEnvironment);
     console.log("Deployment target review:");
     console.log(`  Project: ${project.name} (${project.id})`);
     console.log(`  Domain: ${canonicalUrl.origin}`);
     console.log(`  Neon: ${neonProject.name} (${neonProject.id})`);
+    console.log(`  Edge Config: ${maintenanceEdgeConfig.edgeConfigId}`);
     console.log(`  Pooled host: ${redactDatabaseHost(database.pooledHost)}`);
     console.log(`  Direct host: ${redactDatabaseHost(database.directHost)} (not saved)`);
     console.log(
@@ -295,6 +339,34 @@ export async function runDeploymentWorkflow(
       "true",
       false,
     );
+    setVercelEnvironment(
+      runner,
+      link,
+      "EDGE_CONFIG",
+      maintenanceEdgeConfig.connectionString,
+      true,
+    );
+    setVercelEnvironment(
+      runner,
+      link,
+      "MAINTENANCE_EDGE_CONFIG_ID",
+      maintenanceEdgeConfig.edgeConfigId,
+      false,
+    );
+    setVercelEnvironment(
+      runner,
+      link,
+      "MAINTENANCE_EDGE_CONFIG_TEAM_ID",
+      link.orgId,
+      false,
+    );
+    setVercelEnvironment(
+      runner,
+      link,
+      "MAINTENANCE_EDGE_CONFIG_WRITE_TOKEN",
+      maintenanceEdgeConfig.writeToken,
+      true,
+    );
     const resultingEnvironment = listProductionEnvironment(runner, link);
     assertExactProductionEnvironment(resultingEnvironment);
 
@@ -307,6 +379,8 @@ export async function runDeploymentWorkflow(
       database.pooledUrl,
       buildAuthSecret,
       canonicalUrl.origin,
+      maintenanceEdgeConfig,
+      link.orgId,
     );
     runQualityGates(runner, projectRoot, buildEnvironment);
     assertGitClean(runner, projectRoot, "after quality gates");
@@ -469,7 +543,16 @@ export async function runDeploymentWorkflow(
       database.pooledUrl,
     );
     state.smokeCredentials = credentials;
-    const stagedSmoke = await runSmokeChecks(candidateUrl, credentials);
+    const stagedExpectation = await readMaintenancePublicExpectation(
+      maintenanceEdgeConfig,
+      "site_maintenance_preview",
+    );
+    const stagedSmoke = await runSmokeChecks(
+      candidateUrl,
+      credentials,
+      globalThis.fetch,
+      { publicSiteExpectation: stagedExpectation },
+    );
     console.log(`Staged smoke passed: ${stagedSmoke.checks.join(", ")}`);
     console.log(
       "Waiting at least 5 minutes without polling, then allowing up to 5 minutes for the Neon management API to report idle before one health wake-up check...",
@@ -550,7 +633,16 @@ export async function runDeploymentWorkflow(
       candidate.id,
       true,
     );
-    const canonicalSmoke = await runSmokeChecks(canonicalUrl, credentials);
+    const canonicalExpectation = await readMaintenancePublicExpectation(
+      maintenanceEdgeConfig,
+      "site_maintenance_production",
+    );
+    const canonicalSmoke = await runSmokeChecks(
+      canonicalUrl,
+      credentials,
+      globalThis.fetch,
+      { publicSiteExpectation: canonicalExpectation },
+    );
     console.log(`Canonical smoke passed: ${canonicalSmoke.checks.join(", ")}`);
     state.productionAcceptanceComplete = true;
     console.log(
@@ -626,10 +718,17 @@ export async function runDeploymentWorkflow(
               state.previousProductionId,
               true,
             );
-            if (state.smokeCredentials) {
+            if (state.smokeCredentials && state.maintenanceEdgeConfig) {
+              const rollbackExpectation =
+                await readMaintenancePublicExpectation(
+                  state.maintenanceEdgeConfig,
+                  "site_maintenance_production",
+                );
               const rollbackSmoke = await runSmokeChecks(
                 state.canonicalUrl,
                 state.smokeCredentials,
+                globalThis.fetch,
+                { publicSiteExpectation: rollbackExpectation },
               );
               console.error(
                 `Rolled-back canonical smoke passed: ${rollbackSmoke.checks.join(", ")}`,
@@ -656,6 +755,14 @@ export async function runDeploymentWorkflow(
     }
     throw error;
   }
+}
+
+async function readMaintenancePublicExpectation(
+  credentials: MaintenanceEdgeConfigCredentials,
+  key: MaintenanceEdgeConfigKey,
+) {
+  const snapshot = await readMaintenanceEdgeConfig(credentials);
+  return createMaintenancePublicExpectation(snapshot, key);
 }
 
 export function ensureCliTools(runner: CommandRunner): void {
@@ -1081,7 +1188,12 @@ export function assertAllowedProductionEnvironment(
       "DATABASE_URL_UNPOOLED must never be stored in Vercel Production.",
     );
   }
-  for (const name of ["DATABASE_URL", "BETTER_AUTH_SECRET"]) {
+  for (const name of [
+    "DATABASE_URL",
+    "BETTER_AUTH_SECRET",
+    "EDGE_CONFIG",
+    "MAINTENANCE_EDGE_CONFIG_WRITE_TOKEN",
+  ]) {
     if (audit.names.has(name) && audit.types.get(name) !== "sensitive") {
       throw new Error(`${name} must be a Vercel Sensitive value.`);
     }
@@ -1090,6 +1202,8 @@ export function assertAllowedProductionEnvironment(
     "BETTER_AUTH_URL",
     "BETTER_AUTH_TRUSTED_ORIGINS",
     "BETTER_AUTH_TRUST_PROXY_HEADERS",
+    "MAINTENANCE_EDGE_CONFIG_ID",
+    "MAINTENANCE_EDGE_CONFIG_TEAM_ID",
   ]) {
     if (audit.names.has(name) && audit.types.get(name) !== "encrypted") {
       throw new Error(`${name} must be an encrypted non-Sensitive value.`);
@@ -1304,6 +1418,8 @@ export function createBuildEnvironment(
   pooledUrl: string,
   authSecret: string,
   canonicalOrigin: string,
+  maintenanceEdgeConfig: MaintenanceEdgeConfigCredentials,
+  maintenanceEdgeConfigTeamId: string,
 ): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = {
     ...ambient,
@@ -1313,6 +1429,11 @@ export function createBuildEnvironment(
     BETTER_AUTH_URL: canonicalOrigin,
     BETTER_AUTH_TRUSTED_ORIGINS: canonicalOrigin,
     BETTER_AUTH_TRUST_PROXY_HEADERS: "true",
+    EDGE_CONFIG: maintenanceEdgeConfig.connectionString,
+    MAINTENANCE_EDGE_CONFIG_ID: maintenanceEdgeConfig.edgeConfigId,
+    MAINTENANCE_EDGE_CONFIG_TEAM_ID: maintenanceEdgeConfigTeamId,
+    MAINTENANCE_EDGE_CONFIG_WRITE_TOKEN:
+      maintenanceEdgeConfig.writeToken,
   };
   delete environment.DATABASE_URL_UNPOOLED;
   return environment;

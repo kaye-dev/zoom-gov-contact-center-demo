@@ -96,7 +96,21 @@ Vercel Dashboardで、linkしたprojectを次の状態にします。
 5. `Settings > Git`の`Connected Git Repository` sectionにrepository名がなく、`This Project is not connected to a Git repository.`とGitHub／GitLab接続ボタンだけが表示されることを確認する。接続済みなら[Disconnect](https://vercel.com/docs/project-configuration/git-settings)する。
 6. `Settings > Domains`で、設定エラーやredirectがなく`Production`と表示されるdomainを確認し、`https://...`形式のcanonical URLを控える。既存domainを追加する現行UIは`Add Existing`、新規購入は`Buy`である。初回デプロイ前の自動生成`*.vercel.app` domainには`No Deployment`と表示されてもよい。
 
-環境変数は手動で作成しません。`deploy.sh`がProductionへ必要な5項目だけを設定します。
+### Edge Configを準備する
+
+同じVercel Projectの`Storage > Create Database > Edge Config`で`zoom-gov-maintenance`を作成します。Itemsには次の3項目だけを保存し、初回はすべて無効にします。`updatedAt`は有効なUTC ISO日時にしてください。
+
+```json
+{
+  "site_maintenance_production": { "version": 1, "mode": "DISABLED", "scheduledStartAt": null, "scheduledEndAt": null, "updatedAt": "2026-01-01T00:00:00.000Z" },
+  "site_maintenance_preview": { "version": 1, "mode": "DISABLED", "scheduledStartAt": null, "scheduledEndAt": null, "updatedAt": "2026-01-01T00:00:00.000Z" },
+  "site_maintenance_development": { "version": 1, "mode": "DISABLED", "scheduledStartAt": null, "scheduledEndAt": null, "updatedAt": "2026-01-01T00:00:00.000Z" }
+}
+```
+
+Edge Configの`Tokens > Copy Connection String`からread-only connection stringを取得し、画面上部のEdge Config IDを控えます。さらに対象scopeへの書き込み権限を持つ[Vercel REST API access token](https://vercel.com/docs/rest-api#authentication)を作成します。connection stringと2種類のtokenは秘密情報です。ファイル、shell履歴、コマンド引数、ログ、チャットへ保存せず、後述の非表示プロンプトにだけ貼り付けます。
+
+Project接続時に`EDGE_CONFIG`環境変数が自動作成された場合は、connection stringをpassword managerへ保存した後、その自動作成された環境変数だけを削除します。Edge Config store、Items、read tokenは削除しません。`deploy.sh`が`EDGE_CONFIG`を含むProduction限定の9項目を、レビュー後に正しい型で設定します。Team IDは入力値を信用せず、検証済みの`.vercel/project.json`の`orgId`を使用します。
 
 ## 3. Neon projectを準備する
 
@@ -137,10 +151,11 @@ NeonのVercel Integrationは使用しません。
 3. Neonのproject ID、project nameを入力する。
 4. Neon planをAPIで確認できない場合だけ、ConsoleでFreeであることを確認して`free`と入力する。
 5. 非表示プロンプトへpooled URL、direct URLの順に貼り付ける。
-6. 対象project・domain・DB hostを確認し、環境変数更新へ`y`と入力する。
-7. 4件のmigration計画が表示されたら内容を確認し、計画作成へ`y`、実行直前に`migrate`と入力する。
-8. 管理者作成へ`y`と入力し、emailに`admin@keien.dev`、任意のname、12〜128文字のpasswordを2回入力する。passwordはpassword managerへ保存し、変更内容を確認して作成へ`y`と入力する。
-9. staged candidateのsmoke test後、5分間の無通信と、Neon管理APIのidle／active反映待ち（各最大約5分、合計最大約15分）の間はcandidate、Production URL、Neon SQL Editorへアクセスせずに待つ。確認が完了したら、promotionへ`y`と入力する。
+6. 非表示プロンプトへEdge Configのread connection stringを貼り付け、Edge Config IDを入力し、続く非表示プロンプトへVercel REST API access tokenを貼り付ける。Team IDの入力はない。
+7. Edge Configのowner、management/read接続、3項目の形式が検証されたことと、対象project・domain・DB host・Edge Config IDを確認し、環境変数更新へ`y`と入力する。設定値自体は表示されない。
+8. 4件のmigration計画が表示されたら内容を確認し、計画作成へ`y`、実行直前に`migrate`と入力する。
+9. 管理者作成へ`y`と入力し、emailに`admin@keien.dev`、任意のname、12〜128文字のpasswordを2回入力する。passwordはpassword managerへ保存し、変更内容を確認して作成へ`y`と入力する。
+10. staged candidateのsmoke test後、5分間の無通信と、Neon管理APIのidle／active反映待ち（各最大約5分、合計最大約15分）の間はcandidate、Production URL、Neon SQL Editorへアクセスせずに待つ。candidate smokeは`site_maintenance_preview`の実効値に応じて公開HTMLの200または503を期待し、確認が完了したらpromotionへ`y`と入力する。promotion後は`site_maintenance_production`に対して同じ検証を行う。
 
 認証やlinkの確認が表示された場合は、対象account／projectを確認してから`y`と入力します。
 `docker compose exec web npm run db:seed-admin`とcompose既定の`admin@example.local`はローカルDB専用で、Neon Productionには反映されません。
@@ -153,6 +168,8 @@ NeonのVercel Integrationは使用しません。
 4. `/admin/users`で管理画面とユーザー一覧が表示される。
 5. 管理画面の`ログアウト`を操作すると`/login`へ戻り、再び`/admin/users`を開いても未認証で保護される。
 6. Vercelの`Settings > Domains`でcanonical domainの`No Deployment`が消え、`Production`として割り当てられている。
+
+メンテナンスが有効な場合、`/`、`/docs/privacy-policy`、`/life/frequently-asked-questions`は503と`Cache-Control: no-store`を返すのが正常です。この場合も`/login`、管理API、static asset、raw Markdown、`/robots.txt`はメンテナンス503にならないことを`deploy.sh`が検証します。予定メンテナンスの有効時間内だけ、503に終了日時の`Retry-After`が付きます。
 
 ここまで確認できればProductionの受入は完了です。
 

@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 
+import type { MaintenancePublicExpectation } from "./maintenance";
+
 export type SmokeCredentials = {
   email: string;
   password: string;
@@ -17,6 +19,7 @@ export type RequestFunction = (
 
 export type SmokeOptions = {
   cleanupRetryDelayMs?: number;
+  publicSiteExpectation?: MaintenancePublicExpectation;
 };
 
 export async function runSmokeChecks(
@@ -29,33 +32,17 @@ export async function runSmokeChecks(
   await assertHealth(baseUrl, request);
   checks.push("GET /api/health");
 
-  for (const path of [
-    "/",
-    "/login",
-    "/docs/privacy-policy",
-    "/life/frequently-asked-questions",
-  ]) {
-    const response = await fetchWithTimeout(baseUrl, path, request);
-    if (
-      !response.ok ||
-      !(response.headers.get("content-type") ?? "")
-        .toLowerCase()
-        .includes("text/html")
-    ) {
-      throw new Error(`${path} returned an invalid HTTP ${response.status} response.`);
-    }
-    const html = await response.text();
-    const marker =
-      path === "/docs/privacy-policy"
-        ? "プライバシーポリシー"
-        : path === "/life/frequently-asked-questions"
-          ? "未来市のよくある質問"
-          : undefined;
-    if (marker && !html.includes(marker)) {
-      throw new Error(`${path} did not contain its deployment content marker.`);
-    }
-    checks.push(`GET ${path}`);
-  }
+  const publicSiteExpectation = options.publicSiteExpectation ?? {
+    key: "site_maintenance_development",
+    status: 200,
+  };
+  checks.push(
+    ...(await verifyPublicSiteSmoke(
+      baseUrl,
+      publicSiteExpectation,
+      request,
+    )),
+  );
 
   const anonymousSession = await fetchWithTimeout(
     baseUrl,
@@ -85,6 +72,127 @@ export async function runSmokeChecks(
   checks.push("administrator sign-in/session/API/page");
   checks.push("temporary user create/delete cleanup");
   return { checks, authenticatedAdminCrud: true };
+}
+
+export async function verifyPublicSiteSmoke(
+  baseUrl: URL,
+  publicSiteExpectation: MaintenancePublicExpectation,
+  request: RequestFunction = globalThis.fetch,
+): Promise<string[]> {
+  const checks: string[] = [];
+  for (const path of [
+    "/",
+    "/docs/privacy-policy",
+    "/life/frequently-asked-questions",
+  ]) {
+    const response = await fetchWithTimeout(baseUrl, path, request);
+    if (
+      response.status !== publicSiteExpectation.status ||
+      !(response.headers.get("content-type") ?? "")
+        .toLowerCase()
+        .includes("text/html")
+    ) {
+      throw new Error(
+        `${path} returned HTTP ${response.status}; expected ${publicSiteExpectation.status} for ${publicSiteExpectation.key}.`,
+      );
+    }
+    const html = await response.text();
+    if (publicSiteExpectation.status === 503) {
+      const cacheControl = response.headers.get("cache-control") ?? "";
+      if (!/(?:^|,)\s*no-store\s*(?:,|$)/i.test(cacheControl)) {
+        throw new Error(`${path} maintenance response was not marked no-store.`);
+      }
+      const retryAfter = response.headers.get("retry-after");
+      if (retryAfter !== (publicSiteExpectation.retryAfter ?? null)) {
+        throw new Error(`${path} returned an unexpected Retry-After header.`);
+      }
+      if (hasRobotsNoindexMeta(html)) {
+        throw new Error(`${path} maintenance response unexpectedly used noindex.`);
+      }
+    } else {
+      const marker =
+        path === "/docs/privacy-policy"
+          ? "プライバシーポリシー"
+          : path === "/life/frequently-asked-questions"
+            ? "未来市のよくある質問"
+            : undefined;
+      if (marker && !html.includes(marker)) {
+        throw new Error(`${path} did not contain its deployment content marker.`);
+      }
+      if (response.headers.has("retry-after")) {
+        throw new Error(`${path} unexpectedly returned Retry-After while available.`);
+      }
+    }
+    checks.push(`GET ${path}`);
+  }
+
+  await assertPublicExclusions(baseUrl, request);
+  checks.push("maintenance exclusions: login/robots/static/raw Markdown");
+  return checks;
+}
+
+async function assertPublicExclusions(
+  baseUrl: URL,
+  request: RequestFunction,
+): Promise<void> {
+  const login = await fetchWithTimeout(baseUrl, "/login", request);
+  if (
+    login.status !== 200 ||
+    !(login.headers.get("content-type") ?? "").toLowerCase().includes("text/html")
+  ) {
+    throw new Error(`Maintenance-exempt /login returned HTTP ${login.status}.`);
+  }
+  await login.arrayBuffer();
+
+  const robots = await fetchWithTimeout(baseUrl, "/robots.txt", request);
+  if (robots.status === 503) {
+    throw new Error("Maintenance-exempt /robots.txt unexpectedly returned 503.");
+  }
+  await robots.arrayBuffer();
+
+  const staticAsset = await fetchWithTimeout(
+    baseUrl,
+    "/news/news-default-item.png",
+    request,
+  );
+  if (
+    staticAsset.status !== 200 ||
+    !(staticAsset.headers.get("content-type") ?? "")
+      .toLowerCase()
+      .includes("image/png")
+  ) {
+    throw new Error(
+      `Maintenance-exempt static asset returned HTTP ${staticAsset.status}.`,
+    );
+  }
+  await staticAsset.arrayBuffer();
+
+  const rawMarkdown = await fetchWithTimeout(
+    baseUrl,
+    "/docs/privacy-policy.md",
+    request,
+  );
+  const rawMarkdownType = (
+    rawMarkdown.headers.get("content-type") ?? ""
+  ).toLowerCase();
+  if (
+    rawMarkdown.status !== 200 ||
+    !rawMarkdownType.includes("text/markdown")
+  ) {
+    throw new Error(
+      `Maintenance-exempt raw Markdown returned HTTP ${rawMarkdown.status}.`,
+    );
+  }
+  const markdown = await rawMarkdown.text();
+  if (!markdown.includes("プライバシーポリシー")) {
+    throw new Error("Maintenance-exempt raw Markdown did not contain its marker.");
+  }
+}
+
+function hasRobotsNoindexMeta(html: string): boolean {
+  return /<meta\b(?=[^>]*\bname=["']robots["'])(?=[^>]*\bcontent=["'][^"']*\bnoindex\b[^"']*["'])[^>]*>/i.test(
+    html,
+  );
 }
 
 export async function verifyIdleRecovery(

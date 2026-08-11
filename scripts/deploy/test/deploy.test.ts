@@ -807,11 +807,31 @@ test("Vercel environment API audits every target and never stores direct URL", (
         type: "encrypted",
         target: ["production"],
       },
+      {
+        key: "EDGE_CONFIG",
+        type: "sensitive",
+        target: ["production"],
+      },
+      {
+        key: "MAINTENANCE_EDGE_CONFIG_ID",
+        type: "encrypted",
+        target: ["production"],
+      },
+      {
+        key: "MAINTENANCE_EDGE_CONFIG_TEAM_ID",
+        type: "encrypted",
+        target: ["production"],
+      },
+      {
+        key: "MAINTENANCE_EDGE_CONFIG_WRITE_TOKEN",
+        type: "sensitive",
+        target: ["production"],
+      },
       { key: "PREVIEW_ONLY", type: "encrypted", target: ["preview"] },
     ],
   };
   const validAudit = parseProductionEnvironmentAudit(JSON.stringify(valid));
-  assert.equal(validAudit.names.size, 5);
+  assert.equal(validAudit.names.size, 9);
   assert.equal(shouldCreateAuthSecret(validAudit), false);
   const withoutSecret = parseProductionEnvironmentAudit(
     JSON.stringify({
@@ -1060,9 +1080,27 @@ test("production build env removes every ambient unpooled database URL", () => {
     "postgresql://pooled.invalid/runtime",
     "auth-secret",
     "https://example.test",
+    {
+      connectionString:
+        "https://edge-config.vercel.com/ecfg_test?token=read-token",
+      edgeConfigId: "ecfg_test",
+      readToken: "read-token",
+      writeToken: "write-token",
+    },
+    "team_test",
   );
   assert.equal(environment.DATABASE_URL, "postgresql://pooled.invalid/runtime");
   assert.equal(environment.DATABASE_URL_UNPOOLED, undefined);
+  assert.equal(
+    environment.EDGE_CONFIG,
+    "https://edge-config.vercel.com/ecfg_test?token=read-token",
+  );
+  assert.equal(environment.MAINTENANCE_EDGE_CONFIG_ID, "ecfg_test");
+  assert.equal(environment.MAINTENANCE_EDGE_CONFIG_TEAM_ID, "team_test");
+  assert.equal(
+    environment.MAINTENANCE_EDGE_CONFIG_WRITE_TOKEN,
+    "write-token",
+  );
 });
 
 function migrationPlan(planHash: string): MigrationPlan {
@@ -1670,6 +1708,24 @@ test("ambiguous temporary-user write is found with retry and always removed", as
       return response(url, "<html>ok</html>", {
         status: 200,
         headers: { "content-type": "text/html" },
+      });
+    }
+    if (url.pathname === "/robots.txt") {
+      return response(url, "not found", {
+        status: 404,
+        headers: { "content-type": "text/plain" },
+      });
+    }
+    if (url.pathname === "/news/news-default-item.png") {
+      return response(url, "png", {
+        status: 200,
+        headers: { "content-type": "image/png" },
+      });
+    }
+    if (url.pathname === "/docs/privacy-policy.md") {
+      return response(url, "# プライバシーポリシー", {
+        status: 200,
+        headers: { "content-type": "text/markdown; charset=utf-8" },
       });
     }
     if (url.pathname === "/docs/privacy-policy") {
