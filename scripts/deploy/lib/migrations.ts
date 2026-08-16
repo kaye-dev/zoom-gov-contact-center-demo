@@ -9,6 +9,8 @@ import {
   type CommandRunner,
 } from "./process";
 
+const REVIEWED_MIGRATION_COUNT = 5;
+
 export type LocalMigration = {
   name: string;
   sql: string;
@@ -45,9 +47,9 @@ export async function createMigrationPlan(
   const migrations = readLocalMigrations(
     join(options.projectRoot, "prisma", "migrations"),
   );
-  if (migrations.length !== 4) {
+  if (migrations.length !== REVIEWED_MIGRATION_COUNT) {
     throw new Error(
-      `Expected the reviewed chain of 4 Prisma migrations, found ${migrations.length}.`,
+      `Expected the reviewed chain of ${REVIEWED_MIGRATION_COUNT} Prisma migrations, found ${migrations.length}.`,
     );
   }
 
@@ -123,7 +125,7 @@ export async function createMigrationPlan(
   }
 
   const freshDatabase =
-    migrations.length === 4 &&
+    migrations.length === REVIEWED_MIGRATION_COUNT &&
     appliedNames.length === 0 &&
     pending.length === migrations.length &&
     database.userObjects.length === 0;

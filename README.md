@@ -26,37 +26,9 @@ Zoom 製品のデモ用に作成した、架空の市区町村ホームページ
 
 ローカルに Node.js や PostgreSQL の実行環境を直接用意せず、Docker Compose で開発サーバーと DB を起動できます。
 
-メンテナンス設定は Vercel Edge Config を正本にします。先に Vercel Dashboard の対象 Project で `Storage > Create Database > Edge Config` から store を作成し、Items に次の3項目を保存してください。初期値はすべて `DISABLED` にします。
+メンテナンス設定は PostgreSQL の `site_maintenance_settings` を正本にします。migrationが`PRODUCTION`、`PREVIEW`、`DEVELOPMENT`の3行をversion 1・`DISABLED`で作成するため、外部storeや追加tokenの準備は不要です。`DATABASE_URL`にはprimary/read-writeのpooling endpointを設定し、read replicaは使用しません。設定行がない、形式が不正、またはDBから読めない場合、公開HTMLは安全側に倒して503のメンテナンス表示になります。`APP_CANONICAL_ORIGIN`は`BETTER_AUTH_URL`と同じoriginにし、Productionではcanonical HTTPS hostnameとの一致だけを`PRODUCTION`として扱います。
 
-```json
-{
-  "site_maintenance_production": {
-    "version": 1,
-    "mode": "DISABLED",
-    "scheduledStartAt": null,
-    "scheduledEndAt": null,
-    "updatedAt": "2026-01-01T00:00:00.000Z"
-  },
-  "site_maintenance_preview": {
-    "version": 1,
-    "mode": "DISABLED",
-    "scheduledStartAt": null,
-    "scheduledEndAt": null,
-    "updatedAt": "2026-01-01T00:00:00.000Z"
-  },
-  "site_maintenance_development": {
-    "version": 1,
-    "mode": "DISABLED",
-    "scheduledStartAt": null,
-    "scheduledEndAt": null,
-    "updatedAt": "2026-01-01T00:00:00.000Z"
-  }
-}
-```
-
-`Tokens > Copy Connection String` で取得した read-only connection string、画面上部の Edge Config ID、対象 Project の Vercel Team ID、同じ scope への書き込み権限を持つ [Vercel REST API access token](https://vercel.com/docs/rest-api#authentication) を `.env.example` の4変数へ対応させ、実値は Git 管理外の `.env` にだけ保存します。connection string と2種類の token はログ、コマンド引数、README、チャットへ貼り付けないでください。値がない、または3項目の形式が不正な場合、公開ページは安全側に倒してメンテナンス表示になります。Production へのデプロイでは Team ID を入力させず、検証済みの `.vercel/project.json` の `orgId` から設定します。
-
-Vercel Hobby の Edge Config 利用量は月次 100,000 read / 100 write を監視します。緊急解除は管理画面で対象環境を `DISABLED` にするのが第一手段です。DB または認証障害で管理画面を使えない場合だけ、Vercel Dashboard の Edge Config で対象環境のキーだけを有効な形式の `DISABLED` へ更新し、最大10秒待って公開ページが200へ戻ることを確認します。コード rollback は設定による解除を確認した後に判断する別操作であり、同時には行いません。
+緊急解除は管理画面で対象環境を`DISABLED`にするのが第一手段です。認証だけが故障し、DB接続が正常な場合に限り、Neon SQL Editorで[メンテナンスモード緊急解除](docs/deploy/vercel-neon/maintenance-recovery.md)のtransaction SQLを実行します。DB停止中はfail-closedの503を維持し、DBを復旧してから解除を確認します。コードrollbackは設定解除やDB復旧とは別操作です。
 
 ```bash
 ./dev-compose.sh
@@ -128,7 +100,7 @@ curl http://localhost:3000/docs/privacy-policy.md
 
 ### Vercel Hobby + Neon Freeへデプロイ
 
-公開はリポジトリルートの`./deploy.sh`だけから行い、VercelのGit自動デプロイは使用しません。`deploy.sh` は Edge Config の owner、管理・read 接続、3項目の形式を値を表示せずに検証し、candidate では preview、promotion 後は production の実効設定に応じて公開 HTML の 200 / 503 を検証します。手順は次を参照してください。
+公開はリポジトリルートの`./deploy.sh`だけから行い、VercelのGit自動デプロイは使用しません。`deploy.sh`はmigration後にPostgreSQLの3環境行、version 1、revision、5つの制約を値を表示せずに検証し、candidateでは`PREVIEW`、promotion後は`PRODUCTION`の実効設定に応じて公開HTMLの200 / 503を検証します。手順は次を参照してください。
 
 - [新規デプロイ](docs/deploy/vercel-neon/initial-deploy.md)
 - [2回目以降の再デプロイ](docs/deploy/vercel-neon/redeploy.md)
@@ -161,8 +133,8 @@ npm run dev
 | `npm run lint` | ESLint を実行 |
 | `npm run typecheck` | アプリのTypeScript型検査を実行 |
 | `npm run audit:runtime` | デプロイ成果物に含まれる依存関係の脆弱性監査を実行 |
-| `npm run test:deploy` | Vercel/Neon/Edge Configデプロイの安全ゲートをstubで検証 |
-| `./deploy.sh` | Vercel/Neon/Edge Configのpreflight、migration、200/503 staged smoke、promotionを対話式で実行 |
+| `npm run test:deploy` | Vercel/Neon/PostgreSQLデプロイの安全ゲートをstubで検証 |
+| `./deploy.sh` | Vercel/Neon/PostgreSQLのpreflight、migration、200/503 staged smoke、promotionを対話式で実行 |
 | `npm run db:generate` | Prisma Client を生成 |
 | `npm run db:migrate` | Prisma migration を作成し、ローカル DB に適用 |
 | `npm run db:deploy` | Prisma migration をデプロイ先 DB に適用 |

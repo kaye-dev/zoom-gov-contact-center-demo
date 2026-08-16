@@ -1,15 +1,20 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import {
+  MAINTENANCE_SETTINGS_CONFLICT_CODE,
   MAINTENANCE_UPDATE_ERROR_CODES,
+  isValidMaintenanceRevision,
+  resolveMaintenanceEffectiveState,
   utcIsoToJstDateTimeLocal,
+  validMaintenanceReadResult,
   type MaintenanceConfig,
   type MaintenanceEffectiveState,
   type MaintenanceEnvironment,
   type MaintenanceMode,
+  type MaintenanceUpdateInput,
 } from "@/lib/maintenance-config";
 import {
   isSettingsErrorCode,
@@ -22,17 +27,26 @@ type MaintenanceSettingsFormProps = {
   environment: MaintenanceEnvironment;
   initialConfig: MaintenanceConfig | null;
   initialEffective: MaintenanceEffectiveState | null;
+  initialRevision: number | null;
 };
 
 type Feedback =
   | { kind: "success" }
-  | { kind: "error"; code?: SettingsErrorCode; message?: string };
+  | {
+      kind: "error";
+      code?: SettingsErrorCode;
+      message?: string;
+      scheduleError?: ScheduleValidationError;
+    };
+
+type ScheduleValidationError = "required" | "order" | "endFuture";
 
 type MaintenanceSettingsResponse = {
   config?: MaintenanceConfig;
   environment?: MaintenanceEnvironment;
   key?: string;
   effective?: MaintenanceEffectiveState;
+  revision?: number;
   error?: unknown;
 };
 
@@ -41,17 +55,20 @@ const MODE_OPTIONS: MaintenanceMode[] = [
   "ENABLED",
   "SCHEDULED",
 ];
+export const MAX_EFFECTIVE_STATE_TIMER_DELAY_MS = 2_147_483_647;
 
 export function MaintenanceSettingsForm({
   environment,
   initialConfig,
   initialEffective,
+  initialRevision,
 }: MaintenanceSettingsFormProps) {
   const { locale, t } = useI18n();
   const router = useRouter();
-  const canEdit = initialConfig !== null;
+  const canEdit =
+    initialConfig !== null && isValidMaintenanceRevision(initialRevision);
   const [mode, setMode] = useState<MaintenanceMode | null>(
-    initialConfig?.mode ?? null,
+    canEdit ? initialConfig?.mode ?? null : null,
   );
   const [scheduledStartAtJst, setScheduledStartAtJst] = useState(
     toJstDateTimeLocal(initialConfig?.scheduledStartAt ?? null),
@@ -65,8 +82,10 @@ export function MaintenanceSettingsForm({
   const [savedScheduledEndAtJst, setSavedScheduledEndAtJst] = useState(
     toJstDateTimeLocal(initialConfig?.scheduledEndAt ?? null),
   );
+  const [savedConfig, setSavedConfig] = useState(initialConfig);
   const [updatedAt, setUpdatedAt] = useState(initialConfig?.updatedAt ?? null);
   const [effective, setEffective] = useState(initialEffective);
+  const [revision, setRevision] = useState(initialRevision);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const copy = t.admin.maintenanceManagement;
@@ -84,6 +103,39 @@ export function MaintenanceSettingsForm({
       : copy.effectiveInactive
     : copy.effectiveUnknown;
   const updatedAtLabel = formatJstDateTime(updatedAt, locale);
+  const scheduleFieldErrors = getScheduleFieldErrors({
+    error:
+      feedback?.kind === "error" ? feedback.scheduleError : undefined,
+    scheduledStartAtJst,
+    scheduledEndAtJst,
+  });
+
+  useEffect(() => {
+    if (savedConfig === null) return;
+
+    let timerId: number | null = null;
+    let cancelled = false;
+    const refreshEffectiveState = () => {
+      if (cancelled) return;
+
+      const plan = createMaintenanceEffectiveRefreshPlan(
+        savedConfig,
+        new Date(),
+      );
+      setEffective(plan.effective);
+      timerId =
+        plan.refreshDelayMs === null
+          ? null
+          : window.setTimeout(refreshEffectiveState, plan.refreshDelayMs);
+    };
+
+    timerId = window.setTimeout(refreshEffectiveState, 0);
+
+    return () => {
+      cancelled = true;
+      if (timerId !== null) window.clearTimeout(timerId);
+    };
+  }, [savedConfig]);
 
   const updateMode = (nextMode: MaintenanceMode) => {
     setMode(nextMode);
@@ -98,13 +150,19 @@ export function MaintenanceSettingsForm({
     event.preventDefault();
     setFeedback(null);
 
-    if (!canEdit || mode === null) return;
+    if (!canEdit || mode === null || !isValidMaintenanceRevision(revision)) {
+      return;
+    }
 
     if (
       mode === "SCHEDULED" &&
       (!scheduledStartAtJst || !scheduledEndAtJst)
     ) {
-      setFeedback({ kind: "error", message: copy.scheduleRequired });
+      setFeedback({
+        kind: "error",
+        message: copy.scheduleRequired,
+        scheduleError: "required",
+      });
       return;
     }
 
@@ -114,7 +172,11 @@ export function MaintenanceSettingsForm({
       scheduledEndAtJst &&
       scheduledEndAtJst <= scheduledStartAtJst
     ) {
-      setFeedback({ kind: "error", message: copy.scheduleOrderError });
+      setFeedback({
+        kind: "error",
+        message: copy.scheduleOrderError,
+        scheduleError: "order",
+      });
       return;
     }
 
@@ -123,7 +185,11 @@ export function MaintenanceSettingsForm({
       scheduledEndAtJst <=
         toJstDateTimeLocal(new Date().toISOString())
     ) {
-      setFeedback({ kind: "error", message: copy.scheduleEndFutureError });
+      setFeedback({
+        kind: "error",
+        message: copy.scheduleEndFutureError,
+        scheduleError: "endFuture",
+      });
       return;
     }
 
@@ -133,23 +199,32 @@ export function MaintenanceSettingsForm({
       const response = await fetch("/api/admin/maintenance-settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode,
-          scheduledStartAtJst:
-            (mode === "SCHEDULED"
-              ? scheduledStartAtJst
-              : savedScheduledStartAtJst) || null,
-          scheduledEndAtJst:
-            (mode === "SCHEDULED"
-              ? scheduledEndAtJst
-              : savedScheduledEndAtJst) || null,
-        }),
+        body: JSON.stringify(
+          createMaintenanceUpdateRequest({
+            mode,
+            scheduledStartAtJst,
+            scheduledEndAtJst,
+            savedScheduledStartAtJst,
+            savedScheduledEndAtJst,
+            expectedRevision: revision,
+          }),
+        ),
       });
       const body = (await response.json().catch(() => null)) as
         | MaintenanceSettingsResponse
         | null;
 
-      if (!response.ok || !body?.config || !body.effective) {
+      if (isMaintenanceSettingsConflict(response.status, body?.error)) {
+        setFeedback({ kind: "error", message: copy.conflictError });
+        return;
+      }
+
+      if (
+        !response.ok ||
+        !body?.config ||
+        !body.effective ||
+        !isValidMaintenanceRevision(body.revision)
+      ) {
         const maintenanceErrorMessage =
           body?.error === MAINTENANCE_UPDATE_ERROR_CODES.scheduleRequired
             ? copy.scheduleRequired
@@ -160,10 +235,21 @@ export function MaintenanceSettingsForm({
                   MAINTENANCE_UPDATE_ERROR_CODES.invalidSchedule
                 ? copy.scheduleOrderError
                 : undefined;
+        const scheduleError =
+          body?.error === MAINTENANCE_UPDATE_ERROR_CODES.scheduleRequired
+            ? "required"
+            : body?.error ===
+                MAINTENANCE_UPDATE_ERROR_CODES.scheduleMustEndInFuture
+              ? "endFuture"
+              : body?.error ===
+                  MAINTENANCE_UPDATE_ERROR_CODES.invalidSchedule
+                ? "order"
+                : undefined;
         setFeedback({
           kind: "error",
           code: isSettingsErrorCode(body?.error) ? body.error : undefined,
           message: maintenanceErrorMessage,
+          scheduleError,
         });
         return;
       }
@@ -179,8 +265,10 @@ export function MaintenanceSettingsForm({
       setScheduledEndAtJst(savedEndAtJst);
       setSavedScheduledStartAtJst(savedStartAtJst);
       setSavedScheduledEndAtJst(savedEndAtJst);
+      setSavedConfig(body.config);
       setUpdatedAt(body.config.updatedAt);
       setEffective(body.effective);
+      setRevision(body.revision);
       setFeedback({ kind: "success" });
       router.refresh();
     } catch {
@@ -229,7 +317,7 @@ export function MaintenanceSettingsForm({
         </div>
       ) : null}
 
-      <form onSubmit={submit} className="space-y-6">
+      <form onSubmit={submit} noValidate className="space-y-6">
         <fieldset
           disabled={!canEdit || isSubmitting}
           aria-describedby="maintenance-mode-description"
@@ -322,7 +410,12 @@ export function MaintenanceSettingsForm({
                   setFeedback(null);
                 }}
                 required={mode === "SCHEDULED"}
-                aria-describedby="maintenance-time-zone-note"
+                aria-invalid={scheduleFieldErrors.start}
+                aria-describedby={`maintenance-time-zone-note${
+                  scheduleFieldErrors.start
+                    ? " maintenance-settings-feedback"
+                    : ""
+                }`}
                 className="w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/30 disabled:cursor-not-allowed"
               />
             </div>
@@ -344,7 +437,12 @@ export function MaintenanceSettingsForm({
                   setFeedback(null);
                 }}
                 required={mode === "SCHEDULED"}
-                aria-describedby="maintenance-time-zone-note"
+                aria-invalid={scheduleFieldErrors.end}
+                aria-describedby={`maintenance-time-zone-note${
+                  scheduleFieldErrors.end
+                    ? " maintenance-settings-feedback"
+                    : ""
+                }`}
                 className="w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/30 disabled:cursor-not-allowed"
               />
             </div>
@@ -404,6 +502,100 @@ export function MaintenanceSettingsForm({
 function toJstDateTimeLocal(value: string | null): string {
   if (!value) return "";
   return utcIsoToJstDateTimeLocal(value) ?? "";
+}
+
+export function createMaintenanceUpdateRequest({
+  mode,
+  scheduledStartAtJst,
+  scheduledEndAtJst,
+  savedScheduledStartAtJst,
+  savedScheduledEndAtJst,
+  expectedRevision,
+}: {
+  mode: MaintenanceMode;
+  scheduledStartAtJst: string;
+  scheduledEndAtJst: string;
+  savedScheduledStartAtJst: string;
+  savedScheduledEndAtJst: string;
+  expectedRevision: number;
+}): MaintenanceUpdateInput {
+  return {
+    mode,
+    scheduledStartAtJst:
+      (mode === "SCHEDULED"
+        ? scheduledStartAtJst
+        : savedScheduledStartAtJst) || null,
+    scheduledEndAtJst:
+      (mode === "SCHEDULED"
+        ? scheduledEndAtJst
+        : savedScheduledEndAtJst) || null,
+    expectedRevision,
+  };
+}
+
+export function isMaintenanceSettingsConflict(
+  status: number,
+  error: unknown,
+): boolean {
+  return (
+    status === 409 && error === MAINTENANCE_SETTINGS_CONFLICT_CODE
+  );
+}
+
+export function createMaintenanceEffectiveRefreshPlan(
+  config: MaintenanceConfig,
+  now: Date,
+): {
+  effective: MaintenanceEffectiveState;
+  refreshDelayMs: number | null;
+} {
+  const effective = resolveMaintenanceEffectiveState(
+    validMaintenanceReadResult(config),
+    now,
+  );
+  const nowMs = now.getTime();
+
+  if (config.mode !== "SCHEDULED" || !Number.isFinite(nowMs)) {
+    return { effective, refreshDelayMs: null };
+  }
+
+  const startMs = Date.parse(config.scheduledStartAt!);
+  const endMs = Date.parse(config.scheduledEndAt!);
+  const nextBoundaryMs =
+    nowMs < startMs ? startMs : nowMs < endMs ? endMs : null;
+  if (nextBoundaryMs === null) {
+    return { effective, refreshDelayMs: null };
+  }
+
+  return {
+    effective,
+    refreshDelayMs: Math.min(
+      Math.max(nextBoundaryMs - nowMs, 1),
+      MAX_EFFECTIVE_STATE_TIMER_DELAY_MS,
+    ),
+  };
+}
+
+export function getScheduleFieldErrors({
+  error,
+  scheduledStartAtJst,
+  scheduledEndAtJst,
+}: {
+  error: ScheduleValidationError | undefined;
+  scheduledStartAtJst: string;
+  scheduledEndAtJst: string;
+}): { start: boolean; end: boolean } {
+  if (error === "required") {
+    return {
+      start: scheduledStartAtJst.length === 0,
+      end: scheduledEndAtJst.length === 0,
+    };
+  }
+
+  return {
+    start: false,
+    end: error === "order" || error === "endFuture",
+  };
 }
 
 function formatJstDateTime(value: string | null, locale: string): string | null {

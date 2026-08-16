@@ -33,7 +33,7 @@ export async function runSmokeChecks(
   checks.push("GET /api/health");
 
   const publicSiteExpectation = options.publicSiteExpectation ?? {
-    key: "site_maintenance_development",
+    environment: "DEVELOPMENT",
     status: 200,
   };
   checks.push(
@@ -80,55 +80,126 @@ export async function verifyPublicSiteSmoke(
   request: RequestFunction = globalThis.fetch,
 ): Promise<string[]> {
   const checks: string[] = [];
-  for (const path of [
-    "/",
-    "/docs/privacy-policy",
-    "/life/frequently-asked-questions",
-  ]) {
-    const response = await fetchWithTimeout(baseUrl, path, request);
-    if (
-      response.status !== publicSiteExpectation.status ||
-      !(response.headers.get("content-type") ?? "")
-        .toLowerCase()
-        .includes("text/html")
-    ) {
-      throw new Error(
-        `${path} returned HTTP ${response.status}; expected ${publicSiteExpectation.status} for ${publicSiteExpectation.key}.`,
-      );
-    }
-    const html = await response.text();
-    if (publicSiteExpectation.status === 503) {
-      const cacheControl = response.headers.get("cache-control") ?? "";
-      if (!/(?:^|,)\s*no-store\s*(?:,|$)/i.test(cacheControl)) {
-        throw new Error(`${path} maintenance response was not marked no-store.`);
-      }
-      const retryAfter = response.headers.get("retry-after");
-      if (retryAfter !== (publicSiteExpectation.retryAfter ?? null)) {
-        throw new Error(`${path} returned an unexpected Retry-After header.`);
-      }
-      if (hasRobotsNoindexMeta(html)) {
-        throw new Error(`${path} maintenance response unexpectedly used noindex.`);
-      }
-    } else {
-      const marker =
-        path === "/docs/privacy-policy"
-          ? "プライバシーポリシー"
-          : path === "/life/frequently-asked-questions"
-            ? "未来市のよくある質問"
-            : undefined;
-      if (marker && !html.includes(marker)) {
-        throw new Error(`${path} did not contain its deployment content marker.`);
-      }
-      if (response.headers.has("retry-after")) {
-        throw new Error(`${path} unexpectedly returned Retry-After while available.`);
-      }
-    }
+  for (const path of PUBLIC_HTML_SMOKE_PATHS) {
+    await verifyPublicHtmlResponse(
+      path,
+      await fetchWithTimeout(baseUrl, path, request),
+      publicSiteExpectation,
+    );
     checks.push(`GET ${path}`);
   }
 
   await assertPublicExclusions(baseUrl, request);
   checks.push("maintenance exclusions: login/robots/static/raw Markdown");
   return checks;
+}
+
+/**
+ * Captures the public behavior of an already-serving canonical deployment.
+ * This is intentionally limited to public HTTP status and Retry-After state:
+ * a previous release may use a different maintenance-settings provider.
+ */
+export async function capturePublicSiteBaseline(
+  baseUrl: URL,
+  request: RequestFunction = globalThis.fetch,
+): Promise<MaintenancePublicExpectation> {
+  const rootResponse = await fetchWithTimeout(baseUrl, "/", request);
+  if (rootResponse.status !== 200 && rootResponse.status !== 503) {
+    throw new Error(
+      `Existing canonical / returned HTTP ${rootResponse.status}; expected 200 or 503.`,
+    );
+  }
+
+  const retryAfter = rootResponse.headers.get("retry-after");
+  if (
+    retryAfter !== null &&
+    !isCanonicalHttpDate(retryAfter)
+  ) {
+    throw new Error("Existing canonical / returned an invalid Retry-After header.");
+  }
+  const expectation: MaintenancePublicExpectation = {
+    environment: "PRODUCTION",
+    status: rootResponse.status,
+    ...(retryAfter === null ? {} : { retryAfter }),
+  };
+  await verifyPublicHtmlResponse("/", rootResponse, expectation);
+
+  for (const path of PUBLIC_HTML_SMOKE_PATHS.slice(1)) {
+    await verifyPublicHtmlResponse(
+      path,
+      await fetchWithTimeout(baseUrl, path, request),
+      expectation,
+    );
+  }
+  await assertPublicExclusions(baseUrl, request);
+  return expectation;
+}
+
+export function resolvePublicSiteBaselineAt(
+  baseline: MaintenancePublicExpectation,
+  now = new Date(),
+): MaintenancePublicExpectation {
+  if (baseline.status !== 503 || baseline.retryAfter === undefined) {
+    return baseline;
+  }
+  const retryAt = Date.parse(baseline.retryAfter);
+  if (!Number.isFinite(retryAt) || !Number.isFinite(now.getTime())) {
+    throw new Error("Existing canonical public baseline is invalid.");
+  }
+  if (now.getTime() < retryAt) {
+    return baseline;
+  }
+  return { environment: baseline.environment, status: 200 };
+}
+
+const PUBLIC_HTML_SMOKE_PATHS = [
+  "/",
+  "/docs/privacy-policy",
+  "/life/frequently-asked-questions",
+] as const;
+
+async function verifyPublicHtmlResponse(
+  path: string,
+  response: Response,
+  publicSiteExpectation: MaintenancePublicExpectation,
+): Promise<void> {
+  if (
+    response.status !== publicSiteExpectation.status ||
+    !(response.headers.get("content-type") ?? "")
+      .toLowerCase()
+      .includes("text/html")
+  ) {
+    throw new Error(
+      `${path} returned HTTP ${response.status}; expected ${publicSiteExpectation.status} for ${publicSiteExpectation.environment}.`,
+    );
+  }
+  const html = await response.text();
+  if (publicSiteExpectation.status === 503) {
+    const cacheControl = response.headers.get("cache-control") ?? "";
+    if (!/(?:^|,)\s*no-store\s*(?:,|$)/i.test(cacheControl)) {
+      throw new Error(`${path} maintenance response was not marked no-store.`);
+    }
+    const retryAfter = response.headers.get("retry-after");
+    if (retryAfter !== (publicSiteExpectation.retryAfter ?? null)) {
+      throw new Error(`${path} returned an unexpected Retry-After header.`);
+    }
+    if (hasRobotsNoindexMeta(html)) {
+      throw new Error(`${path} maintenance response unexpectedly used noindex.`);
+    }
+  } else {
+    const marker =
+      path === "/docs/privacy-policy"
+        ? "プライバシーポリシー"
+        : path === "/life/frequently-asked-questions"
+          ? "未来市のよくある質問"
+          : undefined;
+    if (marker && !html.includes(marker)) {
+      throw new Error(`${path} did not contain its deployment content marker.`);
+    }
+    if (response.headers.has("retry-after")) {
+      throw new Error(`${path} unexpectedly returned Retry-After while available.`);
+    }
+  }
 }
 
 async function assertPublicExclusions(
@@ -195,6 +266,11 @@ function hasRobotsNoindexMeta(html: string): boolean {
   );
 }
 
+function isCanonicalHttpDate(value: string): boolean {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) && new Date(timestamp).toUTCString() === value;
+}
+
 export async function verifyIdleRecovery(
   baseUrl: URL,
   waitMs = 5 * 60_000,
@@ -239,7 +315,7 @@ async function verifyAdminCrud(
   let temporaryUserId = "";
   let primaryError: unknown;
   let creationAttempted = false;
-  const temporaryEmail = `vercel-smoke-${randomUUID()}@example.invalid`;
+  const temporaryEmail = `deployment-smoke-${randomUUID()}@example.invalid`;
 
   try {
     const signIn = await fetchWithTimeout(
@@ -300,7 +376,7 @@ async function verifyAdminCrud(
       request,
       jsonRequest(baseUrl, cookie, {
         email: temporaryEmail,
-        name: "Vercel deployment verification",
+        name: "Deployment verification",
         role: "user",
       }),
     );
@@ -508,7 +584,7 @@ async function fetchWithTimeout(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 60_000);
   const headers = new Headers(init.headers);
-  headers.set("user-agent", "zoom-gov-demo-vercel-deploy/1.0");
+  headers.set("user-agent", "zoom-gov-demo-deployment-smoke/1.0");
   try {
     const response = await request(new URL(path, baseUrl), {
       ...init,

@@ -373,6 +373,7 @@ export type Dictionary = {
       scheduleRequired: string;
       scheduleOrderError: string;
       scheduleEndFutureError: string;
+      conflictError: string;
       warningTitle: string;
       warningDescription: string;
       propagationNote: string;
@@ -889,11 +890,13 @@ export const dictionaries: Record<Locale, Dictionary> = {
         scheduleRequired: '開始日時と終了日時を入力してください。',
         scheduleOrderError: '終了日時は開始日時より後にしてください。',
         scheduleEndFutureError: '終了日時は現在より後にしてください。',
+        conflictError:
+          '別の管理者が設定を更新しました。入力内容は保持されています。ページを再読み込みして最新の設定を確認してから、もう一度保存してください。',
         warningTitle: '公開サイトの表示が切り替わります',
         warningDescription:
           'メンテナンス中は公開サイトの通常コンテンツ、ヘッダー、フッター、AIチャットを利用できません。管理画面と認証画面は引き続き利用できます。',
         propagationNote:
-          '保存した設定がすべての公開リクエストへ反映されるまで、最大10秒かかる場合があります。',
+          '保存した設定は、次回のネットワークを伴うアクセスから反映されます。',
         updatedAtLabel: '最終更新',
       },
     },
@@ -1414,11 +1417,13 @@ export const dictionaries: Record<Locale, Dictionary> = {
         scheduleOrderError: 'The end date and time must be after the start.',
         scheduleEndFutureError:
           'The end date and time must be in the future.',
+        conflictError:
+          'Another administrator updated these settings. Your entries have been kept. Reload the page to review the latest settings, then save again.',
         warningTitle: 'The public-site display will change',
         warningDescription:
           'During maintenance, regular public content, the header, footer, and AI chat are unavailable. Admin and authentication pages remain available.',
         propagationNote:
-          'Saved settings may take up to 10 seconds to reach every public request.',
+          'Saved settings take effect on the next network request.',
         updatedAtLabel: 'Last updated',
       },
     },
@@ -1913,10 +1918,12 @@ export const dictionaries: Record<Locale, Dictionary> = {
         scheduleRequired: '请输入开始日期和时间以及结束日期和时间。',
         scheduleOrderError: '结束日期和时间必须晚于开始日期和时间。',
         scheduleEndFutureError: '结束日期和时间必须晚于当前时间。',
+        conflictError:
+          '另一位管理员已更新设置。您输入的内容已保留。请重新加载页面并确认最新设置，然后再次保存。',
         warningTitle: '公开网站的显示将会切换',
         warningDescription:
           '维护期间无法使用公开网站的常规内容、页眉、页脚和AI聊天。管理页面和认证页面仍可使用。',
-        propagationNote: '保存的设置最多可能需要10秒才会应用到所有公开请求。',
+        propagationNote: '保存的设置将在下一次网络请求时生效。',
         updatedAtLabel: '最后更新',
       },
     },
@@ -2411,10 +2418,12 @@ export const dictionaries: Record<Locale, Dictionary> = {
         scheduleRequired: '請輸入開始日期與時間以及結束日期與時間。',
         scheduleOrderError: '結束日期與時間必須晚於開始日期與時間。',
         scheduleEndFutureError: '結束日期與時間必須晚於目前時間。',
+        conflictError:
+          '另一位管理員已更新設定。您輸入的內容已保留。請重新載入頁面並確認最新設定，然後再次儲存。',
         warningTitle: '公開網站的顯示將會切換',
         warningDescription:
           '維護期間無法使用公開網站的一般內容、頁首、頁尾與AI聊天。管理頁面與驗證頁面仍可使用。',
-        propagationNote: '儲存的設定最多可能需要10秒才會套用至所有公開請求。',
+        propagationNote: '儲存的設定將於下一次網路請求時生效。',
         updatedAtLabel: '最後更新',
       },
     },
@@ -2915,11 +2924,13 @@ export const dictionaries: Record<Locale, Dictionary> = {
         scheduleRequired: '시작 날짜 및 시간과 종료 날짜 및 시간을 입력하세요.',
         scheduleOrderError: '종료 날짜 및 시간은 시작보다 이후여야 합니다.',
         scheduleEndFutureError: '종료 날짜 및 시간은 현재보다 이후여야 합니다.',
+        conflictError:
+          '다른 관리자가 설정을 업데이트했습니다. 입력한 내용은 유지됩니다. 페이지를 새로고침하여 최신 설정을 확인한 후 다시 저장하세요.',
         warningTitle: '공개 사이트 표시가 전환됩니다',
         warningDescription:
           '점검 중에는 공개 사이트의 일반 콘텐츠, 헤더, 푸터 및 AI 채팅을 사용할 수 없습니다. 관리 및 인증 화면은 계속 사용할 수 있습니다.',
         propagationNote:
-          '저장한 설정이 모든 공개 요청에 적용되기까지 최대 10초가 걸릴 수 있습니다.',
+          '저장한 설정은 다음 네트워크 요청부터 적용됩니다.',
         updatedAtLabel: '마지막 업데이트',
       },
     },

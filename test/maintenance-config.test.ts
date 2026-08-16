@@ -3,7 +3,9 @@ import test from "node:test";
 
 import {
   MAINTENANCE_CONFIG_KEYS,
+  MAINTENANCE_SETTINGS_CONFLICT_CODE,
   MAINTENANCE_UPDATE_ERROR_CODES,
+  MaintenanceEnvironmentResolutionError,
   getMaintenanceConfigKey,
   jstDateTimeLocalToUtcIso,
   parseMaintenanceConfig,
@@ -25,7 +27,7 @@ const scheduledConfig: MaintenanceConfig = {
   updatedAt: "2026-08-10T12:34:56.789Z",
 };
 
-test("maintenance config parser normalizes a valid copy without mutating SDK data", () => {
+test("maintenance config parser normalizes a valid copy without mutating stored data", () => {
   const raw = {
     ...scheduledConfig,
     scheduledStartAt: "2026-08-11T01:00:00Z",
@@ -117,6 +119,7 @@ test("admin update validation creates UTC config and rejects client-owned fields
       mode: "SCHEDULED",
       scheduledStartAtJst: "2026-08-11T10:00",
       scheduledEndAtJst: "2026-08-11T11:00",
+      expectedRevision: 7,
     },
     now,
   );
@@ -124,11 +127,14 @@ test("admin update validation creates UTC config and rejects client-owned fields
   assert.deepEqual(result, {
     ok: true,
     value: {
-      version: 1,
-      mode: "SCHEDULED",
-      scheduledStartAt: "2026-08-11T01:00:00.000Z",
-      scheduledEndAt: "2026-08-11T02:00:00.000Z",
-      updatedAt: now.toISOString(),
+      config: {
+        version: 1,
+        mode: "SCHEDULED",
+        scheduledStartAt: "2026-08-11T01:00:00.000Z",
+        scheduledEndAt: "2026-08-11T02:00:00.000Z",
+        updatedAt: now.toISOString(),
+      },
+      expectedRevision: 7,
     },
   });
 
@@ -138,6 +144,7 @@ test("admin update validation creates UTC config and rejects client-owned fields
         mode: "DISABLED",
         scheduledStartAtJst: null,
         scheduledEndAtJst: null,
+        expectedRevision: 7,
         updatedAt: now.toISOString(),
       },
       now,
@@ -158,6 +165,7 @@ test("schedule validation requires a valid pair and a future scheduled end", () 
         mode: "SCHEDULED",
         scheduledStartAtJst: null,
         scheduledEndAtJst: null,
+        expectedRevision: 1,
       },
       now,
     ),
@@ -172,6 +180,7 @@ test("schedule validation requires a valid pair and a future scheduled end", () 
         mode: "SCHEDULED",
         scheduledStartAtJst: "2026-08-11T10:00",
         scheduledEndAtJst: null,
+        expectedRevision: 1,
       },
       now,
     ),
@@ -186,6 +195,7 @@ test("schedule validation requires a valid pair and a future scheduled end", () 
         mode: "SCHEDULED",
         scheduledStartAtJst: "2026-08-11T08:00",
         scheduledEndAtJst: "2026-08-11T09:00",
+        expectedRevision: 1,
       },
       now,
     ),
@@ -200,19 +210,61 @@ test("schedule validation requires a valid pair and a future scheduled end", () 
         mode: "ENABLED",
         scheduledStartAtJst: "2025-01-01T09:00",
         scheduledEndAtJst: "2025-01-01T10:00",
+        expectedRevision: 9,
       },
       now,
     ),
     {
       ok: true,
       value: {
-        version: 1,
-        mode: "ENABLED",
-        scheduledStartAt: "2025-01-01T00:00:00.000Z",
-        scheduledEndAt: "2025-01-01T01:00:00.000Z",
-        updatedAt: now.toISOString(),
+        config: {
+          version: 1,
+          mode: "ENABLED",
+          scheduledStartAt: "2025-01-01T00:00:00.000Z",
+          scheduledEndAt: "2025-01-01T01:00:00.000Z",
+          updatedAt: now.toISOString(),
+        },
+        expectedRevision: 9,
       },
     },
+  );
+
+  for (const expectedRevision of [
+    undefined,
+    null,
+    0,
+    -1,
+    1.5,
+    2_147_483_648,
+  ]) {
+    assert.deepEqual(
+      parseMaintenanceUpdateInput(
+        {
+          mode: "DISABLED",
+          scheduledStartAtJst: null,
+          scheduledEndAtJst: null,
+          expectedRevision,
+        },
+        now,
+      ),
+      {
+        ok: false,
+        code: MAINTENANCE_UPDATE_ERROR_CODES.invalidRequest,
+      },
+    );
+  }
+
+  assert.equal(
+    parseMaintenanceUpdateInput(
+      {
+        mode: "DISABLED",
+        scheduledStartAtJst: null,
+        scheduledEndAtJst: null,
+        expectedRevision: 2_147_483_647,
+      },
+      now,
+    ).ok,
+    true,
   );
 });
 
@@ -303,53 +355,92 @@ test("Retry-After is emitted only during an active valid schedule", () => {
   assert.equal(resolveMaintenanceRetryAfter(null), null);
 });
 
-test("environment resolution uses exact normalized production hosts", () => {
+test("environment resolution uses only the exact APP_CANONICAL_ORIGIN host", () => {
   assert.equal(
     resolveMaintenanceEnvironment({
       nodeEnv: "development",
       requestHostname: "city.example.jp",
-      betterAuthUrl: "https://city.example.jp",
-      vercelProjectProductionUrl: "city.vercel.app",
+      appCanonicalOrigin: undefined,
     }),
     "development",
   );
   assert.equal(
     resolveMaintenanceEnvironment({
       nodeEnv: "production",
-      requestHostname: "CITY.EXAMPLE.JP:443, proxy.internal",
-      betterAuthUrl: "https://city.example.jp",
-      vercelProjectProductionUrl: "city.vercel.app",
+      requestHostname: "CITY.EXAMPLE.JP:443",
+      appCanonicalOrigin: "https://city.example.jp",
     }),
     "production",
   );
-  assert.equal(
-    resolveMaintenanceEnvironment({
-      nodeEnv: "production",
-      requestHostname: "city.vercel.app",
-      betterAuthUrl: "https://city.example.jp",
-      vercelProjectProductionUrl: "https://city.vercel.app",
-    }),
-    "production",
-  );
-
   for (const requestHostname of [
+    "city.vercel.app",
     "city-git-sha.vercel.app",
     "city.example.jp.attacker.test",
-    undefined,
   ]) {
     assert.equal(
       resolveMaintenanceEnvironment({
         nodeEnv: "production",
         requestHostname,
-        betterAuthUrl: "https://city.example.jp",
-        vercelProjectProductionUrl: "city.vercel.app",
+        appCanonicalOrigin: "https://city.example.jp",
       }),
       "preview",
+    );
+  }
+
+  for (const requestHostname of [
+    undefined,
+    "",
+    ".example",
+    "example..com",
+    "-bad.example",
+    "bad-.example",
+    "exa\tmple.example",
+    "%65xample.com",
+    "city.example.jp, proxy.internal",
+    "https://city.example.jp",
+    "https://city.example.jp/path",
+    "city.example.jp/",
+  ]) {
+    assert.throws(
+      () =>
+        resolveMaintenanceEnvironment({
+          nodeEnv: "production",
+          requestHostname,
+          appCanonicalOrigin: "https://city.example.jp",
+        }),
+      MaintenanceEnvironmentResolutionError,
+    );
+  }
+
+  for (const appCanonicalOrigin of [
+    undefined,
+    "city.example.jp",
+    "http://city.example.jp",
+    "https://.example",
+    "https://example..com",
+    "https://-bad.example",
+    "https://exa%09mple.example",
+    "https://city.example.jp:8443",
+    "https://city.example.jp/path",
+    "https://user@city.example.jp",
+  ]) {
+    assert.throws(
+      () =>
+        resolveMaintenanceEnvironment({
+          nodeEnv: "production",
+          requestHostname: "city.example.jp",
+          appCanonicalOrigin,
+        }),
+      MaintenanceEnvironmentResolutionError,
     );
   }
 });
 
 test("environment keys are exact and exhaustive", () => {
+  assert.equal(
+    MAINTENANCE_SETTINGS_CONFLICT_CODE,
+    "MAINTENANCE_SETTINGS_CONFLICT",
+  );
   assert.deepEqual(MAINTENANCE_CONFIG_KEYS, {
     production: "site_maintenance_production",
     preview: "site_maintenance_preview",

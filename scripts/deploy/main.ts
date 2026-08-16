@@ -25,11 +25,9 @@ import {
 } from "./lib/migrations";
 import {
   createMaintenancePublicExpectation,
-  readMaintenanceEdgeConfig,
-  validateMaintenanceEdgeConfigCredentials,
-  verifyMaintenanceEdgeConfig,
-  type MaintenanceEdgeConfigCredentials,
-  type MaintenanceEdgeConfigKey,
+  readMaintenanceSettingsDatabase,
+  verifyMaintenanceSettingsDatabase,
+  type MaintenanceEnvironment,
 } from "./lib/maintenance";
 import {
   assertCommandSucceeded,
@@ -40,6 +38,8 @@ import {
   type CommandRunner,
 } from "./lib/process";
 import {
+  capturePublicSiteBaseline,
+  resolvePublicSiteBaselineAt,
   runSmokeChecks,
   verifyIdleRecovery,
   type SmokeCredentials,
@@ -74,10 +74,7 @@ const PRODUCTION_ENV_ALLOWLIST = new Set([
   "BETTER_AUTH_URL",
   "BETTER_AUTH_TRUSTED_ORIGINS",
   "BETTER_AUTH_TRUST_PROXY_HEADERS",
-  "EDGE_CONFIG",
-  "MAINTENANCE_EDGE_CONFIG_ID",
-  "MAINTENANCE_EDGE_CONFIG_TEAM_ID",
-  "MAINTENANCE_EDGE_CONFIG_WRITE_TOKEN",
+  "APP_CANONICAL_ORIGIN",
 ]);
 
 class CliUnavailableError extends Error {}
@@ -137,7 +134,9 @@ type WorkflowState = {
   vercelLink?: VercelLink;
   previousProductionId?: string;
   smokeCredentials?: SmokeCredentials;
-  maintenanceEdgeConfig?: MaintenanceEdgeConfigCredentials;
+  rollbackPublicExpectation?: ReturnType<
+    typeof createMaintenancePublicExpectation
+  >;
   promoted: boolean;
   promotionAttempted: boolean;
   productionAcceptanceComplete: boolean;
@@ -196,7 +195,7 @@ export async function runDeploymentWorkflow(
     state.canonicalUrl = canonicalUrl;
     assertCanonicalDomain(runner, link, canonicalUrl);
 
-    console.log("[2/7] Neon and Edge Config targets and secret input");
+    console.log("[2/7] Neon target and secret input");
     const neonProjectId = validateNeonProjectId(
       await prompter.ask("Neon project ID: "),
     );
@@ -246,43 +245,13 @@ export async function runDeploymentWorkflow(
     );
     assertNeonEndpointMatches(endpoints.stdout, database, neonProject.id);
 
-    const edgeConfigConnectionRaw = await prompter.hidden(
-      "EDGE_CONFIG (read connection string): ",
-    );
-    secrets.add(edgeConfigConnectionRaw);
-    const maintenanceEdgeConfigId = await prompter.ask(
-      "MAINTENANCE_EDGE_CONFIG_ID: ",
-    );
-    const maintenanceWriteTokenRaw = await prompter.hidden(
-      "MAINTENANCE_EDGE_CONFIG_WRITE_TOKEN: ",
-    );
-    secrets.add(maintenanceWriteTokenRaw);
-    const maintenanceEdgeConfig = validateMaintenanceEdgeConfigCredentials({
-      connectionString: edgeConfigConnectionRaw,
-      edgeConfigId: maintenanceEdgeConfigId,
-      writeToken: maintenanceWriteTokenRaw,
-    });
-    secrets.add(
-      maintenanceEdgeConfig.connectionString,
-      maintenanceEdgeConfig.readToken,
-      maintenanceEdgeConfig.writeToken,
-    );
-    state.maintenanceEdgeConfig = maintenanceEdgeConfig;
-    await verifyMaintenanceEdgeConfig(
-      maintenanceEdgeConfig,
-      link.orgId,
-    );
-    console.log(
-      "Edge Config connection, owner, management access, and three maintenance keys verified.",
-    );
-
     const currentEnvironment = listProductionEnvironment(runner, link);
     assertAllowedProductionEnvironment(currentEnvironment);
+    assertNoLinkedProductionSharedEnvironment(runner, link);
     console.log("Deployment target review:");
     console.log(`  Project: ${project.name} (${project.id})`);
     console.log(`  Domain: ${canonicalUrl.origin}`);
     console.log(`  Neon: ${neonProject.name} (${neonProject.id})`);
-    console.log(`  Edge Config: ${maintenanceEdgeConfig.edgeConfigId}`);
     console.log(`  Pooled host: ${redactDatabaseHost(database.pooledHost)}`);
     console.log(`  Direct host: ${redactDatabaseHost(database.directHost)} (not saved)`);
     console.log(
@@ -342,33 +311,13 @@ export async function runDeploymentWorkflow(
     setVercelEnvironment(
       runner,
       link,
-      "EDGE_CONFIG",
-      maintenanceEdgeConfig.connectionString,
-      true,
-    );
-    setVercelEnvironment(
-      runner,
-      link,
-      "MAINTENANCE_EDGE_CONFIG_ID",
-      maintenanceEdgeConfig.edgeConfigId,
+      "APP_CANONICAL_ORIGIN",
+      canonicalUrl.origin,
       false,
-    );
-    setVercelEnvironment(
-      runner,
-      link,
-      "MAINTENANCE_EDGE_CONFIG_TEAM_ID",
-      link.orgId,
-      false,
-    );
-    setVercelEnvironment(
-      runner,
-      link,
-      "MAINTENANCE_EDGE_CONFIG_WRITE_TOKEN",
-      maintenanceEdgeConfig.writeToken,
-      true,
     );
     const resultingEnvironment = listProductionEnvironment(runner, link);
     assertExactProductionEnvironment(resultingEnvironment);
+    assertNoLinkedProductionSharedEnvironment(runner, link);
 
     console.log("[3/7] Quality gates");
     const buildAuthSecret =
@@ -379,8 +328,6 @@ export async function runDeploymentWorkflow(
       database.pooledUrl,
       buildAuthSecret,
       canonicalUrl.origin,
-      maintenanceEdgeConfig,
-      link.orgId,
     );
     runQualityGates(runner, projectRoot, buildEnvironment);
     assertGitClean(runner, projectRoot, "after quality gates");
@@ -421,6 +368,16 @@ export async function runDeploymentWorkflow(
     console.log(
       `Canonical deployment before staging: ${previousProduction?.id ?? "none"}`,
     );
+    if (previousProduction) {
+      state.rollbackPublicExpectation = await capturePublicSiteBaseline(
+        canonicalUrl,
+        globalThis.fetch,
+      );
+      console.log(
+        `Existing canonical public baseline verified: HTTP ${state.rollbackPublicExpectation.status}${state.rollbackPublicExpectation.retryAfter ? " with Retry-After" : ""}.`,
+      );
+    }
+    assertCandidateProductionEnvironmentReady(runner, link);
     const deployment = runner.run(
       "vercel",
       [
@@ -534,6 +491,10 @@ export async function runDeploymentWorkflow(
       }
       console.log(renderMigrationPlan(afterMigration));
     }
+    await verifyMaintenanceSettingsDatabase(database.directUrl);
+    console.log(
+      "Maintenance settings table, constraints, and three version-1 environment rows verified.",
+    );
     promotionGuard.markMigrationVerified();
 
     console.log("[6/7] Administrator and staged smoke tests");
@@ -544,8 +505,8 @@ export async function runDeploymentWorkflow(
     );
     state.smokeCredentials = credentials;
     const stagedExpectation = await readMaintenancePublicExpectation(
-      maintenanceEdgeConfig,
-      "site_maintenance_preview",
+      database.directUrl,
+      "PREVIEW",
     );
     const stagedSmoke = await runSmokeChecks(
       candidateUrl,
@@ -634,8 +595,8 @@ export async function runDeploymentWorkflow(
       true,
     );
     const canonicalExpectation = await readMaintenancePublicExpectation(
-      maintenanceEdgeConfig,
-      "site_maintenance_production",
+      database.directUrl,
+      "PRODUCTION",
     );
     const canonicalSmoke = await runSmokeChecks(
       canonicalUrl,
@@ -671,7 +632,8 @@ export async function runDeploymentWorkflow(
         state.previousProductionId &&
         state.candidateId &&
         state.vercelLink &&
-        state.canonicalUrl
+        state.canonicalUrl &&
+        state.rollbackPublicExpectation
       ) {
         const expected = `rollback ${state.previousProductionId}`;
         try {
@@ -718,17 +680,16 @@ export async function runDeploymentWorkflow(
               state.previousProductionId,
               true,
             );
-            if (state.smokeCredentials && state.maintenanceEdgeConfig) {
-              const rollbackExpectation =
-                await readMaintenancePublicExpectation(
-                  state.maintenanceEdgeConfig,
-                  "site_maintenance_production",
-                );
+            if (state.smokeCredentials) {
               const rollbackSmoke = await runSmokeChecks(
                 state.canonicalUrl,
                 state.smokeCredentials,
                 globalThis.fetch,
-                { publicSiteExpectation: rollbackExpectation },
+                {
+                  publicSiteExpectation: resolvePublicSiteBaselineAt(
+                    state.rollbackPublicExpectation,
+                  ),
+                },
               );
               console.error(
                 `Rolled-back canonical smoke passed: ${rollbackSmoke.checks.join(", ")}`,
@@ -758,11 +719,11 @@ export async function runDeploymentWorkflow(
 }
 
 async function readMaintenancePublicExpectation(
-  credentials: MaintenanceEdgeConfigCredentials,
-  key: MaintenanceEdgeConfigKey,
+  directUrl: string,
+  environment: MaintenanceEnvironment,
 ) {
-  const snapshot = await readMaintenanceEdgeConfig(credentials);
-  return createMaintenancePublicExpectation(snapshot, key);
+  const snapshot = await readMaintenanceSettingsDatabase(directUrl);
+  return createMaintenancePublicExpectation(snapshot, environment);
 }
 
 export function ensureCliTools(runner: CommandRunner): void {
@@ -1107,6 +1068,14 @@ function listProductionEnvironment(
   return parseProductionEnvironmentAudit(result.stdout);
 }
 
+export function assertCandidateProductionEnvironmentReady(
+  runner: CommandRunner,
+  link: VercelLink,
+): void {
+  assertExactProductionEnvironment(listProductionEnvironment(runner, link));
+  assertNoLinkedProductionSharedEnvironment(runner, link);
+}
+
 export function parseProductionEnvironmentAudit(
   output: string,
 ): ProductionEnvironmentAudit {
@@ -1172,6 +1141,98 @@ export function parseProductionEnvironmentAudit(
   return { names, types };
 }
 
+const SHARED_ENVIRONMENT_AUDIT_FAILURE =
+  "Vercel Shared Environment Variable audit could not prove the Production environment is unlinked.";
+const PRODUCTION_SHARED_ENVIRONMENT_FAILURE =
+  "Vercel Production has a linked Shared Environment Variable. Unlink every Production-targeted shared variable from this project and retry.";
+
+export function assertNoLinkedProductionSharedEnvironment(
+  runner: CommandRunner,
+  link: VercelLink,
+): void {
+  let result: CommandResult;
+  try {
+    result = runner.run(
+      "vercel",
+      [
+        "api",
+        `/v1/env?projectId=${encodeURIComponent(link.projectId)}&teamId=${encodeURIComponent(link.orgId)}`,
+        "--raw",
+        "--scope",
+        link.orgId,
+      ],
+      { env: { ...process.env, NO_COLOR: "1" } },
+    );
+  } catch {
+    throw new Error(SHARED_ENVIRONMENT_AUDIT_FAILURE);
+  }
+  if (result.status !== 0) {
+    throw new Error(SHARED_ENVIRONMENT_AUDIT_FAILURE);
+  }
+  assertNoProductionSharedEnvironment(result.stdout, link);
+}
+
+export function assertNoProductionSharedEnvironment(
+  output: string,
+  link: VercelLink,
+): void {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(output) as unknown;
+  } catch {
+    throw new Error(SHARED_ENVIRONMENT_AUDIT_FAILURE);
+  }
+  if (
+    !isRecord(parsed) ||
+    !Array.isArray(parsed.data) ||
+    !isRecord(parsed.pagination) ||
+    !Number.isSafeInteger(parsed.pagination.count) ||
+    (parsed.pagination.count as number) < 0 ||
+    parsed.pagination.count !== parsed.data.length ||
+    !(parsed.pagination.next === undefined ||
+      parsed.pagination.next === null) ||
+    !(parsed.pagination.prev === undefined || parsed.pagination.prev === null)
+  ) {
+    throw new Error(SHARED_ENVIRONMENT_AUDIT_FAILURE);
+  }
+
+  for (const record of parsed.data) {
+    if (!isRecord(record)) {
+      throw new Error(SHARED_ENVIRONMENT_AUDIT_FAILURE);
+    }
+    if (
+      record.ownerId !== undefined &&
+      record.ownerId !== null &&
+      record.ownerId !== link.orgId
+    ) {
+      throw new Error(SHARED_ENVIRONMENT_AUDIT_FAILURE);
+    }
+    if (
+      record.projectId !== undefined &&
+      (!Array.isArray(record.projectId) ||
+        !record.projectId.every((projectId) => typeof projectId === "string") ||
+        !record.projectId.includes(link.projectId))
+    ) {
+      throw new Error(SHARED_ENVIRONMENT_AUDIT_FAILURE);
+    }
+    if (
+      !Array.isArray(record.target) ||
+      record.target.length === 0 ||
+      !record.target.every(
+        (target) =>
+          target === "development" ||
+          target === "preview" ||
+          target === "production",
+      )
+    ) {
+      throw new Error(SHARED_ENVIRONMENT_AUDIT_FAILURE);
+    }
+    if (record.target.includes("production")) {
+      throw new Error(PRODUCTION_SHARED_ENVIRONMENT_FAILURE);
+    }
+  }
+}
+
 export function assertAllowedProductionEnvironment(
   audit: ProductionEnvironmentAudit,
 ): void {
@@ -1191,8 +1252,6 @@ export function assertAllowedProductionEnvironment(
   for (const name of [
     "DATABASE_URL",
     "BETTER_AUTH_SECRET",
-    "EDGE_CONFIG",
-    "MAINTENANCE_EDGE_CONFIG_WRITE_TOKEN",
   ]) {
     if (audit.names.has(name) && audit.types.get(name) !== "sensitive") {
       throw new Error(`${name} must be a Vercel Sensitive value.`);
@@ -1202,8 +1261,7 @@ export function assertAllowedProductionEnvironment(
     "BETTER_AUTH_URL",
     "BETTER_AUTH_TRUSTED_ORIGINS",
     "BETTER_AUTH_TRUST_PROXY_HEADERS",
-    "MAINTENANCE_EDGE_CONFIG_ID",
-    "MAINTENANCE_EDGE_CONFIG_TEAM_ID",
+    "APP_CANONICAL_ORIGIN",
   ]) {
     if (audit.names.has(name) && audit.types.get(name) !== "encrypted") {
       throw new Error(`${name} must be an encrypted non-Sensitive value.`);
@@ -1418,22 +1476,17 @@ export function createBuildEnvironment(
   pooledUrl: string,
   authSecret: string,
   canonicalOrigin: string,
-  maintenanceEdgeConfig: MaintenanceEdgeConfigCredentials,
-  maintenanceEdgeConfigTeamId: string,
 ): NodeJS.ProcessEnv {
+  const normalizedCanonicalOrigin = validateCanonicalUrl(canonicalOrigin).origin;
   const environment: NodeJS.ProcessEnv = {
     ...ambient,
     NODE_ENV: "production",
     DATABASE_URL: pooledUrl,
     BETTER_AUTH_SECRET: authSecret,
-    BETTER_AUTH_URL: canonicalOrigin,
-    BETTER_AUTH_TRUSTED_ORIGINS: canonicalOrigin,
+    BETTER_AUTH_URL: normalizedCanonicalOrigin,
+    BETTER_AUTH_TRUSTED_ORIGINS: normalizedCanonicalOrigin,
     BETTER_AUTH_TRUST_PROXY_HEADERS: "true",
-    EDGE_CONFIG: maintenanceEdgeConfig.connectionString,
-    MAINTENANCE_EDGE_CONFIG_ID: maintenanceEdgeConfig.edgeConfigId,
-    MAINTENANCE_EDGE_CONFIG_TEAM_ID: maintenanceEdgeConfigTeamId,
-    MAINTENANCE_EDGE_CONFIG_WRITE_TOKEN:
-      maintenanceEdgeConfig.writeToken,
+    APP_CANONICAL_ORIGIN: normalizedCanonicalOrigin,
   };
   delete environment.DATABASE_URL_UNPOOLED;
   return environment;

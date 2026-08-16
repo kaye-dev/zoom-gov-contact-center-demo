@@ -1,4 +1,5 @@
 export const MAINTENANCE_CONFIG_VERSION = 1 as const;
+export const MAINTENANCE_REVISION_MAX = 2_147_483_647;
 
 export const MAINTENANCE_MODES = [
   "DISABLED",
@@ -38,6 +39,15 @@ export type MaintenanceUpdateInput = {
   mode: MaintenanceMode;
   scheduledStartAtJst: string | null;
   scheduledEndAtJst: string | null;
+  expectedRevision: number;
+};
+
+export const MAINTENANCE_SETTINGS_CONFLICT_CODE =
+  "MAINTENANCE_SETTINGS_CONFLICT" as const;
+
+export type ValidatedMaintenanceUpdate = {
+  config: MaintenanceConfig;
+  expectedRevision: number;
 };
 
 export const MAINTENANCE_UPDATE_ERROR_CODES = {
@@ -52,7 +62,7 @@ export type MaintenanceUpdateErrorCode =
   (typeof MAINTENANCE_UPDATE_ERROR_CODES)[keyof typeof MAINTENANCE_UPDATE_ERROR_CODES];
 
 export type MaintenanceUpdateValidationResult =
-  | { ok: true; value: MaintenanceConfig }
+  | { ok: true; value: ValidatedMaintenanceUpdate }
   | { ok: false; code: MaintenanceUpdateErrorCode };
 
 export const MAINTENANCE_CONFIG_READ_STATUSES = [
@@ -93,9 +103,15 @@ export type MaintenanceEffectiveState = {
 export type MaintenanceEnvironmentInput = {
   nodeEnv: string | undefined;
   requestHostname: string | null | undefined;
-  betterAuthUrl: string | undefined;
-  vercelProjectProductionUrl: string | undefined;
+  appCanonicalOrigin: string | undefined;
 };
+
+export class MaintenanceEnvironmentResolutionError extends Error {
+  constructor() {
+    super("Maintenance environment could not be resolved.");
+    this.name = "MaintenanceEnvironmentResolutionError";
+  }
+}
 
 const CONFIG_KEYS = [
   "version",
@@ -108,16 +124,19 @@ const UPDATE_INPUT_KEYS = [
   "mode",
   "scheduledStartAtJst",
   "scheduledEndAtJst",
+  "expectedRevision",
 ] as const;
 const UTC_ISO_PATTERN =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?Z$/;
 const JST_DATE_TIME_LOCAL_PATTERN =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/;
 const JST_OFFSET_MILLISECONDS = 9 * 60 * 60 * 1000;
+const HOSTNAME_UNSAFE_INPUT_PATTERN = /[%\s\u0000-\u001f\u007f]/u;
+const DNS_LABEL_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 
 /**
- * Parses the versioned Edge Config value. The returned value is always a new,
- * normalized object; the SDK-owned value is never mutated.
+ * Parses a versioned stored value. The returned value is always a new,
+ * normalized object; the persistence-provider value is never mutated.
  */
 export function parseMaintenanceConfig(
   input: unknown,
@@ -190,6 +209,7 @@ export function parseMaintenanceUpdateInput(
     !isMaintenanceMode(input.mode) ||
     !isNullableString(input.scheduledStartAtJst) ||
     !isNullableString(input.scheduledEndAtJst) ||
+    !isValidMaintenanceRevision(input.expectedRevision) ||
     !isValidDate(now)
   ) {
     return invalidUpdate(MAINTENANCE_UPDATE_ERROR_CODES.invalidRequest);
@@ -236,11 +256,14 @@ export function parseMaintenanceUpdateInput(
   return {
     ok: true,
     value: {
-      version: MAINTENANCE_CONFIG_VERSION,
-      mode: input.mode,
-      scheduledStartAt,
-      scheduledEndAt,
-      updatedAt: now.toISOString(),
+      config: {
+        version: MAINTENANCE_CONFIG_VERSION,
+        mode: input.mode,
+        scheduledStartAt,
+        scheduledEndAt,
+        updatedAt: now.toISOString(),
+      },
+      expectedRevision: input.expectedRevision,
     },
   };
 }
@@ -318,16 +341,18 @@ export function resolveMaintenanceEnvironment(
 ): MaintenanceEnvironment {
   if (input.nodeEnv !== "production") return "development";
 
-  const requestHostname = normalizeHost(input.requestHostname);
-  const canonicalHostnames = [
-    normalizeHost(input.betterAuthUrl),
-    normalizeHost(input.vercelProjectProductionUrl),
-  ].filter((hostname): hostname is string => hostname !== null);
+  const canonicalHostname = normalizeCanonicalOriginHostname(
+    input.appCanonicalOrigin,
+  );
+  if (canonicalHostname === null) {
+    throw new MaintenanceEnvironmentResolutionError();
+  }
 
-  if (
-    requestHostname !== null &&
-    canonicalHostnames.includes(requestHostname)
-  ) {
+  const requestHostname = normalizeHost(input.requestHostname);
+  if (requestHostname === null) {
+    throw new MaintenanceEnvironmentResolutionError();
+  }
+  if (requestHostname === canonicalHostname) {
     return "production";
   }
 
@@ -431,6 +456,15 @@ export function unavailableMaintenanceReadResult(
   return { status, config: null };
 }
 
+export function isValidMaintenanceRevision(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value > 0 &&
+    value <= MAINTENANCE_REVISION_MAX
+  );
+}
+
 function isMaintenanceMode(value: string): value is MaintenanceMode {
   return (MAINTENANCE_MODES as readonly string[]).includes(value);
 }
@@ -463,17 +497,87 @@ function normalizeUtcIso(value: string): string | null {
 }
 
 function normalizeHost(value: string | null | undefined): string | null {
-  const candidate = value?.split(",", 1)[0]?.trim();
-  if (!candidate) return null;
+  const candidate = value?.trim();
+  if (
+    !candidate ||
+    HOSTNAME_UNSAFE_INPUT_PATTERN.test(candidate) ||
+    candidate.includes("://") ||
+    candidate.includes("/") ||
+    candidate.includes("?") ||
+    candidate.includes("#")
+  ) {
+    return null;
+  }
 
   try {
-    const url = new URL(
-      candidate.includes("://") ? candidate : `https://${candidate}`,
-    );
-    return url.hostname.toLowerCase().replace(/\.$/, "") || null;
+    const url = new URL(`https://${candidate}`);
+    if (
+      url.username ||
+      url.password ||
+      url.pathname !== "/" ||
+      url.search ||
+      url.hash
+    ) {
+      return null;
+    }
+    return normalizeParsedHostname(url.hostname);
   } catch {
     return null;
   }
+}
+
+function normalizeCanonicalOriginHostname(
+  value: string | undefined,
+): string | null {
+  const candidate = value?.trim();
+  if (!candidate || HOSTNAME_UNSAFE_INPUT_PATTERN.test(candidate)) {
+    return null;
+  }
+
+  try {
+    const url = new URL(candidate);
+    if (
+      url.protocol !== "https:" ||
+      url.username ||
+      url.password ||
+      url.port ||
+      url.pathname !== "/" ||
+      url.search ||
+      url.hash
+    ) {
+      return null;
+    }
+
+    return normalizeParsedHostname(url.hostname);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeParsedHostname(value: string): string | null {
+  const hostname = value.toLowerCase().replace(/\.$/, "");
+  if (!hostname) return null;
+
+  // WHATWG URL parsing already validates bracketed IPv6 literals. Keep the
+  // brackets so request and canonical values compare in the same form.
+  if (hostname.startsWith("[") && hostname.endsWith("]")) {
+    return /^[\[\]0-9a-f:.]+$/.test(hostname) ? hostname : null;
+  }
+
+  if (hostname.length > 253) return null;
+  const labels = hostname.split(".");
+  if (
+    labels.some(
+      (label) =>
+        label.length === 0 ||
+        label.length > 63 ||
+        !DNS_LABEL_PATTERN.test(label),
+    )
+  ) {
+    return null;
+  }
+
+  return hostname;
 }
 
 function hasExactKeys(

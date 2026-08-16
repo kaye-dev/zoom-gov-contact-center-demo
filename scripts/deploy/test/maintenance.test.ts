@@ -2,146 +2,224 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  assertMaintenanceConstraints,
   createMaintenancePublicExpectation,
-  parseMaintenanceEdgeConfigItems,
-  validateMaintenanceEdgeConfigCredentials,
-  verifyMaintenanceEdgeConfig,
-  type MaintenanceEdgeConfigSnapshot,
+  parseMaintenanceSettingRows,
+  verifyMaintenanceSettingsDatabase,
+  type MaintenanceDatabaseClient,
+  type MaintenanceSettingsSnapshot,
 } from "../lib/maintenance";
-import { verifyPublicSiteSmoke } from "../lib/smoke";
+import {
+  capturePublicSiteBaseline,
+  resolvePublicSiteBaselineAt,
+  verifyPublicSiteSmoke,
+} from "../lib/smoke";
 
 const disabled = {
   version: 1,
   mode: "DISABLED",
   scheduledStartAt: null,
   scheduledEndAt: null,
+  revision: 1,
   updatedAt: "2026-08-11T00:00:00.000Z",
 } as const;
 
-const snapshot: MaintenanceEdgeConfigSnapshot = {
-  site_maintenance_production: disabled,
-  site_maintenance_preview: {
+const rows: Array<Record<string, unknown>> = [
+  { environment: "PRODUCTION", ...disabled },
+  {
+    environment: "PREVIEW",
     version: 1,
     mode: "SCHEDULED",
     scheduledStartAt: "2026-08-11T01:00:00.000Z",
     scheduledEndAt: "2026-08-11T03:00:00.000Z",
+    revision: 2,
     updatedAt: "2026-08-11T00:00:00.000Z",
   },
-  site_maintenance_development: {
+  {
+    environment: "DEVELOPMENT",
     version: 1,
     mode: "ENABLED",
     scheduledStartAt: null,
     scheduledEndAt: null,
+    revision: 3,
     updatedAt: "2026-08-11T00:00:00.000Z",
   },
+];
+
+const snapshot: MaintenanceSettingsSnapshot = {
+  PRODUCTION: rows[0] as MaintenanceSettingsSnapshot["PRODUCTION"],
+  PREVIEW: rows[1] as MaintenanceSettingsSnapshot["PREVIEW"],
+  DEVELOPMENT: rows[2] as MaintenanceSettingsSnapshot["DEVELOPMENT"],
 };
 
-test("Edge Config credentials require one canonical matching connection", () => {
-  const credentials = validateMaintenanceEdgeConfigCredentials({
-    connectionString:
-      "https://edge-config.vercel.com/ecfg_demo?token=synthetic-read-token",
-    edgeConfigId: "ecfg_demo",
-    writeToken: "synthetic-write-token",
-  });
-  assert.equal(credentials.edgeConfigId, "ecfg_demo");
-  assert.equal(credentials.readToken, "synthetic-read-token");
+const constraints = [
+  {
+    name: "site_maintenance_settings_version_check",
+    definition: 'CHECK (("version" = 1))',
+  },
+  {
+    name: "site_maintenance_settings_revision_check",
+    definition: 'CHECK (("revision" > 0))',
+  },
+  {
+    name: "site_maintenance_settings_schedule_pair_check",
+    definition:
+      'CHECK ((("scheduledStartAt" IS NULL) = ("scheduledEndAt" IS NULL)))',
+  },
+  {
+    name: "site_maintenance_settings_schedule_order_check",
+    definition:
+      'CHECK ((("scheduledStartAt" IS NULL) OR ("scheduledStartAt" < "scheduledEndAt")))',
+  },
+  {
+    name: "site_maintenance_settings_scheduled_mode_check",
+    definition:
+      'CHECK ((("mode" <> \'SCHEDULED\'::"MaintenanceMode") OR (("scheduledStartAt" IS NOT NULL) AND ("scheduledEndAt" IS NOT NULL))))',
+  },
+];
 
-  for (const connectionString of [
-    "http://edge-config.vercel.com/ecfg_demo?token=read-token",
-    "https://example.test/ecfg_demo?token=read-token",
-    "https://edge-config.vercel.com/ecfg_other?token=read-token",
-    "https://edge-config.vercel.com/ecfg_demo?token=read-token&extra=value",
-    "https://edge-config.vercel.com/ecfg_demo?token=first&token=second",
-  ]) {
-    assert.throws(
-      () =>
-        validateMaintenanceEdgeConfigCredentials({
-          connectionString,
-          edgeConfigId: "ecfg_demo",
-          writeToken: "synthetic-write-token",
-        }),
-      /EDGE_CONFIG/,
-    );
-  }
+test("all three database rows use the exact versioned value shape", () => {
+  assert.deepEqual(parseMaintenanceSettingRows(rows), snapshot);
 
   assert.throws(
-    () =>
-      validateMaintenanceEdgeConfigCredentials({
-        connectionString:
-          "https://edge-config.vercel.com/not-an-edge-config?token=read-token",
-        edgeConfigId: "not-an-edge-config",
-        writeToken: "synthetic-write-token",
-      }),
-    /MAINTENANCE_EDGE_CONFIG_ID/,
+    () => parseMaintenanceSettingRows(rows.slice(0, 2)),
+    /exactly three environment rows/,
+  );
+
+  const duplicate = structuredClone(rows);
+  duplicate[2]!.environment = "PREVIEW";
+  assert.throws(
+    () => parseMaintenanceSettingRows(duplicate),
+    /PREVIEW.*invalid/,
+  );
+
+  const extraField = structuredClone(rows);
+  extraField[0]!.unexpected = true;
+  assert.throws(
+    () => parseMaintenanceSettingRows(extraField),
+    /PRODUCTION.*invalid/,
+  );
+
+  const invalidVersion = structuredClone(rows);
+  invalidVersion[0]!.version = 2;
+  assert.throws(
+    () => parseMaintenanceSettingRows(invalidVersion),
+    /PRODUCTION.*invalid/,
+  );
+
+  const invalidRevision = structuredClone(rows);
+  invalidRevision[0]!.revision = 0;
+  assert.throws(
+    () => parseMaintenanceSettingRows(invalidRevision),
+    /PRODUCTION.*invalid/,
+  );
+
+  const invalidSchedule = structuredClone(rows);
+  invalidSchedule[1]!.scheduledEndAt = "2026-08-11T00:30:00.000Z";
+  assert.throws(
+    () => parseMaintenanceSettingRows(invalidSchedule),
+    /PREVIEW.*invalid/,
+  );
+
+  const retainedSchedule = structuredClone(rows);
+  retainedSchedule[0]!.scheduledStartAt = "2026-08-12T01:00:00.000Z";
+  retainedSchedule[0]!.scheduledEndAt = "2026-08-12T03:00:00.000Z";
+  assert.equal(
+    parseMaintenanceSettingRows(retainedSchedule).PRODUCTION.mode,
+    "DISABLED",
+  );
+
+  const partialRetainedSchedule = structuredClone(rows);
+  partialRetainedSchedule[2]!.scheduledStartAt =
+    "2026-08-12T01:00:00.000Z";
+  assert.throws(
+    () => parseMaintenanceSettingRows(partialRetainedSchedule),
+    /DEVELOPMENT.*invalid/,
+  );
+
+  const impossibleTimestamp = structuredClone(rows);
+  impossibleTimestamp[0]!.updatedAt = "2026-02-31T00:00:00.000Z";
+  assert.throws(
+    () => parseMaintenanceSettingRows(impossibleTimestamp),
+    /PRODUCTION.*invalid/,
   );
 });
 
-test("all three maintenance keys use the exact versioned value shape", () => {
-  assert.deepEqual(parseMaintenanceEdgeConfigItems(snapshot), snapshot);
-
-  const missing = structuredClone(snapshot) as Record<string, unknown>;
-  delete missing.site_maintenance_preview;
+test("database constraint verification requires the exact five invariants", () => {
+  assert.doesNotThrow(() => assertMaintenanceConstraints(constraints));
   assert.throws(
-    () => parseMaintenanceEdgeConfigItems(missing),
-    /site_maintenance_preview.*invalid/,
+    () => assertMaintenanceConstraints(constraints.slice(0, 4)),
+    /incomplete or unexpected/,
+  );
+  assert.throws(
+    () =>
+      assertMaintenanceConstraints([
+        ...constraints.slice(0, 4),
+        {
+          ...constraints[4]!,
+          definition: "CHECK (true)",
+        },
+      ]),
+    /scheduled_mode_check.*invalid/,
+  );
+});
+
+test("database verification reads constraints and three rows in one read-only transaction", async () => {
+  const queries: string[] = [];
+  let ended = false;
+  const result = await verifyMaintenanceSettingsDatabase(
+    "postgresql://synthetic.invalid/database",
+    () =>
+      ({
+        connect: async () => undefined,
+        query: async <T extends Record<string, unknown>>(sql: string) => {
+          queries.push(sql);
+          const resultRows = sql.includes("pg_catalog.pg_constraint")
+            ? constraints
+            : sql.includes('FROM public."site_maintenance_settings"')
+              ? rows
+              : [];
+          return { rows: resultRows as T[] };
+        },
+        end: async () => {
+          ended = true;
+        },
+      }) satisfies MaintenanceDatabaseClient,
   );
 
-  const extraField = structuredClone(snapshot) as Record<string, unknown>;
-  extraField.site_maintenance_production = {
-    ...disabled,
-    unexpected: true,
-  };
-  assert.throws(
-    () => parseMaintenanceEdgeConfigItems(extraField),
-    /site_maintenance_production.*invalid/,
-  );
+  assert.deepEqual(result, snapshot);
+  assert.match(queries[0]!, /REPEATABLE READ READ ONLY/);
+  assert.match(queries[1]!, /pg_catalog\.pg_constraint/);
+  assert.match(queries[2]!, /site_maintenance_settings/);
+  assert.equal(queries[3]!.trim(), "ROLLBACK");
+  assert.equal(ended, true);
+});
 
-  const invalidSchedule = structuredClone(snapshot) as Record<string, unknown>;
-  invalidSchedule.site_maintenance_preview = {
-    ...snapshot.site_maintenance_preview,
-    scheduledEndAt: "2026-08-11T00:30:00.000Z",
-  };
-  assert.throws(
-    () => parseMaintenanceEdgeConfigItems(invalidSchedule),
-    /site_maintenance_preview.*invalid/,
-  );
-
-  const retainedSchedule = structuredClone(snapshot) as Record<string, unknown>;
-  retainedSchedule.site_maintenance_production = {
-    ...disabled,
-    scheduledStartAt: "2026-08-12T01:00:00.000Z",
-    scheduledEndAt: "2026-08-12T03:00:00.000Z",
-  };
-  assert.deepEqual(
-    parseMaintenanceEdgeConfigItems(retainedSchedule)
-      .site_maintenance_production,
-    retainedSchedule.site_maintenance_production,
-  );
-
-  const partialRetainedSchedule = structuredClone(snapshot) as Record<
-    string,
-    unknown
-  >;
-  partialRetainedSchedule.site_maintenance_development = {
-    ...snapshot.site_maintenance_development,
-    scheduledStartAt: "2026-08-12T01:00:00.000Z",
-  };
-  assert.throws(
-    () => parseMaintenanceEdgeConfigItems(partialRetainedSchedule),
-    /site_maintenance_development.*invalid/,
-  );
-
-  const impossibleTimestamp = structuredClone(snapshot) as Record<
-    string,
-    unknown
-  >;
-  impossibleTimestamp.site_maintenance_production = {
-    ...disabled,
-    updatedAt: "2026-02-31T00:00:00.000Z",
-  };
-  assert.throws(
-    () => parseMaintenanceEdgeConfigItems(impossibleTimestamp),
-    /site_maintenance_production.*invalid/,
+test("database verification fails closed without exposing connection errors", async () => {
+  const secret = "synthetic-database-password";
+  await assert.rejects(
+    verifyMaintenanceSettingsDatabase(
+      `postgresql://user:${secret}@example.invalid/database`,
+      () =>
+        ({
+          connect: async () => {
+            throw new Error(`connection failed for ${secret}`);
+          },
+          query: async <T extends Record<string, unknown>>() => ({
+            rows: [] as T[],
+          }),
+          end: async () => undefined,
+        }) satisfies MaintenanceDatabaseClient,
+    ),
+    (error: unknown) => {
+      assert.equal(error instanceof Error, true);
+      assert.equal(
+        (error as Error).message,
+        "Maintenance settings database verification failed.",
+      );
+      assert.doesNotMatch((error as Error).message, new RegExp(secret));
+      return true;
+    },
   );
 });
 
@@ -149,19 +227,19 @@ test("maintenance expectation resolves enabled and half-open schedules", () => {
   assert.deepEqual(
     createMaintenancePublicExpectation(
       snapshot,
-      "site_maintenance_production",
+      "PRODUCTION",
       new Date("2026-08-11T02:00:00.000Z"),
     ),
-    { key: "site_maintenance_production", status: 200 },
+    { environment: "PRODUCTION", status: 200 },
   );
   assert.deepEqual(
     createMaintenancePublicExpectation(
       snapshot,
-      "site_maintenance_preview",
+      "PREVIEW",
       new Date("2026-08-11T02:00:00.000Z"),
     ),
     {
-      key: "site_maintenance_preview",
+      environment: "PREVIEW",
       status: 503,
       retryAfter: "Tue, 11 Aug 2026 03:00:00 GMT",
     },
@@ -169,98 +247,14 @@ test("maintenance expectation resolves enabled and half-open schedules", () => {
   assert.equal(
     createMaintenancePublicExpectation(
       snapshot,
-      "site_maintenance_preview",
+      "PREVIEW",
       new Date("2026-08-11T03:00:00.000Z"),
     ).status,
     200,
   );
   assert.deepEqual(
-    createMaintenancePublicExpectation(
-      snapshot,
-      "site_maintenance_development",
-    ),
-    { key: "site_maintenance_development", status: 503 },
-  );
-});
-
-test("Edge Config preflight proves owner and both read paths without token URLs", async () => {
-  const credentials = validateMaintenanceEdgeConfigCredentials({
-    connectionString:
-      "https://edge-config.vercel.com/ecfg_demo?token=synthetic-read-token",
-    edgeConfigId: "ecfg_demo",
-    writeToken: "synthetic-write-token",
-  });
-  const requests: Array<{ url: URL; authorization: string | null }> = [];
-  const result = await verifyMaintenanceEdgeConfig(
-    credentials,
-    "team_demo",
-    async (input, init = {}) => {
-      const url = new URL(String(input));
-      const headers = new Headers(init.headers);
-      requests.push({
-        url,
-        authorization: headers.get("authorization"),
-      });
-      const payload =
-        url.pathname === "/v1/edge-config/ecfg_demo"
-          ? { id: "ecfg_demo", ownerId: "team_demo" }
-          : snapshot;
-      return new Response(JSON.stringify(payload), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    },
-  );
-
-  assert.deepEqual(result, snapshot);
-  assert.equal(requests.length, 3);
-  assert.equal(
-    requests.every(
-      ({ url }) =>
-        !url.href.includes("synthetic-read-token") &&
-        !url.href.includes("synthetic-write-token"),
-    ),
-    true,
-  );
-  assert.deepEqual(
-    requests.map(({ authorization }) => authorization),
-    [
-      "Bearer synthetic-write-token",
-      "Bearer synthetic-write-token",
-      "Bearer synthetic-read-token",
-    ],
-  );
-  assert.deepEqual(
-    requests.map(({ url }) => url.searchParams.get("teamId")),
-    ["team_demo", "team_demo", null],
-  );
-});
-
-test("Edge Config preflight never surfaces response bodies or credentials", async () => {
-  const credentials = validateMaintenanceEdgeConfigCredentials({
-    connectionString:
-      "https://edge-config.vercel.com/ecfg_demo?token=synthetic-read-token",
-    edgeConfigId: "ecfg_demo",
-    writeToken: "synthetic-write-token",
-  });
-  await assert.rejects(
-    verifyMaintenanceEdgeConfig(
-      credentials,
-      "team_demo",
-      async () =>
-        new Response(
-          "synthetic-read-token synthetic-write-token unexpected-payload",
-          { status: 401 },
-        ),
-    ),
-    (error: unknown) => {
-      assert.equal(error instanceof Error, true);
-      const message = (error as Error).message;
-      assert.match(message, /returned HTTP 401/);
-      assert.doesNotMatch(message, /synthetic-(?:read|write)-token/);
-      assert.doesNotMatch(message, /unexpected-payload/);
-      return true;
-    },
+    createMaintenancePublicExpectation(snapshot, "DEVELOPMENT"),
+    { environment: "DEVELOPMENT", status: 503 },
   );
 });
 
@@ -270,7 +264,7 @@ test("503 public smoke preserves login, static assets, and raw Markdown", async 
   const checks = await verifyPublicSiteSmoke(
     baseUrl,
     {
-      key: "site_maintenance_preview",
+      environment: "PREVIEW",
       status: 503,
       retryAfter,
     },
@@ -332,7 +326,7 @@ test("503 public smoke rejects a robots noindex meta", async () => {
   await assert.rejects(
     verifyPublicSiteSmoke(
       new URL("https://candidate.vercel.app"),
-      { key: "site_maintenance_preview", status: 503 },
+      { environment: "PREVIEW", status: 503 },
       async (input) => {
         const url = new URL(String(input));
         return response(
@@ -349,6 +343,98 @@ test("503 public smoke rejects a robots noindex meta", async () => {
       },
     ),
     /unexpectedly used noindex/,
+  );
+});
+
+test("existing canonical baseline captures one verified 503 and Retry-After state", async () => {
+  const baseUrl = new URL("https://canonical.example.test");
+  const retryAfter = "Tue, 11 Aug 2026 03:00:00 GMT";
+  const requestedPaths: string[] = [];
+  const baseline = await capturePublicSiteBaseline(baseUrl, async (input) => {
+    const url = new URL(String(input));
+    requestedPaths.push(url.pathname);
+    if (
+      [
+        "/",
+        "/docs/privacy-policy",
+        "/life/frequently-asked-questions",
+      ].includes(url.pathname)
+    ) {
+      return response(url, "<html>maintenance</html>", {
+        status: 503,
+        headers: {
+          "cache-control": "no-store",
+          "content-type": "text/html",
+          "retry-after": retryAfter,
+        },
+      });
+    }
+    if (url.pathname === "/login") {
+      return response(url, "<html>login</html>", {
+        status: 200,
+        headers: { "content-type": "text/html" },
+      });
+    }
+    if (url.pathname === "/robots.txt") {
+      return response(url, "not found", {
+        status: 404,
+        headers: { "content-type": "text/plain" },
+      });
+    }
+    if (url.pathname === "/news/news-default-item.png") {
+      return response(url, "png", {
+        status: 200,
+        headers: { "content-type": "image/png" },
+      });
+    }
+    if (url.pathname === "/docs/privacy-policy.md") {
+      return response(url, "# プライバシーポリシー", {
+        status: 200,
+        headers: { "content-type": "text/markdown" },
+      });
+    }
+    throw new Error(`Unexpected baseline path: ${url.pathname}`);
+  });
+
+  assert.deepEqual(baseline, {
+    environment: "PRODUCTION",
+    status: 503,
+    retryAfter,
+  });
+  assert.deepEqual(
+    resolvePublicSiteBaselineAt(
+      baseline,
+      new Date("2026-08-11T03:00:00.000Z"),
+    ),
+    { environment: "PRODUCTION", status: 200 },
+  );
+  assert.deepEqual(requestedPaths, [
+    "/",
+    "/docs/privacy-policy",
+    "/life/frequently-asked-questions",
+    "/login",
+    "/robots.txt",
+    "/news/news-default-item.png",
+    "/docs/privacy-policy.md",
+  ]);
+});
+
+test("existing canonical baseline rejects inconsistent public status", async () => {
+  await assert.rejects(
+    capturePublicSiteBaseline(
+      new URL("https://canonical.example.test"),
+      async (input) => {
+        const url = new URL(String(input));
+        return response(url, "<html>public</html>", {
+          status: url.pathname === "/" ? 200 : 503,
+          headers: {
+            "cache-control": "no-store",
+            "content-type": "text/html",
+          },
+        });
+      },
+    ),
+    /expected 200 for PRODUCTION/,
   );
 });
 

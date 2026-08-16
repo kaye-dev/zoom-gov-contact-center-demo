@@ -28,6 +28,18 @@ enum ZoomChatMode {
   CONTACT_CENTER_ENTRY_ID
 }
 
+enum MaintenanceEnvironment {
+  PRODUCTION
+  PREVIEW
+  DEVELOPMENT
+}
+
+enum MaintenanceMode {
+  DISABLED
+  ENABLED
+  SCHEDULED
+}
+
 model user {
   id                        String    @id
   name                      String
@@ -165,4 +177,16 @@ model LocaleDisplaySetting {
 
   @@index([displayOrder])
   @@map("locale_display_settings")
+}
+
+model SiteMaintenanceSetting {
+  environment      MaintenanceEnvironment @id
+  schemaVersion    Int                    @default(1) @map("version")
+  mode             MaintenanceMode        @default(DISABLED)
+  scheduledStartAt DateTime?              @db.Timestamptz(3)
+  scheduledEndAt   DateTime?              @db.Timestamptz(3)
+  revision         Int                    @default(1)
+  updatedAt        DateTime               @default(now()) @updatedAt @db.Timestamptz(3)
+
+  @@map("site_maintenance_settings")
 }

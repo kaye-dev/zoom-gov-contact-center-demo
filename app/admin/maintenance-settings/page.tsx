@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 
 import { requireAdminSession } from "@/lib/server/auth/server";
-import { getMaintenanceSettingsSnapshot } from "@/lib/server/maintenance-settings";
+import { getMaintenanceSettingsSnapshot } from "@/lib/server/maintenance-settings-read";
 
 import { MaintenanceSettingsForm } from "./MaintenanceSettingsForm";
 
@@ -19,6 +19,9 @@ export default async function MaintenanceSettingsPage() {
         snapshot.readStatus === "VALID" ? snapshot.config : null
       }
       initialEffective={snapshot.effective}
+      initialRevision={
+        snapshot.readStatus === "VALID" ? snapshot.revision : null
+      }
     />
   );
 }
