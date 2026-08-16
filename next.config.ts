@@ -1,52 +1,8 @@
 import type { NextConfig } from "next";
 import createMDX from "@next/mdx";
+import { GLOBAL_SEARCH_INDEXING_HEADERS } from "./lib/search-indexing";
 
 const allowedDevOrigin = process.env.NEXT_ALLOWED_DEV_ORIGIN?.trim();
-
-export const FAQ_LEGACY_REDIRECTS = [
-  {
-    source: '/life/frequently-asked-questions/procedure-faq',
-    destination: '/life/frequently-asked-questions',
-    permanent: false,
-  },
-  {
-    source: '/life/frequently-asked-questions/online-service-faq',
-    destination: '/life/frequently-asked-questions',
-    permanent: false,
-  },
-  {
-    source:
-      '/life/frequently-asked-questions/nanao-branch-office/branch-office-services',
-    destination:
-      '/life/frequently-asked-questions/administrative-service-center/service-counter-guide',
-    permanent: false,
-  },
-  {
-    source:
-      '/life/frequently-asked-questions/nanao-branch-office/branch-office-access',
-    destination:
-      '/life/frequently-asked-questions/administrative-service-center/location-and-access',
-    permanent: false,
-  },
-  {
-    source: '/life/frequently-asked-questions/nanao-branch-office/:faq*',
-    destination:
-      '/life/frequently-asked-questions/administrative-service-center/:faq*',
-    permanent: false,
-  },
-  {
-    source: '/life/frequently-asked-questions/safety-net-call-center/:faq*',
-    destination:
-      '/life/frequently-asked-questions/welfare-consultation-desk/:faq*',
-    permanent: false,
-  },
-  {
-    source:
-      '/life/frequently-asked-questions/developmental-education-support/:faq*',
-    destination: '/life/frequently-asked-questions/education-support/:faq*',
-    permanent: false,
-  },
-];
 
 const nextConfig: NextConfig = {
   ...(allowedDevOrigin ? { allowedDevOrigins: [allowedDevOrigin] } : {}),
@@ -62,6 +18,11 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     '/docs/**': ['./content/docs/**/*'],
     '/api/docs-md/**': ['./content/docs/**/*'],
+    '/sitemap.xml': [
+      './content/docs/**/*',
+      './docs/knowledge-base/自治体-基礎自治体-未来市/**/*.md',
+      './docs/knowledge-base/自治体-基礎自治体-未来市/_translations/**/*.json',
+    ],
     '/life/frequently-asked-questions': [
       './docs/knowledge-base/自治体-基礎自治体-未来市/**/*.md',
       './docs/knowledge-base/自治体-基礎自治体-未来市/_translations/**/*.json',
@@ -71,9 +32,12 @@ const nextConfig: NextConfig = {
       './docs/knowledge-base/自治体-基礎自治体-未来市/_translations/**/*.json',
     ],
   },
-  async redirects() {
-    return FAQ_LEGACY_REDIRECTS;
+  async headers() {
+    return [...GLOBAL_SEARCH_INDEXING_HEADERS];
   },
+  // Framework-generated trailing-slash redirects can drop custom headers.
+  // Proxy owns normalization so redirect responses retain X-Robots-Tag.
+  skipTrailingSlashRedirect: true,
   async rewrites() {
     return {
       // beforeFiles: ファイルシステム/ページ照合より前に書き換える。

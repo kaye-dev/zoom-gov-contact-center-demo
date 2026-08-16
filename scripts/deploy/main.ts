@@ -512,7 +512,10 @@ export async function runDeploymentWorkflow(
       candidateUrl,
       credentials,
       globalThis.fetch,
-      { publicSiteExpectation: stagedExpectation },
+      {
+        canonicalOrigin: canonicalUrl,
+        publicSiteExpectation: stagedExpectation,
+      },
     );
     console.log(`Staged smoke passed: ${stagedSmoke.checks.join(", ")}`);
     console.log(
@@ -602,7 +605,10 @@ export async function runDeploymentWorkflow(
       canonicalUrl,
       credentials,
       globalThis.fetch,
-      { publicSiteExpectation: canonicalExpectation },
+      {
+        canonicalOrigin: canonicalUrl,
+        publicSiteExpectation: canonicalExpectation,
+      },
     );
     console.log(`Canonical smoke passed: ${canonicalSmoke.checks.join(", ")}`);
     state.productionAcceptanceComplete = true;
@@ -686,13 +692,18 @@ export async function runDeploymentWorkflow(
                 state.smokeCredentials,
                 globalThis.fetch,
                 {
+                  canonicalOrigin: state.canonicalUrl,
                   publicSiteExpectation: resolvePublicSiteBaselineAt(
                     state.rollbackPublicExpectation,
                   ),
+                  searchIndexingExpectation: "legacy-compatible",
                 },
               );
               console.error(
                 `Rolled-back canonical smoke passed: ${rollbackSmoke.checks.join(", ")}`,
+              );
+              console.error(
+                "Rollback search-index checks used legacy-compatible mode; the restored release may predate noindex, robots.txt, and sitemap.xml support.",
               );
             }
             console.error(
