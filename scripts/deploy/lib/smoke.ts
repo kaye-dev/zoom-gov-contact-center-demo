@@ -18,9 +18,13 @@ export type RequestFunction = (
 ) => Promise<Response>;
 
 export type SmokeOptions = {
+  canonicalOrigin?: URL;
   cleanupRetryDelayMs?: number;
   publicSiteExpectation?: MaintenancePublicExpectation;
+  searchIndexingExpectation?: SearchIndexingExpectation;
 };
+
+export type SearchIndexingExpectation = "required" | "legacy-compatible";
 
 export async function runSmokeChecks(
   baseUrl: URL,
@@ -29,7 +33,13 @@ export async function runSmokeChecks(
   options: SmokeOptions = {},
 ): Promise<SmokeResult> {
   const checks: string[] = [];
-  await assertHealth(baseUrl, request);
+  const searchIndexingExpectation =
+    options.searchIndexingExpectation ?? "required";
+  const protectedRequest = createSearchProtectionRequest(
+    request,
+    searchIndexingExpectation,
+  );
+  await assertHealth(baseUrl, protectedRequest);
   checks.push("GET /api/health");
 
   const publicSiteExpectation = options.publicSiteExpectation ?? {
@@ -41,13 +51,17 @@ export async function runSmokeChecks(
       baseUrl,
       publicSiteExpectation,
       request,
+      {
+        canonicalOrigin: options.canonicalOrigin,
+        searchIndexingExpectation,
+      },
     )),
   );
 
   const anonymousSession = await fetchWithTimeout(
     baseUrl,
     "/api/auth/get-session",
-    request,
+    protectedRequest,
   );
   const anonymousPayload = await anonymousSession.json().catch(() => undefined);
   if (!anonymousSession.ok || anonymousPayload !== null) {
@@ -58,7 +72,7 @@ export async function runSmokeChecks(
   const anonymousAdmin = await fetchWithTimeout(
     baseUrl,
     "/api/admin/password-reset-requests",
-    request,
+    protectedRequest,
   );
   if (![401, 403].includes(anonymousAdmin.status)) {
     throw new Error(
@@ -68,7 +82,7 @@ export async function runSmokeChecks(
   await anonymousAdmin.arrayBuffer();
   checks.push("anonymous admin API denied");
 
-  await verifyAdminCrud(baseUrl, credentials, request, options);
+  await verifyAdminCrud(baseUrl, credentials, protectedRequest, options);
   checks.push("administrator sign-in/session/API/page");
   checks.push("temporary user create/delete cleanup");
   return { checks, authenticatedAdminCrud: true };
@@ -78,32 +92,56 @@ export async function verifyPublicSiteSmoke(
   baseUrl: URL,
   publicSiteExpectation: MaintenancePublicExpectation,
   request: RequestFunction = globalThis.fetch,
+  options: Pick<
+    SmokeOptions,
+    "canonicalOrigin" | "searchIndexingExpectation"
+  > = {},
 ): Promise<string[]> {
   const checks: string[] = [];
+  const searchIndexingExpectation =
+    options.searchIndexingExpectation ?? "required";
+  const protectedRequest = createSearchProtectionRequest(
+    request,
+    searchIndexingExpectation,
+  );
   for (const path of PUBLIC_HTML_SMOKE_PATHS) {
     await verifyPublicHtmlResponse(
       path,
-      await fetchWithTimeout(baseUrl, path, request),
+      await fetchWithTimeout(baseUrl, path, protectedRequest),
       publicSiteExpectation,
+      searchIndexingExpectation,
     );
     checks.push(`GET ${path}`);
   }
 
-  await assertPublicExclusions(baseUrl, request);
-  checks.push("maintenance exclusions: login/robots/static/raw Markdown");
+  await assertPublicExclusions(
+    baseUrl,
+    protectedRequest,
+    options.canonicalOrigin ?? baseUrl,
+    searchIndexingExpectation,
+  );
+  checks.push(
+    searchIndexingExpectation === "required"
+      ? "search protection: login/robots/sitemap/static/raw Markdown"
+      : "legacy-compatible search endpoints/exclusions",
+  );
   return checks;
 }
 
 /**
  * Captures the public behavior of an already-serving canonical deployment.
- * This is intentionally limited to public HTTP status and Retry-After state:
- * a previous release may use a different maintenance-settings provider.
+ * A previous release may use a different maintenance-settings provider and
+ * may predate the repository-wide noindex, robots, and sitemap behavior.
  */
 export async function capturePublicSiteBaseline(
   baseUrl: URL,
   request: RequestFunction = globalThis.fetch,
 ): Promise<MaintenancePublicExpectation> {
-  const rootResponse = await fetchWithTimeout(baseUrl, "/", request);
+  const baselineRequest = createSearchProtectionRequest(
+    request,
+    "legacy-compatible",
+  );
+  const rootResponse = await fetchWithTimeout(baseUrl, "/", baselineRequest);
   if (rootResponse.status !== 200 && rootResponse.status !== 503) {
     throw new Error(
       `Existing canonical / returned HTTP ${rootResponse.status}; expected 200 or 503.`,
@@ -122,16 +160,27 @@ export async function capturePublicSiteBaseline(
     status: rootResponse.status,
     ...(retryAfter === null ? {} : { retryAfter }),
   };
-  await verifyPublicHtmlResponse("/", rootResponse, expectation);
+  await verifyPublicHtmlResponse(
+    "/",
+    rootResponse,
+    expectation,
+    "legacy-compatible",
+  );
 
   for (const path of PUBLIC_HTML_SMOKE_PATHS.slice(1)) {
     await verifyPublicHtmlResponse(
       path,
-      await fetchWithTimeout(baseUrl, path, request),
+      await fetchWithTimeout(baseUrl, path, baselineRequest),
       expectation,
+      "legacy-compatible",
     );
   }
-  await assertPublicExclusions(baseUrl, request);
+  await assertPublicExclusions(
+    baseUrl,
+    baselineRequest,
+    baseUrl,
+    "legacy-compatible",
+  );
   return expectation;
 }
 
@@ -162,6 +211,7 @@ async function verifyPublicHtmlResponse(
   path: string,
   response: Response,
   publicSiteExpectation: MaintenancePublicExpectation,
+  searchIndexingExpectation: SearchIndexingExpectation,
 ): Promise<void> {
   if (
     response.status !== publicSiteExpectation.status ||
@@ -174,6 +224,14 @@ async function verifyPublicHtmlResponse(
     );
   }
   const html = await response.text();
+  if (
+    searchIndexingExpectation === "required" &&
+    !hasRobotsNoindexNofollowMeta(html)
+  ) {
+    throw new Error(
+      `${path} did not contain a robots noindex, nofollow meta tag.`,
+    );
+  }
   if (publicSiteExpectation.status === 503) {
     const cacheControl = response.headers.get("cache-control") ?? "";
     if (!/(?:^|,)\s*no-store\s*(?:,|$)/i.test(cacheControl)) {
@@ -182,9 +240,6 @@ async function verifyPublicHtmlResponse(
     const retryAfter = response.headers.get("retry-after");
     if (retryAfter !== (publicSiteExpectation.retryAfter ?? null)) {
       throw new Error(`${path} returned an unexpected Retry-After header.`);
-    }
-    if (hasRobotsNoindexMeta(html)) {
-      throw new Error(`${path} maintenance response unexpectedly used noindex.`);
     }
   } else {
     const marker =
@@ -205,6 +260,8 @@ async function verifyPublicHtmlResponse(
 async function assertPublicExclusions(
   baseUrl: URL,
   request: RequestFunction,
+  canonicalOrigin: URL,
+  searchIndexingExpectation: SearchIndexingExpectation,
 ): Promise<void> {
   const login = await fetchWithTimeout(baseUrl, "/login", request);
   if (
@@ -213,13 +270,35 @@ async function assertPublicExclusions(
   ) {
     throw new Error(`Maintenance-exempt /login returned HTTP ${login.status}.`);
   }
-  await login.arrayBuffer();
+  const loginHtml = await login.text();
+  if (
+    searchIndexingExpectation === "required" &&
+    !hasRobotsNoindexNofollowMeta(loginHtml)
+  ) {
+    throw new Error(
+      "/login did not contain a robots noindex, nofollow meta tag.",
+    );
+  }
 
   const robots = await fetchWithTimeout(baseUrl, "/robots.txt", request);
-  if (robots.status === 503) {
-    throw new Error("Maintenance-exempt /robots.txt unexpectedly returned 503.");
+  if (
+    searchIndexingExpectation === "legacy-compatible" &&
+    robots.status === 404
+  ) {
+    await robots.arrayBuffer();
+  } else {
+    await assertRobotsResponse(robots, canonicalOrigin);
   }
-  await robots.arrayBuffer();
+
+  const sitemap = await fetchWithTimeout(baseUrl, "/sitemap.xml", request);
+  if (
+    searchIndexingExpectation === "legacy-compatible" &&
+    sitemap.status === 404
+  ) {
+    await sitemap.arrayBuffer();
+  } else {
+    await assertSitemapResponse(sitemap, canonicalOrigin);
+  }
 
   const staticAsset = await fetchWithTimeout(
     baseUrl,
@@ -260,10 +339,236 @@ async function assertPublicExclusions(
   }
 }
 
-function hasRobotsNoindexMeta(html: string): boolean {
-  return /<meta\b(?=[^>]*\bname=["']robots["'])(?=[^>]*\bcontent=["'][^"']*\bnoindex\b[^"']*["'])[^>]*>/i.test(
-    html,
+const SITEMAP_REPRESENTATIVE_PATHS = [
+  "/",
+  "/life",
+  "/life/trash-recycling",
+  "/life/trash-recycling/sorting-and-collection",
+  "/news/assembly-session-june-2026",
+  "/life/frequently-asked-questions/administrative-service-center/location-and-access",
+  "/docs/privacy-policy",
+] as const;
+const EXPECTED_SITEMAP_URL_COUNT = 275;
+
+async function assertRobotsResponse(
+  response: Response,
+  canonicalOrigin: URL,
+): Promise<void> {
+  const contentType = (response.headers.get("content-type") ?? "").toLowerCase();
+  if (response.status !== 200 || !contentType.includes("text/plain")) {
+    throw new Error(
+      `Maintenance-exempt /robots.txt returned HTTP ${response.status}; expected 200 text/plain.`,
+    );
+  }
+  const directives = (await response.text())
+    .split(/\r?\n/u)
+    .map((line) => line.replace(/#.*$/u, "").trim())
+    .filter(Boolean)
+    .map((line) => {
+      const separator = line.indexOf(":");
+      return separator === -1
+        ? { name: line.toLowerCase(), value: "" }
+        : {
+            name: line.slice(0, separator).trim().toLowerCase(),
+            value: line.slice(separator + 1).trim(),
+          };
+    });
+  const expectedSitemap = new URL("/sitemap.xml", canonicalOrigin).href;
+  if (
+    !directives.some(
+      ({ name, value }) => name === "user-agent" && value === "*",
+    ) ||
+    !directives.some(({ name, value }) => name === "allow" && value === "/") ||
+    !directives.some(
+      ({ name, value }) => name === "sitemap" && value === expectedSitemap,
+    ) ||
+    directives.some(({ name, value }) => name === "disallow" && value !== "")
+  ) {
+    throw new Error(
+      `/robots.txt did not allow crawling and advertise ${expectedSitemap}.`,
+    );
+  }
+}
+
+async function assertSitemapResponse(
+  response: Response,
+  canonicalOrigin: URL,
+): Promise<void> {
+  const contentType = (response.headers.get("content-type") ?? "").toLowerCase();
+  if (
+    response.status !== 200 ||
+    (!contentType.includes("application/xml") &&
+      !contentType.includes("text/xml"))
+  ) {
+    throw new Error(
+      `Maintenance-exempt /sitemap.xml returned HTTP ${response.status}; expected 200 XML.`,
+    );
+  }
+
+  const locations = readSitemapLocations(await response.text());
+  if (
+    locations.length !== EXPECTED_SITEMAP_URL_COUNT ||
+    new Set(locations).size !== locations.length
+  ) {
+    throw new Error(
+      `/sitemap.xml did not contain exactly ${EXPECTED_SITEMAP_URL_COUNT} unique canonical locations.`,
+    );
+  }
+
+  const canonicalLocations = new Set<string>();
+  for (const location of locations) {
+    let url: URL;
+    try {
+      url = new URL(location);
+    } catch {
+      throw new Error(`/sitemap.xml contained an invalid URL: ${location}`);
+    }
+    if (
+      url.origin !== canonicalOrigin.origin ||
+      url.username !== "" ||
+      url.password !== "" ||
+      url.search !== "" ||
+      url.hash !== ""
+    ) {
+      throw new Error(
+        `/sitemap.xml contained a non-canonical location: ${location}`,
+      );
+    }
+    if (isExcludedSitemapPath(url.pathname)) {
+      throw new Error(`/sitemap.xml contained an excluded path: ${url.pathname}`);
+    }
+    canonicalLocations.add(url.href);
+  }
+
+  for (const path of SITEMAP_REPRESENTATIVE_PATHS) {
+    const expected = new URL(path, canonicalOrigin).href;
+    if (!canonicalLocations.has(expected)) {
+      throw new Error(`/sitemap.xml did not contain representative URL ${expected}.`);
+    }
+  }
+}
+
+function readSitemapLocations(xml: string): string[] {
+  const documentMatch = xml.trim().match(
+    /^<\?xml version="1\.0" encoding="UTF-8"\?>\s*<urlset xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9">([\s\S]*)<\/urlset>$/u,
   );
+  if (documentMatch === null) {
+    throw new Error("/sitemap.xml was not a complete sitemap XML document.");
+  }
+
+  const body = documentMatch[1]!;
+  const locations: string[] = [];
+  const urlPattern = /<url\b([^>]*)>([\s\S]*?)<\/url>/giu;
+  let previousEnd = 0;
+  for (const match of body.matchAll(urlPattern)) {
+    if (body.slice(previousEnd, match.index).trim() || match[1]!.trim()) {
+      throw new Error("/sitemap.xml contained invalid urlset content.");
+    }
+    const locationMatch = match[2]!.match(/^\s*<loc>([^<]*)<\/loc>\s*$/iu);
+    if (locationMatch === null) {
+      throw new Error("/sitemap.xml contained an invalid url element.");
+    }
+    const encodedLocation = locationMatch[1]!.trim();
+    if (
+      /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/u.test(encodedLocation) ||
+      /&(?!(?:amp|lt|gt|quot|apos);)/u.test(encodedLocation)
+    ) {
+      throw new Error("/sitemap.xml contained invalid XML text.");
+    }
+    locations.push(decodeXmlText(encodedLocation));
+    previousEnd = match.index + match[0].length;
+  }
+  if (body.slice(previousEnd).trim()) {
+    throw new Error("/sitemap.xml contained invalid urlset content.");
+  }
+  return locations;
+}
+
+function isExcludedSitemapPath(pathname: string): boolean {
+  return (
+    pathname === "/robots.txt" ||
+    pathname === "/sitemap.xml" ||
+    pathname === "/maintenance-unavailable" ||
+    pathname === "/login" ||
+    pathname.startsWith("/login/") ||
+    pathname === "/forgot-password" ||
+    pathname.startsWith("/forgot-password/") ||
+    pathname === "/change-password" ||
+    pathname.startsWith("/change-password/") ||
+    pathname === "/admin" ||
+    pathname.startsWith("/admin/") ||
+    pathname === "/api" ||
+    pathname.startsWith("/api/") ||
+    pathname === "/_next" ||
+    pathname.startsWith("/_next/") ||
+    pathname === "/_vercel" ||
+    pathname.startsWith("/_vercel/") ||
+    pathname.toLowerCase().endsWith(".md") ||
+    pathname.toLowerCase().endsWith(".html") ||
+    /\.[a-z0-9]+$/iu.test(pathname)
+  );
+}
+
+function decodeXmlText(value: string): string {
+  return value
+    .replaceAll("&amp;", "&")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&apos;", "'");
+}
+
+function createSearchProtectionRequest(
+  request: RequestFunction,
+  expectation: SearchIndexingExpectation,
+): RequestFunction {
+  if (expectation === "legacy-compatible") return request;
+  return async (input, init) => {
+    const response = await request(input, init);
+    assertNoindexHeader(new URL(String(input)).pathname, response);
+    return response;
+  };
+}
+
+function assertNoindexHeader(path: string, response: Response): void {
+  const value = response.headers.get("x-robots-tag");
+  if (
+    value === null ||
+    !hasRobotsDirective(value, "noindex") ||
+    !hasRobotsDirective(value, "nofollow")
+  ) {
+    throw new Error(
+      `${path} did not return X-Robots-Tag: noindex, nofollow.`,
+    );
+  }
+}
+
+function hasRobotsNoindexNofollowMeta(html: string): boolean {
+  const tags = html.match(/<meta\b[^>]*>/giu) ?? [];
+  return tags.some((tag) => {
+    const name = readHtmlAttribute(tag, "name");
+    const content = readHtmlAttribute(tag, "content");
+    return (
+      name?.toLowerCase() === "robots" &&
+      content !== undefined &&
+      hasRobotsDirective(content, "noindex") &&
+      hasRobotsDirective(content, "nofollow")
+    );
+  });
+}
+
+function readHtmlAttribute(tag: string, name: string): string | undefined {
+  const match = tag.match(
+    new RegExp(`\\b${name}\\s*=\\s*(["'])(.*?)\\1`, "iu"),
+  );
+  return match?.[2];
+}
+
+function hasRobotsDirective(value: string, directive: string): boolean {
+  return value
+    .toLowerCase()
+    .split(/[\s,]+/u)
+    .includes(directive);
 }
 
 function isCanonicalHttpDate(value: string): boolean {
@@ -280,7 +585,10 @@ export async function verifyIdleRecovery(
 ): Promise<void> {
   await new Promise((resolveDelay) => setTimeout(resolveDelay, waitMs));
   await observeState?.("idle");
-  await assertHealth(baseUrl, request);
+  await assertHealth(
+    baseUrl,
+    createSearchProtectionRequest(request, "required"),
+  );
   await observeState?.("active");
 }
 
@@ -364,7 +672,26 @@ async function verifyAdminCrud(
       if (!response.ok) {
         throw new Error(`Authenticated ${path} returned HTTP ${response.status}.`);
       }
-      await response.arrayBuffer();
+      if (path === "/admin/users") {
+        if (
+          !(response.headers.get("content-type") ?? "")
+            .toLowerCase()
+            .includes("text/html")
+        ) {
+          throw new Error("Authenticated /admin/users did not return HTML.");
+        }
+        const html = await response.text();
+        if (
+          (options.searchIndexingExpectation ?? "required") === "required" &&
+          !hasRobotsNoindexNofollowMeta(html)
+        ) {
+          throw new Error(
+            "Authenticated /admin/users did not contain a robots noindex, nofollow meta tag.",
+          );
+        }
+      } else {
+        await response.arrayBuffer();
+      }
     }
 
     await assertTemporaryUserAbsent(baseUrl, cookie, temporaryEmail, request);

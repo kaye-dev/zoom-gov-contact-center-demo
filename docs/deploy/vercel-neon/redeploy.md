@@ -59,7 +59,7 @@ Connect画面の表示形式は`Connection string`を選び、`postgresql://`か
 4. 対象project、domain、DB hostとProduction限定の6環境変数を確認し、環境変数更新へ`y`と入力する。既存の`BETTER_AUTH_SECRET`は維持され、`BETTER_AUTH_URL`と`APP_CANONICAL_ORIGIN`は同じcanonical HTTPS originになる。
 5. migrationがup-to-dateならそのまま進む。pendingが表示された場合だけ、計画を確認して`y`、実行直前に`migrate`と入力する。migration後はPostgreSQLの3環境行、version 1、revision、5制約が検証される。
 6. 通常は管理者作成・更新でEnterを押し、既存管理者のemailに`admin@keien.dev`、続けて保存したpasswordを入力する。管理者を更新する場合だけ`y`を選び、表示された変更内容を再確認する。
-7. staged candidateのsmoke test後、5分間の無通信と、Neon管理APIのidle／active反映待ち（各最大約5分、合計最大約15分）の間はcandidate、Production URL、Neon SQL Editorへアクセスせずに待つ。candidateは`PREVIEW`、promotion後のcanonicalは`PRODUCTION`のDB設定に応じて、公開HTMLが200または503であることを検証する。確認が完了したらpromotionへ`y`と入力する。
+7. staged candidateのsmoke test後、5分間の無通信と、Neon管理APIのidle／active反映待ち（各最大約5分、合計最大約15分）の間はcandidate、Production URL、Neon SQL Editorへアクセスせずに待つ。candidateは`PREVIEW`、promotion後のcanonicalは`PRODUCTION`のDB設定に応じて、公開HTMLが200または503であることを検証する。さらにHTMLの`noindex, nofollow` robots meta、全レスポンスの`X-Robots-Tag: noindex`、`/robots.txt`と`/sitemap.xml`のcanonical内容も検証する。確認が完了したらpromotionへ`y`と入力する。
 `Canonical smoke passed`に続いて`Deployment completed: <Production URL> (<commit SHA>)`が表示されれば、Productionの再デプロイは完了です。
 
 現行`deploy.sh`が扱えるmigrationは、リポジトリにある既存5件だけです。6件目以降を追加した場合は、デプロイスクリプトとテストを先に更新し、この手順では実行しません。

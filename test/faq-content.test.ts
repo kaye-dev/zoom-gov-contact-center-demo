@@ -3,7 +3,6 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 
-import { FAQ_LEGACY_REDIRECTS } from "../next.config";
 import {
   FAQ_KNOWLEDGE_BASE_ROOT,
   FaqContentError,
@@ -16,6 +15,10 @@ import {
   parseFaqMarkdown,
   parseFaqTranslationJson,
 } from "../lib/faq-content";
+import {
+  FAQ_LEGACY_REDIRECTS,
+  resolveFaqLegacyRedirect,
+} from "../lib/legacy-redirects";
 import { SITE_LOCALES } from "../lib/site-settings";
 
 const repository = loadFaqRepository();
@@ -523,6 +526,23 @@ test("legacy FAQ department routes temporarily redirect to generic slugs", () =>
     },
   ]);
   assert.ok(migratedDepartmentRedirects.every(({ permanent }) => !permanent));
+  for (const { source, destination } of FAQ_LEGACY_REDIRECTS) {
+    if (source.endsWith(":faq*")) {
+      assert.equal(
+        resolveFaqLegacyRedirect(source.replace(":faq*", "example")),
+        destination.replace(":faq*", "example"),
+      );
+    } else {
+      assert.equal(resolveFaqLegacyRedirect(source), destination);
+    }
+  }
+  assert.equal(
+    resolveFaqLegacyRedirect(
+      "/LIFE/FREQUENTLY-ASKED-QUESTIONS/NANAO-BRANCH-OFFICE/Mixed-Case",
+    ),
+    "/life/frequently-asked-questions/administrative-service-center/Mixed-Case",
+  );
+  assert.equal(resolveFaqLegacyRedirect("/unrelated"), null);
 });
 
 test("public FAQ projections exclude management metadata", () => {

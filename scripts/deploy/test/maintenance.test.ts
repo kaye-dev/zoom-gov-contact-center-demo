@@ -258,8 +258,9 @@ test("maintenance expectation resolves enabled and half-open schedules", () => {
   );
 });
 
-test("503 public smoke preserves login, static assets, and raw Markdown", async () => {
+test("503 public smoke requires noindex and preserves search endpoints and exclusions", async () => {
   const baseUrl = new URL("https://candidate.vercel.app");
+  const canonicalOrigin = new URL("https://demo.example.test");
   const retryAfter = "Tue, 11 Aug 2026 03:00:00 GMT";
   const checks = await verifyPublicSiteSmoke(
     baseUrl,
@@ -277,7 +278,7 @@ test("503 public smoke preserves login, static assets, and raw Markdown", async 
           "/life/frequently-asked-questions",
         ].includes(url.pathname)
       ) {
-        return response(url, "<html>maintenance</html>", {
+        return protectedResponse(url, `<html>${ROBOTS_META}maintenance</html>`, {
           status: 503,
           headers: {
             "cache-control": "private, no-cache, no-store, max-age=0",
@@ -287,62 +288,133 @@ test("503 public smoke preserves login, static assets, and raw Markdown", async 
         });
       }
       if (url.pathname === "/login") {
-        return response(url, "<html>login</html>", {
+        return protectedResponse(url, `<html>${ROBOTS_META}login</html>`, {
           status: 200,
           headers: { "content-type": "text/html" },
         });
       }
       if (url.pathname === "/robots.txt") {
-        return response(url, "not found", {
-          status: 404,
-          headers: { "content-type": "text/plain" },
+        return protectedResponse(
+          url,
+          `User-agent: *\nAllow: /\nSitemap: ${canonicalOrigin.origin}/sitemap.xml\n`,
+          {
+            status: 200,
+            headers: { "content-type": "text/plain" },
+          },
+        );
+      }
+      if (url.pathname === "/sitemap.xml") {
+        return protectedResponse(url, sitemapXml(canonicalOrigin), {
+          status: 200,
+          headers: { "content-type": "application/xml" },
         });
       }
       if (url.pathname === "/news/news-default-item.png") {
-        return response(url, "png", {
+        return protectedResponse(url, "png", {
           status: 200,
           headers: { "content-type": "image/png" },
         });
       }
       if (url.pathname === "/docs/privacy-policy.md") {
-        return response(url, "# プライバシーポリシー", {
+        return protectedResponse(url, "# プライバシーポリシー", {
           status: 200,
           headers: { "content-type": "text/markdown" },
         });
       }
       throw new Error(`Unexpected smoke path: ${url.pathname}`);
     },
+    { canonicalOrigin },
   );
 
   assert.deepEqual(checks, [
     "GET /",
     "GET /docs/privacy-policy",
     "GET /life/frequently-asked-questions",
-    "maintenance exclusions: login/robots/static/raw Markdown",
+    "search protection: login/robots/sitemap/static/raw Markdown",
   ]);
 });
 
-test("503 public smoke rejects a robots noindex meta", async () => {
+test("503 public smoke requires a robots noindex, nofollow meta", async () => {
   await assert.rejects(
     verifyPublicSiteSmoke(
       new URL("https://candidate.vercel.app"),
       { environment: "PREVIEW", status: 503 },
       async (input) => {
         const url = new URL(String(input));
-        return response(
-          url,
-          '<html><meta name="robots" content="noindex, nofollow"></html>',
-          {
-            status: 503,
-            headers: {
-              "cache-control": "no-store",
-              "content-type": "text/html",
-            },
+        return protectedResponse(url, "<html>maintenance</html>", {
+          status: 503,
+          headers: {
+            "cache-control": "no-store",
+            "content-type": "text/html",
           },
-        );
+        });
       },
     ),
-    /unexpectedly used noindex/,
+    /did not contain a robots noindex, nofollow meta tag/,
+  );
+});
+
+test("503 public smoke rejects a platform-only X-Robots-Tag noindex", async () => {
+  await assert.rejects(
+    verifyPublicSiteSmoke(
+      new URL("https://candidate.vercel.app"),
+      { environment: "PREVIEW", status: 503 },
+      async (input) => {
+        const url = new URL(String(input));
+        return response(url, `<html>${ROBOTS_META}maintenance</html>`, {
+          status: 503,
+          headers: {
+            "cache-control": "no-store",
+            "content-type": "text/html",
+            "x-robots-tag": "noindex",
+          },
+        });
+      },
+    ),
+    /did not return X-Robots-Tag: noindex, nofollow/,
+  );
+});
+
+test("public smoke rejects excluded sitemap locations", async () => {
+  const baseUrl = new URL("https://candidate.vercel.app");
+  const canonicalOrigin = new URL("https://demo.example.test");
+  await assert.rejects(
+    verifyPublicSiteSmoke(
+      baseUrl,
+      { environment: "PREVIEW", status: 503 },
+      protectedPublicSearchRequest(baseUrl, canonicalOrigin, ["/admin/users"]),
+      { canonicalOrigin },
+    ),
+    /contained an excluded path: \/admin\/users/,
+  );
+});
+
+test("public smoke rejects a truncated sitemap document", async () => {
+  const baseUrl = new URL("https://candidate.vercel.app");
+  const canonicalOrigin = new URL("https://demo.example.test");
+  const validRequest = protectedPublicSearchRequest(
+    baseUrl,
+    canonicalOrigin,
+    [],
+  );
+  await assert.rejects(
+    verifyPublicSiteSmoke(
+      baseUrl,
+      { environment: "PREVIEW", status: 503 },
+      async (input) => {
+        const url = new URL(String(input));
+        if (url.pathname === "/sitemap.xml") {
+          return protectedResponse(
+            url,
+            sitemapXml(canonicalOrigin).replace(/<\/urlset>$/u, ""),
+            { status: 200, headers: { "content-type": "application/xml" } },
+          );
+        }
+        return validRequest(input);
+      },
+      { canonicalOrigin },
+    ),
+    /not a complete sitemap XML document/,
   );
 });
 
@@ -381,6 +453,12 @@ test("existing canonical baseline captures one verified 503 and Retry-After stat
         headers: { "content-type": "text/plain" },
       });
     }
+    if (url.pathname === "/sitemap.xml") {
+      return response(url, "not found", {
+        status: 404,
+        headers: { "content-type": "text/plain" },
+      });
+    }
     if (url.pathname === "/news/news-default-item.png") {
       return response(url, "png", {
         status: 200,
@@ -414,6 +492,7 @@ test("existing canonical baseline captures one verified 503 and Retry-After stat
     "/life/frequently-asked-questions",
     "/login",
     "/robots.txt",
+    "/sitemap.xml",
     "/news/news-default-item.png",
     "/docs/privacy-policy.md",
   ]);
@@ -442,4 +521,100 @@ function response(url: URL, body: BodyInit | null, init: ResponseInit): Response
   const value = new Response(body, init);
   Object.defineProperty(value, "url", { value: url.href });
   return value;
+}
+
+const ROBOTS_META = '<meta name="robots" content="noindex, nofollow">';
+
+function protectedResponse(
+  url: URL,
+  body: BodyInit | null,
+  init: ResponseInit,
+): Response {
+  const headers = new Headers(init.headers);
+  headers.set("x-robots-tag", "noindex, nofollow");
+  return response(url, body, { ...init, headers });
+}
+
+function sitemapXml(origin: URL, additionalPaths: string[] = []): string {
+  const requiredPaths = [
+    "/",
+    "/life",
+    "/life/trash-recycling",
+    "/life/trash-recycling/sorting-and-collection",
+    "/news/assembly-session-june-2026",
+    "/life/frequently-asked-questions/administrative-service-center/location-and-access",
+    "/docs/privacy-policy",
+    ...additionalPaths,
+  ];
+  const paths = [
+    ...requiredPaths,
+    ...Array.from(
+      { length: 275 - requiredPaths.length },
+      (_, index) => `/life/maintenance-smoke-${index}`,
+    ),
+  ];
+  const urls = paths
+    .map((path) => `<url><loc>${new URL(path, origin).href}</loc></url>`)
+    .join("");
+  return `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`;
+}
+
+function protectedPublicSearchRequest(
+  baseUrl: URL,
+  canonicalOrigin: URL,
+  additionalSitemapPaths: string[],
+) {
+  return async (input: RequestInfo | URL): Promise<Response> => {
+    const url = new URL(String(input));
+    if (
+      [
+        "/",
+        "/docs/privacy-policy",
+        "/life/frequently-asked-questions",
+      ].includes(url.pathname)
+    ) {
+      return protectedResponse(url, `<html>${ROBOTS_META}maintenance</html>`, {
+        status: 503,
+        headers: {
+          "cache-control": "no-store",
+          "content-type": "text/html",
+        },
+      });
+    }
+    if (url.pathname === "/login") {
+      return protectedResponse(url, `<html>${ROBOTS_META}login</html>`, {
+        status: 200,
+        headers: { "content-type": "text/html" },
+      });
+    }
+    if (url.pathname === "/robots.txt") {
+      return protectedResponse(
+        url,
+        `User-agent: *\nAllow: /\nSitemap: ${canonicalOrigin.origin}/sitemap.xml\n`,
+        { status: 200, headers: { "content-type": "text/plain" } },
+      );
+    }
+    if (url.pathname === "/sitemap.xml") {
+      return protectedResponse(
+        url,
+        sitemapXml(canonicalOrigin, additionalSitemapPaths),
+        { status: 200, headers: { "content-type": "application/xml" } },
+      );
+    }
+    if (url.pathname === "/news/news-default-item.png") {
+      return protectedResponse(url, "png", {
+        status: 200,
+        headers: { "content-type": "image/png" },
+      });
+    }
+    if (url.pathname === "/docs/privacy-policy.md") {
+      return protectedResponse(url, "# プライバシーポリシー", {
+        status: 200,
+        headers: { "content-type": "text/markdown" },
+      });
+    }
+    throw new Error(
+      `Unexpected smoke path for ${baseUrl.origin}: ${url.pathname}`,
+    );
+  };
 }

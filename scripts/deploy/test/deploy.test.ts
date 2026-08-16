@@ -1850,9 +1850,36 @@ test("local AWS artifacts are fully prevalidated before directory-only removal",
 });
 
 function response(url: URL, body: BodyInit | null, init: ResponseInit): Response {
-  const value = new Response(body, init);
+  const headers = new Headers(init.headers);
+  headers.set("x-robots-tag", "noindex, nofollow");
+  const value = new Response(body, { ...init, headers });
   Object.defineProperty(value, "url", { value: url.href });
   return value;
+}
+
+const ROBOTS_META = '<meta name="robots" content="noindex, nofollow">';
+
+function deploymentSitemapXml(origin: URL): string {
+  const representativePaths = [
+    "/",
+    "/life",
+    "/life/trash-recycling",
+    "/life/trash-recycling/sorting-and-collection",
+    "/news/assembly-session-june-2026",
+    "/life/frequently-asked-questions/administrative-service-center/location-and-access",
+    "/docs/privacy-policy",
+  ];
+  const paths = [
+    ...representativePaths,
+    ...Array.from(
+      { length: 275 - representativePaths.length },
+      (_, index) => `/life/deployment-smoke-${index}`,
+    ),
+  ];
+  const urls = paths
+    .map((path) => `<url><loc>${new URL(path, origin).href}</loc></url>`)
+    .join("");
+  return `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`;
 }
 
 test("ambiguous temporary-user write is found with retry and always removed", async () => {
@@ -1879,15 +1906,25 @@ test("ambiguous temporary-user write is found with retry and always removed", as
       );
     }
     if (["/", "/login"].includes(url.pathname)) {
-      return response(url, "<html>ok</html>", {
+      return response(url, `<html>${ROBOTS_META}ok</html>`, {
         status: 200,
         headers: { "content-type": "text/html" },
       });
     }
     if (url.pathname === "/robots.txt") {
-      return response(url, "not found", {
-        status: 404,
-        headers: { "content-type": "text/plain" },
+      return response(
+        url,
+        `User-agent: *\nAllow: /\nSitemap: ${baseUrl.origin}/sitemap.xml\n`,
+        {
+          status: 200,
+          headers: { "content-type": "text/plain" },
+        },
+      );
+    }
+    if (url.pathname === "/sitemap.xml") {
+      return response(url, deploymentSitemapXml(baseUrl), {
+        status: 200,
+        headers: { "content-type": "application/xml" },
       });
     }
     if (url.pathname === "/news/news-default-item.png") {
@@ -1903,13 +1940,13 @@ test("ambiguous temporary-user write is found with retry and always removed", as
       });
     }
     if (url.pathname === "/docs/privacy-policy") {
-      return response(url, "<html>プライバシーポリシー</html>", {
+      return response(url, `<html>${ROBOTS_META}プライバシーポリシー</html>`, {
         status: 200,
         headers: { "content-type": "text/html" },
       });
     }
     if (url.pathname === "/life/frequently-asked-questions") {
-      return response(url, "<html>未来市のよくある質問</html>", {
+      return response(url, `<html>${ROBOTS_META}未来市のよくある質問</html>`, {
         status: 200,
         headers: { "content-type": "text/html" },
       });
@@ -1930,7 +1967,7 @@ test("ambiguous temporary-user write is found with retry and always removed", as
       });
     }
     if (url.pathname === "/admin/users") {
-      return response(url, "<html>users</html>", {
+      return response(url, `<html>${ROBOTS_META}users</html>`, {
         status: authenticated ? 200 : 401,
         headers: { "content-type": "text/html" },
       });

@@ -146,7 +146,7 @@ NeonのVercel Integrationは使用しません。
 6. 対象project、domain、DB hostとProduction限定の6環境変数を確認し、環境変数更新へ`y`と入力する。`BETTER_AUTH_URL`と`APP_CANONICAL_ORIGIN`は同じcanonical HTTPS originになる。
 7. 5件のmigration計画が表示されたら内容を確認し、計画作成へ`y`、実行直前に`migrate`と入力する。migration後にメンテナンス設定の3行、version 1、revision、5制約が検証される。
 8. 管理者作成へ`y`と入力し、emailに`admin@keien.dev`、任意のname、12〜128文字のpasswordを2回入力する。passwordはpassword managerへ保存し、変更内容を確認して作成へ`y`と入力する。
-9. staged candidateのsmoke test後、5分間の無通信と、Neon管理APIのidle／active反映待ち（各最大約5分、合計最大約15分）の間はcandidate、Production URL、Neon SQL Editorへアクセスせずに待つ。candidateは`PREVIEW`、promotion後のcanonicalは`PRODUCTION`のDB設定に応じて公開HTMLの200または503を期待する。確認が完了したらpromotionへ`y`と入力する。
+9. staged candidateのsmoke test後、5分間の無通信と、Neon管理APIのidle／active反映待ち（各最大約5分、合計最大約15分）の間はcandidate、Production URL、Neon SQL Editorへアクセスせずに待つ。candidateは`PREVIEW`、promotion後のcanonicalは`PRODUCTION`のDB設定に応じて公開HTMLの200または503を期待する。smoke testはHTMLの`noindex, nofollow` robots meta、全レスポンスの`X-Robots-Tag: noindex`、`/robots.txt`のAllowとcanonical sitemap指定、公開canonical URLだけを含む`/sitemap.xml`も検証する。確認が完了したらpromotionへ`y`と入力する。
 
 認証やlinkの確認が表示された場合は、対象account／projectを確認してから`y`と入力します。
 `docker compose exec web npm run db:seed-admin`とcompose既定の`admin@example.local`はローカルDB専用で、Neon Productionには反映されません。
@@ -160,7 +160,7 @@ NeonのVercel Integrationは使用しません。
 5. 管理画面の`ログアウト`を操作すると`/login`へ戻り、再び`/admin/users`を開いても未認証で保護される。
 6. Vercelの`Settings > Domains`でcanonical domainの`No Deployment`が消え、`Production`として割り当てられている。
 
-メンテナンスが有効な場合、`/`、`/docs/privacy-policy`、`/life/frequently-asked-questions`は503と`Cache-Control: no-store`を返すのが正常です。この場合も`/login`、管理API、static asset、raw Markdown、`/robots.txt`はメンテナンス503にならないことを`deploy.sh`が検証します。予定メンテナンスの有効時間内だけ、503に終了日時の`Retry-After`が付きます。
+メンテナンスが有効な場合、`/`、`/docs/privacy-policy`、`/life/frequently-asked-questions`は503と`Cache-Control: no-store`を返すのが正常です。503 HTMLにもrobots metaと`X-Robots-Tag`が残り、`/login`、管理API、static asset、raw Markdown、`/robots.txt`、`/sitemap.xml`はメンテナンス503にならないことを`deploy.sh`が検証します。予定メンテナンスの有効時間内だけ、503に終了日時の`Retry-After`が付きます。
 
 ここまで確認できればProductionの受入は完了です。
 

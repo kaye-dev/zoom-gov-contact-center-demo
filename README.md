@@ -20,6 +20,12 @@ Zoom 製品のデモ用に作成した、架空の市区町村ホームページ
 - Docker / Docker Compose
 - 多言語対応（i18n）/ ダークモード対応
 
+## 検索エンジン向け設定
+
+このサイトはデモ専用のため、Production、Preview、ローカルの全環境でHTMLへ`noindex, nofollow`のrobots metaを付与し、API、raw Markdown、static assetを含む全レスポンスにも`X-Robots-Tag: noindex, nofollow`を付与します。
+
+`/robots.txt`はcrawlerがnoindexを読み取れるよう`Allow: /`とし、`APP_CANONICAL_ORIGIN`を正本とする`/sitemap.xml`を案内します。XML sitemapには公開canonical HTMLだけを列挙し、管理・認証・API・内部ページは含めません。sitemapとnoindexの併用は意図した仕様であり、Search Consoleでは掲載URLがnoindexにより除外されたものとして表示される場合があります。
+
 ## セットアップ
 
 ### Docker で起動
@@ -100,7 +106,7 @@ curl http://localhost:3000/docs/privacy-policy.md
 
 ### Vercel Hobby + Neon Freeへデプロイ
 
-公開はリポジトリルートの`./deploy.sh`だけから行い、VercelのGit自動デプロイは使用しません。`deploy.sh`はmigration後にPostgreSQLの3環境行、version 1、revision、5つの制約を値を表示せずに検証し、candidateでは`PREVIEW`、promotion後は`PRODUCTION`の実効設定に応じて公開HTMLの200 / 503を検証します。手順は次を参照してください。
+公開はリポジトリルートの`./deploy.sh`だけから行い、VercelのGit自動デプロイは使用しません。`deploy.sh`はmigration後にPostgreSQLの3環境行、version 1、revision、5つの制約を値を表示せずに検証し、candidateでは`PREVIEW`、promotion後は`PRODUCTION`の実効設定に応じて公開HTMLの200 / 503を検証します。併せてHTMLのrobots meta、全レスポンスの`X-Robots-Tag`、`/robots.txt`、`/sitemap.xml`も検証します。手順は次を参照してください。
 
 - [新規デプロイ](docs/deploy/vercel-neon/initial-deploy.md)
 - [2回目以降の再デプロイ](docs/deploy/vercel-neon/redeploy.md)
