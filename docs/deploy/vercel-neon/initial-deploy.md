@@ -96,7 +96,13 @@ Vercel Dashboardで、linkしたprojectを次の状態にします。
 5. `Settings > Git`の`Connected Git Repository` sectionにrepository名がなく、`This Project is not connected to a Git repository.`とGitHub／GitLab接続ボタンだけが表示されることを確認する。接続済みなら[Disconnect](https://vercel.com/docs/project-configuration/git-settings)する。
 6. `Settings > Domains`で、設定エラーやredirectがなく`Production`と表示されるdomainを確認し、`https://...`形式のcanonical URLを控える。既存domainを追加する現行UIは`Add Existing`、新規購入は`Buy`である。初回デプロイ前の自動生成`*.vercel.app` domainには`No Deployment`と表示されてもよい。
 
-環境変数は手動で作成しません。`deploy.sh`がProductionへ必要な5項目だけを設定します。
+### Production環境変数を確認する
+
+`deploy.sh`が設定するProduction環境変数は`DATABASE_URL`、`BETTER_AUTH_SECRET`、`BETTER_AUTH_URL`、`BETTER_AUTH_TRUSTED_ORIGINS`、`BETTER_AUTH_TRUST_PROXY_HEADERS`、`APP_CANONICAL_ORIGIN`の6項目だけです。既存projectを再利用する場合は、`Settings > Environment Variables`でこれ以外のProduction変数を事前に確認し、不要な項目を手動で削除します。さらに同画面の`Shared` tab／Shared Environment Variables sectionを開き、このprojectへlinkされたProduction対象の共有変数がないことを確認し、存在する場合はprojectからunlinkします。`APP_CANONICAL_ORIGIN`と`BETTER_AUTH_URL`は、入力した同じcanonical HTTPS originで上書きされます。
+
+`deploy.sh`は通常のproject環境変数に加え、Vercel APIのproject ID filterでlink済みShared Environment Variablesを環境変数更新の前後とcandidate作成直前に監査します。Production対象が1件でもある場合、API権限が不足する場合、または完全で正しいレスポンスを証明できない場合は、共有変数のkeyや値を表示せず停止します。
+
+メンテナンス設定用の外部storeやtokenは不要です。後述の5番目のmigrationがPostgreSQLへ`PRODUCTION`、`PREVIEW`、`DEVELOPMENT`の3行をversion 1・`DISABLED`で作成し、`deploy.sh`がmigration後に行数・形式・revision・5つの制約をdirect URLから検証します。
 
 ## 3. Neon projectを準備する
 
@@ -113,7 +119,7 @@ neon auth
 
 Project Dashboardの`Connect`を開き、同じbranch・database・roleで[次の2つ](https://neon.com/docs/connect/connection-pooling)をコピーします。
 
-- `Connection pooling`を有効にしたURL: `DATABASE_URL`。hostに`-pooler`が付く。
+- primary/read-write branchの`Connection pooling`を有効にしたURL: `DATABASE_URL`。hostに`-pooler`が付く。read replicaのURLは使用しない。
 - `Connection pooling`を無効にしたURL: `DATABASE_URL_UNPOOLED`。hostに`-pooler`が付かない。
 
 両方とも`sslmode=require`を含むことを確認します。URLは秘密情報のため、ファイルやチャットへ保存せず、後述の非表示プロンプトへだけ貼り付けます。
@@ -137,10 +143,10 @@ NeonのVercel Integrationは使用しません。
 3. Neonのproject ID、project nameを入力する。
 4. Neon planをAPIで確認できない場合だけ、ConsoleでFreeであることを確認して`free`と入力する。
 5. 非表示プロンプトへpooled URL、direct URLの順に貼り付ける。
-6. 対象project・domain・DB hostを確認し、環境変数更新へ`y`と入力する。
-7. 4件のmigration計画が表示されたら内容を確認し、計画作成へ`y`、実行直前に`migrate`と入力する。
+6. 対象project、domain、DB hostとProduction限定の6環境変数を確認し、環境変数更新へ`y`と入力する。`BETTER_AUTH_URL`と`APP_CANONICAL_ORIGIN`は同じcanonical HTTPS originになる。
+7. 5件のmigration計画が表示されたら内容を確認し、計画作成へ`y`、実行直前に`migrate`と入力する。migration後にメンテナンス設定の3行、version 1、revision、5制約が検証される。
 8. 管理者作成へ`y`と入力し、emailに`admin@keien.dev`、任意のname、12〜128文字のpasswordを2回入力する。passwordはpassword managerへ保存し、変更内容を確認して作成へ`y`と入力する。
-9. staged candidateのsmoke test後、5分間の無通信と、Neon管理APIのidle／active反映待ち（各最大約5分、合計最大約15分）の間はcandidate、Production URL、Neon SQL Editorへアクセスせずに待つ。確認が完了したら、promotionへ`y`と入力する。
+9. staged candidateのsmoke test後、5分間の無通信と、Neon管理APIのidle／active反映待ち（各最大約5分、合計最大約15分）の間はcandidate、Production URL、Neon SQL Editorへアクセスせずに待つ。candidateは`PREVIEW`、promotion後のcanonicalは`PRODUCTION`のDB設定に応じて公開HTMLの200または503を期待する。確認が完了したらpromotionへ`y`と入力する。
 
 認証やlinkの確認が表示された場合は、対象account／projectを確認してから`y`と入力します。
 `docker compose exec web npm run db:seed-admin`とcompose既定の`admin@example.local`はローカルDB専用で、Neon Productionには反映されません。
@@ -154,9 +160,13 @@ NeonのVercel Integrationは使用しません。
 5. 管理画面の`ログアウト`を操作すると`/login`へ戻り、再び`/admin/users`を開いても未認証で保護される。
 6. Vercelの`Settings > Domains`でcanonical domainの`No Deployment`が消え、`Production`として割り当てられている。
 
+メンテナンスが有効な場合、`/`、`/docs/privacy-policy`、`/life/frequently-asked-questions`は503と`Cache-Control: no-store`を返すのが正常です。この場合も`/login`、管理API、static asset、raw Markdown、`/robots.txt`はメンテナンス503にならないことを`deploy.sh`が検証します。予定メンテナンスの有効時間内だけ、503に終了日時の`Retry-After`が付きます。
+
 ここまで確認できればProductionの受入は完了です。
 
-現行`deploy.sh`が扱えるmigrationは、リポジトリにある既存4件だけです。migrationを追加した場合は、デプロイスクリプトとテストを先に更新します。
+現行`deploy.sh`が扱えるmigrationは、リポジトリにある既存5件だけです。migrationを追加した場合は、デプロイスクリプトとテストを先に更新します。
+
+認証だけが故障した場合のtransaction SQLと、DB停止時に503を維持する復旧順は[メンテナンスモード緊急解除](maintenance-recovery.md)を参照してください。
 
 ## 停止した場合
 

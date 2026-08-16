@@ -25,9 +25,12 @@ import {
 import { saveChatSettings } from "@/lib/server/chat-settings";
 import { savePhoneSettings } from "@/lib/server/phone-settings";
 import { saveLanguageSettings } from "@/lib/server/site-settings";
+import { saveMaintenanceSettings } from "@/lib/server/maintenance-settings-write";
+import { getSettingsAuthorizationFailure } from "@/lib/server/settings-authorization";
 import { createBoundedPasswordResetRequest } from "@/lib/server/password-reset-requests";
 import { parseChatSettings } from "@/lib/chat-settings";
 import { parsePhoneSettings } from "@/lib/phone-settings";
+import { MAINTENANCE_SETTINGS_CONFLICT_CODE } from "@/lib/maintenance-config";
 import {
   SETTINGS_ERROR_CODES,
   parseLanguageSettings,
@@ -411,6 +414,47 @@ app.put("/admin/language-settings", async (c) => {
   }
 });
 
+app.put("/admin/maintenance-settings", async (c) => {
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const session = await getAppSession(auth, c.req.raw.headers);
+  const unauthorized = rejectNonAdminForSettings(session);
+
+  if (unauthorized) {
+    return c.json(unauthorized.body, unauthorized.status);
+  }
+
+  try {
+    const result = await saveMaintenanceSettings(
+      await readJsonBody(c.req.raw),
+      {
+        requestHostname: new URL(c.req.raw.url).hostname,
+        prisma,
+      },
+    );
+
+    if (!result.ok) {
+      return c.json(
+        { error: result.code },
+        result.code === MAINTENANCE_SETTINGS_CONFLICT_CODE ? 409 : 400,
+      );
+    }
+
+    return c.json({
+      config: result.snapshot.config,
+      environment: result.snapshot.environment,
+      key: result.snapshot.configKey,
+      effective: result.snapshot.effective,
+      revision: result.snapshot.revision,
+    });
+  } catch {
+    // Store failures can contain connection metadata. Never log the request
+    // body, credentials, or original error.
+    console.error("Failed to save maintenance settings.");
+    return c.json({ error: SETTINGS_ERROR_CODES.saveFailed }, 500);
+  }
+});
+
 app.post("/account/change-password", async (c) => {
   const auth = c.get("auth");
   const prisma = c.get("prisma");
@@ -570,28 +614,7 @@ function rejectNonAdmin(session: Awaited<ReturnType<typeof getAppSession>>) {
 function rejectNonAdminForSettings(
   session: Awaited<ReturnType<typeof getAppSession>>,
 ) {
-  if (!session) {
-    return {
-      status: 401 as const,
-      body: { error: SETTINGS_ERROR_CODES.authenticationRequired },
-    };
-  }
-
-  if (!isAdminSession(session)) {
-    return {
-      status: 403 as const,
-      body: { error: SETTINGS_ERROR_CODES.administratorRequired },
-    };
-  }
-
-  if (shouldChangePassword(session)) {
-    return {
-      status: 403 as const,
-      body: { error: SETTINGS_ERROR_CODES.passwordChangeRequired },
-    };
-  }
-
-  return null;
+  return getSettingsAuthorizationFailure(session);
 }
 
 function generateTemporaryPassword() {

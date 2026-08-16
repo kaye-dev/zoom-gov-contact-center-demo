@@ -48,6 +48,9 @@ import {
 } from "../lib/validation";
 import {
   assertAllowedProductionEnvironment,
+  assertCandidateProductionEnvironmentReady,
+  assertNoLinkedProductionSharedEnvironment,
+  assertNoProductionSharedEnvironment,
   assertSameMigrationPlan,
   authenticateNeon,
   authenticateVercel,
@@ -807,11 +810,16 @@ test("Vercel environment API audits every target and never stores direct URL", (
         type: "encrypted",
         target: ["production"],
       },
+      {
+        key: "APP_CANONICAL_ORIGIN",
+        type: "encrypted",
+        target: ["production"],
+      },
       { key: "PREVIEW_ONLY", type: "encrypted", target: ["preview"] },
     ],
   };
   const validAudit = parseProductionEnvironmentAudit(JSON.stringify(valid));
-  assert.equal(validAudit.names.size, 5);
+  assert.equal(validAudit.names.size, 6);
   assert.equal(shouldCreateAuthSecret(validAudit), false);
   const withoutSecret = parseProductionEnvironmentAudit(
     JSON.stringify({
@@ -875,6 +883,198 @@ test("Vercel environment API audits every target and never stores direct URL", (
         ),
       ),
     /must be a Vercel Sensitive value/,
+  );
+  assert.throws(
+    () =>
+      assertAllowedProductionEnvironment(
+        parseProductionEnvironmentAudit(
+          JSON.stringify({
+            envs: [
+              {
+                key: "APP_CANONICAL_ORIGIN",
+                type: "sensitive",
+                target: ["production"],
+              },
+            ],
+          }),
+        ),
+      ),
+    /APP_CANONICAL_ORIGIN must be an encrypted non-Sensitive value/,
+  );
+});
+
+test("shared environment audit accepts only complete non-Production project results", () => {
+  assert.doesNotThrow(() =>
+    assertNoProductionSharedEnvironment(
+      JSON.stringify({
+        data: [],
+        pagination: { count: 0, next: null, prev: null },
+      }),
+      link,
+    ),
+  );
+  assert.doesNotThrow(() =>
+    assertNoProductionSharedEnvironment(
+      JSON.stringify({ data: [], pagination: { count: 0 } }),
+      link,
+    ),
+  );
+  assert.doesNotThrow(() =>
+    assertNoProductionSharedEnvironment(
+      JSON.stringify({
+        data: [
+          {
+            ownerId: link.orgId,
+            projectId: [link.projectId],
+            target: ["preview", "development"],
+          },
+        ],
+        pagination: { count: 1, next: null, prev: null },
+      }),
+      link,
+    ),
+  );
+
+  for (const invalid of [
+    "not json",
+    JSON.stringify({ data: [] }),
+    JSON.stringify({
+      data: [{ target: ["preview"] }],
+      pagination: { count: 0, next: null, prev: null },
+    }),
+    JSON.stringify({
+      data: [{ target: ["preview"] }],
+      pagination: { count: 1, next: 123, prev: null },
+    }),
+    JSON.stringify({
+      data: [{ target: ["custom"] }],
+      pagination: { count: 1, next: null, prev: null },
+    }),
+    JSON.stringify({
+      data: [{ projectId: ["prj_other"], target: ["preview"] }],
+      pagination: { count: 1, next: null, prev: null },
+    }),
+    JSON.stringify({
+      data: [{ ownerId: "team_other", target: ["preview"] }],
+      pagination: { count: 1, next: null, prev: null },
+    }),
+  ]) {
+    assert.throws(
+      () => assertNoProductionSharedEnvironment(invalid, link),
+      /could not prove the Production environment is unlinked/,
+    );
+  }
+});
+
+test("shared environment audit fails closed without exposing keys or values", () => {
+  const syntheticKey = "SYNTHETIC_SHARED_KEY";
+  const syntheticValue = "synthetic-shared-secret-value";
+  const productionOutput = JSON.stringify({
+    data: [
+      {
+        key: syntheticKey,
+        value: syntheticValue,
+        ownerId: link.orgId,
+        projectId: [link.projectId],
+        target: ["production"],
+      },
+    ],
+    pagination: { count: 1, next: null, prev: null },
+  });
+  assert.throws(
+    () => assertNoProductionSharedEnvironment(productionOutput, link),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /has a linked Shared Environment Variable/);
+      assert.equal(error.message.includes(syntheticKey), false);
+      assert.equal(error.message.includes(syntheticValue), false);
+      return true;
+    },
+  );
+
+  const runner = new RecordingRunner(() => ({
+    status: 403,
+    stdout: syntheticValue,
+    stderr: syntheticKey,
+  }));
+  assert.throws(
+    () => assertNoLinkedProductionSharedEnvironment(runner, link),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(
+        error.message,
+        /could not prove the Production environment is unlinked/,
+      );
+      assert.equal(error.message.includes(syntheticKey), false);
+      assert.equal(error.message.includes(syntheticValue), false);
+      return true;
+    },
+  );
+  assert.deepEqual(runner.calls[0]?.arguments_, [
+    "api",
+    `/v1/env?projectId=${link.projectId}&teamId=${link.orgId}`,
+    "--raw",
+    "--scope",
+    link.orgId,
+  ]);
+});
+
+test("candidate environment preflight repeats exact project and shared audits", () => {
+  const runner = new RecordingRunner((_command, arguments_) => {
+    const endpoint = arguments_[1];
+    if (endpoint?.startsWith(`/v10/projects/${link.projectId}/env?`)) {
+      return success(
+        JSON.stringify({
+          envs: [
+            { key: "DATABASE_URL", type: "sensitive", target: ["production"] },
+            {
+              key: "BETTER_AUTH_SECRET",
+              type: "sensitive",
+              target: ["production"],
+            },
+            {
+              key: "BETTER_AUTH_URL",
+              type: "encrypted",
+              target: ["production"],
+            },
+            {
+              key: "BETTER_AUTH_TRUSTED_ORIGINS",
+              type: "encrypted",
+              target: ["production"],
+            },
+            {
+              key: "BETTER_AUTH_TRUST_PROXY_HEADERS",
+              type: "encrypted",
+              target: ["production"],
+            },
+            {
+              key: "APP_CANONICAL_ORIGIN",
+              type: "encrypted",
+              target: ["production"],
+            },
+          ],
+        }),
+      );
+    }
+    if (endpoint?.startsWith("/v1/env?projectId=")) {
+      return success(
+        JSON.stringify({ data: [], pagination: { count: 0 } }),
+      );
+    }
+    throw new Error("Unexpected candidate environment audit command.");
+  });
+
+  assert.doesNotThrow(() =>
+    assertCandidateProductionEnvironmentReady(runner, link),
+  );
+  assert.equal(runner.calls.length, 2);
+  assert.match(
+    runner.calls[0]?.arguments_[1] ?? "",
+    /\/v10\/projects\/prj_abc123\/env\?decrypt=false&teamId=team_abc123/,
+  );
+  assert.equal(
+    runner.calls[1]?.arguments_[1],
+    "/v1/env?projectId=prj_abc123&teamId=team_abc123",
   );
 });
 
@@ -1063,6 +1263,18 @@ test("production build env removes every ambient unpooled database URL", () => {
   );
   assert.equal(environment.DATABASE_URL, "postgresql://pooled.invalid/runtime");
   assert.equal(environment.DATABASE_URL_UNPOOLED, undefined);
+  assert.equal(environment.BETTER_AUTH_URL, "https://example.test");
+  assert.equal(environment.APP_CANONICAL_ORIGIN, "https://example.test");
+  assert.throws(
+    () =>
+      createBuildEnvironment(
+        { NODE_ENV: "production" },
+        "postgresql://pooled.invalid/runtime",
+        "auth-secret",
+        "http://example.test",
+      ),
+    /HTTPS origin/,
+  );
 });
 
 function migrationPlan(planHash: string): MigrationPlan {
@@ -1078,7 +1290,7 @@ function migrationPlan(planHash: string): MigrationPlan {
     databaseObjects: [],
     tablesWithData: [],
     statusSummary: "1 pending migration",
-    totalMigrationCount: 4,
+    totalMigrationCount: 5,
   };
 }
 
@@ -1670,6 +1882,24 @@ test("ambiguous temporary-user write is found with retry and always removed", as
       return response(url, "<html>ok</html>", {
         status: 200,
         headers: { "content-type": "text/html" },
+      });
+    }
+    if (url.pathname === "/robots.txt") {
+      return response(url, "not found", {
+        status: 404,
+        headers: { "content-type": "text/plain" },
+      });
+    }
+    if (url.pathname === "/news/news-default-item.png") {
+      return response(url, "png", {
+        status: 200,
+        headers: { "content-type": "image/png" },
+      });
+    }
+    if (url.pathname === "/docs/privacy-policy.md") {
+      return response(url, "# プライバシーポリシー", {
+        status: 200,
+        headers: { "content-type": "text/markdown; charset=utf-8" },
       });
     }
     if (url.pathname === "/docs/privacy-policy") {

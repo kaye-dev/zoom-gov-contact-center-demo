@@ -24,6 +24,12 @@ import {
   type MigrationPlan,
 } from "./lib/migrations";
 import {
+  createMaintenancePublicExpectation,
+  readMaintenanceSettingsDatabase,
+  verifyMaintenanceSettingsDatabase,
+  type MaintenanceEnvironment,
+} from "./lib/maintenance";
+import {
   assertCommandSucceeded,
   combinedOutput,
   SecretRegistry,
@@ -32,6 +38,8 @@ import {
   type CommandRunner,
 } from "./lib/process";
 import {
+  capturePublicSiteBaseline,
+  resolvePublicSiteBaselineAt,
   runSmokeChecks,
   verifyIdleRecovery,
   type SmokeCredentials,
@@ -66,6 +74,7 @@ const PRODUCTION_ENV_ALLOWLIST = new Set([
   "BETTER_AUTH_URL",
   "BETTER_AUTH_TRUSTED_ORIGINS",
   "BETTER_AUTH_TRUST_PROXY_HEADERS",
+  "APP_CANONICAL_ORIGIN",
 ]);
 
 class CliUnavailableError extends Error {}
@@ -125,6 +134,9 @@ type WorkflowState = {
   vercelLink?: VercelLink;
   previousProductionId?: string;
   smokeCredentials?: SmokeCredentials;
+  rollbackPublicExpectation?: ReturnType<
+    typeof createMaintenancePublicExpectation
+  >;
   promoted: boolean;
   promotionAttempted: boolean;
   productionAcceptanceComplete: boolean;
@@ -235,6 +247,7 @@ export async function runDeploymentWorkflow(
 
     const currentEnvironment = listProductionEnvironment(runner, link);
     assertAllowedProductionEnvironment(currentEnvironment);
+    assertNoLinkedProductionSharedEnvironment(runner, link);
     console.log("Deployment target review:");
     console.log(`  Project: ${project.name} (${project.id})`);
     console.log(`  Domain: ${canonicalUrl.origin}`);
@@ -295,8 +308,16 @@ export async function runDeploymentWorkflow(
       "true",
       false,
     );
+    setVercelEnvironment(
+      runner,
+      link,
+      "APP_CANONICAL_ORIGIN",
+      canonicalUrl.origin,
+      false,
+    );
     const resultingEnvironment = listProductionEnvironment(runner, link);
     assertExactProductionEnvironment(resultingEnvironment);
+    assertNoLinkedProductionSharedEnvironment(runner, link);
 
     console.log("[3/7] Quality gates");
     const buildAuthSecret =
@@ -347,6 +368,16 @@ export async function runDeploymentWorkflow(
     console.log(
       `Canonical deployment before staging: ${previousProduction?.id ?? "none"}`,
     );
+    if (previousProduction) {
+      state.rollbackPublicExpectation = await capturePublicSiteBaseline(
+        canonicalUrl,
+        globalThis.fetch,
+      );
+      console.log(
+        `Existing canonical public baseline verified: HTTP ${state.rollbackPublicExpectation.status}${state.rollbackPublicExpectation.retryAfter ? " with Retry-After" : ""}.`,
+      );
+    }
+    assertCandidateProductionEnvironmentReady(runner, link);
     const deployment = runner.run(
       "vercel",
       [
@@ -460,6 +491,10 @@ export async function runDeploymentWorkflow(
       }
       console.log(renderMigrationPlan(afterMigration));
     }
+    await verifyMaintenanceSettingsDatabase(database.directUrl);
+    console.log(
+      "Maintenance settings table, constraints, and three version-1 environment rows verified.",
+    );
     promotionGuard.markMigrationVerified();
 
     console.log("[6/7] Administrator and staged smoke tests");
@@ -469,7 +504,16 @@ export async function runDeploymentWorkflow(
       database.pooledUrl,
     );
     state.smokeCredentials = credentials;
-    const stagedSmoke = await runSmokeChecks(candidateUrl, credentials);
+    const stagedExpectation = await readMaintenancePublicExpectation(
+      database.directUrl,
+      "PREVIEW",
+    );
+    const stagedSmoke = await runSmokeChecks(
+      candidateUrl,
+      credentials,
+      globalThis.fetch,
+      { publicSiteExpectation: stagedExpectation },
+    );
     console.log(`Staged smoke passed: ${stagedSmoke.checks.join(", ")}`);
     console.log(
       "Waiting at least 5 minutes without polling, then allowing up to 5 minutes for the Neon management API to report idle before one health wake-up check...",
@@ -550,7 +594,16 @@ export async function runDeploymentWorkflow(
       candidate.id,
       true,
     );
-    const canonicalSmoke = await runSmokeChecks(canonicalUrl, credentials);
+    const canonicalExpectation = await readMaintenancePublicExpectation(
+      database.directUrl,
+      "PRODUCTION",
+    );
+    const canonicalSmoke = await runSmokeChecks(
+      canonicalUrl,
+      credentials,
+      globalThis.fetch,
+      { publicSiteExpectation: canonicalExpectation },
+    );
     console.log(`Canonical smoke passed: ${canonicalSmoke.checks.join(", ")}`);
     state.productionAcceptanceComplete = true;
     console.log(
@@ -579,7 +632,8 @@ export async function runDeploymentWorkflow(
         state.previousProductionId &&
         state.candidateId &&
         state.vercelLink &&
-        state.canonicalUrl
+        state.canonicalUrl &&
+        state.rollbackPublicExpectation
       ) {
         const expected = `rollback ${state.previousProductionId}`;
         try {
@@ -630,6 +684,12 @@ export async function runDeploymentWorkflow(
               const rollbackSmoke = await runSmokeChecks(
                 state.canonicalUrl,
                 state.smokeCredentials,
+                globalThis.fetch,
+                {
+                  publicSiteExpectation: resolvePublicSiteBaselineAt(
+                    state.rollbackPublicExpectation,
+                  ),
+                },
               );
               console.error(
                 `Rolled-back canonical smoke passed: ${rollbackSmoke.checks.join(", ")}`,
@@ -656,6 +716,14 @@ export async function runDeploymentWorkflow(
     }
     throw error;
   }
+}
+
+async function readMaintenancePublicExpectation(
+  directUrl: string,
+  environment: MaintenanceEnvironment,
+) {
+  const snapshot = await readMaintenanceSettingsDatabase(directUrl);
+  return createMaintenancePublicExpectation(snapshot, environment);
 }
 
 export function ensureCliTools(runner: CommandRunner): void {
@@ -1000,6 +1068,14 @@ function listProductionEnvironment(
   return parseProductionEnvironmentAudit(result.stdout);
 }
 
+export function assertCandidateProductionEnvironmentReady(
+  runner: CommandRunner,
+  link: VercelLink,
+): void {
+  assertExactProductionEnvironment(listProductionEnvironment(runner, link));
+  assertNoLinkedProductionSharedEnvironment(runner, link);
+}
+
 export function parseProductionEnvironmentAudit(
   output: string,
 ): ProductionEnvironmentAudit {
@@ -1065,6 +1141,98 @@ export function parseProductionEnvironmentAudit(
   return { names, types };
 }
 
+const SHARED_ENVIRONMENT_AUDIT_FAILURE =
+  "Vercel Shared Environment Variable audit could not prove the Production environment is unlinked.";
+const PRODUCTION_SHARED_ENVIRONMENT_FAILURE =
+  "Vercel Production has a linked Shared Environment Variable. Unlink every Production-targeted shared variable from this project and retry.";
+
+export function assertNoLinkedProductionSharedEnvironment(
+  runner: CommandRunner,
+  link: VercelLink,
+): void {
+  let result: CommandResult;
+  try {
+    result = runner.run(
+      "vercel",
+      [
+        "api",
+        `/v1/env?projectId=${encodeURIComponent(link.projectId)}&teamId=${encodeURIComponent(link.orgId)}`,
+        "--raw",
+        "--scope",
+        link.orgId,
+      ],
+      { env: { ...process.env, NO_COLOR: "1" } },
+    );
+  } catch {
+    throw new Error(SHARED_ENVIRONMENT_AUDIT_FAILURE);
+  }
+  if (result.status !== 0) {
+    throw new Error(SHARED_ENVIRONMENT_AUDIT_FAILURE);
+  }
+  assertNoProductionSharedEnvironment(result.stdout, link);
+}
+
+export function assertNoProductionSharedEnvironment(
+  output: string,
+  link: VercelLink,
+): void {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(output) as unknown;
+  } catch {
+    throw new Error(SHARED_ENVIRONMENT_AUDIT_FAILURE);
+  }
+  if (
+    !isRecord(parsed) ||
+    !Array.isArray(parsed.data) ||
+    !isRecord(parsed.pagination) ||
+    !Number.isSafeInteger(parsed.pagination.count) ||
+    (parsed.pagination.count as number) < 0 ||
+    parsed.pagination.count !== parsed.data.length ||
+    !(parsed.pagination.next === undefined ||
+      parsed.pagination.next === null) ||
+    !(parsed.pagination.prev === undefined || parsed.pagination.prev === null)
+  ) {
+    throw new Error(SHARED_ENVIRONMENT_AUDIT_FAILURE);
+  }
+
+  for (const record of parsed.data) {
+    if (!isRecord(record)) {
+      throw new Error(SHARED_ENVIRONMENT_AUDIT_FAILURE);
+    }
+    if (
+      record.ownerId !== undefined &&
+      record.ownerId !== null &&
+      record.ownerId !== link.orgId
+    ) {
+      throw new Error(SHARED_ENVIRONMENT_AUDIT_FAILURE);
+    }
+    if (
+      record.projectId !== undefined &&
+      (!Array.isArray(record.projectId) ||
+        !record.projectId.every((projectId) => typeof projectId === "string") ||
+        !record.projectId.includes(link.projectId))
+    ) {
+      throw new Error(SHARED_ENVIRONMENT_AUDIT_FAILURE);
+    }
+    if (
+      !Array.isArray(record.target) ||
+      record.target.length === 0 ||
+      !record.target.every(
+        (target) =>
+          target === "development" ||
+          target === "preview" ||
+          target === "production",
+      )
+    ) {
+      throw new Error(SHARED_ENVIRONMENT_AUDIT_FAILURE);
+    }
+    if (record.target.includes("production")) {
+      throw new Error(PRODUCTION_SHARED_ENVIRONMENT_FAILURE);
+    }
+  }
+}
+
 export function assertAllowedProductionEnvironment(
   audit: ProductionEnvironmentAudit,
 ): void {
@@ -1081,7 +1249,10 @@ export function assertAllowedProductionEnvironment(
       "DATABASE_URL_UNPOOLED must never be stored in Vercel Production.",
     );
   }
-  for (const name of ["DATABASE_URL", "BETTER_AUTH_SECRET"]) {
+  for (const name of [
+    "DATABASE_URL",
+    "BETTER_AUTH_SECRET",
+  ]) {
     if (audit.names.has(name) && audit.types.get(name) !== "sensitive") {
       throw new Error(`${name} must be a Vercel Sensitive value.`);
     }
@@ -1090,6 +1261,7 @@ export function assertAllowedProductionEnvironment(
     "BETTER_AUTH_URL",
     "BETTER_AUTH_TRUSTED_ORIGINS",
     "BETTER_AUTH_TRUST_PROXY_HEADERS",
+    "APP_CANONICAL_ORIGIN",
   ]) {
     if (audit.names.has(name) && audit.types.get(name) !== "encrypted") {
       throw new Error(`${name} must be an encrypted non-Sensitive value.`);
@@ -1305,14 +1477,16 @@ export function createBuildEnvironment(
   authSecret: string,
   canonicalOrigin: string,
 ): NodeJS.ProcessEnv {
+  const normalizedCanonicalOrigin = validateCanonicalUrl(canonicalOrigin).origin;
   const environment: NodeJS.ProcessEnv = {
     ...ambient,
     NODE_ENV: "production",
     DATABASE_URL: pooledUrl,
     BETTER_AUTH_SECRET: authSecret,
-    BETTER_AUTH_URL: canonicalOrigin,
-    BETTER_AUTH_TRUSTED_ORIGINS: canonicalOrigin,
+    BETTER_AUTH_URL: normalizedCanonicalOrigin,
+    BETTER_AUTH_TRUSTED_ORIGINS: normalizedCanonicalOrigin,
     BETTER_AUTH_TRUST_PROXY_HEADERS: "true",
+    APP_CANONICAL_ORIGIN: normalizedCanonicalOrigin,
   };
   delete environment.DATABASE_URL_UNPOOLED;
   return environment;
