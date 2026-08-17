@@ -1,0 +1,34 @@
+FROM public.ecr.aws/aws-cli/aws-cli:2.34.28@sha256:d342da23236133bce0b638d1fa7a8ead91e016c61ad007035ef6ca08ea87fa67 AS aws-cli
+
+FROM node:24.19.0-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03
+
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends \
+        ca-certificates=20250419~deb12u1 \
+        git=1:2.39.5-0+deb12u3 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=aws-cli /usr/local/aws-cli /usr/local/aws-cli
+RUN ln -s /usr/local/aws-cli/v2/current/bin/aws /usr/local/bin/aws \
+    && npm install --global vercel@59.1.3 \
+    && npm cache clean --force \
+    && install --directory --owner=node --group=node /workspace
+
+WORKDIR /workspace
+
+COPY --chown=node:node package.json package-lock.json prisma.config.ts ./
+COPY --chown=node:node prisma ./prisma
+
+USER node
+RUN npm ci
+
+COPY --chown=node:node . .
+
+ARG DEPLOY_GIT_SHA
+ARG DEPLOY_GIT_BRANCH
+ENV DEPLOY_GIT_SHA=${DEPLOY_GIT_SHA}
+ENV DEPLOY_GIT_BRANCH=${DEPLOY_GIT_BRANCH}
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NO_COLOR=1
+
+CMD ["node", "--import", "tsx", "scripts/deploy/main.ts"]

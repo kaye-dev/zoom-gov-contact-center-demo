@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "migrations": [
+    {
+      "name": "20260623105657_init",
+      "sha256": "b9390d2923e3109951e5699d0112ebcf3461cee2b4a8632018b871c1ebe5e052",
+      "classification": "bootstrap-only"
+    },
+    {
+      "name": "20260804090000_add_site_settings",
+      "sha256": "cee50868ab0fa97ddef94f0e2f4c301dffd44ac0a3d7933ce1ff2b496d33e611",
+      "classification": "expand-compatible"
+    },
+    {
+      "name": "20260804150000_add_zoom_virtual_agent_web_tag",
+      "sha256": "bcfba7754e324bcf58e99dafdd9db9739d31bf7c8d0f885e6e08349da52bd5e9",
+      "classification": "expand-compatible"
+    },
+    {
+      "name": "20260805040000_split_phone_and_chat_settings",
+      "sha256": "0f92c69d08b1b2df29b2e6a22de78513ae83bbcad781367a2134539acca722e8",
+      "classification": "destructive-reviewed"
+    },
+    {
+      "name": "20260816090000_add_site_maintenance_settings",
+      "sha256": "bbdbed98ed1b8e1bca9624d51a9fd85287f31f28b3ef5bd658b04f9d1bc41f45",
+      "classification": "expand-compatible"
+    }
+  ]
+}
