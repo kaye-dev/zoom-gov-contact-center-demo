@@ -4,6 +4,7 @@ import {
   chmodSync,
   copyFileSync,
   lstatSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -70,6 +71,27 @@ test("setup wrapper builds a non-empty argument array under Bash nounset", () =>
   );
 });
 
+test("AWS configuration stays read-only while CLI role cache uses tmpfs", () => {
+  const deploySource = readFileSync(deployScript, "utf8");
+  const setupSource = readFileSync(setupDeployAwsScript, "utf8");
+
+  assert.match(deploySource, /:\/root\/\.aws:ro/);
+  assert.match(
+    deploySource,
+    /AWS_ROOT_CLI_CACHE_TMPFS="\/root\/\.aws\/cli\/cache:rw,noexec,nosuid,nodev,size=1m,mode=0700,uid=0,gid=0"/,
+  );
+  assert.equal(
+    deploySource.match(/--tmpfs "\$\{AWS_ROOT_CLI_CACHE_TMPFS\}"/g)?.length,
+    2,
+  );
+  assert.match(setupSource, /:\/home\/node\/\.aws:ro/);
+  assert.match(
+    deploySource,
+    /AWS_NODE_CLI_CACHE_TMPFS="\/home\/node\/\.aws\/cli\/cache:rw,noexec,nosuid,nodev,size=1m,mode=0700,uid=1000,gid=1000"/,
+  );
+  assert.match(setupSource, /--tmpfs "\$\{AWS_NODE_CLI_CACHE_TMPFS\}"/);
+});
+
 function initializeWrapperFixture(): string {
   const root = mkdtempSync(join(tmpdir(), "zoom-deploy-wrapper-"));
   copyFileSync(deployScript, join(root, "deploy.sh"));
@@ -96,6 +118,37 @@ function runFixture(root: string, body: string) {
     encoding: "utf8",
   });
 }
+
+test("AWS cache mountpoint creation is private and rejects symlinks", () => {
+  const root = initializeWrapperFixture();
+  const awsHome = join(root, "aws-home");
+  const awsDirectory = join(awsHome, ".aws");
+  try {
+    mkdirSync(awsDirectory, { recursive: true, mode: 0o700 });
+    const created = runFixture(
+      root,
+      `HOME=${shellQuote(awsHome)}\nprepare_aws_host_directory`,
+    );
+    assert.equal(created.status, 0, created.stderr);
+    assert.equal(created.stdout, `${awsDirectory}\n`);
+    assert.equal(lstatSync(join(awsDirectory, "cli")).mode & 0o777, 0o700);
+    assert.equal(
+      lstatSync(join(awsDirectory, "cli", "cache")).mode & 0o777,
+      0o700,
+    );
+
+    rmSync(join(awsDirectory, "cli", "cache"), { recursive: true });
+    symlinkSync("../outside", join(awsDirectory, "cli", "cache"));
+    const rejected = runFixture(
+      root,
+      `HOME=${shellQuote(awsHome)}\nprepare_aws_host_directory`,
+    );
+    assert.notEqual(rejected.status, 0);
+    assert.match(rejected.stderr, /cache directory is unavailable or unsafe/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 function runFixtureAsync(root: string, body: string): Promise<{
   status: number | null;

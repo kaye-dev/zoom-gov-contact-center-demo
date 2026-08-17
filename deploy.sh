@@ -4,6 +4,8 @@ set -euo pipefail
 
 SCRIPT_DIRECTORY="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 AWS_CLI_IMAGE="public.ecr.aws/aws-cli/aws-cli:2.34.28"
+AWS_ROOT_CLI_CACHE_TMPFS="/root/.aws/cli/cache:rw,noexec,nosuid,nodev,size=1m,mode=0700,uid=0,gid=0"
+AWS_NODE_CLI_CACHE_TMPFS="/home/node/.aws/cli/cache:rw,noexec,nosuid,nodev,size=1m,mode=0700,uid=1000,gid=1000"
 DEPLOY_RUNNER_REPOSITORY="zoom-gov-contact-center-demo-deploy"
 DEPLOY_REGION="ap-northeast-1"
 DEPLOY_CONFIG_PARAMETER="/zoom-gov-contact-center-demo/production/deploy/config"
@@ -52,7 +54,7 @@ trap cleanup_deploy_wrapper EXIT
 
 require_host_tools() {
   local command_name
-  for command_name in docker git tar mktemp awk id ln; do
+  for command_name in docker git tar mktemp awk id ln mkdir; do
     command -v "${command_name}" >/dev/null 2>&1 || \
       die "Required host command is missing: ${command_name}"
   done
@@ -120,11 +122,29 @@ aws_host_directory() {
   printf '%s\n' "${directory}"
 }
 
-run_aws_helper() {
+ensure_private_aws_directory() {
+  local directory="$1"
+  if [[ ! -e "${directory}" && ! -L "${directory}" ]]; then
+    (umask 077; mkdir "${directory}") || true
+  fi
+  [[ -d "${directory}" && ! -L "${directory}" ]] || \
+    die "AWS CLI cache directory is unavailable or unsafe: ${directory}"
+}
+
+prepare_aws_host_directory() {
   local aws_directory
   aws_directory="$(aws_host_directory)"
+  ensure_private_aws_directory "${aws_directory}/cli"
+  ensure_private_aws_directory "${aws_directory}/cli/cache"
+  printf '%s\n' "${aws_directory}"
+}
+
+run_aws_helper() {
+  local aws_directory
+  aws_directory="$(prepare_aws_host_directory)"
   docker run --rm \
     --volume "${aws_directory}:/root/.aws:ro" \
+    --tmpfs "${AWS_ROOT_CLI_CACHE_TMPFS}" \
     "${AWS_CLI_IMAGE}" \
     "$@" \
     --region "${DEPLOY_REGION}" \
@@ -133,9 +153,10 @@ run_aws_helper() {
 
 list_aws_profiles() {
   local aws_directory
-  aws_directory="$(aws_host_directory)"
+  aws_directory="$(prepare_aws_host_directory)"
   docker run --rm \
     --volume "${aws_directory}:/root/.aws:ro" \
+    --tmpfs "${AWS_ROOT_CLI_CACHE_TMPFS}" \
     "${AWS_CLI_IMAGE}" \
     configure list-profiles
 }

@@ -62,10 +62,11 @@ main_setup() {
   require_clean_worktree
   resolve_aws_profile "${SETUP_REQUESTED_PROFILE}"
   build_deploy_runner_image
-  aws_directory="$(aws_host_directory)"
+  aws_directory="$(prepare_aws_host_directory)"
   build_setup_container_arguments
   docker run --rm --interactive --tty \
     --volume "${aws_directory}:/home/node/.aws:ro" \
+    --tmpfs "${AWS_NODE_CLI_CACHE_TMPFS}" \
     "${DEPLOY_RUNNER_IMAGE}" \
     "${SETUP_CONTAINER_ARGUMENTS[@]}"
   maybe_create_env_file

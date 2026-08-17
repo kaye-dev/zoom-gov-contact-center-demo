@@ -41,6 +41,8 @@ Node.js、npm、Vercel CLI、Neon CLIをhostへインストールする必要は
 
 AWS IAM Identity Center sessionが失効している場合は、ブラウザまたはdevice authorizationで再loginします。SSO session cacheは`~/.aws/sso/cache`にあり、tokenや一時credentialをリポジトリへコピーしません。[AWS CLIのIAM Identity Center認証](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sso.html)も参照してください。
 
+local wrapperは`~/.aws`をread-onlyでcontainerへmountします。AWS CLIがrole session用に必要とする`~/.aws/cli/cache`だけは、hostへcredentialを書き戻さない揮発性tmpfsで覆い、container終了時に破棄します。mountpointがない場合は、秘密値を含まない空ディレクトリをmode `0700`でhostに作成します。
+
 初回setup用identityには、少なくとも次のAPIを対象account / Regionで許可します。`CreateKey`は作成前にkey ARNを限定できないため、初回だけ使う管理者identityへ分離し、setup完了後の通常deploy identityには付与しません。
 
 ```text
