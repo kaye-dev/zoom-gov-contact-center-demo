@@ -522,7 +522,7 @@ async function promptNonSecretInput(
     policyVersion: "demo-v1",
     aws: { accountId, region: DEPLOY_REGION },
     vercel: {
-      orgId: await ask("Vercel org ID", existing?.vercel.orgId),
+      orgId: await ask("Vercel team ID", existing?.vercel.orgId),
       projectId: await ask("Vercel project ID", existing?.vercel.projectId),
       projectName: await ask(
         "Vercel project name",

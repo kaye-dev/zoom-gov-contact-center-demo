@@ -284,7 +284,7 @@ export function parseStoredDeploymentConfig(
   );
   const orgId = expectString(
     vercel.orgId,
-    "Vercel org ID",
+    "Vercel team ID",
     /^team_[A-Za-z0-9]+$/,
   );
   const vercelProjectId = expectString(

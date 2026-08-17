@@ -210,7 +210,9 @@ export function readVercelLink(path: string): VercelLink {
     typeof projectId !== "string" ||
     !/^prj_[A-Za-z0-9]+$/.test(projectId)
   ) {
-    throw new Error("The Vercel link does not contain valid orgId/projectId values.");
+    throw new Error(
+      "The Vercel link does not contain valid team/project ID values.",
+    );
   }
   return { orgId, projectId };
 }

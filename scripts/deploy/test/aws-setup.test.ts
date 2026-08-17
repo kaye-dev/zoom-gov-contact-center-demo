@@ -440,6 +440,8 @@ test("initial setup writes three secrets through stdin before config", async () 
     { profile: "splai-prd", reconfigure: false },
     strictProviderFetch(vercelToken, neonApiKey),
   );
+  assert.equal(prompter.messages[0], "Vercel team ID: ");
+  assert.ok(!prompter.messages.some((message) => message.includes("org ID")));
 
   const puts = runner.calls.filter(
     ({ arguments_ }) => arguments_[0] === "ssm" && arguments_[1] === "put-parameter",

@@ -311,7 +311,7 @@ test("stored config parser rejects extra fields and non-origin URLs", () => {
           vercel: { ...validConfig.vercel, orgId: "user_abc123" },
         }),
       ),
-    /Vercel org ID is invalid/,
+    /Vercel team ID is invalid/,
   );
 });
 

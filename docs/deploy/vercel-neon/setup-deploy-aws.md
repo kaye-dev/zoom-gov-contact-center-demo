@@ -20,7 +20,7 @@
 ```text
 schemaVersion, policyVersion
 aws.accountId, aws.region
-vercel.orgId, projectId, projectName, canonicalOrigin, expectedPlan
+vercel.orgId (Vercel team ID), projectId, projectName, canonicalOrigin, expectedPlan
 neon.projectId, projectName, branchId, databaseName, roleName, regionId, expectedPlan
 admin.email
 kmsKeyArn
@@ -95,7 +95,7 @@ setupはAWS accountを確認し、provider APIでplan、project、domain、regio
 
 初回だけ次を入力します。これはSSMへ登録する一回限りの入力で、通常deployでは再入力しません。
 
-1. Vercel org ID、project ID、project name、canonical Production origin。
+1. Vercel team ID (`team_...`)、project ID、project name、canonical Production origin。
 2. Neon project ID、project name、primary branch ID、database name、role name。
 3. 既存管理者のemail。
 4. 非表示promptへVercel token、Neon API key、既存管理者passwordを入力し、passwordをもう一度入力する。
