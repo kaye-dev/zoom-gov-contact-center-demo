@@ -929,7 +929,7 @@ async function verifyVercelTarget(
       fetchImplementation,
     ),
     fetchJson(
-      `https://api.vercel.com/v2/teams/${encodeURIComponent(config.vercel.orgId)}`,
+      `https://api.vercel.com/v2/teams/${encodeURIComponent(config.vercel.orgId)}?${query}`,
       authorization,
       "Vercel scope",
       fetchImplementation,

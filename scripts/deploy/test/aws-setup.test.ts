@@ -377,6 +377,9 @@ function strictProviderFetch(
 ): typeof globalThis.fetch {
   return async (input, init) => {
     const url = new URL(String(input));
+    if (url.hostname === "api.vercel.com") {
+      assert.deepEqual([...url.searchParams], [["teamId", "team_abc123"]]);
+    }
     const expectedToken =
       url.hostname === "api.vercel.com"
         ? expectedVercelToken
