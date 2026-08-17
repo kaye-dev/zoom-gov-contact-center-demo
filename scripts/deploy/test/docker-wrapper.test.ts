@@ -24,6 +24,7 @@ import {
 
 const projectRoot = resolve(import.meta.dirname, "../../..");
 const deployScript = join(projectRoot, "deploy.sh");
+const setupDeployAwsScript = join(projectRoot, "setup-deploy-aws.sh");
 
 test("Docker build context archives the exact resolved Git SHA", () => {
   const source = readFileSync(deployScript, "utf8");
@@ -37,6 +38,37 @@ test("Docker build context archives the exact resolved Git SHA", () => {
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
+
+test("setup wrapper builds a non-empty argument array under Bash nounset", () => {
+  const result = spawnSync(
+    "/bin/bash",
+    [
+      "-uc",
+      [
+        `source ${shellQuote(setupDeployAwsScript)}`,
+        "parse_setup_wrapper_arguments --profile demo-keien-01",
+        'DEPLOY_AWS_PROFILE="${SETUP_REQUESTED_PROFILE}"',
+        "build_setup_container_arguments",
+        `printf '<%s>\\n' "\${SETUP_CONTAINER_ARGUMENTS[@]}"`,
+      ].join("\n"),
+    ],
+    { cwd: projectRoot, encoding: "utf8" },
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(
+    result.stdout,
+    [
+      "<node>",
+      "<--import>",
+      "<tsx>",
+      "<scripts/deploy/setup-aws.ts>",
+      "<--profile>",
+      "<demo-keien-01>",
+      "",
+    ].join("\n"),
+  );
+});
 
 function initializeWrapperFixture(): string {
   const root = mkdtempSync(join(tmpdir(), "zoom-deploy-wrapper-"));

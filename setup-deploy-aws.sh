@@ -6,6 +6,8 @@ SETUP_SCRIPT_DIRECTORY="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=deploy.sh
 source "${SETUP_SCRIPT_DIRECTORY}/deploy.sh"
 
+SETUP_CONTAINER_ARGUMENTS=()
+
 parse_setup_wrapper_arguments() {
   SETUP_REQUESTED_PROFILE=""
   SETUP_RECONFIGURE=0
@@ -37,9 +39,22 @@ parse_setup_wrapper_arguments() {
   done
 }
 
+build_setup_container_arguments() {
+  [[ -n "${DEPLOY_AWS_PROFILE:-}" ]] || die "A validated AWS profile is required."
+  SETUP_CONTAINER_ARGUMENTS=(
+    node
+    --import
+    tsx
+    scripts/deploy/setup-aws.ts
+    --profile
+    "${DEPLOY_AWS_PROFILE}"
+  )
+  [[ ${SETUP_RECONFIGURE} -eq 0 ]] || SETUP_CONTAINER_ARGUMENTS+=(--reconfigure)
+  [[ -z "${SETUP_ROTATE}" ]] || SETUP_CONTAINER_ARGUMENTS+=(--rotate "${SETUP_ROTATE}")
+}
+
 main_setup() {
   local aws_directory
-  local setup_arguments=()
   parse_setup_wrapper_arguments "$@"
   [[ -t 0 && -t 1 ]] || \
     die "setup-deploy-aws.sh must be run directly from an interactive terminal."
@@ -48,15 +63,14 @@ main_setup() {
   resolve_aws_profile "${SETUP_REQUESTED_PROFILE}"
   build_deploy_runner_image
   aws_directory="$(aws_host_directory)"
-  [[ ${SETUP_RECONFIGURE} -eq 0 ]] || setup_arguments+=(--reconfigure)
-  [[ -z "${SETUP_ROTATE}" ]] || setup_arguments+=(--rotate "${SETUP_ROTATE}")
+  build_setup_container_arguments
   docker run --rm --interactive --tty \
     --volume "${aws_directory}:/home/node/.aws:ro" \
     "${DEPLOY_RUNNER_IMAGE}" \
-    node --import tsx scripts/deploy/setup-aws.ts \
-    --profile "${DEPLOY_AWS_PROFILE}" \
-    "${setup_arguments[@]}"
+    "${SETUP_CONTAINER_ARGUMENTS[@]}"
   maybe_create_env_file
 }
 
-main_setup "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main_setup "$@"
+fi
