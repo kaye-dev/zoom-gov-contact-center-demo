@@ -461,32 +461,27 @@ async function collectDesiredSecrets(
   const vercelToken =
     existing.vercelToken !== undefined && rotate !== "vercel-token"
       ? existing.vercelToken
-      : validateSecret(
-          await prompter.hidden("Vercel access token: "),
+      : await promptConfirmedSecret(
+          prompter,
           "Vercel access token",
           16,
         );
   const neonApiKey =
     existing.neonApiKey !== undefined && rotate !== "neon-api-key"
       ? existing.neonApiKey
-      : validateSecret(
-          await prompter.hidden("Neon API key: "),
+      : await promptConfirmedSecret(
+          prompter,
           "Neon API key",
           16,
         );
   let adminPassword = existing.adminPassword;
   if (adminPassword === undefined || rotate === "admin-password") {
-    const first = validateSecret(
-      await prompter.hidden("Administrator password: "),
+    adminPassword = await promptConfirmedSecret(
+      prompter,
       "Administrator password",
       12,
       128,
     );
-    const second = await prompter.hidden("Administrator password (again): ");
-    if (first !== second) {
-      throw new Error("Administrator password confirmation did not match.");
-    }
-    adminPassword = first;
   }
   return {
     vercelToken: validateSecret(vercelToken, "Vercel access token", 16),
@@ -498,6 +493,25 @@ async function collectDesiredSecrets(
       128,
     ),
   };
+}
+
+async function promptConfirmedSecret(
+  prompter: Prompter,
+  label: string,
+  minimum: number,
+  maximum = 4_096,
+): Promise<string> {
+  const first = validateSecret(
+    await prompter.hidden(`${label}: `),
+    label,
+    minimum,
+    maximum,
+  );
+  const second = await prompter.hidden(`${label} (again): `);
+  if (first !== second) {
+    throw new Error(`${label} confirmation did not match.`);
+  }
+  return first;
 }
 
 async function promptNonSecretInput(

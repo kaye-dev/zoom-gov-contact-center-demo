@@ -431,7 +431,14 @@ test("initial setup writes three secrets through stdin before config", async () 
       "neondb_owner",
       "admin@example.com",
     ],
-    [vercelToken, neonApiKey, adminPassword, adminPassword],
+    [
+      vercelToken,
+      vercelToken,
+      neonApiKey,
+      neonApiKey,
+      adminPassword,
+      adminPassword,
+    ],
   );
   await runAwsSetup(
     runner,
@@ -442,6 +449,8 @@ test("initial setup writes three secrets through stdin before config", async () 
   );
   assert.equal(prompter.messages[0], "Vercel team ID: ");
   assert.ok(!prompter.messages.some((message) => message.includes("org ID")));
+  assert.ok(prompter.messages.includes("Vercel access token (again): "));
+  assert.ok(prompter.messages.includes("Neon API key (again): "));
 
   const puts = runner.calls.filter(
     ({ arguments_ }) => arguments_[0] === "ssm" && arguments_[1] === "put-parameter",
@@ -651,7 +660,7 @@ test("rotating one secret updates only its version and config", async () => {
   const rotatedNeonKey = "rotated-neon-api-key-123456";
   await runAwsSetup(
     runner,
-    new SetupPrompter([], [rotatedNeonKey]),
+    new SetupPrompter([], [rotatedNeonKey, rotatedNeonKey]),
     new SecretRegistry(),
     {
       profile: "splai-prd",
@@ -684,6 +693,52 @@ test("rotating one secret updates only its version and config", async () => {
   assert.equal(
     runner.parameters.get(DEPLOY_NEON_API_KEY_PARAMETER)?.Value,
     rotatedNeonKey,
+  );
+});
+
+test("provider secret confirmation mismatch stops before AWS writes", async () => {
+  const runner = new AwsSetupRunner();
+  let providerCalls = 0;
+  const unexpectedProviderFetch: typeof globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error("Provider API must not run before secret confirmation.");
+  };
+  const prompter = new SetupPrompter(
+    [
+      "team_abc123",
+      "prj_abc123",
+      "zoom-gov-contact-center-demo",
+      "https://example.com",
+      "quiet-rain-12345678",
+      "zoom-gov-contact-center-demo",
+      "br-muddy-rain-12345678",
+      "neondb",
+      "neondb_owner",
+      "admin@example.com",
+    ],
+    [vercelToken, `${vercelToken}-mismatch`],
+  );
+  await assert.rejects(
+    runAwsSetup(
+      runner,
+      prompter,
+      new SecretRegistry(),
+      { profile: "splai-prd", reconfigure: false },
+      unexpectedProviderFetch,
+    ),
+    /Vercel access token confirmation did not match/,
+  );
+  assert.equal(providerCalls, 0);
+  const awsWriteOperations = new Set([
+    "create-key",
+    "enable-key-rotation",
+    "create-alias",
+    "put-parameter",
+  ]);
+  assert.ok(
+    !runner.calls.some(({ arguments_ }) =>
+      awsWriteOperations.has(arguments_[1] ?? ""),
+    ),
   );
 });
 

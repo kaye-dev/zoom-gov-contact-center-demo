@@ -91,14 +91,14 @@ connection stringを事前にコピーする必要はありません。setupとd
 
 profileを省略した場合は、`.env`の`DEPLOY_AWS_PROFILE`を使用します。それもない対話terminalでは利用可能なprofileから選択します。非対話実行でprofileを決定できない場合は停止します。
 
-setupはAWS accountを確認し、provider APIでplan、project、domain、region、branch、database、roleを検証した後、保存内容の要約を表示します。Vercel token、Neon API key、管理者passwordは非表示で入力し、値をlog、argv、temporary fileへ出しません。対象とpolicyの確認を拒否した場合はparameterを変更せず停止します。
+setupはAWS accountを確認し、provider APIでplan、project、domain、region、branch、database、roleを検証した後、保存内容の要約を表示します。Vercel token、Neon API key、管理者passwordはそれぞれ非表示で2回入力し、完全一致を確認します。値をlog、argv、temporary fileへ出しません。対象とpolicyの確認を拒否した場合はparameterを変更せず停止します。
 
 初回だけ次を入力します。これはSSMへ登録する一回限りの入力で、通常deployでは再入力しません。
 
 1. Vercel team ID (`team_...`)、project ID、project name、canonical Production origin。
 2. Neon project ID、project name、primary branch ID、database name、role name。
 3. 既存管理者のemail。
-4. 非表示promptへVercel token、Neon API key、既存管理者passwordを入力し、passwordをもう一度入力する。
+4. 非表示promptへVercel token、Neon API key、既存管理者passwordをそれぞれ2回入力する。
 5. API検証後、表示された12桁accountが正しい場合だけ`setup <AWS_ACCOUNT_ID>`と入力する。
 
 最後の完全一致確認より前はAWS resourceを書き込みません。承認後、専用symmetric single-Region KMS keyを作成し、365日rotation、管理tag、aliasを設定します。そのkeyで3 SecureStringを作成し、それぞれの`PutParameter`が返したversionを`config.secretVersions`に対応させた`config`を最後に書き込み、provider対象を保存後に再検証します。4件を`GetParameters`で再取得する処理ではありません。
