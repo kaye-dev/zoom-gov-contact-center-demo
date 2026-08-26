@@ -14,6 +14,8 @@ import {
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
 } from "@/lib/password-policy";
+import { VisibilityIcon } from "@/app/components/svg/VisibilityIcon";
+import { VisibilityOffIcon } from "@/app/components/svg/VisibilityOffIcon";
 
 import { useI18n } from "../../../i18n/LanguageProvider";
 import { ConfirmationDialog } from "../ConfirmationDialog";
@@ -52,6 +54,9 @@ export function UserDetailsView({
     useState<AdminUserPasswordMode>("temporary");
   const [password, setPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const [isPasswordConfirmationVisible, setIsPasswordConfirmationVisible] =
+    useState(false);
   const [revokeSessions, setRevokeSessions] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmingEmail, setConfirmingEmail] = useState(false);
@@ -88,6 +93,8 @@ export function UserDetailsView({
     setPasswordMode("temporary");
     setPassword("");
     setPasswordConfirmation("");
+    setIsPasswordVisible(false);
+    setIsPasswordConfirmationVisible(false);
     setRevokeSessions(true);
     setConfirmingPassword(false);
     setError(null);
@@ -100,6 +107,8 @@ export function UserDetailsView({
     setPasswordMode("temporary");
     setPassword("");
     setPasswordConfirmation("");
+    setIsPasswordVisible(false);
+    setIsPasswordConfirmationVisible(false);
     setRevokeSessions(true);
     setConfirmingPassword(false);
     setError(null);
@@ -109,6 +118,8 @@ export function UserDetailsView({
     setPasswordMode(mode);
     setPassword("");
     setPasswordConfirmation("");
+    setIsPasswordVisible(false);
+    setIsPasswordConfirmationVisible(false);
     setError(null);
   };
 
@@ -239,6 +250,10 @@ export function UserDetailsView({
       password.length > PASSWORD_MAX_LENGTH);
   const passwordsMismatch =
     passwordConfirmation.length > 0 && password !== passwordConfirmation;
+  const passwordsMatch =
+    passwordConfirmation.length > 0 &&
+    password === passwordConfirmation &&
+    !passwordLengthInvalid;
   const canSubmitPassword =
     password.length >= PASSWORD_MIN_LENGTH &&
     password.length <= PASSWORD_MAX_LENGTH &&
@@ -425,46 +440,100 @@ export function UserDetailsView({
               </fieldset>
 
               <div className="grid max-w-2xl gap-4 sm:grid-cols-2">
-                <label className="space-y-2">
-                  <span className="block text-sm font-semibold">
+                <div className="space-y-2">
+                  <label
+                    htmlFor="admin-new-password"
+                    className="block text-sm font-semibold"
+                  >
                     {t.admin.userManagement.newPassword}
+                  </label>
+                  <span className="relative block">
+                    <input
+                      id="admin-new-password"
+                      type={isPasswordVisible ? "text" : "password"}
+                      value={password}
+                      onChange={(event) => {
+                        setPassword(event.target.value);
+                        setError(null);
+                      }}
+                      required
+                      minLength={PASSWORD_MIN_LENGTH}
+                      maxLength={PASSWORD_MAX_LENGTH}
+                      autoComplete="new-password"
+                      disabled={isSubmitting}
+                      autoFocus
+                      aria-describedby="admin-password-requirements"
+                      className="w-full rounded-md border border-line bg-surface py-2 pl-3 pr-12 text-fg outline-none transition-colors focus:border-accent disabled:opacity-60"
+                    />
+                    <button
+                      type="button"
+                      aria-label={
+                        isPasswordVisible
+                          ? t.admin.userManagement.hidePassword
+                          : t.admin.userManagement.showPassword
+                      }
+                      aria-pressed={isPasswordVisible}
+                      aria-controls="admin-new-password"
+                      onClick={() => setIsPasswordVisible((visible) => !visible)}
+                      disabled={isSubmitting}
+                      className="absolute inset-y-0 right-1 my-auto inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isPasswordVisible ? (
+                        <VisibilityOffIcon />
+                      ) : (
+                        <VisibilityIcon />
+                      )}
+                    </button>
                   </span>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(event) => {
-                      setPassword(event.target.value);
-                      setError(null);
-                    }}
-                    required
-                    minLength={PASSWORD_MIN_LENGTH}
-                    maxLength={PASSWORD_MAX_LENGTH}
-                    autoComplete="new-password"
-                    disabled={isSubmitting}
-                    autoFocus
-                    aria-describedby="admin-password-requirements"
-                    className="w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent disabled:opacity-60"
-                  />
-                </label>
-                <label className="space-y-2">
-                  <span className="block text-sm font-semibold">
+                </div>
+                <div className="space-y-2">
+                  <label
+                    htmlFor="admin-confirm-password"
+                    className="block text-sm font-semibold"
+                  >
                     {t.admin.userManagement.confirmPassword}
+                  </label>
+                  <span className="relative block">
+                    <input
+                      id="admin-confirm-password"
+                      type={
+                        isPasswordConfirmationVisible ? "text" : "password"
+                      }
+                      value={passwordConfirmation}
+                      onChange={(event) => {
+                        setPasswordConfirmation(event.target.value);
+                        setError(null);
+                      }}
+                      required
+                      minLength={PASSWORD_MIN_LENGTH}
+                      maxLength={PASSWORD_MAX_LENGTH}
+                      autoComplete="new-password"
+                      disabled={isSubmitting}
+                      className="w-full rounded-md border border-line bg-surface py-2 pl-3 pr-12 text-fg outline-none transition-colors focus:border-accent disabled:opacity-60"
+                    />
+                    <button
+                      type="button"
+                      aria-label={
+                        isPasswordConfirmationVisible
+                          ? t.admin.userManagement.hidePassword
+                          : t.admin.userManagement.showPassword
+                      }
+                      aria-pressed={isPasswordConfirmationVisible}
+                      aria-controls="admin-confirm-password"
+                      onClick={() =>
+                        setIsPasswordConfirmationVisible((visible) => !visible)
+                      }
+                      disabled={isSubmitting}
+                      className="absolute inset-y-0 right-1 my-auto inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isPasswordConfirmationVisible ? (
+                        <VisibilityOffIcon />
+                      ) : (
+                        <VisibilityIcon />
+                      )}
+                    </button>
                   </span>
-                  <input
-                    type="password"
-                    value={passwordConfirmation}
-                    onChange={(event) => {
-                      setPasswordConfirmation(event.target.value);
-                      setError(null);
-                    }}
-                    required
-                    minLength={PASSWORD_MIN_LENGTH}
-                    maxLength={PASSWORD_MAX_LENGTH}
-                    autoComplete="new-password"
-                    disabled={isSubmitting}
-                    className="w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent disabled:opacity-60"
-                  />
-                </label>
+                </div>
               </div>
               <div className="max-w-2xl space-y-2">
                 <p
@@ -495,12 +564,7 @@ export function UserDetailsView({
                       {t.admin.userManagement.revokeSessionsDescription}
                     </p>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span className="text-xs font-semibold text-fg-muted">
-                      {revokeSessions
-                        ? t.admin.userManagement.enabled
-                        : t.admin.userManagement.disabled}
-                    </span>
+                  <div className="shrink-0">
                     <button
                       type="button"
                       role="switch"
@@ -531,6 +595,16 @@ export function UserDetailsView({
               {passwordsMismatch ? (
                 <p role="alert" className="max-w-2xl text-sm text-red-700 dark:text-red-200">
                   {t.admin.userManagement.errors.PASSWORD_MISMATCH}
+                </p>
+              ) : null}
+              {passwordsMatch ? (
+                <p
+                  role="status"
+                  aria-live="polite"
+                  className="inline-flex max-w-2xl items-center gap-2 text-sm font-semibold text-emerald-700 dark:text-emerald-300"
+                >
+                  <span aria-hidden="true">✓</span>
+                  {t.admin.userManagement.passwordsMatch}
                 </p>
               ) : null}
               {error ? (

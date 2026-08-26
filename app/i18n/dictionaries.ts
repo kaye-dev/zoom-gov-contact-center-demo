@@ -296,6 +296,9 @@ export type Dictionary = {
       standardPasswordModeDescription: string;
       newPassword: string;
       confirmPassword: string;
+      showPassword: string;
+      hidePassword: string;
+      passwordsMatch: string;
       passwordRequirements: string;
       generateTemporaryPassword: string;
       revokeSessions: string;
@@ -825,6 +828,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
           '管理者が設定したパスワードをそのまま利用できます。',
         newPassword: '新しいパスワード',
         confirmPassword: '新しいパスワード（確認）',
+        showPassword: 'パスワードを表示',
+        hidePassword: 'パスワードを非表示',
+        passwordsMatch: 'パスワードが一致しています。',
         passwordRequirements: '12文字以上128文字以下で入力してください。',
         generateTemporaryPassword: '一時パスワードを自動生成',
         revokeSessions: '変更後に強制ログアウトする',
@@ -1436,6 +1442,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'Allow the user to continue using the password set by the administrator.',
         newPassword: 'New password',
         confirmPassword: 'Confirm new password',
+        showPassword: 'Show password',
+        hidePassword: 'Hide password',
+        passwordsMatch: 'The passwords match.',
         passwordRequirements: 'Enter between 12 and 128 characters.',
         generateTemporaryPassword: 'Generate a temporary password',
         revokeSessions: 'Force sign-out after changing',
@@ -2028,6 +2037,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
         standardPasswordModeDescription: '用户可以继续使用管理员设置的密码。',
         newPassword: '新密码',
         confirmPassword: '确认新密码',
+        showPassword: '显示密码',
+        hidePassword: '隐藏密码',
+        passwordsMatch: '两次输入的密码一致。',
         passwordRequirements: '请输入12至128个字符。',
         generateTemporaryPassword: '自动生成临时密码',
         revokeSessions: '更改后强制退出登录',
@@ -2603,6 +2615,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
         standardPasswordModeDescription: '使用者可以繼續使用管理員設定的密碼。',
         newPassword: '新密碼',
         confirmPassword: '確認新密碼',
+        showPassword: '顯示密碼',
+        hidePassword: '隱藏密碼',
+        passwordsMatch: '兩次輸入的密碼一致。',
         passwordRequirements: '請輸入12至128個字元。',
         generateTemporaryPassword: '自動產生臨時密碼',
         revokeSessions: '變更後強制登出',
@@ -3179,6 +3194,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
         standardPasswordModeDescription: '관리자가 설정한 비밀번호를 그대로 사용할 수 있습니다.',
         newPassword: '새 비밀번호',
         confirmPassword: '새 비밀번호 확인',
+        showPassword: '비밀번호 표시',
+        hidePassword: '비밀번호 숨기기',
+        passwordsMatch: '비밀번호가 일치합니다.',
         passwordRequirements: '12자 이상 128자 이하로 입력하세요.',
         generateTemporaryPassword: '임시 비밀번호 자동 생성',
         revokeSessions: '변경 후 강제 로그아웃',

@@ -193,6 +193,9 @@ test("all locales include complete user-management copy and errors", () => {
     assert.ok(copy.generateTemporaryPassword.length > 0, locale);
     assert.ok(copy.revokeSessionsDescription.length > 0, locale);
     assert.ok(copy.passwordDialogDescription.length > 0, locale);
+    assert.ok(copy.showPassword.length > 0, locale);
+    assert.ok(copy.hidePassword.length > 0, locale);
+    assert.ok(copy.passwordsMatch.length > 0, locale);
     assert.deepEqual(Object.keys(copy.errors).sort(), expectedErrorCodes, locale);
     for (const message of Object.values(copy.errors)) {
       assert.ok(message.length > 0, locale);
@@ -226,4 +229,28 @@ test("user management UI keeps editing and destructive actions behind explicit c
   assert.match(detailsSource, /role="switch"/);
   assert.match(detailsSource, /setConfirmingPassword\(true\)/);
   assert.match(detailsSource, /passwordDialogTitle/);
+  assert.match(detailsSource, /VisibilityIcon/);
+  assert.match(detailsSource, /VisibilityOffIcon/);
+  assert.match(detailsSource, /isPasswordVisible \? "text" : "password"/);
+  assert.match(detailsSource, /isPasswordConfirmationVisible/);
+  assert.match(detailsSource, /passwordsMatch/);
+  assert.match(detailsSource, /role="status"/);
+});
+
+test("password visibility controls use the requested Material Symbols SVG paths", () => {
+  const visibilitySource = readFileSync(
+    new URL("../app/components/svg/VisibilityIcon.tsx", import.meta.url),
+    "utf8",
+  );
+  const visibilityOffSource = readFileSync(
+    new URL("../app/components/svg/VisibilityOffIcon.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(visibilitySource, /viewBox="0 -960 960 960"/);
+  assert.match(visibilitySource, /M480-320q75 0 127\.5-52\.5/);
+  assert.match(visibilityOffSource, /viewBox="0 -960 960 960"/);
+  assert.match(visibilityOffSource, /m644-428-58-58/);
+  assert.match(visibilitySource, /aria-hidden="true"/);
+  assert.match(visibilityOffSource, /aria-hidden="true"/);
 });
