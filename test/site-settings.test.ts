@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   DEFAULT_SITE_LOCALE,
+  HTML_LANG_BY_SITE_LOCALE,
   SETTINGS_ERROR_CODES,
   SITE_LOCALES,
   fromDatabaseSiteLocale,
@@ -10,6 +11,7 @@ import {
   parseLanguageSettings,
   resolveAvailableLocale,
   toDatabaseSiteLocale,
+  toHtmlLanguageTag,
   type LanguageSettings,
 } from "../lib/site-settings";
 
@@ -21,6 +23,21 @@ test("site locale and database enum values round-trip", () => {
   for (const locale of SITE_LOCALES) {
     assert.equal(fromDatabaseSiteLocale(toDatabaseSiteLocale(locale)), locale);
   }
+});
+
+test("every site locale maps to the explicit Zoom Campaign HTML language", () => {
+  assert.deepEqual(HTML_LANG_BY_SITE_LOCALE, {
+    ja: "ja-JP",
+    en: "en-US",
+    "zh-Hans": "zh-CN",
+    "zh-Hant": "zh-TW",
+    ko: "ko-KR",
+  });
+
+  assert.deepEqual(
+    SITE_LOCALES.map((locale) => toHtmlLanguageTag(locale)),
+    ["ja-JP", "en-US", "zh-CN", "zh-TW", "ko-KR"],
+  );
 });
 
 test("nullable values normalize empty strings to null", () => {

@@ -24,9 +24,15 @@ const themeStoreSource = readFileSync(
 );
 
 test("theme content stays hidden until the stored theme is synchronized", () => {
-  assert.match(layoutSource, /className="theme-loading h-full antialiased"/);
+  assert.match(
+    layoutSource,
+    /className="theme-loading language-loading h-full antialiased"/,
+  );
   assert.match(layoutSource, /strategy="beforeInteractive"/);
-  assert.match(globalsSource, /:root\.theme-loading body\s*{\s*visibility: hidden;/);
+  assert.match(
+    globalsSource,
+    /:root\.theme-loading body,[\s\S]*?:root\.language-loading body\s*{\s*visibility: hidden;/,
+  );
   assert.match(themeSyncSource, /useLayoutEffect\(\(\) =>\s*{/);
 
   assert.match(themeSyncSource, /const isDark = useIsDarkTheme\(\);/);

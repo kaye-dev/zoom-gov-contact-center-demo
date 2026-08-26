@@ -10,6 +10,17 @@ export type SiteLocale = (typeof SITE_LOCALES)[number];
 
 export const DEFAULT_SITE_LOCALE: SiteLocale = "ja";
 
+export const HTML_LANG_BY_SITE_LOCALE = {
+  ja: "ja-JP",
+  en: "en-US",
+  "zh-Hans": "zh-CN",
+  "zh-Hant": "zh-TW",
+  ko: "ko-KR",
+} as const satisfies Record<SiteLocale, string>;
+
+export type SiteHtmlLanguage =
+  (typeof HTML_LANG_BY_SITE_LOCALE)[SiteLocale];
+
 export const DATABASE_SITE_LOCALES = [
   "JA",
   "EN",
@@ -72,6 +83,10 @@ export type ValidationResult<T> =
 
 export function isSiteLocale(value: string): value is SiteLocale {
   return (SITE_LOCALES as readonly string[]).includes(value);
+}
+
+export function toHtmlLanguageTag(locale: SiteLocale): SiteHtmlLanguage {
+  return HTML_LANG_BY_SITE_LOCALE[locale];
 }
 
 export function isSettingsErrorCode(

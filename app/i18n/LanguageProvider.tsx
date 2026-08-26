@@ -4,7 +4,7 @@ import {
   useCallback,
   createContext,
   useContext,
-  useEffect,
+  useLayoutEffect,
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
@@ -14,14 +14,24 @@ import {
   type Dictionary,
   type Locale,
 } from './dictionaries';
-import { resolveAvailableLocale } from '@/lib/site-settings';
-
-const STORAGE_KEY = 'locale';
-const LOCALE_CHANGE_EVENT = 'mirai-city-locale-change';
+import {
+  resolveAvailableLocale,
+  toHtmlLanguageTag,
+} from '@/lib/site-settings';
+import {
+  LANGUAGE_CHANGE_EVENT,
+  LANGUAGE_STORAGE_KEY,
+  readStoredLocale,
+  revealLanguageContent,
+  storeLocale,
+  syncLanguageFromStorage,
+  useIsLanguageReady,
+} from './language-store';
 
 type LanguageContextValue = {
   locale: Locale;
   availableLocales: readonly Locale[];
+  isLocaleReady: boolean;
   setLocale: (locale: Locale) => void;
   t: Dictionary;
 };
@@ -32,16 +42,6 @@ function getServerLocaleSnapshot(): Locale {
   return defaultLocale;
 }
 
-function subscribeLocaleChange(onStoreChange: () => void) {
-  window.addEventListener(LOCALE_CHANGE_EVENT, onStoreChange);
-  window.addEventListener('storage', onStoreChange);
-
-  return () => {
-    window.removeEventListener(LOCALE_CHANGE_EVENT, onStoreChange);
-    window.removeEventListener('storage', onStoreChange);
-  };
-}
-
 export function LanguageProvider({
   availableLocales,
   children,
@@ -50,50 +50,59 @@ export function LanguageProvider({
   children: ReactNode;
 }) {
   const getStoredLocale = useCallback((): Locale => {
-    try {
-      return resolveAvailableLocale(
-        localStorage.getItem(STORAGE_KEY),
-        availableLocales,
-      );
-    } catch {
-      return defaultLocale;
-    }
+    return readStoredLocale(availableLocales);
   }, [availableLocales]);
+
+  const subscribeLocaleChange = useCallback(
+    (onStoreChange: () => void) => {
+      const onStorage = (event: StorageEvent) => {
+        if (
+          event.key !== null &&
+          event.key !== LANGUAGE_STORAGE_KEY
+        ) {
+          return;
+        }
+
+        const next = readStoredLocale(availableLocales);
+        if (document.documentElement.lang !== toHtmlLanguageTag(next)) {
+          window.location.reload();
+          return;
+        }
+        onStoreChange();
+      };
+
+      window.addEventListener(LANGUAGE_CHANGE_EVENT, onStoreChange);
+      window.addEventListener('storage', onStorage);
+
+      return () => {
+        window.removeEventListener(LANGUAGE_CHANGE_EVENT, onStoreChange);
+        window.removeEventListener('storage', onStorage);
+      };
+    },
+    [availableLocales],
+  );
 
   const locale = useSyncExternalStore(
     subscribeLocaleChange,
     getStoredLocale,
     getServerLocaleSnapshot,
   );
+  const isLocaleReady = useIsLanguageReady();
 
-  useEffect(() => {
-    let resolved = locale;
-
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      resolved = resolveAvailableLocale(stored, availableLocales);
-      if (stored !== resolved) {
-        localStorage.setItem(STORAGE_KEY, resolved);
-      }
-    } catch {
-      /* localStorage が使えない環境では無視 */
-    }
-
-    document.documentElement.lang = resolved;
+  useLayoutEffect(() => {
+    const resolved = syncLanguageFromStorage(availableLocales);
     if (resolved !== locale) {
-      window.dispatchEvent(new Event(LOCALE_CHANGE_EVENT));
+      window.dispatchEvent(new Event(LANGUAGE_CHANGE_EVENT));
+      return;
     }
+
+    revealLanguageContent();
   }, [availableLocales, locale]);
 
   const setLocale = (next: Locale) => {
     const resolved = resolveAvailableLocale(next, availableLocales);
-    try {
-      localStorage.setItem(STORAGE_KEY, resolved);
-    } catch {
-      /* localStorage が使えない環境では無視 */
-    }
-    document.documentElement.lang = resolved;
-    window.dispatchEvent(new Event(LOCALE_CHANGE_EVENT));
+    if (resolved === locale || !storeLocale(resolved)) return;
+    window.location.reload();
   };
 
   return (
@@ -101,6 +110,7 @@ export function LanguageProvider({
       value={{
         locale,
         availableLocales,
+        isLocaleReady,
         setLocale,
         t: dictionaries[locale],
       }}

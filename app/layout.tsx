@@ -8,7 +8,11 @@ import {
 } from "@/lib/maintenance-request";
 import { NOINDEX_ROBOTS_METADATA } from "@/lib/search-indexing";
 import { getLanguageSettings } from "@/lib/server/site-settings";
-import { SITE_LOCALES } from "@/lib/site-settings";
+import {
+  DEFAULT_SITE_LOCALE,
+  SITE_LOCALES,
+  toHtmlLanguageTag,
+} from "@/lib/site-settings";
 import "./globals.css";
 import { ThemeSync } from "./components/ThemeSync";
 import { LanguageProvider } from "./i18n/LanguageProvider";
@@ -41,8 +45,8 @@ export default async function RootLayout({
 
   return (
     <html
-      lang="ja"
-      className="theme-loading h-full antialiased"
+      lang={toHtmlLanguageTag(DEFAULT_SITE_LOCALE)}
+      className="theme-loading language-loading h-full antialiased"
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
