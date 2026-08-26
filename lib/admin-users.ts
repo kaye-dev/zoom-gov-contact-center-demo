@@ -1,3 +1,8 @@
+import {
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+} from "@/lib/password-policy";
+
 export const ADMIN_USER_ERROR_CODES = {
   authenticationRequired: "AUTHENTICATION_REQUIRED",
   administratorRequired: "ADMINISTRATOR_REQUIRED",
@@ -7,6 +12,8 @@ export const ADMIN_USER_ERROR_CODES = {
   invalidEmail: "INVALID_EMAIL",
   emailAlreadyExists: "EMAIL_ALREADY_EXISTS",
   invalidRole: "INVALID_ROLE",
+  invalidPassword: "INVALID_PASSWORD",
+  passwordMismatch: "PASSWORD_MISMATCH",
   userNotFound: "USER_NOT_FOUND",
   selfProtected: "SELF_PROTECTED",
   lastActiveAdmin: "LAST_ACTIVE_ADMIN",
@@ -14,6 +21,8 @@ export const ADMIN_USER_ERROR_CODES = {
   suspendFailed: "SUSPEND_FAILED",
   reactivateFailed: "REACTIVATE_FAILED",
   deleteFailed: "DELETE_FAILED",
+  resetPasswordFailed: "RESET_PASSWORD_FAILED",
+  sessionRevocationFailed: "SESSION_REVOCATION_FAILED",
 } as const;
 
 export type AdminUserErrorCode =
@@ -28,8 +37,21 @@ export type AdminUserUpdate =
   | { field: "email"; value: string }
   | { field: "role"; value: "user" | "admin" };
 
+export type AdminUserPasswordMode = "temporary" | "standard";
+
+export type AdminUserPasswordReset = {
+  mode: AdminUserPasswordMode;
+  password: string;
+  passwordConfirmation: string;
+  revokeSessions: boolean;
+};
+
 type AdminUserUpdateResult =
   | { ok: true; value: AdminUserUpdate }
+  | { ok: false; code: AdminUserErrorCode };
+
+type AdminUserPasswordResetResult =
+  | { ok: true; value: AdminUserPasswordReset }
   | { ok: false; code: AdminUserErrorCode };
 
 type ProtectedUser = {
@@ -69,6 +91,47 @@ export function parseAdminUserUpdate(value: unknown): AdminUserUpdateResult {
   return value.value === "user" || value.value === "admin"
     ? { ok: true, value: { field: "role", value: value.value } }
     : { ok: false, code: ADMIN_USER_ERROR_CODES.invalidRole };
+}
+
+export function parseAdminUserPasswordReset(
+  value: unknown,
+): AdminUserPasswordResetResult {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Object.keys(value).length !== 4 ||
+    !("mode" in value) ||
+    !("password" in value) ||
+    !("passwordConfirmation" in value) ||
+    !("revokeSessions" in value) ||
+    (value.mode !== "temporary" && value.mode !== "standard") ||
+    typeof value.password !== "string" ||
+    typeof value.passwordConfirmation !== "string" ||
+    typeof value.revokeSessions !== "boolean"
+  ) {
+    return { ok: false, code: ADMIN_USER_ERROR_CODES.invalidRequest };
+  }
+
+  if (
+    value.password.length < PASSWORD_MIN_LENGTH ||
+    value.password.length > PASSWORD_MAX_LENGTH
+  ) {
+    return { ok: false, code: ADMIN_USER_ERROR_CODES.invalidPassword };
+  }
+
+  if (value.password !== value.passwordConfirmation) {
+    return { ok: false, code: ADMIN_USER_ERROR_CODES.passwordMismatch };
+  }
+
+  return {
+    ok: true,
+    value: {
+      mode: value.mode,
+      password: value.password,
+      passwordConfirmation: value.passwordConfirmation,
+      revokeSessions: value.revokeSessions,
+    },
+  };
 }
 
 export function getProtectedAdminActionError({

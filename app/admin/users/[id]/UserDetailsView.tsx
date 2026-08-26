@@ -4,7 +4,16 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
-import type { AdminUserField } from "@/lib/admin-users";
+import {
+  parseAdminUserPasswordReset,
+  type AdminUserField,
+  type AdminUserPasswordMode,
+} from "@/lib/admin-users";
+import {
+  generateTemporaryPassword,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+} from "@/lib/password-policy";
 
 import { useI18n } from "../../../i18n/LanguageProvider";
 import { ConfirmationDialog } from "../ConfirmationDialog";
@@ -16,6 +25,7 @@ type ManagedUser = {
   email: string;
   role: string | null;
   banned: boolean | null;
+  mustChangePassword: boolean;
 };
 
 type UserDetailsViewProps = {
@@ -37,10 +47,17 @@ export function UserDetailsView({
   );
   const [editingField, setEditingField] = useState<AdminUserField | null>(null);
   const [draftValue, setDraftValue] = useState("");
+  const [isEditingPassword, setIsEditingPassword] = useState(false);
+  const [passwordMode, setPasswordMode] =
+    useState<AdminUserPasswordMode>("temporary");
+  const [password, setPassword] = useState("");
+  const [passwordConfirmation, setPasswordConfirmation] = useState("");
+  const [revokeSessions, setRevokeSessions] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmingEmail, setConfirmingEmail] = useState(false);
+  const [confirmingPassword, setConfirmingPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const protectedRoleReason = getRoleProtectionReason({
     user,
@@ -49,12 +66,13 @@ export function UserDetailsView({
     selfProtected: t.admin.userManagement.selfProtected,
     lastAdminProtected: t.admin.userManagement.lastAdminProtected,
   });
+  const passwordResetProtected = user.id === currentUserId;
 
   const beginEdit = (field: AdminUserField) => {
     setEditingField(field);
     setDraftValue(getFieldValue(user, field));
     setError(null);
-    setSaved(false);
+    setSuccessMessage(null);
   };
 
   const cancelEdit = () => {
@@ -62,6 +80,42 @@ export function UserDetailsView({
     setEditingField(null);
     setDraftValue("");
     setConfirmingEmail(false);
+    setError(null);
+  };
+
+  const beginPasswordReset = () => {
+    setIsEditingPassword(true);
+    setPasswordMode("temporary");
+    setPassword("");
+    setPasswordConfirmation("");
+    setRevokeSessions(true);
+    setConfirmingPassword(false);
+    setError(null);
+    setSuccessMessage(null);
+  };
+
+  const cancelPasswordReset = () => {
+    if (isSubmitting) return;
+    setIsEditingPassword(false);
+    setPasswordMode("temporary");
+    setPassword("");
+    setPasswordConfirmation("");
+    setRevokeSessions(true);
+    setConfirmingPassword(false);
+    setError(null);
+  };
+
+  const changePasswordMode = (mode: AdminUserPasswordMode) => {
+    setPasswordMode(mode);
+    setPassword("");
+    setPasswordConfirmation("");
+    setError(null);
+  };
+
+  const generatePassword = () => {
+    const generated = generateTemporaryPassword();
+    setPassword(generated);
+    setPasswordConfirmation(generated);
     setError(null);
   };
 
@@ -117,9 +171,78 @@ export function UserDetailsView({
     setConfirmingEmail(false);
     setEditingField(null);
     setDraftValue("");
-    setSaved(true);
+    setSuccessMessage(t.admin.userManagement.saved);
     router.refresh();
   };
+
+  const submitPasswordReset = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (isSubmitting) return;
+
+    const parsed = parseAdminUserPasswordReset({
+      mode: passwordMode,
+      password,
+      passwordConfirmation,
+      revokeSessions,
+    });
+
+    if (!parsed.ok) {
+      setError(getLocalizedError(parsed.code, t.admin.userManagement.errors));
+      return;
+    }
+
+    setError(null);
+    setConfirmingPassword(true);
+  };
+
+  const resetPassword = async () => {
+    setIsSubmitting(true);
+    setError(null);
+
+    const response = await fetch(
+      `/api/admin/users/${encodeURIComponent(user.id)}/reset-password`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: passwordMode,
+          password,
+          passwordConfirmation,
+          revokeSessions,
+        }),
+      },
+    );
+    const body = (await response.json().catch(() => null)) as
+      | {
+          ok?: boolean;
+          user?: Pick<ManagedUser, "id" | "mustChangePassword">;
+          error?: string;
+        }
+      | null;
+
+    if (!response.ok || !body?.ok || !body.user) {
+      setError(getLocalizedError(body?.error, t.admin.userManagement.errors));
+      setIsSubmitting(false);
+      return;
+    }
+
+    setUser((current) => ({ ...current, ...body.user }));
+    setIsSubmitting(false);
+    setSuccessMessage(t.admin.userManagement.passwordResetSaved);
+    cancelPasswordReset();
+    router.refresh();
+  };
+
+  const passwordLengthInvalid =
+    password.length > 0 &&
+    (password.length < PASSWORD_MIN_LENGTH ||
+      password.length > PASSWORD_MAX_LENGTH);
+  const passwordsMismatch =
+    passwordConfirmation.length > 0 && password !== passwordConfirmation;
+  const canSubmitPassword =
+    password.length >= PASSWORD_MIN_LENGTH &&
+    password.length <= PASSWORD_MAX_LENGTH &&
+    password === passwordConfirmation;
 
   const fields: Array<{
     field: AdminUserField;
@@ -154,12 +277,12 @@ export function UserDetailsView({
         <StatusBadge banned={user.banned} />
       </div>
 
-      {saved ? (
+      {successMessage ? (
         <p
           role="status"
           className="rounded-md bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200"
         >
-          {t.admin.userManagement.saved}
+          {successMessage}
         </p>
       ) : null}
 
@@ -167,7 +290,8 @@ export function UserDetailsView({
         {fields.map(({ field, label, value }) => {
           const isEditing = editingField === field;
           const roleEditProtected = field === "role" && protectedRoleReason !== null;
-          const editDisabled = editingField !== null || roleEditProtected;
+          const editDisabled =
+            editingField !== null || isEditingPassword || roleEditProtected;
 
           return (
             <div
@@ -255,6 +379,221 @@ export function UserDetailsView({
             </div>
           );
         })}
+        <div className="grid gap-3 px-5 py-6 sm:grid-cols-[11rem_minmax(0,1fr)_auto] sm:items-start sm:gap-6">
+          <p className="text-sm font-semibold text-fg-muted">
+            {t.admin.userManagement.password}
+          </p>
+          {isEditingPassword ? (
+            <form
+              onSubmit={submitPasswordReset}
+              className="space-y-5 sm:col-span-2"
+            >
+              <fieldset className="space-y-3">
+                <legend className="text-sm font-semibold">
+                  {t.admin.userManagement.passwordMode}
+                </legend>
+                <div className="grid max-w-2xl gap-3 sm:grid-cols-2">
+                  {(["temporary", "standard"] as const).map((mode) => (
+                    <label
+                      key={mode}
+                      className="flex cursor-pointer gap-3 rounded-lg border border-line p-4 has-[:checked]:border-accent has-[:checked]:bg-primary-50/60 dark:has-[:checked]:bg-primary-950/30"
+                    >
+                      <input
+                        type="radio"
+                        name="passwordMode"
+                        value={mode}
+                        checked={passwordMode === mode}
+                        onChange={() => changePasswordMode(mode)}
+                        disabled={isSubmitting}
+                        className="mt-1 h-4 w-4 cursor-pointer accent-primary disabled:cursor-not-allowed"
+                      />
+                      <span>
+                        <span className="block text-sm font-semibold">
+                          {mode === "temporary"
+                            ? t.admin.userManagement.temporaryPasswordMode
+                            : t.admin.userManagement.standardPasswordMode}
+                        </span>
+                        <span className="mt-1 block text-xs leading-5 text-fg-muted">
+                          {mode === "temporary"
+                            ? t.admin.userManagement.temporaryPasswordModeDescription
+                            : t.admin.userManagement.standardPasswordModeDescription}
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+
+              <div className="grid max-w-2xl gap-4 sm:grid-cols-2">
+                <label className="space-y-2">
+                  <span className="block text-sm font-semibold">
+                    {t.admin.userManagement.newPassword}
+                  </span>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(event) => {
+                      setPassword(event.target.value);
+                      setError(null);
+                    }}
+                    required
+                    minLength={PASSWORD_MIN_LENGTH}
+                    maxLength={PASSWORD_MAX_LENGTH}
+                    autoComplete="new-password"
+                    disabled={isSubmitting}
+                    autoFocus
+                    aria-describedby="admin-password-requirements"
+                    className="w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent disabled:opacity-60"
+                  />
+                </label>
+                <label className="space-y-2">
+                  <span className="block text-sm font-semibold">
+                    {t.admin.userManagement.confirmPassword}
+                  </span>
+                  <input
+                    type="password"
+                    value={passwordConfirmation}
+                    onChange={(event) => {
+                      setPasswordConfirmation(event.target.value);
+                      setError(null);
+                    }}
+                    required
+                    minLength={PASSWORD_MIN_LENGTH}
+                    maxLength={PASSWORD_MAX_LENGTH}
+                    autoComplete="new-password"
+                    disabled={isSubmitting}
+                    className="w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent disabled:opacity-60"
+                  />
+                </label>
+              </div>
+              <div className="max-w-2xl space-y-2">
+                <p
+                  id="admin-password-requirements"
+                  className="text-xs leading-5 text-fg-muted"
+                >
+                  {t.admin.userManagement.passwordRequirements}
+                </p>
+                {passwordMode === "temporary" ? (
+                  <button
+                    type="button"
+                    onClick={generatePassword}
+                    disabled={isSubmitting}
+                    className="cursor-pointer text-sm font-semibold text-accent underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {t.admin.userManagement.generateTemporaryPassword}
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="max-w-2xl rounded-lg border border-line p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold">
+                      {t.admin.userManagement.revokeSessions}
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-fg-muted">
+                      {t.admin.userManagement.revokeSessionsDescription}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="text-xs font-semibold text-fg-muted">
+                      {revokeSessions
+                        ? t.admin.userManagement.enabled
+                        : t.admin.userManagement.disabled}
+                    </span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={revokeSessions}
+                      aria-label={t.admin.userManagement.revokeSessions}
+                      onClick={() => setRevokeSessions((value) => !value)}
+                      disabled={isSubmitting}
+                      className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
+                        revokeSessions ? "bg-primary" : "bg-gray-300 dark:bg-gray-600"
+                      }`}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                          revokeSessions ? "translate-x-6" : "translate-x-1"
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {passwordLengthInvalid ? (
+                <p role="alert" className="max-w-2xl text-sm text-red-700 dark:text-red-200">
+                  {t.admin.userManagement.errors.INVALID_PASSWORD}
+                </p>
+              ) : null}
+              {passwordsMismatch ? (
+                <p role="alert" className="max-w-2xl text-sm text-red-700 dark:text-red-200">
+                  {t.admin.userManagement.errors.PASSWORD_MISMATCH}
+                </p>
+              ) : null}
+              {error ? (
+                <p
+                  role="alert"
+                  className="max-w-2xl rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200"
+                >
+                  {error}
+                </p>
+              ) : null}
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="submit"
+                  disabled={isSubmitting || !canSubmitPassword}
+                  className="cursor-pointer rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {t.admin.userManagement.save}
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelPasswordReset}
+                  disabled={isSubmitting}
+                  className="cursor-pointer rounded-md border border-line bg-surface px-4 py-2 text-sm font-semibold transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {t.admin.userManagement.cancel}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <>
+              <div className="min-w-0">
+                <p className="font-medium">
+                  {user.mustChangePassword
+                    ? t.admin.userManagement.passwordChangeRequired
+                    : t.admin.userManagement.passwordConfigured}
+                </p>
+                {passwordResetProtected ? (
+                  <p className="mt-2 text-xs leading-5 text-fg-muted">
+                    {t.admin.userManagement.selfPasswordResetProtected}
+                  </p>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                onClick={beginPasswordReset}
+                disabled={
+                  editingField !== null ||
+                  isEditingPassword ||
+                  passwordResetProtected
+                }
+                title={
+                  passwordResetProtected
+                    ? t.admin.userManagement.selfPasswordResetProtected
+                    : undefined
+                }
+                className="cursor-pointer justify-self-start rounded-md px-2 py-1 text-sm font-semibold text-accent transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-45 sm:justify-self-end"
+              >
+                {t.admin.userManagement.resetPassword}
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {confirmingEmail ? (
@@ -288,6 +627,57 @@ export function UserDetailsView({
                 {t.admin.userManagement.newEmail}
               </dt>
               <dd className="mt-1 break-all font-semibold">{draftValue}</dd>
+            </div>
+          </dl>
+        </ConfirmationDialog>
+      ) : null}
+
+      {confirmingPassword ? (
+        <ConfirmationDialog
+          title={t.admin.userManagement.passwordDialogTitle}
+          description={t.admin.userManagement.passwordDialogDescription}
+          confirmLabel={
+            isSubmitting
+              ? t.admin.userManagement.saving
+              : t.admin.userManagement.confirmPasswordReset
+          }
+          cancelLabel={t.admin.userManagement.cancel}
+          isSubmitting={isSubmitting}
+          error={error}
+          onClose={() => {
+            if (isSubmitting) return;
+            setConfirmingPassword(false);
+            setError(null);
+          }}
+          onConfirm={() => void resetPassword()}
+        >
+          <dl className="mt-4 space-y-3 rounded-lg bg-surface px-4 py-3 text-sm">
+            <div>
+              <dt className="font-semibold text-fg-muted">
+                {t.admin.userManagement.targetUser}
+              </dt>
+              <dd className="mt-1 font-semibold">{user.name}</dd>
+              <dd className="break-all text-fg-muted">{user.email}</dd>
+            </div>
+            <div>
+              <dt className="font-semibold text-fg-muted">
+                {t.admin.userManagement.passwordMode}
+              </dt>
+              <dd className="mt-1 font-semibold">
+                {passwordMode === "temporary"
+                  ? t.admin.userManagement.temporaryPasswordMode
+                  : t.admin.userManagement.standardPasswordMode}
+              </dd>
+            </div>
+            <div>
+              <dt className="font-semibold text-fg-muted">
+                {t.admin.userManagement.revokeSessions}
+              </dt>
+              <dd className="mt-1 font-semibold">
+                {revokeSessions
+                  ? t.admin.userManagement.enabled
+                  : t.admin.userManagement.disabled}
+              </dd>
             </div>
           </dl>
         </ConfirmationDialog>

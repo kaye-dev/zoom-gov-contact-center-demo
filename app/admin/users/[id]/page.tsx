@@ -23,6 +23,7 @@ export default async function UserDetailsPage({
           email: true,
           role: true,
           banned: true,
+          mustChangePassword: true,
         },
       }),
       prisma.user.count({

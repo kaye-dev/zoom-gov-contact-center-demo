@@ -7,9 +7,11 @@ import {
   ADMIN_USER_ERROR_CODES,
   getProtectedAdminActionError,
   isActiveAdmin,
+  parseAdminUserPasswordReset,
   parseAdminUserUpdate,
   type AdminUserErrorCode,
 } from "@/lib/admin-users";
+import { generateTemporaryPassword } from "@/lib/password-policy";
 import type { PrismaClient } from "@/lib/generated/prisma/client";
 import {
   countDemoRecords,
@@ -443,6 +445,123 @@ app.patch("/admin/users/:id", async (c) => {
   }
 });
 
+app.post("/admin/users/:id/reset-password", async (c) => {
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const session = await getAppSession(auth, c.req.raw.headers);
+  const unauthorized = rejectNonAdminUserManagement(session);
+
+  if (unauthorized) {
+    return c.json(unauthorized.body, unauthorized.status);
+  }
+
+  const parsed = parseAdminUserPasswordReset(await readJsonBody(c.req.raw));
+
+  if (!parsed.ok) {
+    return c.json({ error: parsed.code }, 400);
+  }
+
+  const userId = c.req.param("id");
+  const target = await findManagedUser(prisma, userId);
+
+  if (!target) {
+    return c.json({ error: ADMIN_USER_ERROR_CODES.userNotFound }, 404);
+  }
+
+  const actor = getSessionUser(session)!;
+
+  if (actor.id === userId) {
+    return c.json({ error: ADMIN_USER_ERROR_CODES.selfProtected }, 409);
+  }
+
+  try {
+    await auth.api.setUserPassword({
+      headers: c.req.raw.headers,
+      body: {
+        userId,
+        newPassword: parsed.value.password,
+      },
+    });
+  } catch {
+    console.error("Failed to reset an admin-managed user password.");
+    return c.json(
+      { error: ADMIN_USER_ERROR_CODES.resetPasswordFailed },
+      500,
+    );
+  }
+
+  const changedAt = new Date();
+  let updatedUser: { id: string; mustChangePassword: boolean };
+
+  try {
+    const [user] = await prisma.$transaction([
+      prisma.user.update({
+        where: { id: userId },
+        data:
+          parsed.value.mode === "temporary"
+            ? {
+                mustChangePassword: true,
+                temporaryPasswordIssuedAt: changedAt,
+              }
+            : {
+                mustChangePassword: false,
+                temporaryPasswordIssuedAt: null,
+                passwordChangedAt: changedAt,
+              },
+        select: {
+          id: true,
+          mustChangePassword: true,
+        },
+      }),
+      prisma.passwordResetRequest.updateMany({
+        where: {
+          userId,
+          status: "PENDING",
+        },
+        data: {
+          status: "REJECTED",
+          reviewedAt: changedAt,
+          reviewedByUserId: actor.id,
+        },
+      }),
+      prisma.passwordResetRequest.updateMany({
+        where: {
+          userId,
+          status: "APPROVED",
+        },
+        data: {
+          status: "CONSUMED",
+          consumedAt: changedAt,
+        },
+      }),
+    ]);
+    updatedUser = user;
+  } catch {
+    console.error("Failed to save admin-managed password reset metadata.");
+    return c.json(
+      { error: ADMIN_USER_ERROR_CODES.resetPasswordFailed },
+      500,
+    );
+  }
+
+  if (parsed.value.revokeSessions) {
+    try {
+      await auth.api.revokeUserSessions({
+        headers: c.req.raw.headers,
+        body: { userId },
+      });
+    } catch {
+      console.error("Failed to revoke sessions after an admin password reset.");
+      return c.json(
+        { error: ADMIN_USER_ERROR_CODES.sessionRevocationFailed },
+        500,
+      );
+    }
+  }
+
+  return c.json({ ok: true, user: updatedUser });
+});
+
 app.post("/admin/users/:id/suspend", async (c) => {
   const auth = c.get("auth");
   const prisma = c.get("prisma");
@@ -704,6 +823,7 @@ app.post("/account/change-password", async (c) => {
       where: { id: user.id },
       data: {
         mustChangePassword: false,
+        temporaryPasswordIssuedAt: null,
         passwordChangedAt: changedAt,
       },
     }),
@@ -886,19 +1006,6 @@ function rejectNonAdminForSettings(
   session: Awaited<ReturnType<typeof getAppSession>>,
 ) {
   return getSettingsAuthorizationFailure(session);
-}
-
-function generateTemporaryPassword() {
-  const alphabet =
-    "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*";
-  const crypto = globalThis.crypto;
-  let password = "";
-
-  for (let i = 0; i < 20; i += 1) {
-    password += alphabet[crypto.getRandomValues(new Uint32Array(1))[0] % alphabet.length];
-  }
-
-  return password;
 }
 
 function getAuthErrorMessage(error: unknown) {

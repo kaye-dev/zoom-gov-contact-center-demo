@@ -6,6 +6,7 @@ import {
   ADMIN_USER_ERROR_CODES,
   getProtectedAdminActionError,
   isActiveAdmin,
+  parseAdminUserPasswordReset,
   parseAdminUserUpdate,
 } from "../lib/admin-users";
 import { dictionaries, locales } from "../app/i18n/dictionaries";
@@ -78,6 +79,81 @@ test("self and the last active administrator are protected", () => {
   assert.equal(isActiveAdmin({ role: "admin", banned: true }), false);
 });
 
+test("admin password resets validate mode, length, confirmation, and session policy", () => {
+  const validPassword = "ValidPassword#2026";
+
+  assert.deepEqual(
+    parseAdminUserPasswordReset({
+      mode: "temporary",
+      password: validPassword,
+      passwordConfirmation: validPassword,
+      revokeSessions: true,
+    }),
+    {
+      ok: true,
+      value: {
+        mode: "temporary",
+        password: validPassword,
+        passwordConfirmation: validPassword,
+        revokeSessions: true,
+      },
+    },
+  );
+  assert.equal(
+    parseAdminUserPasswordReset({
+      mode: "standard",
+      password: validPassword,
+      passwordConfirmation: validPassword,
+      revokeSessions: false,
+    }).ok,
+    true,
+  );
+
+  for (const payload of [
+    null,
+    {},
+    {
+      mode: "unknown",
+      password: validPassword,
+      passwordConfirmation: validPassword,
+      revokeSessions: true,
+    },
+    {
+      mode: "temporary",
+      password: "too-short",
+      passwordConfirmation: "too-short",
+      revokeSessions: true,
+    },
+    {
+      mode: "temporary",
+      password: "x".repeat(129),
+      passwordConfirmation: "x".repeat(129),
+      revokeSessions: true,
+    },
+    {
+      mode: "temporary",
+      password: validPassword,
+      passwordConfirmation: "DifferentPassword#2026",
+      revokeSessions: true,
+    },
+    {
+      mode: "temporary",
+      password: validPassword,
+      passwordConfirmation: validPassword,
+      revokeSessions: "yes",
+    },
+    {
+      mode: "temporary",
+      password: validPassword,
+      passwordConfirmation: validPassword,
+      revokeSessions: true,
+      extra: true,
+    },
+  ]) {
+    assert.equal(parseAdminUserPasswordReset(payload).ok, false);
+  }
+});
+
 test("admin user routes use Better Auth lifecycle operations", () => {
   const source = readFileSync(
     new URL("../app/api/[[...route]]/route.ts", import.meta.url),
@@ -90,6 +166,13 @@ test("admin user routes use Better Auth lifecycle operations", () => {
   assert.match(source, /auth\.api\.banUser/);
   assert.match(source, /auth\.api\.unbanUser/);
   assert.match(source, /auth\.api\.removeUser/);
+  assert.match(source, /app\.post\("\/admin\/users\/:id\/reset-password"/);
+  assert.match(source, /auth\.api\.setUserPassword/);
+  assert.match(source, /auth\.api\.revokeUserSessions/);
+  assert.match(source, /status: "PENDING"/);
+  assert.match(source, /status: "REJECTED"/);
+  assert.match(source, /status: "APPROVED"/);
+  assert.match(source, /status: "CONSUMED"/);
   assert.match(source, /export const PATCH = handler/);
   assert.match(source, /export const DELETE = handler/);
   assert.match(source, /NOT: \{ banned: true \}/);
@@ -107,6 +190,9 @@ test("all locales include complete user-management copy and errors", () => {
     assert.ok(copy.delete.length > 0, locale);
     assert.ok(copy.emailDialogDescription.length > 0, locale);
     assert.ok(copy.deleteDialogDescription.length > 0, locale);
+    assert.ok(copy.generateTemporaryPassword.length > 0, locale);
+    assert.ok(copy.revokeSessionsDescription.length > 0, locale);
+    assert.ok(copy.passwordDialogDescription.length > 0, locale);
     assert.deepEqual(Object.keys(copy.errors).sort(), expectedErrorCodes, locale);
     for (const message of Object.values(copy.errors)) {
       assert.ok(message.length > 0, locale);
@@ -133,4 +219,11 @@ test("user management UI keeps editing and destructive actions behind explicit c
   assert.match(detailsSource, /editingField === field/);
   assert.match(detailsSource, /setConfirmingEmail\(true\)/);
   assert.match(detailsSource, /emailDialogTitle/);
+  assert.match(detailsSource, /generateTemporaryPassword\(\)/);
+  assert.match(detailsSource, /setPasswordConfirmation\(generated\)/);
+  assert.match(detailsSource, /changePasswordMode/);
+  assert.match(detailsSource, /setPassword\(""\)/);
+  assert.match(detailsSource, /role="switch"/);
+  assert.match(detailsSource, /setConfirmingPassword\(true\)/);
+  assert.match(detailsSource, /passwordDialogTitle/);
 });
