@@ -226,6 +226,9 @@ export type Dictionary = {
     passwordChanged: string;
     temporaryPassword: string;
     temporaryPasswordDescription: string;
+    copyTemporaryPassword: string;
+    temporaryPasswordCopied: string;
+    temporaryPasswordCopyFailed: string;
     required: string;
     error: string;
   };
@@ -752,6 +755,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
       temporaryPassword: '仮パスワード',
       temporaryPasswordDescription:
         'この仮パスワードは一度だけ表示されます。安全な方法で対象ユーザーに共有してください。',
+      copyTemporaryPassword: '仮パスワードをコピー',
+      temporaryPasswordCopied: '仮パスワードをコピーしました。',
+      temporaryPasswordCopyFailed:
+        'コピーできませんでした。仮パスワードを選択してコピーしてください。',
       required: '必須',
       error: '処理に失敗しました。',
     },
@@ -1366,6 +1373,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
       temporaryPassword: 'Temporary password',
       temporaryPasswordDescription:
         'This temporary password is shown only once. Share it with the user through a secure channel.',
+      copyTemporaryPassword: 'Copy temporary password',
+      temporaryPasswordCopied: 'Temporary password copied.',
+      temporaryPasswordCopyFailed:
+        'Could not copy the temporary password. Select it and copy it manually.',
       required: 'Required',
       error: 'The request failed.',
     },
@@ -1966,6 +1977,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
       temporaryPassword: '临时密码',
       temporaryPasswordDescription:
         '临时密码只会显示一次。请通过安全方式共享给目标用户。',
+      copyTemporaryPassword: '复制临时密码',
+      temporaryPasswordCopied: '已复制临时密码。',
+      temporaryPasswordCopyFailed:
+        '无法复制。请选择临时密码并手动复制。',
       required: '必填',
       error: '处理失败。',
     },
@@ -2544,6 +2559,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
       temporaryPassword: '臨時密碼',
       temporaryPasswordDescription:
         '臨時密碼只會顯示一次。請透過安全方式分享給目標使用者。',
+      copyTemporaryPassword: '複製臨時密碼',
+      temporaryPasswordCopied: '已複製臨時密碼。',
+      temporaryPasswordCopyFailed:
+        '無法複製。請選取臨時密碼並手動複製。',
       required: '必填',
       error: '處理失敗。',
     },
@@ -3123,6 +3142,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
       temporaryPassword: '임시 비밀번호',
       temporaryPasswordDescription:
         '임시 비밀번호는 한 번만 표시됩니다. 안전한 방법으로 대상 사용자에게 공유하세요.',
+      copyTemporaryPassword: '임시 비밀번호 복사',
+      temporaryPasswordCopied: '임시 비밀번호를 복사했습니다.',
+      temporaryPasswordCopyFailed:
+        '복사하지 못했습니다. 임시 비밀번호를 선택하여 직접 복사해 주세요.',
       required: '필수',
       error: '처리에 실패했습니다.',
     },
