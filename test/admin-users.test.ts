@@ -193,8 +193,6 @@ test("all locales include complete user-management copy and errors", () => {
     assert.ok(copy.generateTemporaryPassword.length > 0, locale);
     assert.ok(copy.revokeSessionsDescription.length > 0, locale);
     assert.ok(copy.passwordDialogDescription.length > 0, locale);
-    assert.ok(copy.showPassword.length > 0, locale);
-    assert.ok(copy.hidePassword.length > 0, locale);
     assert.ok(copy.passwordsMatch.length > 0, locale);
     assert.deepEqual(Object.keys(copy.errors).sort(), expectedErrorCodes, locale);
     for (const message of Object.values(copy.errors)) {
@@ -229,15 +227,11 @@ test("user management UI keeps editing and destructive actions behind explicit c
   assert.match(detailsSource, /role="switch"/);
   assert.match(detailsSource, /setConfirmingPassword\(true\)/);
   assert.match(detailsSource, /passwordDialogTitle/);
-  assert.match(detailsSource, /VisibilityIcon/);
-  assert.match(detailsSource, /VisibilityOffIcon/);
-  assert.match(detailsSource, /isPasswordVisible \? "text" : "password"/);
-  assert.match(detailsSource, /isPasswordConfirmationVisible/);
+  assert.match(detailsSource, /PasswordInput/);
+  assert.match(detailsSource, /admin-new-password-\$\{passwordMode\}/);
+  assert.match(detailsSource, /admin-confirm-password-\$\{passwordMode\}/);
   assert.match(detailsSource, /passwordsMatch/);
   assert.match(detailsSource, /role="status"/);
-  assert.match(detailsSource, /VisibilityIcon height=\{14\} width=\{14\}/);
-  assert.match(detailsSource, /VisibilityOffIcon height=\{14\} width=\{14\}/);
-  assert.match(detailsSource, /hover:text-accent/);
 });
 
 test("password visibility controls use the requested Material Symbols SVG paths", () => {
