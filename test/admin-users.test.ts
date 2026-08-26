@@ -235,6 +235,9 @@ test("user management UI keeps editing and destructive actions behind explicit c
   assert.match(detailsSource, /isPasswordConfirmationVisible/);
   assert.match(detailsSource, /passwordsMatch/);
   assert.match(detailsSource, /role="status"/);
+  assert.match(detailsSource, /VisibilityIcon height=\{14\} width=\{14\}/);
+  assert.match(detailsSource, /VisibilityOffIcon height=\{14\} width=\{14\}/);
+  assert.match(detailsSource, /hover:text-accent/);
 });
 
 test("password visibility controls use the requested Material Symbols SVG paths", () => {

@@ -463,7 +463,7 @@ export function UserDetailsView({
                       disabled={isSubmitting}
                       autoFocus
                       aria-describedby="admin-password-requirements"
-                      className="w-full rounded-md border border-line bg-surface py-2 pl-3 pr-12 text-fg outline-none transition-colors focus:border-accent disabled:opacity-60"
+                      className="w-full rounded-md border border-line bg-surface py-2 pl-3 pr-10 text-fg outline-none transition-colors focus:border-accent disabled:opacity-60"
                     />
                     <button
                       type="button"
@@ -476,12 +476,12 @@ export function UserDetailsView({
                       aria-controls="admin-new-password"
                       onClick={() => setIsPasswordVisible((visible) => !visible)}
                       disabled={isSubmitting}
-                      className="absolute inset-y-0 right-1 my-auto inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
+                      className="absolute inset-y-0 right-0 z-10 flex cursor-pointer items-center rounded-r-md px-3 text-fg-muted transition-colors hover:text-accent focus-visible:outline-none focus-visible:text-accent disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {isPasswordVisible ? (
-                        <VisibilityOffIcon />
+                        <VisibilityOffIcon height={14} width={14} />
                       ) : (
-                        <VisibilityIcon />
+                        <VisibilityIcon height={14} width={14} />
                       )}
                     </button>
                   </span>
@@ -509,7 +509,7 @@ export function UserDetailsView({
                       maxLength={PASSWORD_MAX_LENGTH}
                       autoComplete="new-password"
                       disabled={isSubmitting}
-                      className="w-full rounded-md border border-line bg-surface py-2 pl-3 pr-12 text-fg outline-none transition-colors focus:border-accent disabled:opacity-60"
+                      className="w-full rounded-md border border-line bg-surface py-2 pl-3 pr-10 text-fg outline-none transition-colors focus:border-accent disabled:opacity-60"
                     />
                     <button
                       type="button"
@@ -524,12 +524,12 @@ export function UserDetailsView({
                         setIsPasswordConfirmationVisible((visible) => !visible)
                       }
                       disabled={isSubmitting}
-                      className="absolute inset-y-0 right-1 my-auto inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
+                      className="absolute inset-y-0 right-0 z-10 flex cursor-pointer items-center rounded-r-md px-3 text-fg-muted transition-colors hover:text-accent focus-visible:outline-none focus-visible:text-accent disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {isPasswordConfirmationVisible ? (
-                        <VisibilityOffIcon />
+                        <VisibilityOffIcon height={14} width={14} />
                       ) : (
-                        <VisibilityIcon />
+                        <VisibilityIcon height={14} width={14} />
                       )}
                     </button>
                   </span>
