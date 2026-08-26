@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { headers } from "next/headers";
 import { connection } from "next/server";
 import {
@@ -39,8 +40,19 @@ export default async function RootLayout({
   }
 
   return (
-    <html lang="ja" className="h-full antialiased" suppressHydrationWarning>
+    <html
+      lang="ja"
+      className="theme-loading h-full antialiased"
+      suppressHydrationWarning
+    >
       <body className="min-h-full flex flex-col">
+        <Script
+          id="theme-init"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('theme');var d=t==='dark';document.documentElement.classList.toggle('dark',d);document.documentElement.classList.toggle('light',!d);}catch(e){document.documentElement.classList.remove('dark');document.documentElement.classList.add('light');}})();`,
+          }}
+        />
         <ThemeSync />
         <LanguageProvider availableLocales={availableLocales}>
           {children}

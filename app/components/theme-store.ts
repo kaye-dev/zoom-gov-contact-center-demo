@@ -10,19 +10,15 @@ function getStoredTheme() {
     const stored = localStorage.getItem(THEME_STORAGE_KEY);
     if (stored === 'dark' || stored === 'light') return stored;
   } catch {
-    /* localStorage が使えない環境では OS 設定を使う */
+    /* localStorage が使えない環境ではライトを使う */
   }
   return null;
-}
-
-function getSystemThemeSnapshot() {
-  return window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
 function getPreferredThemeSnapshot() {
   const stored = getStoredTheme();
   if (stored) return stored === 'dark';
-  return getSystemThemeSnapshot();
+  return false;
 }
 
 function applyThemeClass(isDark: boolean) {
@@ -38,7 +34,7 @@ function getServerThemeSnapshot() {
   return false;
 }
 
-function syncThemeFromStorage() {
+export function syncThemeFromStorage() {
   applyThemeClass(getPreferredThemeSnapshot());
 }
 
@@ -50,20 +46,13 @@ function subscribeThemeChange(onStoreChange: () => void) {
   const handleStorage = (event: StorageEvent) => {
     if (event.key === null || event.key === THEME_STORAGE_KEY) notify();
   };
-  const handleSystemThemeChange = () => {
-    if (!getStoredTheme()) notify();
-  };
-  const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-
   syncThemeFromStorage();
   window.addEventListener(THEME_CHANGE_EVENT, notify);
   window.addEventListener('storage', handleStorage);
-  mediaQuery.addEventListener('change', handleSystemThemeChange);
 
   return () => {
     window.removeEventListener(THEME_CHANGE_EVENT, notify);
     window.removeEventListener('storage', handleStorage);
-    mediaQuery.removeEventListener('change', handleSystemThemeChange);
   };
 }
 
