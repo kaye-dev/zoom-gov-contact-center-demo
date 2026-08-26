@@ -1,0 +1,7 @@
+interface:
+  display_name: "Git Commit Push PR"
+  short_description: "gitとghで安全にcommit・push・PRを完了"
+  default_prompt: "Use $git-commit-push-pr to stage the current task changes, commit, synchronize with the base branch, push, and create or update the pull request using local git and gh."
+
+policy:
+  allow_implicit_invocation: false
