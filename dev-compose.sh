@@ -203,8 +203,8 @@ configure_web_access() {
   local local_origin="http://localhost:${host_port}"
   local lan_ip=""
   local lan_origin=""
-  local tunnel_origin="https://zoom.keien.dev"
-  local tunnel_hostname="zoom.keien.dev"
+  local tunnel_origin="https://demo.keien.dev"
+  local tunnel_hostname="demo.keien.dev"
   local answer
   local tty_fd
 
