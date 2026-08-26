@@ -5,6 +5,10 @@ import { admin } from "better-auth/plugins";
 
 import type { PrismaClient } from "@/lib/generated/prisma/client";
 import {
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+} from "@/lib/password-policy";
+import {
   connectDatabaseWithRetry,
   createDatabaseContext,
 } from "@/lib/server/prisma";
@@ -53,8 +57,8 @@ export function createAuth(
     emailAndPassword: {
       enabled: true,
       disableSignUp: true,
-      minPasswordLength: 12,
-      maxPasswordLength: 128,
+      minPasswordLength: PASSWORD_MIN_LENGTH,
+      maxPasswordLength: PASSWORD_MAX_LENGTH,
     },
     user: {
       additionalFields: {

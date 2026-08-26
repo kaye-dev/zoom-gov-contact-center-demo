@@ -1,4 +1,5 @@
 import { requireAdminSession } from "@/lib/server/auth/server";
+import { getSessionUser } from "@/lib/server/auth/helpers";
 import { withPrisma } from "@/lib/server/prisma";
 
 import { UsersView } from "./UsersView";
@@ -13,7 +14,7 @@ type UsersPageProps = {
 const PAGE_SIZE = 20;
 
 export default async function UsersPage({ searchParams }: UsersPageProps) {
-  await requireAdminSession("/admin/users");
+  const session = await requireAdminSession("/admin/users");
 
   const params = await searchParams;
   const search = readSearchParam(params.search).trim();
@@ -27,7 +28,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
       }
     : {};
 
-  const [users, total] = await withPrisma((prisma) =>
+  const [users, total, activeAdminCount] = await withPrisma((prisma) =>
     prisma.$transaction([
       prisma.user.findMany({
         where,
@@ -39,11 +40,18 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
           name: true,
           email: true,
           role: true,
+          banned: true,
           mustChangePassword: true,
           createdAt: true,
         },
       }),
       prisma.user.count({ where }),
+      prisma.user.count({
+        where: {
+          role: "admin",
+          NOT: { banned: true },
+        },
+      }),
     ]),
   );
 
@@ -56,6 +64,8 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
       search={search}
       page={page}
       totalPages={Math.max(1, Math.ceil(total / PAGE_SIZE))}
+      currentUserId={getSessionUser(session)!.id}
+      activeAdminCount={activeAdminCount}
     />
   );
 }
