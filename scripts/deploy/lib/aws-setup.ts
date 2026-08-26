@@ -12,6 +12,10 @@ import {
   type StoredDeploymentConfig,
   validateAwsProfileName,
 } from "./aws-config";
+import {
+  type DeploymentParameterInput,
+  type DeploymentParameterWriter,
+} from "./aws-parameter-writer";
 import { requireExact, type Prompter } from "./input";
 import {
   combinedOutput,
@@ -70,7 +74,8 @@ export async function runAwsSetup(
   prompter: Prompter,
   secrets: SecretRegistry,
   options: AwsSetupOptions,
-  fetchImplementation: typeof globalThis.fetch = globalThis.fetch,
+  fetchImplementation: typeof globalThis.fetch,
+  parameterWriter: DeploymentParameterWriter,
 ): Promise<void> {
   const profile = validateAwsProfileName(options.profile);
   const identity = readCallerIdentity(runner, profile);
@@ -200,27 +205,24 @@ export async function runAwsSetup(
   );
 
   const versions = {
-    vercelToken: putSecretIfNeeded(
-      runner,
-      profile,
+    vercelToken: await putSecretIfNeeded(
+      parameterWriter,
       snapshot,
       DEPLOY_VERCEL_TOKEN_PARAMETER,
       desiredSecrets.vercelToken,
       configuredKms.arn,
       options.rotate === "vercel-token",
     ),
-    neonApiKey: putSecretIfNeeded(
-      runner,
-      profile,
+    neonApiKey: await putSecretIfNeeded(
+      parameterWriter,
       snapshot,
       DEPLOY_NEON_API_KEY_PARAMETER,
       desiredSecrets.neonApiKey,
       configuredKms.arn,
       options.rotate === "neon-api-key",
     ),
-    adminPassword: putSecretIfNeeded(
-      runner,
-      profile,
+    adminPassword: await putSecretIfNeeded(
+      parameterWriter,
       snapshot,
       DEPLOY_ADMIN_PASSWORD_PARAMETER,
       desiredSecrets.adminPassword,
@@ -229,9 +231,8 @@ export async function runAwsSetup(
     ),
   };
   const config = buildConfig(nonSecretInput, configuredKms.arn, versions);
-  putParameter(
-    runner,
-    profile,
+  await putParameter(
+    parameterWriter,
     {
       Name: DEPLOY_CONFIG_PARAMETER,
       Description:
@@ -828,22 +829,20 @@ function assertExistingParameterMetadata(
   }
 }
 
-function putSecretIfNeeded(
-  runner: CommandRunner,
-  profile: string,
+async function putSecretIfNeeded(
+  parameterWriter: DeploymentParameterWriter,
   snapshot: SetupSnapshot,
   name: string,
   value: string,
   kmsKeyArn: string,
   rotate: boolean,
-): number {
+): Promise<number> {
   const existing = snapshot.get(name);
   if (existing !== undefined && !rotate) {
     return existing.version;
   }
   return putParameter(
-    runner,
-    profile,
+    parameterWriter,
     {
       Name: name,
       Description:
@@ -859,47 +858,15 @@ function putSecretIfNeeded(
   );
 }
 
-function putParameter(
-  runner: CommandRunner,
-  profile: string,
-  input: Record<string, unknown>,
+async function putParameter(
+  parameterWriter: DeploymentParameterWriter,
+  input: DeploymentParameterInput,
   containsSecret: boolean,
-): number {
-  const result = runner.run(
-    "aws",
-    [
-      "ssm",
-      "put-parameter",
-      "--cli-input-json",
-      "file:///dev/stdin",
-      "--output",
-      "json",
-      "--no-cli-pager",
-      "--region",
-      DEPLOY_REGION,
-      "--profile",
-      profile,
-    ],
-    { input: JSON.stringify(input) },
-  );
-  assertAwsSuccess(
-    result,
+): Promise<number> {
+  return parameterWriter.put(
+    input,
     containsSecret ? "SecureString write" : "deployment config write",
   );
-  let response: unknown;
-  try {
-    response = JSON.parse(result.stdout) as unknown;
-  } catch {
-    throw new Error("SSM PutParameter returned invalid JSON.");
-  }
-  if (
-    !isRecord(response) ||
-    !Number.isSafeInteger(response.Version) ||
-    (response.Version as number) < 1
-  ) {
-    throw new Error("SSM PutParameter did not return a valid version.");
-  }
-  return response.Version as number;
 }
 
 async function verifyProviderTargets(

@@ -11,7 +11,14 @@ import {
   DEPLOY_VERCEL_TOKEN_PARAMETER,
   type StoredDeploymentConfig,
 } from "../lib/aws-config";
-import { runAwsSetup } from "../lib/aws-setup";
+import {
+  runAwsSetup as runAwsSetupImplementation,
+  type AwsSetupOptions,
+} from "../lib/aws-setup";
+import type {
+  DeploymentParameterInput,
+  DeploymentParameterWriter,
+} from "../lib/aws-parameter-writer";
 import type { Prompter } from "../lib/input";
 import {
   SecretRegistry,
@@ -254,6 +261,42 @@ class SetupPrompter implements Prompter {
     }
     return answer;
   }
+}
+
+function runAwsSetup(
+  runner: AwsSetupRunner,
+  prompter: SetupPrompter,
+  secrets: SecretRegistry,
+  options: AwsSetupOptions,
+  fetchImplementation: typeof globalThis.fetch,
+): Promise<void> {
+  return runAwsSetupImplementation(
+    runner,
+    prompter,
+    secrets,
+    options,
+    fetchImplementation,
+    createTestParameterWriter(runner),
+  );
+}
+
+function createTestParameterWriter(
+  runner: AwsSetupRunner,
+): DeploymentParameterWriter {
+  return {
+    async put(input: DeploymentParameterInput): Promise<number> {
+      const result = runner.run(
+        "aws",
+        ["ssm", "put-parameter"],
+        { input: JSON.stringify(input) },
+      );
+      assert.equal(result.status, 0);
+      const response = JSON.parse(result.stdout) as { Version?: unknown };
+      assert.ok(Number.isSafeInteger(response.Version));
+      return response.Version as number;
+    },
+    destroy() {},
+  };
 }
 
 function jsonSuccess(value: unknown): CommandResult {
