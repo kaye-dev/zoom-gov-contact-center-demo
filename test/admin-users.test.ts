@@ -182,7 +182,11 @@ test("all locales include complete user-management copy and errors", () => {
   const expectedErrorCodes = Object.values(ADMIN_USER_ERROR_CODES).sort();
 
   for (const locale of locales) {
+    const authCopy = dictionaries[locale].auth;
     const copy = dictionaries[locale].admin.userManagement;
+    assert.ok(authCopy.copyTemporaryPassword.length > 0, locale);
+    assert.ok(authCopy.temporaryPasswordCopied.length > 0, locale);
+    assert.ok(authCopy.temporaryPasswordCopyFailed.length > 0, locale);
     assert.ok(copy.detailsTitle.length > 0, locale);
     assert.ok(copy.edit.length > 0, locale);
     assert.ok(copy.suspend.length > 0, locale);
@@ -232,6 +236,33 @@ test("user management UI keeps editing and destructive actions behind explicit c
   assert.match(detailsSource, /admin-confirm-password-\$\{passwordMode\}/);
   assert.match(detailsSource, /passwordsMatch/);
   assert.match(detailsSource, /role="status"/);
+});
+
+test("new-user temporary passwords can be copied with accessible feedback", () => {
+  const formSource = readFileSync(
+    new URL("../app/admin/users/new/NewUserForm.tsx", import.meta.url),
+    "utf8",
+  );
+  const copyIconSource = readFileSync(
+    new URL("../app/components/svg/ContentCopyIcon.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(formSource, /navigator\.clipboard\.writeText\(createdUser\.temporaryPassword\)/);
+  assert.match(formSource, /setCopyFeedback\(null\)/);
+  assert.match(formSource, /type="button"/);
+  assert.match(formSource, /aria-label=\{t\.auth\.copyTemporaryPassword\}/);
+  assert.match(formSource, /role=\{copyFeedback\.kind === "error" \? "alert" : "status"\}/);
+  assert.match(formSource, /min-h-11 min-w-11 shrink-0 cursor-pointer/);
+  assert.doesNotMatch(formSource, /execCommand/);
+
+  assert.match(copyIconSource, /viewBox="0 -960 960 960"/);
+  assert.match(copyIconSource, /M360-240q-33 0-56\.5-23\.5T280-320/);
+  assert.match(copyIconSource, /height = 24/);
+  assert.match(copyIconSource, /width = 24/);
+  assert.match(copyIconSource, /fill="currentColor"/);
+  assert.match(copyIconSource, /aria-hidden="true"/);
+  assert.match(copyIconSource, /focusable="false"/);
 });
 
 test("password visibility controls use the requested Material Symbols SVG paths", () => {

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { ContentCopyIcon } from "../../../components/svg/ContentCopyIcon";
 import { useI18n } from "../../../i18n/LanguageProvider";
 
 type CreatedUser = {
@@ -9,14 +10,21 @@ type CreatedUser = {
   temporaryPassword: string;
 };
 
+type CopyFeedback = {
+  kind: "success" | "error";
+  message: string;
+};
+
 export function NewUserForm() {
   const { t } = useI18n();
   const [createdUser, setCreatedUser] = useState<CreatedUser | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState<CopyFeedback | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const submit = async (formData: FormData) => {
     setError(null);
+    setCopyFeedback(null);
     setCreatedUser(null);
     setIsSubmitting(true);
 
@@ -54,6 +62,25 @@ export function NewUserForm() {
     });
   };
 
+  const copyTemporaryPassword = async () => {
+    if (!createdUser) return;
+
+    setCopyFeedback(null);
+
+    try {
+      await navigator.clipboard.writeText(createdUser.temporaryPassword);
+      setCopyFeedback({
+        kind: "success",
+        message: t.auth.temporaryPasswordCopied,
+      });
+    } catch {
+      setCopyFeedback({
+        kind: "error",
+        message: t.auth.temporaryPasswordCopyFailed,
+      });
+    }
+  };
+
   return (
     <section className="mx-auto max-w-2xl space-y-6">
       <div className="space-y-2">
@@ -74,9 +101,39 @@ export function NewUserForm() {
             </div>
             <div>
               <dt className="font-semibold">{t.auth.temporaryPassword}</dt>
-              <dd className="mt-1 rounded-md bg-white px-3 py-2 font-mono text-base text-primary-1200">
-                {createdUser.temporaryPassword}
+              <dd className="mt-1 flex min-h-11 items-stretch rounded-md bg-white pl-3 font-mono text-base text-primary-1200">
+                <span className="min-w-0 flex-1 select-all overflow-x-auto py-2">
+                  {createdUser.temporaryPassword}
+                </span>
+                <button
+                  type="button"
+                  aria-label={t.auth.copyTemporaryPassword}
+                  aria-describedby={
+                    copyFeedback ? "temporary-password-copy-feedback" : undefined
+                  }
+                  title={t.auth.copyTemporaryPassword}
+                  onClick={copyTemporaryPassword}
+                  className="flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center rounded-r-md text-primary-1000 transition-colors hover:bg-primary-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
+                >
+                  <ContentCopyIcon height={20} width={20} />
+                </button>
               </dd>
+              {copyFeedback ? (
+                <p
+                  id="temporary-password-copy-feedback"
+                  role={copyFeedback.kind === "error" ? "alert" : "status"}
+                  aria-live={
+                    copyFeedback.kind === "error" ? "assertive" : "polite"
+                  }
+                  className={`mt-2 text-xs font-semibold ${
+                    copyFeedback.kind === "error"
+                      ? "text-red-700 dark:text-red-200"
+                      : "text-primary-1100"
+                  }`}
+                >
+                  {copyFeedback.message}
+                </p>
+              ) : null}
             </div>
           </dl>
         </div>
