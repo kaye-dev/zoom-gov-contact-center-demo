@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
+import { PasswordInput } from "@/app/components/PasswordInput";
 import {
   parseAdminUserPasswordReset,
   type AdminUserField,
@@ -14,8 +15,6 @@ import {
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
 } from "@/lib/password-policy";
-import { VisibilityIcon } from "@/app/components/svg/VisibilityIcon";
-import { VisibilityOffIcon } from "@/app/components/svg/VisibilityOffIcon";
 
 import { useI18n } from "../../../i18n/LanguageProvider";
 import { ConfirmationDialog } from "../ConfirmationDialog";
@@ -54,9 +53,6 @@ export function UserDetailsView({
     useState<AdminUserPasswordMode>("temporary");
   const [password, setPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
-  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
-  const [isPasswordConfirmationVisible, setIsPasswordConfirmationVisible] =
-    useState(false);
   const [revokeSessions, setRevokeSessions] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmingEmail, setConfirmingEmail] = useState(false);
@@ -93,8 +89,6 @@ export function UserDetailsView({
     setPasswordMode("temporary");
     setPassword("");
     setPasswordConfirmation("");
-    setIsPasswordVisible(false);
-    setIsPasswordConfirmationVisible(false);
     setRevokeSessions(true);
     setConfirmingPassword(false);
     setError(null);
@@ -107,8 +101,6 @@ export function UserDetailsView({
     setPasswordMode("temporary");
     setPassword("");
     setPasswordConfirmation("");
-    setIsPasswordVisible(false);
-    setIsPasswordConfirmationVisible(false);
     setRevokeSessions(true);
     setConfirmingPassword(false);
     setError(null);
@@ -118,8 +110,6 @@ export function UserDetailsView({
     setPasswordMode(mode);
     setPassword("");
     setPasswordConfirmation("");
-    setIsPasswordVisible(false);
-    setIsPasswordConfirmationVisible(false);
     setError(null);
   };
 
@@ -440,100 +430,38 @@ export function UserDetailsView({
               </fieldset>
 
               <div className="grid max-w-2xl gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <label
-                    htmlFor="admin-new-password"
-                    className="block text-sm font-semibold"
-                  >
-                    {t.admin.userManagement.newPassword}
-                  </label>
-                  <span className="relative block">
-                    <input
-                      id="admin-new-password"
-                      type={isPasswordVisible ? "text" : "password"}
-                      value={password}
-                      onChange={(event) => {
-                        setPassword(event.target.value);
-                        setError(null);
-                      }}
-                      required
-                      minLength={PASSWORD_MIN_LENGTH}
-                      maxLength={PASSWORD_MAX_LENGTH}
-                      autoComplete="new-password"
-                      disabled={isSubmitting}
-                      autoFocus
-                      aria-describedby="admin-password-requirements"
-                      className="w-full rounded-md border border-line bg-surface py-2 pl-3 pr-10 text-fg outline-none transition-colors focus:border-accent disabled:opacity-60"
-                    />
-                    <button
-                      type="button"
-                      aria-label={
-                        isPasswordVisible
-                          ? t.admin.userManagement.hidePassword
-                          : t.admin.userManagement.showPassword
-                      }
-                      aria-pressed={isPasswordVisible}
-                      aria-controls="admin-new-password"
-                      onClick={() => setIsPasswordVisible((visible) => !visible)}
-                      disabled={isSubmitting}
-                      className="absolute inset-y-0 right-0 z-10 flex cursor-pointer items-center rounded-r-md px-3 text-fg-muted transition-colors hover:text-accent focus-visible:outline-none focus-visible:text-accent disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {isPasswordVisible ? (
-                        <VisibilityOffIcon height={14} width={14} />
-                      ) : (
-                        <VisibilityIcon height={14} width={14} />
-                      )}
-                    </button>
-                  </span>
-                </div>
-                <div className="space-y-2">
-                  <label
-                    htmlFor="admin-confirm-password"
-                    className="block text-sm font-semibold"
-                  >
-                    {t.admin.userManagement.confirmPassword}
-                  </label>
-                  <span className="relative block">
-                    <input
-                      id="admin-confirm-password"
-                      type={
-                        isPasswordConfirmationVisible ? "text" : "password"
-                      }
-                      value={passwordConfirmation}
-                      onChange={(event) => {
-                        setPasswordConfirmation(event.target.value);
-                        setError(null);
-                      }}
-                      required
-                      minLength={PASSWORD_MIN_LENGTH}
-                      maxLength={PASSWORD_MAX_LENGTH}
-                      autoComplete="new-password"
-                      disabled={isSubmitting}
-                      className="w-full rounded-md border border-line bg-surface py-2 pl-3 pr-10 text-fg outline-none transition-colors focus:border-accent disabled:opacity-60"
-                    />
-                    <button
-                      type="button"
-                      aria-label={
-                        isPasswordConfirmationVisible
-                          ? t.admin.userManagement.hidePassword
-                          : t.admin.userManagement.showPassword
-                      }
-                      aria-pressed={isPasswordConfirmationVisible}
-                      aria-controls="admin-confirm-password"
-                      onClick={() =>
-                        setIsPasswordConfirmationVisible((visible) => !visible)
-                      }
-                      disabled={isSubmitting}
-                      className="absolute inset-y-0 right-0 z-10 flex cursor-pointer items-center rounded-r-md px-3 text-fg-muted transition-colors hover:text-accent focus-visible:outline-none focus-visible:text-accent disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {isPasswordConfirmationVisible ? (
-                        <VisibilityOffIcon height={14} width={14} />
-                      ) : (
-                        <VisibilityIcon height={14} width={14} />
-                      )}
-                    </button>
-                  </span>
-                </div>
+                <PasswordInput
+                  key={`admin-new-password-${passwordMode}`}
+                  id="admin-new-password"
+                  label={t.admin.userManagement.newPassword}
+                  value={password}
+                  onChange={(event) => {
+                    setPassword(event.target.value);
+                    setError(null);
+                  }}
+                  required
+                  minLength={PASSWORD_MIN_LENGTH}
+                  maxLength={PASSWORD_MAX_LENGTH}
+                  autoComplete="new-password"
+                  disabled={isSubmitting}
+                  autoFocus
+                  aria-describedby="admin-password-requirements"
+                />
+                <PasswordInput
+                  key={`admin-confirm-password-${passwordMode}`}
+                  id="admin-confirm-password"
+                  label={t.admin.userManagement.confirmPassword}
+                  value={passwordConfirmation}
+                  onChange={(event) => {
+                    setPasswordConfirmation(event.target.value);
+                    setError(null);
+                  }}
+                  required
+                  minLength={PASSWORD_MIN_LENGTH}
+                  maxLength={PASSWORD_MAX_LENGTH}
+                  autoComplete="new-password"
+                  disabled={isSubmitting}
+                />
               </div>
               <div className="max-w-2xl space-y-2">
                 <p
