@@ -254,6 +254,9 @@ test("new-user temporary passwords can be copied with accessible feedback", () =
   assert.match(formSource, /aria-label=\{t\.auth\.copyTemporaryPassword\}/);
   assert.match(formSource, /role=\{copyFeedback\.kind === "error" \? "alert" : "status"\}/);
   assert.match(formSource, /min-h-11 min-w-11 shrink-0 cursor-pointer/);
+  assert.match(formSource, /text-fg-muted transition-colors hover:text-accent/);
+  assert.match(formSource, /focus-visible:outline-none focus-visible:text-accent/);
+  assert.doesNotMatch(formSource, /hover:bg-primary-100/);
   assert.doesNotMatch(formSource, /execCommand/);
 
   assert.match(copyIconSource, /viewBox="0 -960 960 960"/);

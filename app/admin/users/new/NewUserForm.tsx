@@ -113,7 +113,7 @@ export function NewUserForm() {
                   }
                   title={t.auth.copyTemporaryPassword}
                   onClick={copyTemporaryPassword}
-                  className="flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center rounded-r-md text-primary-1000 transition-colors hover:bg-primary-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
+                  className="flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center rounded-r-md text-fg-muted transition-colors hover:text-accent focus-visible:outline-none focus-visible:text-accent"
                 >
                   <ContentCopyIcon height={20} width={20} />
                 </button>
