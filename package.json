@@ -9,6 +9,7 @@
     "dev": "next dev",
     "test": "node --import tsx --test test/*.test.ts scripts/deploy/test/*.test.ts",
     "test:deploy": "node --import tsx --test scripts/deploy/test/*.test.ts",
+    "plans:cleanup": "node scripts/cleanup-plan-files.mjs",
     "audit:runtime": "npm audit --omit=dev",
     "typecheck": "tsc --noEmit",
     "build": "next build --webpack",

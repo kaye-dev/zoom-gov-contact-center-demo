@@ -18,6 +18,12 @@ plan-driven HTML reviewでは、remote baseの同期をfinal plan base確定とr
 
 一時plan、prototype、review画面は`plans/tmp/`へ置き、Gitでは追跡しない。追跡する正規書式は`plans/template.md`だけとする。
 
+## plan成果物の一括cleanup
+
+`npm run plans:cleanup`は、`plans/template.md`を除く`plans/`配下の削除候補をpreview表示する。previewはファイルを変更しない。候補を確認して一括削除する場合だけ、別の明示操作として`npm run plans:cleanup -- --apply`を実行する。この操作は日付付きの追跡済みplanと`plans/tmp/`の一時成果物をともに削除し、templateだけを残す。
+
+この一括cleanupは`git-commit-push-pr`が明示承認されたexact `plans/tmp/<plan-id>/`だけを削除する処理とは別であり、shippingの一部として自動実行しない。Codexは現在のユーザー依頼で`plans/template.md`以外の一括削除が明示されている場合だけ`--apply`を実行する。
+
 ## HTMLレビューの要点
 
 `implementation-review`はレビュー規則と画面templateを一つにまとめたskillであり、独自app serverやexecution engineではない。
