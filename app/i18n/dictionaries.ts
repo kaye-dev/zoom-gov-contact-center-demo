@@ -8,6 +8,7 @@ import {
   type SettingsErrorCode,
   type SiteLocale,
 } from '@/lib/site-settings';
+import type { AdminUserErrorCode } from '@/lib/admin-users';
 
 export const locales = SITE_LOCALES;
 
@@ -267,6 +268,38 @@ export type Dictionary = {
     adminOnly: string;
     dashboardTitle: string;
     dashboardDescription: string;
+    userManagement: {
+      detailsTitle: string;
+      detailsDescription: string;
+      backToUsers: string;
+      settings: string;
+      actionsFor: string;
+      edit: string;
+      suspend: string;
+      reactivate: string;
+      delete: string;
+      active: string;
+      suspended: string;
+      save: string;
+      saving: string;
+      cancel: string;
+      saved: string;
+      selfProtected: string;
+      lastAdminProtected: string;
+      emailDialogTitle: string;
+      emailDialogDescription: string;
+      currentEmail: string;
+      newEmail: string;
+      changeEmail: string;
+      suspendDialogTitle: string;
+      suspendDialogDescription: string;
+      reactivateDialogTitle: string;
+      reactivateDialogDescription: string;
+      deleteDialogTitle: string;
+      deleteDialogDescription: string;
+      targetUser: string;
+      errors: Record<AdminUserErrorCode, string>;
+    };
     settings: {
       save: string;
       saving: string;
@@ -739,6 +772,58 @@ export const dictionaries: Record<Locale, Dictionary> = {
       dashboardTitle: '管理画面',
       dashboardDescription:
         'ログイン済みです。ユーザー管理機能を利用するには管理者権限が必要です。',
+      userManagement: {
+        detailsTitle: 'ユーザー詳細',
+        detailsDescription: 'ユーザー情報を項目ごとに確認・編集できます。',
+        backToUsers: 'ユーザー管理へ戻る',
+        settings: '設定',
+        actionsFor: '設定対象',
+        edit: '編集',
+        suspend: '停止',
+        reactivate: '再開',
+        delete: '削除',
+        active: '有効',
+        suspended: '停止',
+        save: '保存',
+        saving: '保存中…',
+        cancel: 'キャンセル',
+        saved: '変更を保存しました。',
+        selfProtected: '自分自身にはこの操作を実行できません。',
+        lastAdminProtected: '最後の有効な管理者にはこの操作を実行できません。',
+        emailDialogTitle: 'メールアドレスを変更しますか？',
+        emailDialogDescription:
+          '変更後は新しいメールアドレスがログインに使用されます。内容を確認して変更してください。',
+        currentEmail: '現在のメールアドレス',
+        newEmail: '新しいメールアドレス',
+        changeEmail: 'メールアドレスを変更',
+        suspendDialogTitle: 'ユーザーを停止しますか？',
+        suspendDialogDescription:
+          'ユーザーのログイン中セッションは終了し、再開するまでログインできなくなります。',
+        reactivateDialogTitle: 'ユーザーを再開しますか？',
+        reactivateDialogDescription:
+          '停止を解除し、このユーザーが再びログインできるようにします。',
+        deleteDialogTitle: 'ユーザーを削除しますか？',
+        deleteDialogDescription:
+          'ユーザーと認証情報は完全に削除されます。この操作は取り消せません。',
+        targetUser: '対象ユーザー',
+        errors: {
+          AUTHENTICATION_REQUIRED: 'ログインが必要です。',
+          ADMINISTRATOR_REQUIRED: '管理者権限が必要です。',
+          PASSWORD_CHANGE_REQUIRED: '先にパスワードを変更してください。',
+          INVALID_REQUEST: 'リクエストの内容が正しくありません。',
+          INVALID_NAME: '氏名を入力してください。',
+          INVALID_EMAIL: '有効なメールアドレスを入力してください。',
+          EMAIL_ALREADY_EXISTS: 'このメールアドレスは既に使用されています。',
+          INVALID_ROLE: '有効な権限を選択してください。',
+          USER_NOT_FOUND: '対象ユーザーが見つかりません。',
+          SELF_PROTECTED: '自分自身にはこの操作を実行できません。',
+          LAST_ACTIVE_ADMIN: '最後の有効な管理者にはこの操作を実行できません。',
+          UPDATE_FAILED: 'ユーザー情報を更新できませんでした。',
+          SUSPEND_FAILED: 'ユーザーを停止できませんでした。',
+          REACTIVATE_FAILED: 'ユーザーを再開できませんでした。',
+          DELETE_FAILED: 'ユーザーを削除できませんでした。',
+        },
+      },
       settings: {
         save: '設定を保存',
         saving: '保存中…',
@@ -1266,6 +1351,60 @@ export const dictionaries: Record<Locale, Dictionary> = {
       dashboardTitle: 'Admin',
       dashboardDescription:
         'You are signed in. Administrator features require the admin role.',
+      userManagement: {
+        detailsTitle: 'User details',
+        detailsDescription: 'Review and edit each item of this user’s information.',
+        backToUsers: 'Back to User Management',
+        settings: 'Settings',
+        actionsFor: 'Settings for',
+        edit: 'Edit',
+        suspend: 'Suspend',
+        reactivate: 'Reactivate',
+        delete: 'Delete',
+        active: 'Active',
+        suspended: 'Suspended',
+        save: 'Save',
+        saving: 'Saving…',
+        cancel: 'Cancel',
+        saved: 'Changes saved.',
+        selfProtected: 'You cannot perform this action on your own account.',
+        lastAdminProtected:
+          'You cannot perform this action on the last active administrator.',
+        emailDialogTitle: 'Change this email address?',
+        emailDialogDescription:
+          'The new email address will be used to log in. Review it before confirming the change.',
+        currentEmail: 'Current email address',
+        newEmail: 'New email address',
+        changeEmail: 'Change email address',
+        suspendDialogTitle: 'Suspend this user?',
+        suspendDialogDescription:
+          'The user’s active sessions will end, and they will be unable to log in until reactivated.',
+        reactivateDialogTitle: 'Reactivate this user?',
+        reactivateDialogDescription:
+          'Remove the suspension and allow this user to log in again.',
+        deleteDialogTitle: 'Delete this user?',
+        deleteDialogDescription:
+          'The user and authentication information will be permanently deleted. This cannot be undone.',
+        targetUser: 'Target user',
+        errors: {
+          AUTHENTICATION_REQUIRED: 'Please sign in.',
+          ADMINISTRATOR_REQUIRED: 'Administrator access is required.',
+          PASSWORD_CHANGE_REQUIRED: 'Change your password first.',
+          INVALID_REQUEST: 'The request is invalid.',
+          INVALID_NAME: 'Enter a name.',
+          INVALID_EMAIL: 'Enter a valid email address.',
+          EMAIL_ALREADY_EXISTS: 'This email address is already in use.',
+          INVALID_ROLE: 'Select a valid role.',
+          USER_NOT_FOUND: 'The user could not be found.',
+          SELF_PROTECTED: 'You cannot perform this action on your own account.',
+          LAST_ACTIVE_ADMIN:
+            'You cannot perform this action on the last active administrator.',
+          UPDATE_FAILED: 'Unable to update the user.',
+          SUSPEND_FAILED: 'Unable to suspend the user.',
+          REACTIVATE_FAILED: 'Unable to reactivate the user.',
+          DELETE_FAILED: 'Unable to delete the user.',
+        },
+      },
       settings: {
         save: 'Save settings',
         saving: 'Saving…',
@@ -1775,6 +1914,54 @@ export const dictionaries: Record<Locale, Dictionary> = {
       adminOnly: '仅限管理员访问。',
       dashboardTitle: '管理页面',
       dashboardDescription: '您已登录。用户管理功能需要管理员权限。',
+      userManagement: {
+        detailsTitle: '用户详情',
+        detailsDescription: '可以逐项查看和编辑用户信息。',
+        backToUsers: '返回用户管理',
+        settings: '设置',
+        actionsFor: '设置对象',
+        edit: '编辑',
+        suspend: '停用',
+        reactivate: '重新启用',
+        delete: '删除',
+        active: '有效',
+        suspended: '已停用',
+        save: '保存',
+        saving: '正在保存…',
+        cancel: '取消',
+        saved: '更改已保存。',
+        selfProtected: '无法对自己的账户执行此操作。',
+        lastAdminProtected: '无法对最后一名有效管理员执行此操作。',
+        emailDialogTitle: '要更改电子邮件地址吗？',
+        emailDialogDescription: '更改后将使用新地址登录。请确认内容后再更改。',
+        currentEmail: '当前电子邮件地址',
+        newEmail: '新电子邮件地址',
+        changeEmail: '更改电子邮件地址',
+        suspendDialogTitle: '要停用此用户吗？',
+        suspendDialogDescription: '用户的现有会话将结束，重新启用前将无法登录。',
+        reactivateDialogTitle: '要重新启用此用户吗？',
+        reactivateDialogDescription: '解除停用状态，允许此用户再次登录。',
+        deleteDialogTitle: '要删除此用户吗？',
+        deleteDialogDescription: '用户及其身份验证信息将被永久删除。此操作无法撤销。',
+        targetUser: '目标用户',
+        errors: {
+          AUTHENTICATION_REQUIRED: '请先登录。',
+          ADMINISTRATOR_REQUIRED: '需要管理员权限。',
+          PASSWORD_CHANGE_REQUIRED: '请先更改密码。',
+          INVALID_REQUEST: '请求内容无效。',
+          INVALID_NAME: '请输入姓名。',
+          INVALID_EMAIL: '请输入有效的电子邮件地址。',
+          EMAIL_ALREADY_EXISTS: '此电子邮件地址已被使用。',
+          INVALID_ROLE: '请选择有效的权限。',
+          USER_NOT_FOUND: '找不到目标用户。',
+          SELF_PROTECTED: '无法对自己的账户执行此操作。',
+          LAST_ACTIVE_ADMIN: '无法对最后一名有效管理员执行此操作。',
+          UPDATE_FAILED: '无法更新用户信息。',
+          SUSPEND_FAILED: '无法停用用户。',
+          REACTIVATE_FAILED: '无法重新启用用户。',
+          DELETE_FAILED: '无法删除用户。',
+        },
+      },
       settings: {
         save: '保存设置',
         saving: '正在保存…',
@@ -2275,6 +2462,54 @@ export const dictionaries: Record<Locale, Dictionary> = {
       adminOnly: '僅限管理員存取。',
       dashboardTitle: '管理頁面',
       dashboardDescription: '您已登入。使用者管理功能需要管理員權限。',
+      userManagement: {
+        detailsTitle: '使用者詳細資料',
+        detailsDescription: '可以逐項檢視及編輯使用者資訊。',
+        backToUsers: '返回使用者管理',
+        settings: '設定',
+        actionsFor: '設定對象',
+        edit: '編輯',
+        suspend: '停用',
+        reactivate: '重新啟用',
+        delete: '刪除',
+        active: '有效',
+        suspended: '已停用',
+        save: '儲存',
+        saving: '儲存中…',
+        cancel: '取消',
+        saved: '變更已儲存。',
+        selfProtected: '無法對自己的帳戶執行此操作。',
+        lastAdminProtected: '無法對最後一名有效管理員執行此操作。',
+        emailDialogTitle: '要變更電子郵件地址嗎？',
+        emailDialogDescription: '變更後將使用新地址登入。請確認內容後再變更。',
+        currentEmail: '目前的電子郵件地址',
+        newEmail: '新的電子郵件地址',
+        changeEmail: '變更電子郵件地址',
+        suspendDialogTitle: '要停用此使用者嗎？',
+        suspendDialogDescription: '使用者目前的工作階段將結束，重新啟用前將無法登入。',
+        reactivateDialogTitle: '要重新啟用此使用者嗎？',
+        reactivateDialogDescription: '解除停用狀態，允許此使用者再次登入。',
+        deleteDialogTitle: '要刪除此使用者嗎？',
+        deleteDialogDescription: '使用者及其驗證資訊將被永久刪除。此操作無法復原。',
+        targetUser: '目標使用者',
+        errors: {
+          AUTHENTICATION_REQUIRED: '請先登入。',
+          ADMINISTRATOR_REQUIRED: '需要管理員權限。',
+          PASSWORD_CHANGE_REQUIRED: '請先變更密碼。',
+          INVALID_REQUEST: '要求內容無效。',
+          INVALID_NAME: '請輸入姓名。',
+          INVALID_EMAIL: '請輸入有效的電子郵件地址。',
+          EMAIL_ALREADY_EXISTS: '此電子郵件地址已被使用。',
+          INVALID_ROLE: '請選擇有效的權限。',
+          USER_NOT_FOUND: '找不到目標使用者。',
+          SELF_PROTECTED: '無法對自己的帳戶執行此操作。',
+          LAST_ACTIVE_ADMIN: '無法對最後一名有效管理員執行此操作。',
+          UPDATE_FAILED: '無法更新使用者資訊。',
+          SUSPEND_FAILED: '無法停用使用者。',
+          REACTIVATE_FAILED: '無法重新啟用使用者。',
+          DELETE_FAILED: '無法刪除使用者。',
+        },
+      },
       settings: {
         save: '儲存設定',
         saving: '正在儲存…',
@@ -2776,6 +3011,54 @@ export const dictionaries: Record<Locale, Dictionary> = {
       adminOnly: '관리자만 접근할 수 있습니다.',
       dashboardTitle: '관리 화면',
       dashboardDescription: '로그인되어 있습니다. 사용자 관리 기능에는 관리자 권한이 필요합니다.',
+      userManagement: {
+        detailsTitle: '사용자 상세 정보',
+        detailsDescription: '사용자 정보를 항목별로 확인하고 편집할 수 있습니다.',
+        backToUsers: '사용자 관리로 돌아가기',
+        settings: '설정',
+        actionsFor: '설정 대상',
+        edit: '편집',
+        suspend: '정지',
+        reactivate: '재활성화',
+        delete: '삭제',
+        active: '활성',
+        suspended: '정지됨',
+        save: '저장',
+        saving: '저장 중…',
+        cancel: '취소',
+        saved: '변경 사항을 저장했습니다.',
+        selfProtected: '자신의 계정에는 이 작업을 수행할 수 없습니다.',
+        lastAdminProtected: '마지막 활성 관리자에게는 이 작업을 수행할 수 없습니다.',
+        emailDialogTitle: '이메일 주소를 변경하시겠습니까?',
+        emailDialogDescription: '변경 후에는 새 이메일 주소로 로그인합니다. 내용을 확인한 후 변경하세요.',
+        currentEmail: '현재 이메일 주소',
+        newEmail: '새 이메일 주소',
+        changeEmail: '이메일 주소 변경',
+        suspendDialogTitle: '사용자를 정지하시겠습니까?',
+        suspendDialogDescription: '사용자의 현재 세션이 종료되며 재활성화할 때까지 로그인할 수 없습니다.',
+        reactivateDialogTitle: '사용자를 재활성화하시겠습니까?',
+        reactivateDialogDescription: '정지를 해제하고 이 사용자가 다시 로그인할 수 있도록 합니다.',
+        deleteDialogTitle: '사용자를 삭제하시겠습니까?',
+        deleteDialogDescription: '사용자와 인증 정보가 영구적으로 삭제됩니다. 이 작업은 취소할 수 없습니다.',
+        targetUser: '대상 사용자',
+        errors: {
+          AUTHENTICATION_REQUIRED: '로그인이 필요합니다.',
+          ADMINISTRATOR_REQUIRED: '관리자 권한이 필요합니다.',
+          PASSWORD_CHANGE_REQUIRED: '먼저 비밀번호를 변경하세요.',
+          INVALID_REQUEST: '요청 내용이 올바르지 않습니다.',
+          INVALID_NAME: '이름을 입력하세요.',
+          INVALID_EMAIL: '유효한 이메일 주소를 입력하세요.',
+          EMAIL_ALREADY_EXISTS: '이 이메일 주소는 이미 사용 중입니다.',
+          INVALID_ROLE: '유효한 권한을 선택하세요.',
+          USER_NOT_FOUND: '대상 사용자를 찾을 수 없습니다.',
+          SELF_PROTECTED: '자신의 계정에는 이 작업을 수행할 수 없습니다.',
+          LAST_ACTIVE_ADMIN: '마지막 활성 관리자에게는 이 작업을 수행할 수 없습니다.',
+          UPDATE_FAILED: '사용자 정보를 업데이트할 수 없습니다.',
+          SUSPEND_FAILED: '사용자를 정지할 수 없습니다.',
+          REACTIVATE_FAILED: '사용자를 재활성화할 수 없습니다.',
+          DELETE_FAILED: '사용자를 삭제할 수 없습니다.',
+        },
+      },
       settings: {
         save: '설정 저장',
         saving: '저장 중…',

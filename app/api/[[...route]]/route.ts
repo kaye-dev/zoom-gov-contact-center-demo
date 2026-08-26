@@ -3,6 +3,13 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { handle } from "hono/vercel";
 
 import { createAuth, type AppAuth } from "@/lib/auth";
+import {
+  ADMIN_USER_ERROR_CODES,
+  getProtectedAdminActionError,
+  isActiveAdmin,
+  parseAdminUserUpdate,
+  type AdminUserErrorCode,
+} from "@/lib/admin-users";
 import type { PrismaClient } from "@/lib/generated/prisma/client";
 import {
   countDemoRecords,
@@ -341,6 +348,209 @@ app.post("/admin/users", async (c) => {
   }
 });
 
+app.patch("/admin/users/:id", async (c) => {
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const session = await getAppSession(auth, c.req.raw.headers);
+  const unauthorized = rejectNonAdminUserManagement(session);
+
+  if (unauthorized) {
+    return c.json(unauthorized.body, unauthorized.status);
+  }
+
+  const actor = getSessionUser(session);
+  const parsed = parseAdminUserUpdate(await readJsonBody(c.req.raw));
+
+  if (!parsed.ok) {
+    return c.json({ error: parsed.code }, 400);
+  }
+
+  const userId = c.req.param("id");
+  const target = await findManagedUser(prisma, userId);
+
+  if (!target) {
+    return c.json({ error: ADMIN_USER_ERROR_CODES.userNotFound }, 404);
+  }
+
+  if (parsed.value.field === "email") {
+    const existing = await prisma.user.findFirst({
+      where: {
+        id: { not: userId },
+        email: { equals: parsed.value.value, mode: "insensitive" },
+      },
+      select: { id: true },
+    });
+
+    if (existing) {
+      return c.json({ error: ADMIN_USER_ERROR_CODES.emailAlreadyExists }, 409);
+    }
+  }
+
+  if (
+    parsed.value.field === "role" &&
+    parsed.value.value === "user" &&
+    target.role === "admin"
+  ) {
+    const protectedError = await getProtectedMutationError(
+      prisma,
+      actor!.id,
+      target,
+    );
+
+    if (protectedError) {
+      return c.json({ error: protectedError }, 409);
+    }
+  }
+
+  try {
+    if (parsed.value.field === "role") {
+      const result = await auth.api.setRole({
+        headers: c.req.raw.headers,
+        body: {
+          userId,
+          role: parsed.value.value,
+        },
+      });
+      return c.json({ user: result.user });
+    }
+
+    const user = await auth.api.adminUpdateUser({
+      headers: c.req.raw.headers,
+      body: {
+        userId,
+        data: { [parsed.value.field]: parsed.value.value },
+      },
+    });
+    return c.json({ user });
+  } catch {
+    if (parsed.value.field === "email") {
+      const existing = await prisma.user.findFirst({
+        where: {
+          id: { not: userId },
+          email: { equals: parsed.value.value, mode: "insensitive" },
+        },
+        select: { id: true },
+      });
+      if (existing) {
+        return c.json(
+          { error: ADMIN_USER_ERROR_CODES.emailAlreadyExists },
+          409,
+        );
+      }
+    }
+    console.error("Failed to update an admin-managed user.");
+    return c.json({ error: ADMIN_USER_ERROR_CODES.updateFailed }, 500);
+  }
+});
+
+app.post("/admin/users/:id/suspend", async (c) => {
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const session = await getAppSession(auth, c.req.raw.headers);
+  const unauthorized = rejectNonAdminUserManagement(session);
+
+  if (unauthorized) {
+    return c.json(unauthorized.body, unauthorized.status);
+  }
+
+  const userId = c.req.param("id");
+  const target = await findManagedUser(prisma, userId);
+
+  if (!target) {
+    return c.json({ error: ADMIN_USER_ERROR_CODES.userNotFound }, 404);
+  }
+
+  const protectedError = await getProtectedMutationError(
+    prisma,
+    getSessionUser(session)!.id,
+    target,
+  );
+
+  if (protectedError) {
+    return c.json({ error: protectedError }, 409);
+  }
+
+  try {
+    const result = await auth.api.banUser({
+      headers: c.req.raw.headers,
+      body: {
+        userId,
+        banReason: "Suspended by an administrator.",
+      },
+    });
+    return c.json({ user: result.user });
+  } catch {
+    console.error("Failed to suspend an admin-managed user.");
+    return c.json({ error: ADMIN_USER_ERROR_CODES.suspendFailed }, 500);
+  }
+});
+
+app.post("/admin/users/:id/reactivate", async (c) => {
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const session = await getAppSession(auth, c.req.raw.headers);
+  const unauthorized = rejectNonAdminUserManagement(session);
+
+  if (unauthorized) {
+    return c.json(unauthorized.body, unauthorized.status);
+  }
+
+  const userId = c.req.param("id");
+  if (!(await findManagedUser(prisma, userId))) {
+    return c.json({ error: ADMIN_USER_ERROR_CODES.userNotFound }, 404);
+  }
+
+  try {
+    const result = await auth.api.unbanUser({
+      headers: c.req.raw.headers,
+      body: { userId },
+    });
+    return c.json({ user: result.user });
+  } catch {
+    console.error("Failed to reactivate an admin-managed user.");
+    return c.json({ error: ADMIN_USER_ERROR_CODES.reactivateFailed }, 500);
+  }
+});
+
+app.delete("/admin/users/:id", async (c) => {
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const session = await getAppSession(auth, c.req.raw.headers);
+  const unauthorized = rejectNonAdminUserManagement(session);
+
+  if (unauthorized) {
+    return c.json(unauthorized.body, unauthorized.status);
+  }
+
+  const userId = c.req.param("id");
+  const target = await findManagedUser(prisma, userId);
+
+  if (!target) {
+    return c.json({ error: ADMIN_USER_ERROR_CODES.userNotFound }, 404);
+  }
+
+  const protectedError = await getProtectedMutationError(
+    prisma,
+    getSessionUser(session)!.id,
+    target,
+  );
+
+  if (protectedError) {
+    return c.json({ error: protectedError }, 409);
+  }
+
+  try {
+    await auth.api.removeUser({
+      headers: c.req.raw.headers,
+      body: { userId },
+    });
+    return c.json({ ok: true });
+  } catch {
+    console.error("Failed to delete an admin-managed user.");
+    return c.json({ error: ADMIN_USER_ERROR_CODES.deleteFailed }, 500);
+  }
+});
+
 app.put("/admin/phone-settings", async (c) => {
   const auth = c.get("auth");
   const prisma = c.get("prisma");
@@ -520,6 +730,8 @@ const handler = handle(app);
 export const GET = handler;
 export const POST = handler;
 export const PUT = handler;
+export const PATCH = handler;
+export const DELETE = handler;
 
 async function readJsonBody(request: Request) {
   try {
@@ -609,6 +821,65 @@ function rejectNonAdmin(session: Awaited<ReturnType<typeof getAppSession>>) {
   }
 
   return null;
+}
+
+function rejectNonAdminUserManagement(
+  session: Awaited<ReturnType<typeof getAppSession>>,
+) {
+  if (!session) {
+    return {
+      status: 401 as const,
+      body: { error: ADMIN_USER_ERROR_CODES.authenticationRequired },
+    };
+  }
+
+  if (!isAdminSession(session)) {
+    return {
+      status: 403 as const,
+      body: { error: ADMIN_USER_ERROR_CODES.administratorRequired },
+    };
+  }
+
+  if (shouldChangePassword(session)) {
+    return {
+      status: 403 as const,
+      body: { error: ADMIN_USER_ERROR_CODES.passwordChangeRequired },
+    };
+  }
+
+  return null;
+}
+
+async function findManagedUser(prisma: PrismaClient, id: string) {
+  return prisma.user.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      role: true,
+      banned: true,
+    },
+  });
+}
+
+async function getProtectedMutationError(
+  prisma: PrismaClient,
+  actorUserId: string,
+  target: NonNullable<Awaited<ReturnType<typeof findManagedUser>>>,
+): Promise<AdminUserErrorCode | null> {
+  const activeAdminCount = isActiveAdmin(target)
+    ? await prisma.user.count({
+        where: {
+          role: "admin",
+          NOT: { banned: true },
+        },
+      })
+    : 2;
+
+  return getProtectedAdminActionError({
+    activeAdminCount,
+    actorUserId,
+    target,
+  });
 }
 
 function rejectNonAdminForSettings(
