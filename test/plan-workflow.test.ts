@@ -123,7 +123,7 @@ test("HTML review skillはcatnose式の意図別・リスク順・二段階・co
   const [skill, ui, workflow] = await Promise.all([
     read(".agents/skills/implementation-review/SKILL.md"),
     read(".agents/skills/implementation-review/agents/openai.yaml"),
-    read("docs/codex-development-workflow.md"),
+    read("docs/development/codex-development-workflow.md"),
   ]);
   for (const pattern of [/Group related edits by intent/, /Sort groups by risk/, /blind_diff_reviewer/, /plan_conformance_reviewer/, /human comments/, /Codex in-app Browser/]) {
     assert.match(skill, pattern);

@@ -13,7 +13,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # Codex計画駆動開発
 
-大きな変更は、[Codex計画・実装・HTMLレビューワークフロー](docs/codex-development-workflow.md)に従う。
+大きな変更は、[Codex計画・実装・HTMLレビューワークフロー](docs/development/codex-development-workflow.md)に従う。
 
 - `plans/template.md`を正規書式とし、一時plan、prototype、HTML reviewは追跡対象外の`plans/tmp/<plan-id>/`へ置く。
 - 計画と実装は薄いhandoffとして扱い、独自runtimeやstate machineを作らない。大きな差分だけ`$implementation-review`を明示実行する。

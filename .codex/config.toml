@@ -31,3 +31,7 @@ config_file = "./agents/implementer.toml"
 [agents.mechanical_worker]
 description = "仕様判断を伴わない限定的な機械作業を行うagent"
 config_file = "./agents/mechanical_worker.toml"
+
+[agents.git_shipper]
+description = "承認された変更を安全にcommit・push・PRへ反映するagent"
+config_file = "./agents/git_shipper.toml"
