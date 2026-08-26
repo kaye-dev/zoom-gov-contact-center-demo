@@ -8,6 +8,7 @@ import {
   type SettingsErrorCode,
   type SiteLocale,
 } from '@/lib/site-settings';
+import type { AdminUserErrorCode } from '@/lib/admin-users';
 
 export const locales = SITE_LOCALES;
 
@@ -206,6 +207,8 @@ export type Dictionary = {
     password: string;
     currentPassword: string;
     newPassword: string;
+    showPassword: string;
+    hidePassword: string;
     name: string;
     role: string;
     roleUser: string;
@@ -267,6 +270,61 @@ export type Dictionary = {
     adminOnly: string;
     dashboardTitle: string;
     dashboardDescription: string;
+    userManagement: {
+      detailsTitle: string;
+      detailsDescription: string;
+      backToUsers: string;
+      settings: string;
+      actionsFor: string;
+      edit: string;
+      suspend: string;
+      reactivate: string;
+      delete: string;
+      active: string;
+      suspended: string;
+      save: string;
+      saving: string;
+      cancel: string;
+      saved: string;
+      password: string;
+      resetPassword: string;
+      passwordConfigured: string;
+      passwordChangeRequired: string;
+      selfPasswordResetProtected: string;
+      passwordMode: string;
+      temporaryPasswordMode: string;
+      temporaryPasswordModeDescription: string;
+      standardPasswordMode: string;
+      standardPasswordModeDescription: string;
+      newPassword: string;
+      confirmPassword: string;
+      passwordsMatch: string;
+      passwordRequirements: string;
+      generateTemporaryPassword: string;
+      revokeSessions: string;
+      revokeSessionsDescription: string;
+      enabled: string;
+      disabled: string;
+      passwordDialogTitle: string;
+      passwordDialogDescription: string;
+      confirmPasswordReset: string;
+      passwordResetSaved: string;
+      selfProtected: string;
+      lastAdminProtected: string;
+      emailDialogTitle: string;
+      emailDialogDescription: string;
+      currentEmail: string;
+      newEmail: string;
+      changeEmail: string;
+      suspendDialogTitle: string;
+      suspendDialogDescription: string;
+      reactivateDialogTitle: string;
+      reactivateDialogDescription: string;
+      deleteDialogTitle: string;
+      deleteDialogDescription: string;
+      targetUser: string;
+      errors: Record<AdminUserErrorCode, string>;
+    };
     settings: {
       save: string;
       saving: string;
@@ -671,6 +729,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       password: 'パスワード',
       currentPassword: '現在のパスワード',
       newPassword: '新しいパスワード',
+      showPassword: 'パスワードを表示',
+      hidePassword: 'パスワードを非表示',
       name: '氏名',
       role: '権限',
       roleUser: '一般ユーザー',
@@ -739,6 +799,91 @@ export const dictionaries: Record<Locale, Dictionary> = {
       dashboardTitle: '管理画面',
       dashboardDescription:
         'ログイン済みです。ユーザー管理機能を利用するには管理者権限が必要です。',
+      userManagement: {
+        detailsTitle: 'ユーザー詳細',
+        detailsDescription: 'ユーザー情報を項目ごとに確認・編集できます。',
+        backToUsers: 'ユーザー管理へ戻る',
+        settings: '設定',
+        actionsFor: '設定対象',
+        edit: '編集',
+        suspend: '停止',
+        reactivate: '再開',
+        delete: '削除',
+        active: '有効',
+        suspended: '停止',
+        save: '保存',
+        saving: '保存中…',
+        cancel: 'キャンセル',
+        saved: '変更を保存しました。',
+        password: 'パスワード',
+        resetPassword: '再設定',
+        passwordConfigured: '設定済み',
+        passwordChangeRequired: '次回ログイン後に変更が必要',
+        selfPasswordResetProtected:
+          '自分のパスワードはパスワード変更画面から変更してください。',
+        passwordMode: 'パスワードの種類',
+        temporaryPasswordMode: '一時パスワード',
+        temporaryPasswordModeDescription:
+          '次回ログイン後にユーザー自身による変更を求めます。',
+        standardPasswordMode: '通常パスワード',
+        standardPasswordModeDescription:
+          '管理者が設定したパスワードをそのまま利用できます。',
+        newPassword: '新しいパスワード',
+        confirmPassword: '新しいパスワード（確認）',
+        passwordsMatch: 'パスワードが一致しています。',
+        passwordRequirements: '12文字以上128文字以下で入力してください。',
+        generateTemporaryPassword: '一時パスワードを自動生成',
+        revokeSessions: '変更後に強制ログアウトする',
+        revokeSessionsDescription:
+          '有効にすると、対象ユーザーのログイン中セッションをすべて終了します。',
+        enabled: 'する',
+        disabled: 'しない',
+        passwordDialogTitle: 'パスワードを再設定しますか？',
+        passwordDialogDescription:
+          '内容を確認してパスワードを再設定してください。この操作後、以前のパスワードは使用できません。',
+        confirmPasswordReset: 'パスワードを再設定',
+        passwordResetSaved: 'パスワードを再設定しました。',
+        selfProtected: '自分自身にはこの操作を実行できません。',
+        lastAdminProtected: '最後の有効な管理者にはこの操作を実行できません。',
+        emailDialogTitle: 'メールアドレスを変更しますか？',
+        emailDialogDescription:
+          '変更後は新しいメールアドレスがログインに使用されます。内容を確認して変更してください。',
+        currentEmail: '現在のメールアドレス',
+        newEmail: '新しいメールアドレス',
+        changeEmail: 'メールアドレスを変更',
+        suspendDialogTitle: 'ユーザーを停止しますか？',
+        suspendDialogDescription:
+          'ユーザーのログイン中セッションは終了し、再開するまでログインできなくなります。',
+        reactivateDialogTitle: 'ユーザーを再開しますか？',
+        reactivateDialogDescription:
+          '停止を解除し、このユーザーが再びログインできるようにします。',
+        deleteDialogTitle: 'ユーザーを削除しますか？',
+        deleteDialogDescription:
+          'ユーザーと認証情報は完全に削除されます。この操作は取り消せません。',
+        targetUser: '対象ユーザー',
+        errors: {
+          AUTHENTICATION_REQUIRED: 'ログインが必要です。',
+          ADMINISTRATOR_REQUIRED: '管理者権限が必要です。',
+          PASSWORD_CHANGE_REQUIRED: '先にパスワードを変更してください。',
+          INVALID_REQUEST: 'リクエストの内容が正しくありません。',
+          INVALID_NAME: '氏名を入力してください。',
+          INVALID_EMAIL: '有効なメールアドレスを入力してください。',
+          EMAIL_ALREADY_EXISTS: 'このメールアドレスは既に使用されています。',
+          INVALID_ROLE: '有効な権限を選択してください。',
+          INVALID_PASSWORD: 'パスワードは12文字以上128文字以下で入力してください。',
+          PASSWORD_MISMATCH: '確認用パスワードが一致していません。',
+          USER_NOT_FOUND: '対象ユーザーが見つかりません。',
+          SELF_PROTECTED: '自分自身にはこの操作を実行できません。',
+          LAST_ACTIVE_ADMIN: '最後の有効な管理者にはこの操作を実行できません。',
+          UPDATE_FAILED: 'ユーザー情報を更新できませんでした。',
+          SUSPEND_FAILED: 'ユーザーを停止できませんでした。',
+          REACTIVATE_FAILED: 'ユーザーを再開できませんでした。',
+          DELETE_FAILED: 'ユーザーを削除できませんでした。',
+          RESET_PASSWORD_FAILED: 'パスワードを再設定できませんでした。',
+          SESSION_REVOCATION_FAILED:
+            'パスワードは変更されましたが、ログイン中セッションを終了できませんでした。',
+        },
+      },
       settings: {
         save: '設定を保存',
         saving: '保存中…',
@@ -1198,6 +1343,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       password: 'Password',
       currentPassword: 'Current password',
       newPassword: 'New password',
+      showPassword: 'Show password',
+      hidePassword: 'Hide password',
       name: 'Name',
       role: 'Role',
       roleUser: 'User',
@@ -1266,6 +1413,93 @@ export const dictionaries: Record<Locale, Dictionary> = {
       dashboardTitle: 'Admin',
       dashboardDescription:
         'You are signed in. Administrator features require the admin role.',
+      userManagement: {
+        detailsTitle: 'User details',
+        detailsDescription: 'Review and edit each item of this user’s information.',
+        backToUsers: 'Back to User Management',
+        settings: 'Settings',
+        actionsFor: 'Settings for',
+        edit: 'Edit',
+        suspend: 'Suspend',
+        reactivate: 'Reactivate',
+        delete: 'Delete',
+        active: 'Active',
+        suspended: 'Suspended',
+        save: 'Save',
+        saving: 'Saving…',
+        cancel: 'Cancel',
+        saved: 'Changes saved.',
+        password: 'Password',
+        resetPassword: 'Reset',
+        passwordConfigured: 'Configured',
+        passwordChangeRequired: 'Change required after next sign-in',
+        selfPasswordResetProtected:
+          'Change your own password from the Change Password page.',
+        passwordMode: 'Password type',
+        temporaryPasswordMode: 'Temporary password',
+        temporaryPasswordModeDescription:
+          'Require the user to change it after their next sign-in.',
+        standardPasswordMode: 'Standard password',
+        standardPasswordModeDescription:
+          'Allow the user to continue using the password set by the administrator.',
+        newPassword: 'New password',
+        confirmPassword: 'Confirm new password',
+        passwordsMatch: 'The passwords match.',
+        passwordRequirements: 'Enter between 12 and 128 characters.',
+        generateTemporaryPassword: 'Generate a temporary password',
+        revokeSessions: 'Force sign-out after changing',
+        revokeSessionsDescription:
+          'When enabled, all active sessions for this user will end.',
+        enabled: 'Yes',
+        disabled: 'No',
+        passwordDialogTitle: 'Reset this password?',
+        passwordDialogDescription:
+          'Review the settings before resetting the password. The previous password will no longer work.',
+        confirmPasswordReset: 'Reset password',
+        passwordResetSaved: 'Password reset successfully.',
+        selfProtected: 'You cannot perform this action on your own account.',
+        lastAdminProtected:
+          'You cannot perform this action on the last active administrator.',
+        emailDialogTitle: 'Change this email address?',
+        emailDialogDescription:
+          'The new email address will be used to log in. Review it before confirming the change.',
+        currentEmail: 'Current email address',
+        newEmail: 'New email address',
+        changeEmail: 'Change email address',
+        suspendDialogTitle: 'Suspend this user?',
+        suspendDialogDescription:
+          'The user’s active sessions will end, and they will be unable to log in until reactivated.',
+        reactivateDialogTitle: 'Reactivate this user?',
+        reactivateDialogDescription:
+          'Remove the suspension and allow this user to log in again.',
+        deleteDialogTitle: 'Delete this user?',
+        deleteDialogDescription:
+          'The user and authentication information will be permanently deleted. This cannot be undone.',
+        targetUser: 'Target user',
+        errors: {
+          AUTHENTICATION_REQUIRED: 'Please sign in.',
+          ADMINISTRATOR_REQUIRED: 'Administrator access is required.',
+          PASSWORD_CHANGE_REQUIRED: 'Change your password first.',
+          INVALID_REQUEST: 'The request is invalid.',
+          INVALID_NAME: 'Enter a name.',
+          INVALID_EMAIL: 'Enter a valid email address.',
+          EMAIL_ALREADY_EXISTS: 'This email address is already in use.',
+          INVALID_ROLE: 'Select a valid role.',
+          INVALID_PASSWORD: 'Enter a password between 12 and 128 characters.',
+          PASSWORD_MISMATCH: 'The confirmation password does not match.',
+          USER_NOT_FOUND: 'The user could not be found.',
+          SELF_PROTECTED: 'You cannot perform this action on your own account.',
+          LAST_ACTIVE_ADMIN:
+            'You cannot perform this action on the last active administrator.',
+          UPDATE_FAILED: 'Unable to update the user.',
+          SUSPEND_FAILED: 'Unable to suspend the user.',
+          REACTIVATE_FAILED: 'Unable to reactivate the user.',
+          DELETE_FAILED: 'Unable to delete the user.',
+          RESET_PASSWORD_FAILED: 'Unable to reset the password.',
+          SESSION_REVOCATION_FAILED:
+            'The password changed, but active sessions could not be ended.',
+        },
+      },
       settings: {
         save: 'Save settings',
         saving: 'Saving…',
@@ -1712,6 +1946,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       password: '密码',
       currentPassword: '当前密码',
       newPassword: '新密码',
+      showPassword: '显示密码',
+      hidePassword: '隐藏密码',
       name: '姓名',
       role: '权限',
       roleUser: '普通用户',
@@ -1775,6 +2011,82 @@ export const dictionaries: Record<Locale, Dictionary> = {
       adminOnly: '仅限管理员访问。',
       dashboardTitle: '管理页面',
       dashboardDescription: '您已登录。用户管理功能需要管理员权限。',
+      userManagement: {
+        detailsTitle: '用户详情',
+        detailsDescription: '可以逐项查看和编辑用户信息。',
+        backToUsers: '返回用户管理',
+        settings: '设置',
+        actionsFor: '设置对象',
+        edit: '编辑',
+        suspend: '停用',
+        reactivate: '重新启用',
+        delete: '删除',
+        active: '有效',
+        suspended: '已停用',
+        save: '保存',
+        saving: '正在保存…',
+        cancel: '取消',
+        saved: '更改已保存。',
+        password: '密码',
+        resetPassword: '重置',
+        passwordConfigured: '已设置',
+        passwordChangeRequired: '下次登录后需要更改',
+        selfPasswordResetProtected: '请从更改密码页面修改自己的密码。',
+        passwordMode: '密码类型',
+        temporaryPasswordMode: '临时密码',
+        temporaryPasswordModeDescription: '要求用户在下次登录后自行更改密码。',
+        standardPasswordMode: '普通密码',
+        standardPasswordModeDescription: '用户可以继续使用管理员设置的密码。',
+        newPassword: '新密码',
+        confirmPassword: '确认新密码',
+        passwordsMatch: '两次输入的密码一致。',
+        passwordRequirements: '请输入12至128个字符。',
+        generateTemporaryPassword: '自动生成临时密码',
+        revokeSessions: '更改后强制退出登录',
+        revokeSessionsDescription: '启用后将结束此用户的所有现有会话。',
+        enabled: '是',
+        disabled: '否',
+        passwordDialogTitle: '要重置密码吗？',
+        passwordDialogDescription:
+          '请确认设置后再重置密码。重置后旧密码将无法继续使用。',
+        confirmPasswordReset: '重置密码',
+        passwordResetSaved: '密码已重置。',
+        selfProtected: '无法对自己的账户执行此操作。',
+        lastAdminProtected: '无法对最后一名有效管理员执行此操作。',
+        emailDialogTitle: '要更改电子邮件地址吗？',
+        emailDialogDescription: '更改后将使用新地址登录。请确认内容后再更改。',
+        currentEmail: '当前电子邮件地址',
+        newEmail: '新电子邮件地址',
+        changeEmail: '更改电子邮件地址',
+        suspendDialogTitle: '要停用此用户吗？',
+        suspendDialogDescription: '用户的现有会话将结束，重新启用前将无法登录。',
+        reactivateDialogTitle: '要重新启用此用户吗？',
+        reactivateDialogDescription: '解除停用状态，允许此用户再次登录。',
+        deleteDialogTitle: '要删除此用户吗？',
+        deleteDialogDescription: '用户及其身份验证信息将被永久删除。此操作无法撤销。',
+        targetUser: '目标用户',
+        errors: {
+          AUTHENTICATION_REQUIRED: '请先登录。',
+          ADMINISTRATOR_REQUIRED: '需要管理员权限。',
+          PASSWORD_CHANGE_REQUIRED: '请先更改密码。',
+          INVALID_REQUEST: '请求内容无效。',
+          INVALID_NAME: '请输入姓名。',
+          INVALID_EMAIL: '请输入有效的电子邮件地址。',
+          EMAIL_ALREADY_EXISTS: '此电子邮件地址已被使用。',
+          INVALID_ROLE: '请选择有效的权限。',
+          INVALID_PASSWORD: '请输入12至128个字符的密码。',
+          PASSWORD_MISMATCH: '两次输入的密码不一致。',
+          USER_NOT_FOUND: '找不到目标用户。',
+          SELF_PROTECTED: '无法对自己的账户执行此操作。',
+          LAST_ACTIVE_ADMIN: '无法对最后一名有效管理员执行此操作。',
+          UPDATE_FAILED: '无法更新用户信息。',
+          SUSPEND_FAILED: '无法停用用户。',
+          REACTIVATE_FAILED: '无法重新启用用户。',
+          DELETE_FAILED: '无法删除用户。',
+          RESET_PASSWORD_FAILED: '无法重置密码。',
+          SESSION_REVOCATION_FAILED: '密码已更改，但无法结束现有会话。',
+        },
+      },
       settings: {
         save: '保存设置',
         saving: '正在保存…',
@@ -2212,6 +2524,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       password: '密碼',
       currentPassword: '目前密碼',
       newPassword: '新密碼',
+      showPassword: '顯示密碼',
+      hidePassword: '隱藏密碼',
       name: '姓名',
       role: '權限',
       roleUser: '一般使用者',
@@ -2275,6 +2589,82 @@ export const dictionaries: Record<Locale, Dictionary> = {
       adminOnly: '僅限管理員存取。',
       dashboardTitle: '管理頁面',
       dashboardDescription: '您已登入。使用者管理功能需要管理員權限。',
+      userManagement: {
+        detailsTitle: '使用者詳細資料',
+        detailsDescription: '可以逐項檢視及編輯使用者資訊。',
+        backToUsers: '返回使用者管理',
+        settings: '設定',
+        actionsFor: '設定對象',
+        edit: '編輯',
+        suspend: '停用',
+        reactivate: '重新啟用',
+        delete: '刪除',
+        active: '有效',
+        suspended: '已停用',
+        save: '儲存',
+        saving: '儲存中…',
+        cancel: '取消',
+        saved: '變更已儲存。',
+        password: '密碼',
+        resetPassword: '重設',
+        passwordConfigured: '已設定',
+        passwordChangeRequired: '下次登入後需要變更',
+        selfPasswordResetProtected: '請從變更密碼頁面修改自己的密碼。',
+        passwordMode: '密碼類型',
+        temporaryPasswordMode: '臨時密碼',
+        temporaryPasswordModeDescription: '要求使用者在下次登入後自行變更密碼。',
+        standardPasswordMode: '一般密碼',
+        standardPasswordModeDescription: '使用者可以繼續使用管理員設定的密碼。',
+        newPassword: '新密碼',
+        confirmPassword: '確認新密碼',
+        passwordsMatch: '兩次輸入的密碼一致。',
+        passwordRequirements: '請輸入12至128個字元。',
+        generateTemporaryPassword: '自動產生臨時密碼',
+        revokeSessions: '變更後強制登出',
+        revokeSessionsDescription: '啟用後將結束此使用者的所有現有工作階段。',
+        enabled: '是',
+        disabled: '否',
+        passwordDialogTitle: '要重設密碼嗎？',
+        passwordDialogDescription:
+          '請確認設定後再重設密碼。重設後舊密碼將無法繼續使用。',
+        confirmPasswordReset: '重設密碼',
+        passwordResetSaved: '密碼已重設。',
+        selfProtected: '無法對自己的帳戶執行此操作。',
+        lastAdminProtected: '無法對最後一名有效管理員執行此操作。',
+        emailDialogTitle: '要變更電子郵件地址嗎？',
+        emailDialogDescription: '變更後將使用新地址登入。請確認內容後再變更。',
+        currentEmail: '目前的電子郵件地址',
+        newEmail: '新的電子郵件地址',
+        changeEmail: '變更電子郵件地址',
+        suspendDialogTitle: '要停用此使用者嗎？',
+        suspendDialogDescription: '使用者目前的工作階段將結束，重新啟用前將無法登入。',
+        reactivateDialogTitle: '要重新啟用此使用者嗎？',
+        reactivateDialogDescription: '解除停用狀態，允許此使用者再次登入。',
+        deleteDialogTitle: '要刪除此使用者嗎？',
+        deleteDialogDescription: '使用者及其驗證資訊將被永久刪除。此操作無法復原。',
+        targetUser: '目標使用者',
+        errors: {
+          AUTHENTICATION_REQUIRED: '請先登入。',
+          ADMINISTRATOR_REQUIRED: '需要管理員權限。',
+          PASSWORD_CHANGE_REQUIRED: '請先變更密碼。',
+          INVALID_REQUEST: '要求內容無效。',
+          INVALID_NAME: '請輸入姓名。',
+          INVALID_EMAIL: '請輸入有效的電子郵件地址。',
+          EMAIL_ALREADY_EXISTS: '此電子郵件地址已被使用。',
+          INVALID_ROLE: '請選擇有效的權限。',
+          INVALID_PASSWORD: '請輸入12至128個字元的密碼。',
+          PASSWORD_MISMATCH: '兩次輸入的密碼不一致。',
+          USER_NOT_FOUND: '找不到目標使用者。',
+          SELF_PROTECTED: '無法對自己的帳戶執行此操作。',
+          LAST_ACTIVE_ADMIN: '無法對最後一名有效管理員執行此操作。',
+          UPDATE_FAILED: '無法更新使用者資訊。',
+          SUSPEND_FAILED: '無法停用使用者。',
+          REACTIVATE_FAILED: '無法重新啟用使用者。',
+          DELETE_FAILED: '無法刪除使用者。',
+          RESET_PASSWORD_FAILED: '無法重設密碼。',
+          SESSION_REVOCATION_FAILED: '密碼已變更，但無法結束現有工作階段。',
+        },
+      },
       settings: {
         save: '儲存設定',
         saving: '正在儲存…',
@@ -2713,6 +3103,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       password: '비밀번호',
       currentPassword: '현재 비밀번호',
       newPassword: '새 비밀번호',
+      showPassword: '비밀번호 표시',
+      hidePassword: '비밀번호 숨기기',
       name: '이름',
       role: '권한',
       roleUser: '일반 사용자',
@@ -2776,6 +3168,83 @@ export const dictionaries: Record<Locale, Dictionary> = {
       adminOnly: '관리자만 접근할 수 있습니다.',
       dashboardTitle: '관리 화면',
       dashboardDescription: '로그인되어 있습니다. 사용자 관리 기능에는 관리자 권한이 필요합니다.',
+      userManagement: {
+        detailsTitle: '사용자 상세 정보',
+        detailsDescription: '사용자 정보를 항목별로 확인하고 편집할 수 있습니다.',
+        backToUsers: '사용자 관리로 돌아가기',
+        settings: '설정',
+        actionsFor: '설정 대상',
+        edit: '편집',
+        suspend: '정지',
+        reactivate: '재활성화',
+        delete: '삭제',
+        active: '활성',
+        suspended: '정지됨',
+        save: '저장',
+        saving: '저장 중…',
+        cancel: '취소',
+        saved: '변경 사항을 저장했습니다.',
+        password: '비밀번호',
+        resetPassword: '재설정',
+        passwordConfigured: '설정됨',
+        passwordChangeRequired: '다음 로그인 후 변경 필요',
+        selfPasswordResetProtected: '자신의 비밀번호는 비밀번호 변경 화면에서 변경하세요.',
+        passwordMode: '비밀번호 유형',
+        temporaryPasswordMode: '임시 비밀번호',
+        temporaryPasswordModeDescription: '다음 로그인 후 사용자가 직접 변경해야 합니다.',
+        standardPasswordMode: '일반 비밀번호',
+        standardPasswordModeDescription: '관리자가 설정한 비밀번호를 그대로 사용할 수 있습니다.',
+        newPassword: '새 비밀번호',
+        confirmPassword: '새 비밀번호 확인',
+        passwordsMatch: '비밀번호가 일치합니다.',
+        passwordRequirements: '12자 이상 128자 이하로 입력하세요.',
+        generateTemporaryPassword: '임시 비밀번호 자동 생성',
+        revokeSessions: '변경 후 강제 로그아웃',
+        revokeSessionsDescription: '활성화하면 이 사용자의 모든 로그인 세션을 종료합니다.',
+        enabled: '사용',
+        disabled: '사용 안 함',
+        passwordDialogTitle: '비밀번호를 재설정하시겠습니까?',
+        passwordDialogDescription:
+          '설정을 확인한 후 비밀번호를 재설정하세요. 이전 비밀번호는 더 이상 사용할 수 없습니다.',
+        confirmPasswordReset: '비밀번호 재설정',
+        passwordResetSaved: '비밀번호를 재설정했습니다.',
+        selfProtected: '자신의 계정에는 이 작업을 수행할 수 없습니다.',
+        lastAdminProtected: '마지막 활성 관리자에게는 이 작업을 수행할 수 없습니다.',
+        emailDialogTitle: '이메일 주소를 변경하시겠습니까?',
+        emailDialogDescription: '변경 후에는 새 이메일 주소로 로그인합니다. 내용을 확인한 후 변경하세요.',
+        currentEmail: '현재 이메일 주소',
+        newEmail: '새 이메일 주소',
+        changeEmail: '이메일 주소 변경',
+        suspendDialogTitle: '사용자를 정지하시겠습니까?',
+        suspendDialogDescription: '사용자의 현재 세션이 종료되며 재활성화할 때까지 로그인할 수 없습니다.',
+        reactivateDialogTitle: '사용자를 재활성화하시겠습니까?',
+        reactivateDialogDescription: '정지를 해제하고 이 사용자가 다시 로그인할 수 있도록 합니다.',
+        deleteDialogTitle: '사용자를 삭제하시겠습니까?',
+        deleteDialogDescription: '사용자와 인증 정보가 영구적으로 삭제됩니다. 이 작업은 취소할 수 없습니다.',
+        targetUser: '대상 사용자',
+        errors: {
+          AUTHENTICATION_REQUIRED: '로그인이 필요합니다.',
+          ADMINISTRATOR_REQUIRED: '관리자 권한이 필요합니다.',
+          PASSWORD_CHANGE_REQUIRED: '먼저 비밀번호를 변경하세요.',
+          INVALID_REQUEST: '요청 내용이 올바르지 않습니다.',
+          INVALID_NAME: '이름을 입력하세요.',
+          INVALID_EMAIL: '유효한 이메일 주소를 입력하세요.',
+          EMAIL_ALREADY_EXISTS: '이 이메일 주소는 이미 사용 중입니다.',
+          INVALID_ROLE: '유효한 권한을 선택하세요.',
+          INVALID_PASSWORD: '비밀번호를 12자 이상 128자 이하로 입력하세요.',
+          PASSWORD_MISMATCH: '확인 비밀번호가 일치하지 않습니다.',
+          USER_NOT_FOUND: '대상 사용자를 찾을 수 없습니다.',
+          SELF_PROTECTED: '자신의 계정에는 이 작업을 수행할 수 없습니다.',
+          LAST_ACTIVE_ADMIN: '마지막 활성 관리자에게는 이 작업을 수행할 수 없습니다.',
+          UPDATE_FAILED: '사용자 정보를 업데이트할 수 없습니다.',
+          SUSPEND_FAILED: '사용자를 정지할 수 없습니다.',
+          REACTIVATE_FAILED: '사용자를 재활성화할 수 없습니다.',
+          DELETE_FAILED: '사용자를 삭제할 수 없습니다.',
+          RESET_PASSWORD_FAILED: '비밀번호를 재설정할 수 없습니다.',
+          SESSION_REVOCATION_FAILED:
+            '비밀번호는 변경되었지만 로그인 세션을 종료할 수 없습니다.',
+        },
+      },
       settings: {
         save: '설정 저장',
         saving: '저장 중…',

@@ -2,6 +2,9 @@
 
 set -euo pipefail
 
+readonly DEV_COMPOSE_SCRIPT_DIR="${0:A:h}"
+source "${DEV_COMPOSE_SCRIPT_DIR}/scripts/dev-compose-network.zsh"
+
 check_colima() {
   colima status >/dev/null 2>&1
 }
@@ -137,65 +140,6 @@ up_invocation_starts_service() {
 
 up_invocation_requires_migration_check() {
   up_invocation_starts_service web "$@" || up_invocation_starts_service studio "$@"
-}
-
-is_usable_lan_ipv4() {
-  local address="$1"
-  local -a octets
-  local octet
-
-  if [[ "${address}" != <->.<->.<->.<-> ]]; then
-    return 1
-  fi
-
-  octets=("${(@s:.:)address}")
-
-  for octet in "${octets[@]}"; do
-    if (( octet < 0 || octet > 255 )); then
-      return 1
-    fi
-  done
-
-  if ((
-    octets[1] == 0 ||
-    octets[1] == 127 ||
-    (octets[1] == 169 && octets[2] == 254) ||
-    octets[1] >= 224
-  )); then
-    return 1
-  fi
-
-  return 0
-}
-
-detect_lan_ipv4() {
-  local default_interface
-  local route_output
-  local address
-
-  if ! command -v route >/dev/null 2>&1 || ! command -v ipconfig >/dev/null 2>&1; then
-    return 1
-  fi
-
-  if ! route_output="$(route -n get default 2>/dev/null)"; then
-    return 1
-  fi
-
-  default_interface="$(print -r -- "${route_output}" | awk '$1 == "interface:" { print $2; exit }')"
-
-  if [[ -z "${default_interface}" ]]; then
-    return 1
-  fi
-
-  if ! address="$(ipconfig getifaddr "${default_interface}" 2>/dev/null)"; then
-    return 1
-  fi
-
-  if ! is_usable_lan_ipv4 "${address}"; then
-    return 1
-  fi
-
-  print -r -- "${address}"
 }
 
 configure_web_access() {

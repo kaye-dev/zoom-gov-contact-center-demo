@@ -25,8 +25,8 @@ Before any Git write or GitHub mutation:
 1. Read the applicable `AGENTS.md`, `CLAUDE.md`, repository Git rules, and pull request template. Inspect the last 10 commits and, when available, recent pull requests for established language and formatting.
 2. Confirm the repository, current branch, worktrees, working tree, index, remotes, and in-progress operations with read-only Git commands. Stop for a detached HEAD, unresolved index, or an active merge, rebase, cherry-pick, or revert.
 3. Resolve the GitHub remote. Prefer the current branch's upstream remote; otherwise use `origin` only when it is the single unambiguous GitHub remote. Stop rather than guessing among multiple plausible remotes.
-4. Run `gh --version`, `gh auth status` for the remote host, and `gh repo view` to prove that the GitHub repository matches the Git remote. Capture `OWNER/REPO` and pass it explicitly to every later `gh` command. Missing CLI, failed authentication, missing push permission, repository mismatch, or an API/network failure is a blocker; do not install, log in, fork, or reinterpret a failed lookup as "no pull request".
-5. Fetch the chosen remote with pruning before deciding the base or branch state.
+4. Run `gh --version`, `gh auth status` for the remote host, and `gh repo view` to prove that the GitHub repository matches the Git remote. Capture `OWNER/REPO` and pass it explicitly to every later `gh` command. A first failure from a sandboxed command is inconclusive when blocked network or credential-store access could produce the same authentication or connection error. In that case, use the shell tool's approval or sandbox-escalation mechanism to rerun the same read-only preflight once outside the sandbox. Do not report an invalid token from the sandboxed output alone; treat the escalated result as authoritative. If escalation is unavailable or the escalated preflight still shows failed authentication, missing access, repository mismatch, or an API/network failure, stop. Do not install, log in, expose or replace a token, fork, or reinterpret a failed lookup as "no pull request".
+5. Fetch the chosen remote with pruning before deciding the base or branch state. If a fetch fails specifically because network, DNS, SSH agent, credential-store, or sandbox access is unavailable, rerun that exact read-only fetch once through the available approval or sandbox-escalation mechanism. A semantic Git rejection or a second failure is a blocker.
 
 Preserve the initial status so the final report can distinguish task changes from unrelated user changes.
 
@@ -97,6 +97,8 @@ Immediately before push, require all of the following:
 
 Push an unpublished branch with an explicit upstream and refspec. Push an existing branch with an explicit remote and `HEAD:refs/heads/<branch>` refspec. Never use `--force`, `--force-with-lease`, or retry a non-fast-forward rejection by rewriting history.
 
+If a push returns a network, DNS, SSH agent, credential-store, or sandbox-shaped failure, do not immediately repeat the mutation. First query the exact remote topic ref through the approval or sandbox-escalation mechanism. If it already equals local `HEAD`, treat the push as applied. If it does not exist or still points to the previously recorded SHA, retry the exact push once through that mechanism. After an ambiguous retry, query the remote ref again and report the observed state without a second mutation retry. Never apply this retry path to a non-fast-forward, hook, policy, or other semantic rejection.
+
 After push, verify that local `HEAD` equals the remote branch SHA returned by Git. A rejected or unverifiable push is a partial result, not success.
 
 ## 6. Create or minimally update the pull request
@@ -114,11 +116,11 @@ Build the title and body only from:
 
 When a Codex thread or session ID is available and repository instructions do not forbid it, include a single `## Codex セッション` section with `codex resume <id>`.
 
-For a one-commit pull request, normally use the commit subject as the title. Use `gh pr create` with explicit repository, `--base`, `--head`, `--title`, and body input. Do not use `--dry-run` as a safety check because it can still push. If creation fails, search again before any retry so an ambiguous response cannot create a duplicate pull request. Create a ready pull request only when required local validation passed and there are no known follow-ups; otherwise add `--draft` and state what remains unverified.
+For a one-commit pull request, normally use the commit subject as the title. Use `gh pr create` with explicit repository, `--base`, `--head`, `--title`, and body input. Do not use `--dry-run` as a safety check because it can still push. If creation fails, search again before any retry so an ambiguous response cannot create a duplicate pull request. For a sandbox-shaped failure, perform that search through the approval or sandbox-escalation mechanism; if no matching pull request exists, retry the exact create command once through the same mechanism. After an ambiguous retry, search once more and report the observed state without another create attempt. Create a ready pull request only when required local validation passed and there are no known follow-ups; otherwise add `--draft` and state what remains unverified.
 
 ### One open pull request
 
-Pushing already updates its commits. Read the existing title and body, then use `gh pr edit` only when the actual diff, commits, or validation results make specific content stale. Preserve manual notes, unrelated sections, the existing base, the draft/ready state, and Codex session entries from other sessions; add or update only the current session entry when its ID is available. Do not add a noisy update comment when no metadata edit is needed.
+Pushing already updates its commits. Read the existing title and body, then use `gh pr edit` only when the actual diff, commits, or validation results make specific content stale. Preserve manual notes, unrelated sections, the existing base, the draft/ready state, and Codex session entries from other sessions; add or update only the current session entry when its ID is available. Do not add a noisy update comment when no metadata edit is needed. If an edit has a sandbox-shaped or ambiguous failure, reread the pull request through the approval or sandbox-escalation mechanism. Retry the exact edit once only when the intended metadata is still absent; after another ambiguous result, reread and report without further mutation.
 
 ### Multiple open pull requests
 

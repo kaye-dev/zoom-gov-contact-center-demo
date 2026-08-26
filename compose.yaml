@@ -19,7 +19,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: sh -c "npm ci && npm run db:generate && npm run dev -- --hostname 0.0.0.0"
+    # Colima の bind mount では Turbopack の polling が変更を取りこぼすため、
+    # watchOptions の polling を確実に利用できる webpack で開発サーバーを動かす。
+    command: sh -c "npm ci && npm run db:generate && npm run dev -- --webpack --hostname 0.0.0.0"
     depends_on:
       db:
         condition: service_healthy
@@ -33,6 +35,7 @@ services:
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-ChangeMe12345!}
       SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-Demo Admin}
       NEXT_ALLOWED_DEV_ORIGIN: ${NEXT_ALLOWED_DEV_ORIGIN:-}
+      NEXT_WATCH_POLL_INTERVAL_MS: "${NEXT_WATCH_POLL_INTERVAL_MS:-1000}"
       NEXT_TELEMETRY_DISABLED: "1"
     ports:
       - "${WEB_BIND_ADDRESS:-127.0.0.1}:${HOST_PORT:-3000}:3000"

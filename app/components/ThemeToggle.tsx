@@ -26,9 +26,7 @@ export function ThemeToggle() {
       >
         {/* 丸いつまみ：ライト時は左、ダーク時は右へスライド */}
         <span
-          className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform duration-300 ${
-            isDark ? 'translate-x-[22px]' : 'translate-x-[2px]'
-          }`}
+          className="inline-block h-6 w-6 translate-x-[2px] transform rounded-full bg-white shadow-md transition-transform duration-300 dark:translate-x-[22px]"
         />
       </button>
       <span className="text-sm text-fg-muted">{t.theme.dark}</span>

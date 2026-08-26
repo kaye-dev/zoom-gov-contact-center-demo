@@ -3,9 +3,31 @@ import createMDX from "@next/mdx";
 import { GLOBAL_SEARCH_INDEXING_HEADERS } from "./lib/search-indexing";
 
 const allowedDevOrigin = process.env.NEXT_ALLOWED_DEV_ORIGIN?.trim();
+const watchPollIntervalValue =
+  process.env.NEXT_WATCH_POLL_INTERVAL_MS?.trim();
+
+const watchPollIntervalMs = (() => {
+  if (!watchPollIntervalValue) {
+    return undefined;
+  }
+
+  const interval = Number(watchPollIntervalValue);
+
+  if (!Number.isSafeInteger(interval) || interval <= 0) {
+    throw new Error(
+      "NEXT_WATCH_POLL_INTERVAL_MS must be a positive integer in milliseconds.",
+    );
+  }
+
+  return interval;
+})();
 
 const nextConfig: NextConfig = {
   ...(allowedDevOrigin ? { allowedDevOrigins: [allowedDevOrigin] } : {}),
+  // Compose から指定された場合だけ polling を使い、ホスト上の dev は native watcher を維持する。
+  ...(watchPollIntervalMs
+    ? { watchOptions: { pollIntervalMs: watchPollIntervalMs } }
+    : {}),
   // content/docs 配下の .mdx をダイナミックインポートしてレンダリングする。
   // .mdx をルーティング対象（page.mdx）として使う予定はないが、@next/mdx の
   // 標準構成に合わせて拡張子を許可しておく（content/ は app/ 外なのでルートにはならない）。
