@@ -3,3 +3,31 @@
 
 [mcp_servers."openaiDeveloperDocs"]
 url = "https://developers.openai.com/mcp"
+
+[agents.plan_author]
+description = "計画とUI prototypeを作成する読み取り専用agent"
+config_file = "./agents/plan_author.toml"
+
+[agents.plan_critic]
+description = "計画とprototypeを独立レビューする読み取り専用agent"
+config_file = "./agents/plan_critic.toml"
+
+[agents.plan_rewriter]
+description = "採用済み判断から完成版計画を再構成する読み取り専用agent"
+config_file = "./agents/plan_rewriter.toml"
+
+[agents.blind_diff_reviewer]
+description = "planへアクセスせず実装差分だけを検査する読み取り専用agent"
+config_file = "./agents/blind_diff_reviewer.toml"
+
+[agents.plan_conformance_reviewer]
+description = "承認済みplanと実装差分の適合性を検査する読み取り専用agent"
+config_file = "./agents/plan_conformance_reviewer.toml"
+
+[agents.implementer]
+description = "承認済み計画に従って実装するagent"
+config_file = "./agents/implementer.toml"
+
+[agents.mechanical_worker]
+description = "仕様判断を伴わない限定的な機械作業を行うagent"
+config_file = "./agents/mechanical_worker.toml"

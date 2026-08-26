@@ -1,0 +1,6 @@
+interface:
+  display_name: "実装計画レビュー"
+  short_description: "計画の実現性、安全性、並列実行を独立確認"
+  default_prompt: "$plan-critic でこの実装計画を独立レビューしてください。"
+policy:
+  allow_implicit_invocation: false

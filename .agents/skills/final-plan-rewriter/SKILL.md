@@ -37,4 +37,10 @@ Rewrite a settled plan from scratch as one coherent final artifact. Make it unde
 - Preserve concrete identifiers, paths, API names, numerical requirements, and useful citations.
 - Do not edit a document, change files, or implement the plan unless the user separately authorizes that action.
 
+## Repository plan files
+
+When the user authorizes creation of a repository plan artifact, use `plans/template.md` as the canonical structure. Write the result to the exact requested `plans/tmp/<plan-id>/final.md`, preserve its heading order, parallel task table, and progress checkboxes, and write the plan prose in Japanese. Reflect only accepted critique findings and approved UI results. Do not mark `status: approved` while a high-impact decision remains unresolved, and do not change production files.
+
+Use the configured `plan_rewriter` (`gpt-5.6-sol` / `xhigh`) for this rewrite when available. It returns the complete content to the calling task, which writes `final.md` and runs `node scripts/validate-plan-file.mjs <exact-final.md>` before implementation.
+
 Before returning the result, verify that it stands alone for a new participant, contains no residual decision-history language, preserves every operative requirement, and introduces no unconfirmed decision.
