@@ -40,13 +40,13 @@ Zoom 製品のデモ用に作成した、架空の市区町村ホームページ
 ./dev-compose.sh
 ```
 
-Web を起動する場合は、起動時にアクセス範囲を選択します。Enter のみ、または `1` を入力すると、この Mac だけでアクセスできる [http://localhost:3000](http://localhost:3000) を使用します。`2` を入力すると、Mac の LAN 内 IPv4 アドレスを自動検出し、同じネットワーク上のスマートフォンなどから開ける `http://192.168.x.x:3000` 形式の URL を表示します。`3` を入力すると、Cloudflare Tunnel 用の [https://zoom.keien.dev](https://zoom.keien.dev) で起動します。
+Web を起動する場合は、起動時にアクセス範囲を選択します。Enter のみ、または `1` を入力すると、この Mac だけでアクセスできる [http://localhost:3000](http://localhost:3000) を使用します。`2` を入力すると、Mac の LAN 内 IPv4 アドレスを自動検出し、同じネットワーク上のスマートフォンなどから開ける `http://192.168.x.x:3000` 形式の URL を表示します。`3` を入力すると、Cloudflare Tunnel 用の [https://demo.keien.dev](https://demo.keien.dev) で起動します。
 
 ```text
 Web access:
   1) This Mac only: http://localhost:3000 (default)
   2) Same network: http://192.168.x.x:3000
-  3) Cloudflare Tunnel: https://zoom.keien.dev
+  3) Cloudflare Tunnel: https://demo.keien.dev
 Select [1/2/3]:
 ```
 
