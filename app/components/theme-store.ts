@@ -35,7 +35,9 @@ function getServerThemeSnapshot() {
 }
 
 export function syncThemeFromStorage() {
-  applyThemeClass(getPreferredThemeSnapshot());
+  const isDark = getPreferredThemeSnapshot();
+  applyThemeClass(isDark);
+  return isDark;
 }
 
 function subscribeThemeChange(onStoreChange: () => void) {

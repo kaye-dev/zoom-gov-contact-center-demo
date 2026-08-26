@@ -19,6 +19,12 @@
   visibility: hidden;
 }
 
+:root.theme-loading *,
+:root.theme-loading *::before,
+:root.theme-loading *::after {
+  transition: none !important;
+}
+
 :root {
   /* セマンティックトークン（意味ベース）。ライト値は従来の挙動を維持 */
   --surface: #ffffff;        /* ページ/ボディ背景 */
