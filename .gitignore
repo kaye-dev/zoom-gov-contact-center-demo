@@ -27,6 +27,7 @@
 *.sqlite
 *.sqlite-*
 /lib/generated/prisma/
+/plans/tmp/
 
 # debug
 npm-debug.log*

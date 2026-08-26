@@ -50,7 +50,7 @@ Web access:
 Select [1/2/3]:
 ```
 
-Cloudflare Tunnel の初回設定と起動手順は [docs/cloudflared-tunnel.md](docs/cloudflared-tunnel.md) を参照してください。
+Cloudflare Tunnel の初回設定と起動手順は [docs/development/cloudflared-tunnel.md](docs/development/cloudflared-tunnel.md) を参照してください。
 
 LAN 内 IPv4 アドレスは起動のたびに検出されるため、接続先の Wi-Fi などが変わると URL も変わる場合があります。スマートフォンは Mac と同じネットワークへ接続してください。VPN、ゲスト Wi-Fi の端末間通信制限、macOS Firewall などにより接続できない場合があります。
 

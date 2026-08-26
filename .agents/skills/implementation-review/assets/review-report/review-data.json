@@ -1,0 +1,19 @@
+{
+  "title": "UNREPLACED_TEMPLATE",
+  "generatedAt": "UNREPLACED_TEMPLATE",
+  "runId": "UNREPLACED_TEMPLATE",
+  "base": "UNREPLACED_TEMPLATE",
+  "head": "UNREPLACED_TEMPLATE",
+  "remoteBase": { "ref": "UNREPLACED_TEMPLATE", "oid": "UNREPLACED_TEMPLATE" },
+  "diffHash": "UNREPLACED_TEMPLATE",
+  "planHash": "UNREPLACED_TEMPLATE",
+  "assetHashes": { "index.html": "UNREPLACED_TEMPLATE", "styles.css": "UNREPLACED_TEMPLATE", "app.js": "UNREPLACED_TEMPLATE", "review-data-schema.js": "UNREPLACED_TEMPLATE" },
+  "summary": "UNREPLACED_TEMPLATE",
+  "stats": { "files": -1, "intentGroups": -1, "findings": -1, "validationsPassed": -1 },
+  "reviewedPaths": [],
+  "excludedPaths": [],
+  "findingResolutions": [],
+  "reviewPasses": [],
+  "validations": [],
+  "groups": []
+}

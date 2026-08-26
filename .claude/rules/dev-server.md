@@ -1,44 +1,22 @@
-# 開発サーバー（表示確認）コーディング規約
+# 開発サーバーとCodexアプリ内Browserの表示確認規約
 
-実装完了後に画面の表示を確認する流れについて、以下を遵守すること。
+## 実アプリ
 
-## 1. 「npm run dev で確認しますか？」を無条件に出さない
+- 起動前に3000番台のLISTEN port、PID、cwd、commandを確認し、対象appの既存serverへ重ねて起動しない。
+- 必要な場合だけ`npm run dev`を起動し、Codexが起動したPIDだけをcwdとcommandまで照合して停止する。ユーザーの既存processは停止しない。
+- UI変更はCodexアプリ内Browserでdesktopと390×844、主要操作、keyboard、focus、主要state、console、networkを確認する。`curl`やtestだけで実画面確認済みとしない。
 
-- 実装が完了したときに、いきなり
-  「npm run dev で実際の表示を確認しますか？」
-  といった確認文言を表示しない。
-- 表示確認が必要な場合は、まず**起動中のポートの有無を事前確認**してから提案する（下記 2・3 に従う）。
+## plan prototypeとHTMLレビュー
 
-## 2. 表示確認が必要なときは、まず起動中ポートを事前確認する
+`plans/tmp/<plan-id>/prototype/`と`plans/tmp/<plan-id>/implementation-review/`は次の軽量なloopback serverで配信する。
 
-- 画面の表示確認が必要だと判断した場合は、先に `npm run dev` が起動しているポートがあるかを調べる。
-- 例: `lsof -i -P -n | grep LISTEN | grep node` や `lsof -i :3000-3009` などで
-  3000 番台のポート（`localhost:3000` など）が LISTEN しているかを確認する。
+```sh
+node scripts/serve-plan-artifact.mjs plans/tmp/<plan-id>/<prototype|implementation-review>
+```
 
-## 3. ポートの状態に応じて確認の出し方を変える
+- `127.0.0.1`の出力URLをCodexアプリ内Browserで開く。
+- `file://`、外部CDN、外部API、analytics、repo全体を公開するserverは使わない。
+- prototype確認、HTML差分レビュー、実装後の実アプリ確認は別の証拠として扱う。
+- Browserを利用できない場合は未検証と報告する。
 
-- **3000 番台のポートが起動している場合**:
-  そのポート（例: `localhost:3000`）で動作確認するかをユーザーに確認する。
-  新たに `npm run dev` の実行を提案しない。
-- **ポートが起動していない場合のみ**:
-  `npm run dev` を実行してよいかをユーザーに確認する。
-
-## 4. Codex での実際の動作確認は Computer Use で行う
-
-- ユーザーから動作確認を求められた場合、または自分で画面の動作確認を実施する場合は、Codex の
-  `Computer Use` で実際のブラウザ画面を操作して確認する。
-- 起動中のポート（例: `localhost:3000`）へアクセスし、画面の表示・挙動・レスポンシブ状態を確認する。
-  必要に応じて desktop / mobile 相当の表示へ切り替え、スクリーンショットや画面上の状態を根拠として残す。
-- `curl` などで HTML を取得するだけの確認や、確認を省略して「確認してください」とユーザーに丸投げする
-  対応はしない。実際の描画と操作結果を `Computer Use` 経由で確認する。
-- `Computer Use` が利用できない場合は、代替手段で確認済み扱いにしない。利用不可の理由
-  （プラグイン未接続、権限不足、対象ブラウザを操作できない等）を具体的に報告し、UI は未検証として扱う。
-
-## 5. Codex の MCP 設定と `.mcp.json` を混同しない
-
-- Codex のローカル設定は `.codex/config.toml` を参照する。Codex ではブラウザ操作系 MCP を
-  表示確認の既定手段にしない。
-- `.mcp.json` は Claude Code 用の設定として扱う。`.mcp.json` にブラウザ操作系 MCP が残っていても、
-  Codex の動作確認手順へ持ち込まない。
-- Codex でブラウザ確認が必要なときにブラウザ操作系 MCP の再追加や MCP ツールへの切り替えを
-  提案しない。まず `Computer Use` を使う。
+Codexのproject-local設定は`.codex/config.toml`を参照する。`.mcp.json`はClaude Code用である。

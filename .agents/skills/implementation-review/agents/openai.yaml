@@ -1,0 +1,6 @@
+interface:
+  display_name: "実装HTMLレビュー"
+  short_description: "大きな差分を意図別・リスク順にHTMLレビュー"
+  default_prompt: "$implementation-review でこの実装を二段階レビューし、HTMLレビュー画面を作成してください。"
+policy:
+  allow_implicit_invocation: false
