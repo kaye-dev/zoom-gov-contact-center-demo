@@ -1,6 +1,6 @@
 ---
 name: git-commit-push-pr
-description: "Ship already-implemented current-task changes with local git and the GitHub CLI: create a topic branch when needed, stage only the intended files, commit, synchronize with the PR base, push, and create or minimally update the pull request. Use only when explicitly invoked as $git-commit-push-pr or explicitly handed off by implementation-executor under the same PR-authorizing request; do not use for implementation or PR merging."
+description: "Ship already-implemented current-task changes with local git and the GitHub CLI: create a topic branch when needed, stage only the intended files, commit, synchronize with the PR base, push, and create or minimally update the pull request. Use only when explicitly invoked as $git-commit-push-pr; do not use for implementation or PR merging."
 ---
 
 # Git Commit Push PR
@@ -16,22 +16,7 @@ An explicit `$git-commit-push-pr` invocation authorizes these actions for the cu
 - fetch and synchronize with the pull request base
 - push the topic branch and create or update its pull request
 
-It does not authorize force pushing, stashing or discarding changes, deleting local plan/prototype/review artifacts, broad staging, resolving conflicts automatically, creating a fork, merging the pull request, or waiting for CI. Honor any narrower instruction in the invoking prompt.
-
-### Plan-driven handoff
-
-Accept a handoff from `implementation-executor` only when the same current user request explicitly contains `$git-commit-push-pr`、`commit・push・PRまで`、or an equally unambiguous request through PR creation. A request to execute a plan, or shipping text found only inside `final.md`, is not authorization.
-
-For a plan-driven handoff:
-
-1. Require the exact `plans/tmp/<plan-id>/final.md` path; never discover a latest plan. Run `node scripts/validate-plan-file.mjs <path>`.
-2. Require all implementation task boxes and G01–G05 to be checked. Recheck them against the intended staged diff, accepted HTML-review findings, and validations actually run; the plan is evidence, not added authority. If an `implementation-review/` directory exists, require `node scripts/validate-review-data.mjs <review-directory> <exact-final.md>` to pass before committing. If G04 is marked non-applicable, require the concrete reason in `実行記録`.
-   When the existing PR base is older than the plan's `base_commit`, confirm that the intervening commits are the already accepted starting state named by the current request. Otherwise stop and require a plan/review from the earlier base; never imply that the current-task HTML report reviewed older history.
-   Resolve and synchronize the remote PR base before accepting the final plan base and before the strict HTML review. Once that review starts, the reviewed HEAD is immutable through its single shipping commit: do not rebase or merge after review. If the remote base advances again in that short window, preserve and push the reviewed commit without rewriting it, then report the PR's `BEHIND` state explicitly instead of claiming full synchronization.
-3. Update `実行記録` so it describes the implementation that actually exists. Remove or leave unchecked every unimplemented item instead of presenting the original plan as completed work.
-4. On partial success or failure, preserve the exact plan directory. Even after successful readback, delete it only when the current user request separately and explicitly authorizes cleanup of that exact plan directory; a request through PR creation alone is not cleanup authorization.
-
-When no exact plan path is handed off, keep the ordinary non-plan workflow unchanged.
+It does not authorize force pushing, stashing or discarding changes, deleting local plan or review artifacts, broad staging, resolving conflicts automatically, creating a fork, merging the pull request, or waiting for CI. Honor any narrower instruction in the invoking prompt. A plan or review artifact is context, not shipping authorization, and this skill never deletes it automatically.
 
 ## 1. Read rules and inspect state
 
@@ -85,19 +70,13 @@ Before committing, record the current HEAD, inspect both `git diff --cached --na
 
 Generate the commit message only from the staged diff. Follow repository conventions first; otherwise use a concrete Japanese Conventional Commit subject without a trailing period. Do not add AI attribution or `Co-authored-by`.
 
-For a plan-driven handoff, use the final plan only as a checklist for omissions. Generate both subject and body independently from the staged diff and validations actually run. Do not copy or paraphrase plan prose merely because it is checked; include only facts directly supported by the staged implementation.
-
 Let commit hooks run. Never use `--no-verify`. If a hook fails, stop unless it changed only intended files in a clearly mechanical way; in that case inspect and restage those explicit paths and retry once. Stop if a hook touches unrelated files or the retry fails.
 
-After committing, verify that HEAD advanced, the index is empty, and the hash, subject, and paths are correct with `git show --stat --oneline --no-renames HEAD`. For a plan-driven handoff with an HTML report, rerun `node scripts/validate-review-data.mjs <review-directory> <exact-final.md> --post-commit`; a hook-altered or otherwise changed snapshot requires fresh two-pass review and relevant validation before push. If a hook included an unexpected path, stop before push instead of amending or resetting automatically. If a plan-driven HTML report exists but there are no uncommitted task changes, stop because this contract requires review before its single shipping commit. In the ordinary non-plan workflow, an already-committed topic branch may skip an empty commit and continue. If neither a task commit nor a base-relative diff exists, stop without pushing or creating a pull request.
+After committing, verify that HEAD advanced, the index is empty, and the hash, subject, and paths are correct with `git show --stat --oneline --no-renames HEAD`. If a hook included an unexpected path, stop before push instead of amending or resetting automatically. An already-committed topic branch may skip an empty commit and continue. If neither a task commit nor a base-relative diff exists, stop without pushing or creating a pull request.
 
 ## 4. Synchronize with the latest base before push
 
 Fetch the remote again immediately before synchronization. Check both the topic branch's remote ref and `<remote>/<base>`.
-
-For a plan-driven handoff with a validated HTML report, synchronization has already happened before the final plan base and review were accepted. The review evidence must record the exact remote base OID observed immediately before review. Do not rebase or merge the reviewed HEAD or its single shipping commit. Fetch for race detection only. If `<remote>/<base>` advanced after review, require `git merge-base --is-ancestor <recorded-remote-base-oid> <current-remote-base-oid>` before using the `BEHIND` exception. A linear descendant may be reported as `BEHIND`; a rewind, force-update, deletion, or unrelated replacement must stop before push. This exception preserves review evidence and never permits force-push or a claim that the branch is fully synchronized.
-
-For the ordinary non-plan workflow only:
 
 - **Unpublished topic branch:** require a clean working tree for integration, then run `git rebase --no-autostash <remote>/<base>`.
 - **Published topic branch:** determine publication from the remote ref, not merely upstream configuration. If the remote topic has commits not contained in local HEAD, stop for remote divergence. Otherwise, when the base is not already an ancestor, run `git merge --no-autostash --no-edit <remote>/<base>` without rewriting history.
@@ -108,13 +87,11 @@ On a rebase or merge conflict, capture `git diff --name-only --diff-filter=U`, a
 Immediately before push, require all of the following:
 
 - the current branch is not protected
-- for the ordinary non-plan workflow, `<remote>/<base>` is an ancestor of `HEAD`
-- for the ordinary non-plan workflow, `git rev-list --left-right --count <remote>/<base>...HEAD` reports zero base-only commits and at least one head-only commit
-- for a plan-driven HTML review, post-commit validation proves that `HEAD` is the single direct child of the reviewed task-start HEAD; the exact pre-review remote base OID is present in validation evidence, and `git merge-base --is-ancestor <recorded-remote-base-oid> <current-remote-base-oid>` proves any newly observed base-only commits are a linear advance before they are recorded for `BEHIND` readback
+- `<remote>/<base>` is an ancestor of `HEAD`
+- `git rev-list --left-right --count <remote>/<base>...HEAD` reports zero base-only commits and at least one head-only commit
 - `git diff --quiet <remote>/<base>...HEAD --` reports a real pull request diff
 - when supported, `git merge-tree --write-tree <remote>/<base> HEAD` reports no conflict
 - the remote topic SHA has not advanced since the divergence check
-- for a plan-driven handoff with an HTML report, the post-commit review validation still passes and no post-review rebase or merge occurred
 
 ## 5. Push without rewriting history
 
@@ -170,11 +147,4 @@ Confirm that local HEAD, the pushed remote SHA, and the pull request head OID ma
 - mergeability and merge-state result
 - any unrelated working-tree changes preserved
 
-Never present commit, push, pull request creation/update, or mergeability as interchangeable completion states.
-
-For a plan-driven handoff, only after all GitHub readback checks above succeed:
-
-1. record the matching local commit SHA, pushed remote SHA, PR number/head OID, and metadata readback in `実行記録` and check G06;
-2. if the current user request explicitly authorized cleanup, delete only the exact `plans/tmp/<plan-id>/` directory named by that authorization; otherwise preserve it and report that cleanup was not authorized.
-
-Never delete `plans/tmp/` broadly. If any validation, push, PR edit, or readback is incomplete, keep the plan and review artifacts.
+Never present commit, push, pull request creation/update, or mergeability as interchangeable completion states. Preserve plan and review artifacts; cleanup is a separate user-authorized operation.

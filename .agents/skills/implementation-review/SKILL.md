@@ -1,36 +1,41 @@
 ---
 name: implementation-review
-description: "For a substantial implementation, run blind and plan-aware reviews and create an intent-grouped, risk-ordered HTML report for the Codex in-app Browser."
+description: "Run independent blind and plan-conformance reviews for one implementation, then build a local interactive HTML report. Use only when explicitly invoked as $implementation-review."
 ---
 
 # Implementation Review
 
-Use this skill explicitly when a diff is large or its intent is difficult to review in ordinary file order. It bundles the review rules and the reusable HTML output template; it is not an app server or an implementation runtime.
+Review one implementation twice in independent fresh contexts and produce an explanatory local HTML report. This skill is read-only with respect to implementation and Git state; it may write only `plans/reviews/<slug>/`.
 
-## Review in two independent passes
+## Resolve the plan and diff
 
-1. Require `HEAD` to equal the explicitly accepted task-start commit and resolve the complete uncommitted task diff: staged, unstaged, deleted, and relevant untracked files. When this review will feed shipping, fetch and resolve the PR base before accepting that task-start commit; require the current remote base to be its ancestor, or stop so synchronization and plan acceptance happen before review. Record that exact pre-review remote base OID in the report's validation evidence so shipping can distinguish a later linear advance from a rewind or divergent force-update. This plan-driven shipping gate intentionally runs before the single task commit. If task changes are already committed, stop instead of pretending this report attests that history; use an ordinary branch review or create a new accepted workflow from the appropriate earlier base. Treat the task-start commit as a trust boundary, not as evidence that older branch or PR commits were reviewed. Record the exact sorted task path manifest. Record every unrelated dirty/untracked path separately with its reason and current snapshot hash; do not send excluded changes to either reviewer.
-2. Before each pass, capture `HEAD`, the complete diff inventory, and the canonical review snapshot including the Git index. Hash the exact diff/file-context artifacts passed to that reviewer. The custom agent's `sandbox_mode = "read-only"` is a routing request, not a hard permission boundary: a live parent permission can override it. If hard read-only isolation is required, stop and run the review from a separate parent task that is itself read-only. Otherwise use the tamper-evident flow below and never claim that the child was permission-isolated.
-3. Stage the exact reviewed task paths. Deterministically hash the base-to-index binary diff and sorted path/index-blob context, then start `blind_diff_reviewer` (`gpt-5.6-sol` / `xhigh`) with `fork_turns="none"` (or the runtime's exact no-history equivalent) and pass only those exact inputs. Require its normalized output to echo both input hashes. Do not show it the plan or prior discussion. Ask for correctness, security, regressions, accessibility, test gaps, and blast radius.
-4. Immediately after the blind pass, recompute `HEAD`, the index-aware canonical snapshot, inventory, and reviewer-input hashes. Any change invalidates the result and stops the workflow; preserve the unexpected diff for the user and do not restore it automatically.
-5. Separately start `plan_conformance_reviewer` (`gpt-5.6-sol` / `xhigh`) with `fork_turns="none"`, then explicitly pass only the exact final plan, hashed diff/file-context artifacts, the structured pre-review remote-base ref/OID, and checks actually run. Require its normalized output to echo the diff, context, canonical immutable plan, validation-evidence, and remote-base hashes. This plan artifact excludes only lifecycle fields (`status`, `進捗管理`, and `実行記録`) so G04/G05 evidence can be recorded after review without invalidating the adopted design. Browser confirmation is recorded in those lifecycle fields after review, not inserted into the reviewer-attested validations. Do not pass the blind result. Ask for missing requirements, unexplained deviations, and unsupported completion claims. Repeat the same post-pass tamper check.
-6. Keep both pass results, including disagreements and findings that only make sense with the plan. Classify them as `blocker`, `major`, `minor`, or `note`. Record the unchanged pre/post snapshot checks as report validation evidence.
+- Use the explicit `plans/<slug>.md` path. When omitted, select the only `plans/*.md` other than `plans/template.md`; stop for zero or multiple candidates.
+- By default review the current task's complete changes against `HEAD`: staged, unstaged, deleted, and relevant non-ignored untracked files.
+- If the requested changes are already committed, require the user to state the Git base revision and review `<base>...HEAD` instead.
+- Build sorted reviewed and excluded path lists. Never include unrelated changes in either reviewer input. If task and unrelated changes cannot be separated confidently, stop before generating the report.
+- Capture the exact same diff and necessary file context once for both passes. Do not mutate files, the index, or commits during review.
 
-## Create the HTML report
+## Run two independent passes
 
-Read [review-contract.md](references/review-contract.md), then copy `assets/review-report/` to `plans/tmp/<plan-id>/implementation-review/`. Normalize each reviewer result in memory and run the shared `containsSensitiveText` screening before writing it; never persist an unscreened raw response. Save the safe outputs as the fixed, distinct `blind-review.json` and `plan-conformance-review.json`; keep every finding in the matching source file. Replace the entire tracked `review-data.json` placeholder with task-specific data from the two current review passes; do not retain sample groups, findings, counts, paths, or validations from another task. Any remaining `UNREPLACED_TEMPLATE` value is a hard failure.
+1. Start a fresh no-history subagent for the blind diff review. Pass only the exact diff and necessary repository context—not the plan, conversation, task rationale, or any prior review. Ask for correctness, security, regression, accessibility, maintainability, test-gap, and unexplained-change findings.
+2. Start a separate fresh no-history subagent for the conformance review. Pass the exact plan, same diff and context, and checks actually run—not the blind result or conversation. Ask for missing requirements, unexplained deviations, incomplete flows, and unsupported completion claims.
 
-Copy and hash every canonical report asset, including `review-data-schema.js`. A changed canonical asset must itself be fully staged and reviewed and can never appear in `excludedPaths`; unchanged assets are trusted from the accepted base, changed assets from the index, and post-commit assets from the shipping commit.
+Require each finding to contain `source`, `severity`, `title`, `body`, `location`, and `recommendation`. Preserve every finding from both passes. If independent subagents are unavailable, stop rather than silently simulating both passes in one context.
 
-- Group related edits by intent, not by file. A rename and its import fixes belong together.
-- Sort groups by risk and blast radius. Put the most important review decision first.
-- Explain what each group changes and why. Mark a change as needing improvement when its intent or correctness cannot be explained from evidence.
-- Show one or more diff locations for every intent group, including groups with no finding. Also show findings from both passes, validations actually run, and plan deviations.
-- Never interpolate code, diff, or comments into executable HTML/JavaScript. Keep the template local, use DOM text APIs, and include no external scripts, analytics, secrets, or production data.
-- Preserve the report's human comment fields and the action that copies unresolved LLM findings plus human comments as Markdown for the original implementation task.
+## Build the report
 
-Run `node scripts/validate-review-data.mjs plans/tmp/<plan-id>/implementation-review plans/tmp/<plan-id>/final.md --allow-unresolved` before the first display; this binds all evidence while permitting unresolved findings to be reviewed. Serve it with `node scripts/serve-plan-artifact.mjs plans/tmp/<plan-id>/implementation-review`, then inspect it in the Codex in-app Browser at desktop and 390×844. Test risk filters, finding decisions, keyboard/focus, comment entry, Markdown generation, and consolidated copy. Stop only the server started for this report.
+Read [review-contract.md](references/review-contract.md). Copy `assets/review-report/` to `plans/reviews/<slug>/`, replace `review-data.json` completely, and keep only the minimum contract described there. Screen reviewer text for sensitive values before writing it; never persist raw reviewer transcripts or separate raw review JSON.
 
-After accepted fixes, stage the exact task paths, rerun both fresh review passes, and rebuild the report. The strict snapshot binds the index state as well as the working tree, so later staging changes invalidate the report. If the user explicitly rejects a remaining blocker/major, record the complete finding, current review run ID and diff hash, rationale, evidence, and `userApproved: true` in `findingResolutions`; Browser state alone is not evidence. Run the validator again without `--allow-unresolved`. Only this strict result can support G04. During authorized shipping, `--post-commit` additionally rejects every excluded path so an unreviewed change cannot enter the PR.
+Group changes by intent rather than file order, combine mechanical follow-up changes with their purpose, and sort groups by risk. Include locations, rationale, blast radius, verification evidence, and both source-labelled finding sets. Mark any change whose intent cannot be explained as `要改善`.
 
-The calling integration owner checks G04 only after both fresh passes have been rerun against the final diff and every blocker/major is either resolved or explicitly rejected by the user with the rationale recorded in `実行記録`. Merely returning an unresolved finding to the user leaves G04 unchecked and stops shipping. It checks G05 only after the required Browser and live application checks pass. HTML review does not replace tests or live application verification.
+The page must support `採用 / 却下 / 未確定`, per-group human comments, and Markdown generation/copy containing adopted and unresolved findings plus comments. Use only local assets and DOM text APIs; do not add external requests, analytics, dynamic code execution, or `innerHTML`.
+
+Serve only the generated directory with:
+
+```sh
+node scripts/serve-plan-artifact.mjs plans/reviews/<slug>
+```
+
+Open its `127.0.0.1` URL in the Codex in-app Browser. Verify desktop and 390×844 layouts, risk filters, decisions, comments, Markdown generation, clipboard behavior, keyboard/focus, invalid JSON handling, console, and network. Stop only the server started for this report.
+
+Report the review directory, reviewed and excluded paths, validation results, highest-risk findings, and Browser checks. HTML review supplements rather than replaces automated tests and live application verification.

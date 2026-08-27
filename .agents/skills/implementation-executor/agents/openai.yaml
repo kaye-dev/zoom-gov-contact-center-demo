@@ -1,6 +1,6 @@
 interface:
-  display_name: "実装プラン実行"
-  short_description: "承認済み計画をTerra中心で実装・検証"
-  default_prompt: "$implementation-executor plans/tmp/<plan-id>/final.md を実行してください。"
+  display_name: "実装計画実行"
+  short_description: "plans配下の実装計画を実装・検証"
+  default_prompt: "$implementation-executor plans/<slug>.md を実行してください。"
 policy:
   allow_implicit_invocation: false
