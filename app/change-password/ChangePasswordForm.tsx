@@ -75,7 +75,7 @@ export function ChangePasswordForm() {
           </p>
         ) : null}
         {success ? (
-          <p className="rounded-md bg-primary-50 px-3 py-2 text-sm text-primary-1100">
+          <p className="rounded-md bg-surface-accent-subtle px-3 py-2 text-sm text-fg">
             {t.auth.passwordChanged}
           </p>
         ) : null}

@@ -165,7 +165,7 @@ export function ChatSettingsForm({
                   htmlFor={inputId}
                   className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-colors focus-within:ring-2 focus-within:ring-accent/40 ${
                     isSelected
-                      ? "border-primary bg-primary-50 dark:bg-primary-950/40"
+                      ? "border-accent bg-surface-selected"
                       : "border-line bg-surface hover:bg-surface-hover"
                   }`}
                 >
@@ -177,7 +177,7 @@ export function ChatSettingsForm({
                     checked={isSelected}
                     onChange={() => updateActiveMode(value)}
                     aria-describedby={`${descriptionId} chat-settings-mode-help`}
-                    className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-primary"
+                    className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                   />
                   <span className="min-w-0 space-y-1">
                     <span className="block font-bold">{label}</span>
@@ -381,7 +381,7 @@ function ChatMethodFieldset({
         <span
           className={`rounded-full px-2.5 py-1 text-xs font-bold ${
             isActive
-              ? "bg-primary-50 text-primary-1100 dark:bg-primary-950 dark:text-primary-100"
+              ? "bg-surface-accent-subtle text-accent"
               : "bg-surface-hover text-fg-muted"
           }`}
         >

@@ -401,7 +401,7 @@ export function UserDetailsView({
                   {(["temporary", "standard"] as const).map((mode) => (
                     <label
                       key={mode}
-                      className="flex cursor-pointer gap-3 rounded-lg border border-line p-4 has-[:checked]:border-accent has-[:checked]:bg-primary-50/60 dark:has-[:checked]:bg-primary-950/30"
+                      className="flex cursor-pointer gap-3 rounded-lg border border-line p-4 has-[:checked]:border-accent has-[:checked]:bg-surface-selected"
                     >
                       <input
                         type="radio"
@@ -410,7 +410,7 @@ export function UserDetailsView({
                         checked={passwordMode === mode}
                         onChange={() => changePasswordMode(mode)}
                         disabled={isSubmitting}
-                        className="mt-1 h-4 w-4 cursor-pointer accent-primary disabled:cursor-not-allowed"
+                        className="mt-1 h-4 w-4 shrink-0 cursor-pointer accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed"
                       />
                       <span>
                         <span className="block text-sm font-semibold">

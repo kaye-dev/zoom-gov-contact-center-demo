@@ -91,7 +91,7 @@ export function NewUserForm() {
       </div>
 
       {createdUser ? (
-        <div className="rounded-lg border border-primary-200 bg-primary-50 p-4 text-primary-1100">
+        <div className="rounded-lg border border-accent/40 bg-surface-accent-subtle p-4 text-fg">
           <h2 className="text-lg font-bold">{t.admin.issuedPasswordTitle}</h2>
           <p className="mt-1 text-sm">{t.admin.issuedPasswordDescription}</p>
           <dl className="mt-4 space-y-2 text-sm">
@@ -101,7 +101,7 @@ export function NewUserForm() {
             </div>
             <div>
               <dt className="font-semibold">{t.auth.temporaryPassword}</dt>
-              <dd className="mt-1 flex min-h-11 items-stretch rounded-md bg-white pl-3 font-mono text-base text-primary-1200">
+              <dd className="mt-1 flex min-h-11 items-stretch rounded-md bg-surface-raised pl-3 font-mono text-base text-fg">
                 <span className="min-w-0 flex-1 select-all overflow-x-auto py-2">
                   {createdUser.temporaryPassword}
                 </span>
@@ -128,7 +128,7 @@ export function NewUserForm() {
                   className={`mt-2 text-xs font-semibold ${
                     copyFeedback.kind === "error"
                       ? "text-red-700 dark:text-red-200"
-                      : "text-primary-1100"
+                      : "text-accent"
                   }`}
                 >
                   {copyFeedback.message}
