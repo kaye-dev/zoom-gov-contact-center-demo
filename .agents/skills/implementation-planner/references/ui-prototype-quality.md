@@ -11,6 +11,18 @@ The production implementation should be able to replace the prototype's in-memor
 3. Inspect the source that renders the baseline: shell, page component, global styles or tokens, reusable controls, icon system, and relevant responsive rules.
 4. Record concrete evidence in the plan's `UI契約`: baseline route, source paths, viewport sizes, and the invariants that the prototype must preserve.
 
+Before comparing two surfaces, record the conditions reported by each surface, not only the values requested from the browser tool:
+
+- `window.innerWidth` and `window.innerHeight`;
+- `window.devicePixelRatio`;
+- `window.scrollX` and `window.scrollY` for state screenshots and viewport-relative geometry;
+- locale and rendered copy;
+- light or dark theme;
+- user identity, authorization, fixture data, and relevant query state;
+- runtime owner, checkout, and commit when they can differ.
+
+The pair is not comparable while any relevant condition differs. Setting a viewport override is not evidence that both tabs accepted it; read the resulting viewport from each page. Compare page-content screenshots rather than browser chrome screenshots. Either align scroll offsets or compare document coordinates by adding `scrollX` and `scrollY` to viewport-relative rectangles. Focus-driven automatic scrolling is not a layout difference.
+
 If the live route cannot be opened, derive the baseline from repository source and supplied screenshots, mark live parity unverified, and do not present the prototype as UI-ready.
 
 ## Preserve the product identity
@@ -25,6 +37,46 @@ Unless the requested change explicitly includes a redesign, preserve:
 
 Do not invent a hero section, breadcrumb, sidebar, hamburger menu, card shadow, background color, brand wording, icon style, or accent palette merely to make the mock feel more designed. Add a new pattern only when the feature needs it, and make it look native beside the nearest existing pattern.
 
+### Reuse the production styling pipeline
+
+The production application uses Tailwind CSS v4 and semantic tokens from `app/globals.css`. Use the same pipeline for a prototype:
+
+1. Copy the exact production utility strings and direct-child structure for unchanged shell, rows, forms, buttons, inputs, focus styles, disabled states, and responsive variants. JSX-to-HTML syntax may change; layout semantics may not.
+2. Create `prototype/tailwind.css` that imports the production stylesheet and explicitly registers the ignored prototype sources:
+
+   ```css
+   @import "../../../../app/globals.css";
+   @source "./index.html";
+   @source "./app.js";
+   ```
+
+3. Compile a local stylesheet:
+
+   ```sh
+   node .agents/skills/implementation-planner/scripts/build-prototype-css.mjs \
+     plans/tmp/<plan-id>/prototype
+   ```
+
+4. Load only the generated `styles.css`. Do not use the Tailwind Play CDN, remote assets, or a second set of copied token values.
+
+Complete prototype styling with production Tailwind utilities and `app/globals.css`. Do not add handwritten declarations, `@apply` component classes, duplicated tokens, or parallel `.detail-row`, `.primary-button`, `.baseline-input`, or similar styling abstractions by default. If a concrete requirement cannot be expressed with the production Tailwind setup, stop before writing CSS, show the user the exact missing behavior and proposed rule, and obtain explicit approval. Record that approval and the narrow exception in `UI契約`.
+
+Tailwind source detection treats class names as text. Keep complete utility class names in HTML or JavaScript rather than constructing fragments such as `bg-${color}`. Register prototype files explicitly because `plans/tmp/` is ignored by Git and automatic detection can skip ignored files.
+
+### Inventory the baseline state graph
+
+Inspect source and exercise the live route before authoring the prototype. List every state on the affected surface that either changes layout or constrains the new feature, including existing edit forms, dialogs, disabled siblings, saving, validation, success, and failure states.
+
+For every state pair, record:
+
+- which elements are rendered, removed, hidden, disabled, or inert;
+- the active element on entry, keyboard traversal, Escape behavior, and focus destination on exit;
+- direct-child and grid or flex relationships that determine placement and row height;
+- visible copy and realistic fixture values;
+- transitions into and out of the state.
+
+Adding a new control to an existing screen extends the existing mutual-exclusion and disabled-state rules. It does not authorize a simplified replacement for existing interactions. If an unchanged control is present in the prototype, its relevant reachable states must match production or be explicitly marked incomplete; do not implement a generic stand-in interaction.
+
 ## Build a credible screen
 
 - Reproduce the full affected screen or component in its real shell, not an isolated showcase.
@@ -35,6 +87,7 @@ Do not invent a hero section, breadcrumb, sidebar, hamburger menu, card shadow, 
 - Keep review controls out of the product surface. When state switching is useful, place it in a visually separate reviewer toolbar or use query parameters; it must not be confused with shippable UI.
 - Preserve semantic HTML, native disabled behavior, pointer and disabled cursors, keyboard operation, focus visibility, focus return, announcements, and reduced-motion behavior.
 - At 390×844, follow the existing application's responsive model. Do not replace it with a newly invented mobile navigation pattern.
+- Preserve unchanged copy exactly. A clearer label, extra helper, skip link, region wrapper, focus ring, or accessibility behavior is still a product change unless the requested scope includes it and the production implementation will make the same change.
 
 ## Compare before approval
 
@@ -48,8 +101,30 @@ Compare the baseline and prototype side by side. At minimum, verify and record:
 - behavior: desktop, 390×844, horizontal overflow, keyboard, focus, normal and applicable exceptional states, console errors, and failed local requests;
 - deviations: every intentional visual difference and the requirement that justifies it.
 
+Use paired evidence for the same route, viewport, locale, fixture, and state. For unchanged regions, compare bounding rectangles and the computed properties that control layout and appearance: display, direct parent, grid or flex tracks, span, gap, padding, margin, size, font, border, radius, color, shadow, outline, opacity, disabled state, and visibility. Exact token and state mismatches fail. Allow at most 1 CSS pixel only for raster or subpixel rounding; do not use that tolerance to excuse a different utility, border, grid track, or control structure.
+
+Capture an aligned screenshot pair for each material state. Whole-page similarity is insufficient when a new row or dialog intentionally changes the page. Divide the screen into:
+
+- unchanged regions, which must match;
+- intentional delta regions, each mapped to a requirement;
+- downstream regions, which may move only by the measured size of an intentional insertion.
+
+Also compare the accessibility snapshot or equivalent DOM-backed state so a visually faint but still rendered control, a missing disabled flag, or an extra focus stop is not missed.
+
+The following are hard failures and must be fixed before approval:
+
+- the two pages report different comparison conditions;
+- unchanged production Tailwind utilities or DOM relationships were re-created with approximate handwritten CSS;
+- handwritten CSS was added without the user's explicit approval recorded in `UI契約`;
+- an existing control remains enabled, visible, or focusable when production disables, removes, or hides it;
+- an existing interaction was replaced by a generic stand-in;
+- focus border, outline, button border, grid span, row height, copy, or fixture differs without an explicit requirement;
+- the evidence covers only the initial state while an affected interaction expands a form, menu, dialog, or error state.
+
 Fix unexplained differences before asking the user to approve the UI. Functional completeness, accessibility, and responsive behavior do not compensate for visual divergence from the product baseline.
 
-Create a parity matrix in `UI契約` with one row per affected route or overlay and applicable state. For each row, record the prototype entry point, desktop result, 390×844 result, keyboard/focus result, and whether any decision remains open. UI approval requires every row to pass and every material design decision to be resolved.
+Create a parity matrix in `UI契約` with one row per affected route or overlay and applicable state. For each row, record the prototype entry point, actual conditions from both surfaces, screenshot evidence, unchanged-region result, intentional difference IDs, desktop result, 390×844 result, keyboard/focus result, and whether any decision remains open.
+
+Call the result `machine parity passed` only when every row passes. Do not convert that result into user approval. UI approval requires every row to pass, every material design decision to be resolved, and an explicit approval from the user after they inspect the rendered prototype.
 
 After production implementation, repeat the same matrix against the live application. Any implementation departure from the approved prototype requires an explicit UI-contract update and user approval; it cannot be treated as an incidental implementation detail.

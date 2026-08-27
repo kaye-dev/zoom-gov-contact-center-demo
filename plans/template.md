@@ -2,7 +2,7 @@
 
 ## メタデータ
 
-- template_version: 1
+- template_version: 2
 - plan_id: <英小文字・数字・ハイフン>
 - plan_version: 1
 - 作成日: YYYY-MM-DD
@@ -37,13 +37,17 @@
 
 UI変更なし。UI変更がある場合は、対象画面と次を記載し、`plans/tmp/<plan-id>/prototype/`の承認記録を残す。
 
-- production baseline: 比較した実画面URL、locale、runtime、viewport、関連するshell・component・style・tokenのpath
-- 視覚的不変条件: brand、navigation、layout、typography、color、control、icon、responsive behaviorのうち既存UIから維持するもの
-- 意図した差分: 要件に基づき既存UIから変更する箇所と理由
-- stateとinteraction: normal、empty、loading、error、disabled、conflictの適用範囲、keyboard、focus
-- parity検証: 実画面とprototypeのdesktop、390×844比較、主要computed style、overflow、console、networkの結果
+- production baseline: 比較した実画面URL、runtime owner、checkout、commit、関連するshell・component・style・tokenのpath
+- comparison conditions: 実画面とprototypeがそれぞれ報告したviewport、devicePixelRatio、scrollX・scrollY、locale、theme、fixture、query state。指定値でなく両画面の実測値を記録する
+- baseline state inventory: 影響画面の既存interactionをsourceと実操作から列挙し、rendered、removed、hidden、disabled、inert、active element、entry、exitを記録する
+- styling pipeline: 本番と同じTailwind CSS utilityとapp/globals.cssを使用したこと。手書きCSSがある場合は事前のユーザー承認記録と例外理由
+- 視覚的不変条件: brand、navigation、layout、DOMの親子関係、grid・flex、typography、color、control、icon、focus、disabled、responsive behaviorのうち既存UIから維持するもの
+- 意図した差分: explicitな要件IDに基づき既存UIから変更する箇所と理由。要件に紐付かない差分は失敗として扱う
+- stateとinteraction: baseline既存stateと新規normal、empty、loading、error、disabled、saving、conflictの適用範囲、keyboard、focus
+- parity evidence: 条件を揃えた同一stateのscreenshot pair、unchanged regionのbounding rect・computed style・DOM・a11y比較、overflow、console、network、未解消差分
 - production UI正本: 承認済みprototypeを実装後の完成UI契約とし、実装時に未承認の構造・文言・component・responsive・interaction変更を行わないこと
-- parity matrix: 影響するroute・overlay・stateごとのprototype entry point、desktop結果、390×844結果、keyboard・focus結果、未決事項の有無
+- parity matrix: 影響するroute・overlay・baseline state・新規stateごとのentry point、両画面の実測条件、screenshot、unchanged region、意図した差分ID、desktop、390×844、keyboard・focus、未決事項
+- approval semantics: Browserと自動検証はmachine parityの証拠でありUI承認ではない。ユーザーがrendered prototypeを明示承認するまでUI承認記録とG02を未承認にする
 
 ## インターフェースとデータフロー
 

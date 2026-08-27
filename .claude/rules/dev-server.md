@@ -19,7 +19,11 @@ node scripts/serve-plan-artifact.mjs plans/tmp/<plan-id>/<prototype|implementati
 - redesignが明示されていない限り、既存UIにないhero、breadcrumb、sidebar、hamburger menu、shadow、背景色、brand wordingを発明しない。prototype注記、debug control、実装上の免責はproduct UI内へ表示しない。
 - 承認前に実画面とprototypeをdesktop、390×844で比較し、shell、主要computed style、overflow、keyboard、focus、主要state、console、network、意図した差分を記録する。機能・a11y・responsive確認だけではUI parity完了としない。
 - `file://`、外部CDN、外部API、analytics、repo全体を公開するserverは使わない。
+- prototypeのstylingは本番と同じTailwind CSS utilityと`app/globals.css`で完結させる。手書きCSS、`@apply` component、token複製が必要な場合は追加前に理由と対象を示し、ユーザーの明示承認を得る。
+- 比較前に両画面が実際に報告するviewport、devicePixelRatio、scrollX・scrollY、locale、theme、fixture、stateを読み取り、一致しない組み合わせをparity証拠に使わない。viewport overrideを設定した事実だけで一致扱いにしない。focusによる自動scrollが異なる場合はscrollを揃えるか、document座標へ換算して比較する。
+- 初期表示だけでなく、影響画面の既存edit、dialog、disabled sibling、saving、errorなど新機能と共存・競合するstateをsourceからinventoryし、同一stateのscreenshot、DOM・a11y、主要computed styleを比較する。
 - prototype確認、HTML差分レビュー、実装後の実アプリ確認は別の証拠として扱う。
+- Browser検証合格はmachine parityでありユーザーのUI承認ではない。rendered prototypeの明示承認があるまでUI承認gateを完了しない。
 - Browserを利用できない場合は未検証と報告する。
 
 Codexのproject-local設定は`.codex/config.toml`を参照する。`.mcp.json`はClaude Code用である。
