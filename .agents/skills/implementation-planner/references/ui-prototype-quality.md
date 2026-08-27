@@ -114,7 +114,7 @@ Adding a new control to an existing screen extends the existing mutual-exclusion
 
 ## Compare before approval
 
-Serve the artifact with `node scripts/serve-plan-artifact.mjs plans/tmp/<plan-id>/prototype` and inspect it in the Codex in-app Browser.
+Serve the artifact with `./dev-prototype.sh <plan-id>` and inspect its output URL in the Codex in-app Browser. When the prototype is the most recently modified one, `./dev-prototype.sh` is sufficient.
 
 Compare the baseline and prototype side by side. At minimum, verify and record:
 

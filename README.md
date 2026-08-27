@@ -126,11 +126,28 @@ npm run dev
 
 [http://localhost:3000](http://localhost:3000) をブラウザで開くと表示されます。
 
+### UIプロトタイプを確認
+
+`plans/tmp/<plan-id>/prototype/`のモックは、Composeやデータベースを起動せずにlocalhostで確認できます。引数なしでは最終更新されたprototypeを選び、OSが空きポートを自動で割り当てます。
+
+```bash
+./dev-prototype.sh
+```
+
+過去のprototypeなど、対象を明示する場合だけplan IDを指定します。
+
+```bash
+./dev-prototype.sh admin-role-based-access-control
+```
+
+表示された`http://127.0.0.1:<port>/`をブラウザで開き、停止するときは`Ctrl+C`を押します。serverはloopbackだけにbindし、対象prototype以外のリポジトリファイルは配信しません。
+
 ## スクリプト
 
 | コマンド | 説明 |
 | --- | --- |
 | `./dev-compose.sh` | Web のアクセス範囲、Colima、Prisma migration 状態を確認して Docker で開発サーバーを起動 |
+| `./dev-prototype.sh [plan-id]` | 最終更新または指定したUI prototypeを空きlocalhost portで配信 |
 | `docker compose down -v` | Docker volume を含めて停止・削除 |
 | `./dev-compose.sh up studio` | Prisma Studio を Docker 上で起動 |
 | `npm run dev` | 開発サーバーを起動 |
