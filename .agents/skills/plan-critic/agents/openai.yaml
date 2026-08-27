@@ -1,6 +1,6 @@
 interface:
-  display_name: "実装計画レビュー"
-  short_description: "実装計画を独立レビューし自己完結版へ更新"
-  default_prompt: "$plan-critic plans/<slug>.md をレビューして更新してください。"
+  display_name: "Review Plan"
+  short_description: "Independently review and make the plan self-contained"
+  default_prompt: "Use $plan-critic to review and update plans/<slug>.md."
 policy:
   allow_implicit_invocation: false

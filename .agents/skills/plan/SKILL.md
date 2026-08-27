@@ -1,9 +1,9 @@
 ---
-name: implementation-planner
-description: "Investigate this repository and create a self-contained implementation plan under plans from plans/template.md. Use only when explicitly invoked as $implementation-planner."
+name: plan
+description: "Investigate this repository and create a self-contained implementation plan under plans from plans/template.md. Use only when explicitly invoked as $plan."
 ---
 
-# Implementation Planner
+# Plan
 
 Create the implementation specification; do not implement it.
 

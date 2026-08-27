@@ -3,11 +3,11 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
-import { containsSensitiveText, normalizeData, overallStatus } from "../.agents/skills/implementation-review/assets/review-report/review-data-schema.js";
-import { feedbackText, sortFindings, sortGroups } from "../.agents/skills/implementation-review/assets/review-report/app.js";
+import { containsSensitiveText, normalizeData, overallStatus } from "../.agents/skills/review/assets/review-report/review-data-schema.js";
+import { feedbackText, sortFindings, sortGroups } from "../.agents/skills/review/assets/review-report/app.js";
 
 const root = path.resolve(import.meta.dirname, "..");
-const asset = (name: string) => readFile(path.join(root, ".agents/skills/implementation-review/assets/review-report", name), "utf8");
+const asset = (name: string) => readFile(path.join(root, ".agents/skills/review/assets/review-report", name), "utf8");
 
 function validData() {
   return {

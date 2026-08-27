@@ -1,9 +1,9 @@
 ---
-name: implementation-review
-description: "Run independent blind and plan-conformance reviews for one implementation, then build a local interactive HTML report. Use only when explicitly invoked as $implementation-review."
+name: review
+description: "Run independent blind and plan-conformance reviews for one implementation, then build a local interactive HTML report. Use only when explicitly invoked as $review."
 ---
 
-# Implementation Review
+# Review
 
 Review one implementation twice in independent fresh contexts and produce an explanatory local HTML report. This skill is read-only with respect to implementation and Git state; it may write only `plans/reviews/<slug>/`.
 
