@@ -11,11 +11,6 @@ const MIME = new Map([
   [".css", "text/css; charset=utf-8"],
   [".js", "text/javascript; charset=utf-8"],
   [".json", "application/json; charset=utf-8"],
-  [".svg", "image/svg+xml"],
-  [".png", "image/png"],
-  [".jpg", "image/jpeg"],
-  [".jpeg", "image/jpeg"],
-  [".webp", "image/webp"],
 ]);
 
 const CSP = [
@@ -38,13 +33,12 @@ function fail(message) {
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const requested = process.argv[2];
-if (!requested) fail("usage: node scripts/serve-plan-artifact.mjs plans/tmp/<plan-id>/<prototype|implementation-review>");
+if (!requested) fail("usage: node scripts/serve-plan-artifact.mjs plans/reviews/<slug>");
 
 const sourceRoot = path.resolve(repositoryRoot, requested);
 const relativeRoot = path.relative(repositoryRoot, sourceRoot).split(path.sep).join("/");
-const artifactMatch = /^plans\/tmp\/[a-z0-9][a-z0-9-]*\/(prototype|implementation-review)$/.exec(relativeRoot);
-if (!artifactMatch) {
-  fail("artifact path must be plans/tmp/<plan-id>/<prototype|implementation-review>");
+if (!/^plans\/reviews\/[a-z0-9][a-z0-9-]*$/.test(relativeRoot)) {
+  fail("artifact path must be plans/reviews/<slug>");
 }
 const reviewAllowlist = new Set(["index.html", "styles.css", "app.js", "review-data-schema.js", "review-data.json"]);
 
@@ -82,7 +76,7 @@ const server = createServer(async (request, response) => {
     const decoded = decodeURIComponent(url.pathname);
     if (decoded.includes("\0")) throw new Error("invalid path");
     const relative = decoded === "/" ? "index.html" : decoded.replace(/^\/+/, "");
-    if (artifactMatch[1] === "implementation-review" && !reviewAllowlist.has(relative)) throw new Error("file is not part of the review surface");
+    if (!reviewAllowlist.has(relative)) throw new Error("file is not part of the review surface");
     const candidate = path.resolve(canonicalRoot, relative);
     const canonicalFile = await realpath(candidate);
     const inside = path.relative(canonicalRoot, canonicalFile);

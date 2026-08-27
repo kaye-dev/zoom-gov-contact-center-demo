@@ -18,34 +18,27 @@
         </div>
         <div id="overall-status" class="overall-status" aria-live="polite">読込中</div>
       </div>
-      <dl class="revision" aria-label="レビュー対象revision">
+      <dl class="revision" aria-label="レビュー対象">
+        <div><dt>PLAN</dt><dd id="plan-path">—</dd></div>
         <div><dt>BASE</dt><dd id="base-revision">—</dd></div>
         <div><dt>HEAD</dt><dd id="head-revision">—</dd></div>
-        <div><dt>REMOTE BASE</dt><dd id="remote-base">—</dd></div>
-        <div><dt>DIFF SHA-256</dt><dd id="diff-hash">—</dd></div>
-        <div><dt>RUN ID</dt><dd id="run-id">—</dd></div>
         <div><dt>GENERATED</dt><dd id="generated-at">—</dd></div>
       </dl>
     </header>
 
     <main id="review-content">
       <section aria-labelledby="summary-heading" class="section-shell">
-        <div class="section-heading">
-          <div><span class="section-number">01</span><h2 id="summary-heading">レビュー概要</h2></div>
-        </div>
+        <div class="section-heading"><div><span class="section-number">01</span><h2 id="summary-heading">レビュー概要</h2></div></div>
         <div id="metrics" class="metrics" aria-live="polite"></div>
         <div class="verification-panel">
-          <h3>独立レビューpass</h3>
-          <div id="review-passes" class="review-pass-list"></div>
+          <h3>独立レビュー方式</h3>
+          <div class="review-pass-list">
+            <article class="review-pass"><div class="review-pass__heading"><span class="source-badge">BLIND DIFF</span><strong>差分だけのレビュー</strong></div><p>planや会話を渡さず、実装差分だけを確認します。</p></article>
+            <article class="review-pass"><div class="review-pass__heading"><span class="source-badge">PLAN適合</span><strong>plan適合レビュー</strong></div><p>blind結果を渡さず、planと同じ差分を照合します。</p></article>
+          </div>
         </div>
-        <div class="verification-panel">
-          <h3>レビュー対象外の差分</h3>
-          <div id="excluded-paths" class="excluded-path-list"></div>
-        </div>
-        <div class="verification-panel">
-          <h3>検証証拠</h3>
-          <div id="validations" class="validation-list"></div>
-        </div>
+        <div class="verification-panel"><h3>レビュー対象外の差分</h3><div id="excluded-paths" class="excluded-path-list"></div></div>
+        <div class="verification-panel"><h3>検証結果</h3><div id="validations" class="validation-list"></div></div>
       </section>
 
       <section aria-labelledby="groups-heading" class="section-shell">
@@ -63,10 +56,8 @@
       </section>
 
       <section aria-labelledby="feedback-heading" class="section-shell feedback-shell">
-        <div class="section-heading">
-          <div><span class="section-number">03</span><h2 id="feedback-heading">フィードバック</h2></div>
-        </div>
-        <p>採用したLLM指摘、未確定の指摘、入力した人間コメントを、実装taskへ返せるMarkdownにまとめます。</p>
+        <div class="section-heading"><div><span class="section-number">03</span><h2 id="feedback-heading">フィードバック</h2></div></div>
+        <p>採用・未確定のLLM指摘と人間コメントを、実装taskへ返せるMarkdownにまとめます。</p>
         <div id="decision-summary" class="decision-summary" aria-live="polite">
           <span data-decision="adopted">採用 <strong data-decision-count="adopted">0</strong></span>
           <span data-decision="rejected">却下 <strong data-decision-count="rejected">0</strong></span>

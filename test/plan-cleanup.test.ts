@@ -9,32 +9,30 @@ import { cleanupPlanFiles, parsePlanCleanupArgs } from "../scripts/cleanup-plan-
 async function createFixture(context: test.TestContext) {
   const root = await mkdtemp(path.join(tmpdir(), "plan-cleanup-"));
   context.after(() => rm(root, { recursive: true, force: true }));
-  await mkdir(path.join(root, "plans/tmp/example"), { recursive: true });
+  await mkdir(path.join(root, "plans/reviews/example"), { recursive: true });
   await Promise.all([
     writeFile(path.join(root, "plans/template.md"), "canonical template\n"),
-    writeFile(path.join(root, "plans/2026-08-27-example.md"), "tracked plan\n"),
-    writeFile(path.join(root, "plans/.draft.md"), "hidden draft\n"),
-    writeFile(path.join(root, "plans/tmp/example/final.md"), "temporary plan\n"),
+    writeFile(path.join(root, "plans/example.md"), "generated plan\n"),
+    writeFile(path.join(root, "plans/reviews/example/review-data.json"), "{}\n"),
   ]);
   return root;
 }
 
-test("previewはtemplate以外を安定順で列挙し、ファイルを変更しない", async (context) => {
+test("previewは生成planとreviewを安定順で列挙し、ファイルを変更しない", async (context) => {
   const root = await createFixture(context);
   const observed: string[][] = [];
   const result = await cleanupPlanFiles({ repositoryRoot: root, onCandidates: (items) => observed.push(items) });
 
   const expected = [
-    "plans/.draft.md",
-    "plans/2026-08-27-example.md",
-    "plans/tmp/",
-    "plans/tmp/example/",
-    "plans/tmp/example/final.md",
+    "plans/example.md",
+    "plans/reviews/",
+    "plans/reviews/example/",
+    "plans/reviews/example/review-data.json",
   ];
   assert.deepEqual(result, { candidates: expected, removed: [] });
   assert.deepEqual(observed, [expected]);
   assert.equal(await readFile(path.join(root, "plans/template.md"), "utf8"), "canonical template\n");
-  assert.equal(await readFile(path.join(root, "plans/tmp/example/final.md"), "utf8"), "temporary plan\n");
+  assert.equal(await readFile(path.join(root, "plans/reviews/example/review-data.json"), "utf8"), "{}\n");
 });
 
 test("applyはtemplateだけを保持し、symlinkの参照先を変更しない", async (context) => {
@@ -49,10 +47,9 @@ test("applyはtemplateだけを保持し、symlinkの参照先を変更しない
   assert.equal(await readFile(path.join(root, "plans/template.md"), "utf8"), "canonical template\n");
   assert.equal(await readFile(outside, "utf8"), "outside target\n");
   assert.deepEqual(result.removed, [
-    "plans/.draft.md",
-    "plans/2026-08-27-example.md",
+    "plans/example.md",
     "plans/outside-link",
-    "plans/tmp/",
+    "plans/reviews/",
   ]);
 });
 
@@ -61,7 +58,7 @@ test("template欠落時は候補を一切削除しない", async (context) => {
   await rm(path.join(root, "plans/template.md"));
 
   await assert.rejects(cleanupPlanFiles({ repositoryRoot: root, apply: true }), /plans\/template\.md is unavailable/);
-  assert.equal(await readFile(path.join(root, "plans/2026-08-27-example.md"), "utf8"), "tracked plan\n");
+  assert.equal(await readFile(path.join(root, "plans/example.md"), "utf8"), "generated plan\n");
 });
 
 test("templateまたはplans directoryのsymlinkを拒否する", async (context) => {
@@ -72,7 +69,7 @@ test("templateまたはplans directoryのsymlinkを拒否する", async (context
   await symlink(outsideTemplate, path.join(templateRoot, "plans/template.md"));
 
   await assert.rejects(cleanupPlanFiles({ repositoryRoot: templateRoot, apply: true }), /plans\/template\.md must be a regular file, not a symlink/);
-  assert.equal(await readFile(path.join(templateRoot, "plans/2026-08-27-example.md"), "utf8"), "tracked plan\n");
+  assert.equal(await readFile(path.join(templateRoot, "plans/example.md"), "utf8"), "generated plan\n");
   assert.equal(await readFile(outsideTemplate, "utf8"), "outside template\n");
 
   const plansRoot = await mkdtemp(path.join(tmpdir(), "plan-cleanup-symlink-"));
@@ -100,7 +97,7 @@ test("不明な引数を拒否し、部分完了時は削除済みentryと失敗
   assert.deepEqual(parsePlanCleanupArgs([]), { apply: false });
   assert.deepEqual(parsePlanCleanupArgs(["--apply"]), { apply: true });
   assert.throws(() => parsePlanCleanupArgs(["--yes"]), /usage:/);
-  assert.throws(() => parsePlanCleanupArgs(["--apply", "plans\/tmp"]), /usage:/);
+  assert.throws(() => parsePlanCleanupArgs(["--apply", "plans\/reviews"]), /usage:/);
 
   const root = await mkdtemp(path.join(tmpdir(), "plan-cleanup-partial-"));
   context.after(() => rm(root, { recursive: true, force: true }));

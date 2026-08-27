@@ -1,203 +1,115 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
-import { REQUIRED_HEADINGS, TEMPLATE_BODY_SENTINELS, validatePlanText } from "../scripts/validate-plan-file.mjs";
-
 const root = path.resolve(import.meta.dirname, "..");
 const read = (relative: string) => readFile(path.join(root, relative), "utf8");
-const validateTemplate = (text: string) => validatePlanText(text, { allowTemplatePlaceholders: true });
 
-test("plans/template.mdは日本語の正規見出し・task・checkboxを持つ", async () => {
+const headings = [
+  "# 目的と完了条件",
+  "# 現状と根拠",
+  "# 実装方針",
+  "# インターフェースとデータフロー",
+  "# テスト計画",
+  "# 前提・対象外・リスク",
+];
+
+test("plans/template.mdは6見出しだけの最小構成を正しい順で持つ", async () => {
   const template = await read("plans/template.md");
-  assert.deepEqual(template.match(/^## .+$/gm), REQUIRED_HEADINGS);
-  assert.deepEqual(validateTemplate(template), []);
-  assert.match(template, /\| 並列グループ \| タスクID \|/);
-  assert.match(template, /- \[ \] T01:/);
-  for (const gate of ["G01", "G02", "G03", "G04", "G05", "G06"]) assert.match(template, new RegExp(`- \\[ \\] ${gate}:`));
+  assert.deepEqual(template.match(/^# .+$/gm), headings);
+  assert.match(template, /変更なし。/);
+  assert.match(template, /なし。/);
+  assert.doesNotMatch(template, /metadata|status|task表|G0[1-6]|進捗|実行記録|prototype|plans\/tmp|draft|final/iu);
 });
 
-test("plan validatorはtask tableと進捗checkboxの不一致・重複を拒否する", async () => {
-  const template = await read("plans/template.md");
-  assert.match(validateTemplate(template.replace("- [ ] T01:", "- [ ] T02:")).join("\n"), /完全一致/);
-  const taskRow = template.match(/^\| P1 \| T01 \|.*$/m)?.[0] ?? "";
-  assert.match(validateTemplate(template.replace(taskRow, `${taskRow}\n${taskRow.replace("| P1 |", "| P2 |")}`)).join("\n"), /重複/);
-  const englishOnly = template.split("\n").map((line) => /^## |^- [^:]+:|^\||^- \[[ x]\]/.test(line) ? line : (line.trim() ? "English only prose." : line)).join("\n");
-  assert.match(validateTemplate(englishOnly).join("\n"), /日本語/);
+test("plannerはrepo調査後にtemplateから自己完結planを直接生成する", async () => {
+  const planner = await read(".agents/skills/implementation-planner/SKILL.md");
+  assert.match(planner, /Inspect the relevant code, tests, configuration, Git state, and runtime behavior/);
+  assert.match(planner, /plans\/<slug>\.md/);
+  assert.match(planner, /If that path already exists, stop before writing/);
+  assert.match(planner, /Preserve its six headings and their order exactly/);
+  assert.match(planner, /self-contained plan/);
+  assert.match(planner, /Describe only the adopted design/);
+  assert.match(planner, /Do not invent decisions to close a high-impact unknown/);
+  assert.match(planner, /Do not add metadata, status, task tables, lifecycle gates, progress logs, prototype contracts, hashes, or draft\/final files/);
+  assert.doesNotMatch(planner, /plans\/tmp|validate-plan-file|plan_author|gpt-5\./);
 });
 
-test("plan validatorはmetadataの別section配置・重複・不正値・空sectionを拒否する", async () => {
-  const template = await read("plans/template.md");
-  const moved = template.replace("- status: draft\n", "").replace("## 対象範囲\n", "## 対象範囲\n\n- status: draft\n");
-  assert.match(validateTemplate(moved).join("\n"), /metadata status/);
-  assert.match(validateTemplate(template.replace("- status: draft", "- status: draft\n- status: approved")).join("\n"), /metadata status/);
-  assert.match(validateTemplate(template.replace("- base_commit: <Git commit SHA>", "- base_commit: nope")).join("\n"), /base_commit/);
-  assert.match(validateTemplate(template.replace("## 対象外\n\n変更しない機能、外部サービス、本番操作を記載する。", "## 対象外\n")).join("\n"), /対象外.*空/);
-  const finalHeading = "## 前提と未決事項";
-  assert.match(validateTemplate(`${template.slice(0, template.indexOf(finalHeading))}${finalHeading}`).join("\n"), /前提と未決事項.*空/);
+test("criticはfresh reviewを基に同一planを原子的な自己完結版へ更新する", async () => {
+  const critic = await read(".agents/skills/plan-critic/SKILL.md");
+  assert.match(critic, /fresh no-history subagent/);
+  assert.match(critic, /Do not pass the parent conversation/);
+  assert.match(critic, /exactly one candidate exists; stop when there are zero or multiple candidates/);
+  assert.match(critic, /stop and ask the user before changing the plan/);
+  assert.match(critic, /prepare the complete replacement, and write the target once/);
+  assert.match(critic, /as if the adopted design had been known from the start/);
+  assert.match(critic, /Do not create `critique\.md`/);
+  assert.doesNotMatch(critic, /plans\/tmp|plan_critic|plan_rewriter|gpt-5\./);
 });
 
-test("非draft planはplan・UI承認とG01・G02を機械的に要求する", async () => {
-  const template = await read("plans/template.md");
-  const actual = template
-    .replace("# <計画名>", "# 承認済み計画")
-    .replace("- plan_id: <英小文字・数字・ハイフン>", "- plan_id: approved-plan")
-    .replace("- 作成日: YYYY-MM-DD", "- 作成日: 2026-08-27")
-    .replace("- base_commit: <Git commit SHA>", `- base_commit: ${"a".repeat(40)}`)
-    .replace("- status: draft", "- status: approved")
-    .replace("- plan承認記録: 未承認", "- plan承認記録: 2026-08-27 ユーザー承認")
-    .replace("- UI変更有無: UI変更なし", "- UI変更有無: UI変更あり: 設定画面")
-    .replace("- UI承認記録: UI変更なし", "- UI承認記録: 2026-08-27 prototype承認")
-    .replace("- [ ] G01:", "- [x] G01:")
-    .replace("- [ ] G02:", "- [x] G02:")
-    .replace(/<実装内容>|<変更対象パス>|<完了条件>|<検証>|<タスク名>|<条件>/gu, "実装内容");
-  const resolved = TEMPLATE_BODY_SENTINELS.reduce((text, sentinel) => text.replace(sentinel, "実装内容を日本語で確定した。"), actual);
-  assert.deepEqual(validatePlanText(resolved), []);
-  assert.match(validatePlanText(resolved.replace("- [x] G02:", "- [ ] G02:")).join("\n"), /G02完了/);
-  assert.match(validatePlanText(resolved.replace("- UI承認記録: 2026-08-27 prototype承認", "- UI承認記録: 未承認")).join("\n"), /UI承認記録/);
-  assert.match(validatePlanText(resolved.replace("- UI変更有無: UI変更あり: 設定画面", "- UI変更有無: あり")).join("\n"), /UI変更有無/);
-});
-
-test("plan validatorはreviewing・delivery_ready・shippedの完了条件を状態別に要求する", async () => {
-  const template = await read("plans/template.md");
-  const actual = template
-    .replace("# <計画名>", "# 状態遷移計画")
-    .replace("- plan_id: <英小文字・数字・ハイフン>", "- plan_id: lifecycle-plan")
-    .replace("- 作成日: YYYY-MM-DD", "- 作成日: 2026-08-27")
-    .replace("- base_commit: <Git commit SHA>", `- base_commit: ${"a".repeat(40)}`)
-    .replace("- status: draft", "- status: reviewing")
-    .replace("- plan承認記録: 未承認", "- plan承認記録: 2026-08-27 ユーザー承認")
-    .replace("- [ ] G01:", "- [x] G01:")
-    .replace("- [ ] G02:", "- [x] G02:")
-    .replace("- [ ] G03:", "- [x] G03:")
-    .replace(/<実装内容>|<変更対象パス>|<完了条件>|<検証>|<タスク名>|<条件>/gu, "実装内容");
-  const reviewing = TEMPLATE_BODY_SENTINELS.reduce((text, sentinel) => text.replace(sentinel, "実装内容を日本語で確定した。"), actual);
-  assert.deepEqual(validatePlanText(reviewing), []);
-  assert.match(validatePlanText(reviewing.replace("- [x] G03:", "- [ ] G03:")).join("\n"), /reviewingはG03/);
-
-  const deliveryReady = reviewing
-    .replace("- status: reviewing", "- status: delivery_ready")
-    .replace("- [ ] T01:", "- [x] T01:")
-    .replace("- [ ] G04:", "- [x] G04:")
-    .replace("- [ ] G05:", "- [x] G05:");
-  assert.deepEqual(validatePlanText(deliveryReady), []);
-  assert.match(validatePlanText(deliveryReady.replace("- [x] T01:", "- [ ] T01:")).join("\n"), /全実装task/);
-  assert.match(validatePlanText(deliveryReady.replace("- [x] G05:", "- [ ] G05:")).join("\n"), /delivery_readyはG05/);
-
-  const shipped = deliveryReady.replace("- status: delivery_ready", "- status: shipped");
-  assert.match(validatePlanText(shipped).join("\n"), /shippedはG06/);
-  assert.deepEqual(validatePlanText(shipped.replace("- [ ] G06:", "- [x] G06:")), []);
-});
-
-test("plan validatorはtask表の列不足・checkboxの別section配置・未置換placeholderを拒否する", async () => {
-  const template = await read("plans/template.md");
-  assert.match(validateTemplate(template.replace(/^\| P1 \| T01 \|.*$/m, "| P1 | T01 |")).join("\n"), /9列/);
-  const moved = template.replace("- [ ] T01: <タスク名> — 完了条件: <条件> — 検証: 未実施\n", "").replace("## 実行記録\n", "## 実行記録\n\n- [ ] T01: 実装 — 完了条件: 成功 — 検証: 未実施\n");
-  assert.match(validateTemplate(moved).join("\n"), /進捗管理section/);
-  const actual = template.replace("# <計画名>", "# 実装計画").replace("- plan_id: <英小文字・数字・ハイフン>", "- plan_id: implementation-plan").replace("- 作成日: YYYY-MM-DD", "- 作成日: 2026-08-26").replace("- base_commit: <Git commit SHA>", `- base_commit: ${"a".repeat(40)}`);
-  assert.match(validatePlanText(actual).join("\n"), /placeholder/);
-  const proseOnly = actual.replace(/<実装内容>|<変更対象パス>|<完了条件>|<検証>|<タスク名>|<条件>/gu, "実装内容");
-  assert.match(validatePlanText(proseOnly).join("\n"), /説明文/);
-  const extraRow = template.replace(/^\| P1 \| T01 \|.*$/m, (row) => `${row}\n| P1| T99 | 実装 | implementer | path | shared | なし | 完了 | test | extra |`);
-  assert.match(validateTemplate(extraRow).join("\n"), /9列/);
-  assert.match(validateTemplate(template.replace("|---|---|---|---|---|---|---|---|---|", "|---|---|")).join("\n"), /delimiter|9列/);
-});
-
-test("plannerとexecutorは明示呼び出しの軽量handoffである", async () => {
-  const [planner, prototypeQuality, prototypeCssBuilder, executor, plannerUi, executorUi] = await Promise.all([
-    read(".agents/skills/implementation-planner/SKILL.md"),
-    read(".agents/skills/implementation-planner/references/ui-prototype-quality.md"),
-    read(".agents/skills/implementation-planner/scripts/build-prototype-css.mjs"),
+test("executorとreviewは単一plan自動選択・複数停止・明示pathを共有する", async () => {
+  const [executor, review] = await Promise.all([
     read(".agents/skills/implementation-executor/SKILL.md"),
-    read(".agents/skills/implementation-planner/agents/openai.yaml"),
-    read(".agents/skills/implementation-executor/agents/openai.yaml"),
-  ]);
-  assert.match(planner, /plans\/template\.md/);
-  assert.match(planner, /implementation-task and gate checkboxes/);
-  assert.match(planner, /final production UI contract/);
-  assert.match(planner, /references\/ui-prototype-quality\.md/);
-  assert.match(planner, /Tailwind CSS utilities/);
-  assert.match(planner, /user's explicit approval before adding any handwritten rule/);
-  assert.match(planner, /both light and dark modes are mandatory/);
-  assert.match(planner, /one pixel below plus exactly at each relevant breakpoint/);
-  assert.match(prototypeQuality, /production UI acceptance contract/);
-  assert.match(prototypeQuality, /parity matrix/);
-  assert.match(prototypeQuality, /replace the prototype's in-memory data and simulated effects/);
-  assert.match(prototypeQuality, /app\/globals\.css/);
-  assert.match(prototypeQuality, /window\.innerWidth/);
-  assert.match(prototypeQuality, /machine parity passed/);
-  assert.match(prototypeQuality, /explicit approval/);
-  assert.match(prototypeQuality, /Implement every production theme/);
-  assert.match(prototypeQuality, /Treat responsiveness as a breakpoint contract/);
-  assert.match(prototypeQuality, /639\/640 and 767\/768/);
-  assert.match(prototypeCssBuilder, /@tailwindcss\/postcss/);
-  assert.match(prototypeCssBuilder, /plans\/tmp/);
-  assert.match(prototypeCssBuilder, /realpath/);
-  assert.match(prototypeCssBuilder, /targetSegments\.length !== 2/);
-  assert.match(executor, /not a custom Plan Mode|not create its own runtime/);
-  assert.match(executor, /approved prototype and its `UI契約` parity matrix/);
-  assert.match(executor, /updated UI contract and user approval/);
-  assert.doesNotMatch(executor, /state\.json|fingerprint|execution-contract/);
-  assert.match(plannerUi, /allow_implicit_invocation: false/);
-  assert.match(executorUi, /allow_implicit_invocation: false/);
-});
-
-test("HTML review skillはcatnose式の意図別・リスク順・二段階・copy導線を持つ", async () => {
-  const [skill, ui, workflow] = await Promise.all([
     read(".agents/skills/implementation-review/SKILL.md"),
-    read(".agents/skills/implementation-review/agents/openai.yaml"),
-    read("docs/development/codex-development-workflow.md"),
   ]);
-  for (const pattern of [/Group related edits by intent/, /Sort groups by risk/, /blind_diff_reviewer/, /plan_conformance_reviewer/, /human comments/, /Codex in-app Browser/]) {
-    assert.match(skill, pattern);
+  for (const skill of [executor, review]) {
+    assert.match(skill, /Use the explicit `plans\/<slug>\.md` path/);
+    assert.match(skill, /plans\/\*\.md/);
+    assert.match(skill, /plans\/template\.md/);
+    assert.match(skill, /stop[^.]*zero or multiple/i);
   }
-  assert.match(ui, /allow_implicit_invocation: false/);
-  assert.match(workflow, /独自app serverやexecution engineではない/);
-  assert.match(workflow, /人間コメント/);
-  assert.match(skill, /live parent permission can override/);
-  assert.match(skill, /post-pass tamper check/);
-  assert.match(workflow, /全差分snapshot/);
-  assert.match(workflow, /親task自体をread-only/);
+  assert.match(executor, /current agent owns investigation, implementation, verification, and live behavior checks/);
+  assert.doesNotMatch(executor, /validate-plan-file|implementation-review.*automatically|gpt-5\.|G0[1-6]|plans\/tmp/);
+  assert.match(review, /staged, unstaged, deleted, and relevant non-ignored untracked files/);
+  assert.match(review, /require the user to state the Git base revision/);
+  assert.match(review, /fresh no-history subagent for the blind diff review/);
+  assert.match(review, /not the plan, conversation, task rationale, or any prior review/);
+  assert.match(review, /not the blind result or conversation/);
+  assert.match(review, /plans\/reviews\/<slug>/);
+  assert.match(review, /Group changes by intent rather than file order/);
+  assert.match(review, /sort groups by risk/);
+  assert.match(review, /Mark any change whose intent cannot be explained as `要改善`/);
+  assert.doesNotMatch(review, /validate-review-data|remote-base|diffHash|planHash|assetHashes|release gate|gpt-5\.|plans\/tmp/i);
 });
 
-test("custom agent routingはSol・Terra・Lunaの役割を固定する", async () => {
-  const [author, blind, conformance, implementer, worker, config] = await Promise.all([
-    read(".codex/agents/plan_author.toml"),
-    read(".codex/agents/blind_diff_reviewer.toml"),
-    read(".codex/agents/plan_conformance_reviewer.toml"),
-    read(".codex/agents/implementer.toml"),
-    read(".codex/agents/mechanical_worker.toml"),
-    read(".codex/config.toml"),
-  ]);
-  for (const agent of [author, blind, conformance]) {
-    assert.match(agent, /model = "gpt-5\.6-sol"/);
-    assert.match(agent, /model_reasoning_effort = "xhigh"/);
-    assert.match(agent, /sandbox_mode = "read-only"/);
+test("全skill metadataは明示呼び出し専用でdefault promptにskill名を含む", async () => {
+  for (const name of ["implementation-planner", "plan-critic", "implementation-executor", "implementation-review", "git-commit-push-pr"]) {
+    const yaml = await read(`.agents/skills/${name}/agents/openai.yaml`);
+    assert.match(yaml, /allow_implicit_invocation: false/);
+    assert.match(yaml, new RegExp(`default_prompt: "[^\\n]*\\$${name.replaceAll("-", "\\-")}`));
   }
-  assert.match(implementer, /gpt-5\.6-terra/);
-  assert.match(implementer, /model_reasoning_effort = "high"/);
-  assert.match(worker, /gpt-5\.6-luna/);
-  assert.match(worker, /model_reasoning_effort = "medium"/);
-  assert.doesNotMatch(config, /implementation_reviewer/);
 });
 
-test("final planとshippingはtemplate・実差分・exact一時directoryをつなぐ", async () => {
-  const [rewriter, shipping] = await Promise.all([
-    read(".agents/skills/final-plan-rewriter/SKILL.md"),
-    read(".agents/skills/git-commit-push-pr/SKILL.md"),
-  ]);
-  assert.match(rewriter, /plans\/template\.md/);
-  assert.match(rewriter, /plans\/tmp\/<plan-id>\/final\.md/);
-  assert.match(shipping, /Generate both subject and body independently from the staged diff/);
-  assert.doesNotMatch(shipping, /Reuse the final plan's objective|Plan prose may be copied/);
-  assert.match(shipping, /delete only the exact `plans\/tmp\/<plan-id>\/` directory/);
-  assert.match(shipping, /separately and explicitly authorizes cleanup/);
-  assert.match(shipping, /synchronize the remote PR base before accepting the final plan base/);
-  assert.match(shipping, /Do not rebase or merge the reviewed HEAD/);
-  assert.match(shipping, /reported as `BEHIND`/);
-  assert.match(shipping, /git merge-base --is-ancestor <recorded-remote-base-oid> <current-remote-base-oid>/);
-  assert.match(shipping, /rewind, force-update, deletion, or unrelated replacement must stop before push/);
-  assert.doesNotMatch(shipping, /post-commit review validation still passes after any rebase or merge/);
-  assert.doesNotMatch(shipping, /plan-execution-state|state\.json/);
+test("旧workflow・prototype・validator・専用agentは撤去されている", async () => {
+  const removed = [
+    ".agents/skills/final-plan-rewriter/SKILL.md",
+    "docs/development/codex-development-workflow.md",
+    "scripts/validate-plan-file.mjs",
+    "scripts/validate-review-data.mjs",
+    "dev-prototype.sh",
+    "test/review-gate-e2e.test.ts",
+    "test/dev-prototype.test.ts",
+    ".codex/agents/plan_author.toml",
+    ".codex/agents/plan_critic.toml",
+    ".codex/agents/plan_rewriter.toml",
+    ".codex/agents/blind_diff_reviewer.toml",
+    ".codex/agents/plan_conformance_reviewer.toml",
+    ".codex/agents/implementer.toml",
+    ".codex/agents/mechanical_worker.toml",
+    ".codex/agents/git_shipper.toml",
+  ];
+  for (const relative of removed) await assert.rejects(access(path.join(root, relative)), { code: "ENOENT" });
+  const [agents, config, readme, design] = await Promise.all([read("AGENTS.md"), read(".codex/config.toml"), read("README.md"), read("DESIGN.md")]);
+  for (const text of [agents, config, readme, design]) assert.doesNotMatch(text, /codex-development-workflow|dev-prototype|plans\/tmp|UIプロトタイプ|静的 HTML プロトタイプ/u);
+  assert.doesNotMatch(config, /^\[agents\./m);
+});
+
+test("shippingはstaged diffを正本としplan lifecycleへ結合しない", async () => {
+  const shipping = await read(".agents/skills/git-commit-push-pr/SKILL.md");
+  assert.match(shipping, /Generate the commit message only from the staged diff/);
+  assert.match(shipping, /validations actually executed/);
+  assert.match(shipping, /never deletes it automatically/);
+  assert.match(shipping, /cleanup is a separate user-authorized operation/);
+  assert.doesNotMatch(shipping, /final\.md|plans\/tmp|G0[1-6]|validate-plan-file|validate-review-data|Plan-driven|plan-driven/);
 });

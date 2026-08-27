@@ -1,4 +1,0 @@
-interface:
-  display_name: "完成版プラン再構成"
-  short_description: "確定済みプランを経緯に依存しない自己完結した完成版へ全面再構成"
-  default_prompt: "$final-plan-rewriter を使って、この確定済みプランを新規参加者向けの自己完結した完成版へ再構成してください。"

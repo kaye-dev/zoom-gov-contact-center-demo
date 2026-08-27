@@ -8,14 +8,11 @@ import test from "node:test";
 
 const root = path.resolve(import.meta.dirname, "..");
 
-test("loopback serverはplan artifactだけをCSP/no-store付きで配信する", async (context) => {
-  const planId = `server-test-${randomUUID()}`;
-  const testRoot = path.join(root, "plans/tmp", planId);
-  const artifact = path.join(testRoot, "implementation-review");
-  await mkdir(path.dirname(testRoot), { recursive: true });
-  await mkdir(testRoot);
-  await mkdir(artifact);
-  context.after(async () => rm(testRoot, { recursive: true, force: true }));
+test("loopback serverは指定review directoryのallowlistだけをCSP/no-store付きで配信する", async (context) => {
+  const slug = `server-test-${randomUUID()}`;
+  const artifact = path.join(root, "plans/reviews", slug);
+  await mkdir(artifact, { recursive: true });
+  context.after(async () => rm(artifact, { recursive: true, force: true }));
   await writeFile(path.join(artifact, "index.html"), '<!doctype html><link rel="stylesheet" href="styles.css"><title>review</title><script src="app.js" defer></script>');
   await writeFile(path.join(artifact, "styles.css"), "body { color: black; }");
   await writeFile(path.join(artifact, "app.js"), "document.title = 'review';");
@@ -24,7 +21,7 @@ test("loopback serverはplan artifactだけをCSP/no-store付きで配信する"
   await writeFile(path.join(artifact, "extra.json"), "{}");
   await rm(path.join(artifact, "leak.json"), { force: true });
   await symlink(path.join(root, "package.json"), path.join(artifact, "leak.json"));
-  const child = spawn(process.execPath, ["scripts/serve-plan-artifact.mjs", `plans/tmp/${planId}/implementation-review`], {
+  const child = spawn(process.execPath, ["scripts/serve-plan-artifact.mjs", `plans/reviews/${slug}`], {
     cwd: root,
     stdio: ["ignore", "pipe", "pipe"],
   });

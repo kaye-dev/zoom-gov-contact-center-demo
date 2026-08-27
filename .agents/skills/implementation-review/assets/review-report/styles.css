@@ -129,17 +129,14 @@ main { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 38px 0 72
 .review-pass-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .review-pass { min-width: 0; padding: 15px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-subtle); }
 .review-pass__heading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.review-pass__route { margin: 8px 0 4px; color: var(--muted); }
-.review-pass__hash { display: block; overflow-wrap: anywhere; color: var(--navy); font-size: 0.75rem; }
 .review-pass .detail-block { margin-top: 12px; }
 .review-pass li { overflow-wrap: anywhere; }
 
 .excluded-path-list { display: grid; gap: 8px; }
 .excluded-path { padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-subtle); }
 .excluded-path p { margin: 6px 0; color: var(--muted); }
-.excluded-path__name, .excluded-path__hash { display: block; overflow-wrap: anywhere; }
+.excluded-path__name { display: block; overflow-wrap: anywhere; }
 .excluded-path__name { color: var(--navy); font-weight: 700; }
-.excluded-path__hash { color: var(--muted); font-size: 0.72rem; }
 
 .filters { display: flex; flex-wrap: wrap; gap: 7px; }
 .filter-button { padding: 7px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); }
