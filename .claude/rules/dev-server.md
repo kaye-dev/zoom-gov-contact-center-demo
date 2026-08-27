@@ -15,6 +15,9 @@ node scripts/serve-plan-artifact.mjs plans/tmp/<plan-id>/<prototype|implementati
 ```
 
 - `127.0.0.1`の出力URLをCodexアプリ内Browserで開く。
+- UI変更のprototypeは、作成前に最も近い実画面とそのshell、token、共通componentを確認する。mockにしてよいのはdata、永続化、backend side effectだけであり、brand、navigation、layout、typography、color、control、icon、responsive behaviorは本番実装と同等の完成度にする。
+- redesignが明示されていない限り、既存UIにないhero、breadcrumb、sidebar、hamburger menu、shadow、背景色、brand wordingを発明しない。prototype注記、debug control、実装上の免責はproduct UI内へ表示しない。
+- 承認前に実画面とprototypeをdesktop、390×844で比較し、shell、主要computed style、overflow、keyboard、focus、主要state、console、network、意図した差分を記録する。機能・a11y・responsive確認だけではUI parity完了としない。
 - `file://`、外部CDN、外部API、analytics、repo全体を公開するserverは使わない。
 - prototype確認、HTML差分レビュー、実装後の実アプリ確認は別の証拠として扱う。
 - Browserを利用できない場合は未検証と報告する。

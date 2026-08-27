@@ -35,7 +35,15 @@
 
 ## UI契約
 
-UI変更なし。UI変更がある場合は、対象画面、主要state、desktop、390×844、keyboard、focusの確認条件を記載し、`plans/tmp/<plan-id>/prototype/`の承認記録を残す。
+UI変更なし。UI変更がある場合は、対象画面と次を記載し、`plans/tmp/<plan-id>/prototype/`の承認記録を残す。
+
+- production baseline: 比較した実画面URL、locale、runtime、viewport、関連するshell・component・style・tokenのpath
+- 視覚的不変条件: brand、navigation、layout、typography、color、control、icon、responsive behaviorのうち既存UIから維持するもの
+- 意図した差分: 要件に基づき既存UIから変更する箇所と理由
+- stateとinteraction: normal、empty、loading、error、disabled、conflictの適用範囲、keyboard、focus
+- parity検証: 実画面とprototypeのdesktop、390×844比較、主要computed style、overflow、console、networkの結果
+- production UI正本: 承認済みprototypeを実装後の完成UI契約とし、実装時に未承認の構造・文言・component・responsive・interaction変更を行わないこと
+- parity matrix: 影響するroute・overlay・stateごとのprototype entry point、desktop結果、390×844結果、keyboard・focus結果、未決事項の有無
 
 ## インターフェースとデータフロー
 
@@ -63,7 +71,7 @@ task表のセル内ではpipe文字、escaped pipe、複数行を使わず、識
 - [ ] G02: UI prototypeの承認完了、または「UI変更なし」を確認
 - [ ] G03: 実装コードと自動検証完了
 - [ ] G04: 二段階HTMLレビュー完了、または非該当理由確認
-- [ ] G05: 必要な実画面・動作確認完了
+- [ ] G05: 必要な実画面・動作確認と承認済みprototypeとのparity確認完了
 - [ ] G06: commit・push・PR反映確認完了
 
 ## 実行記録

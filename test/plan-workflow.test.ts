@@ -105,15 +105,23 @@ test("plan validatorはtask表の列不足・checkboxの別section配置・未�
 });
 
 test("plannerとexecutorは明示呼び出しの軽量handoffである", async () => {
-  const [planner, executor, plannerUi, executorUi] = await Promise.all([
+  const [planner, prototypeQuality, executor, plannerUi, executorUi] = await Promise.all([
     read(".agents/skills/implementation-planner/SKILL.md"),
+    read(".agents/skills/implementation-planner/references/ui-prototype-quality.md"),
     read(".agents/skills/implementation-executor/SKILL.md"),
     read(".agents/skills/implementation-planner/agents/openai.yaml"),
     read(".agents/skills/implementation-executor/agents/openai.yaml"),
   ]);
   assert.match(planner, /plans\/template\.md/);
   assert.match(planner, /implementation-task and gate checkboxes/);
+  assert.match(planner, /final production UI contract/);
+  assert.match(planner, /references\/ui-prototype-quality\.md/);
+  assert.match(prototypeQuality, /production UI acceptance contract/);
+  assert.match(prototypeQuality, /parity matrix/);
+  assert.match(prototypeQuality, /replace the prototype's in-memory data and simulated effects/);
   assert.match(executor, /not a custom Plan Mode|not create its own runtime/);
+  assert.match(executor, /approved prototype and its `UI契約` parity matrix/);
+  assert.match(executor, /updated UI contract and user approval/);
   assert.doesNotMatch(executor, /state\.json|fingerprint|execution-contract/);
   assert.match(plannerUi, /allow_implicit_invocation: false/);
   assert.match(executorUi, /allow_implicit_invocation: false/);

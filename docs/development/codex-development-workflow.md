@@ -6,9 +6,9 @@
 
 ## 標準フロー
 
-1. `$implementation-planner`で`plans/template.md`を複製し、`plans/tmp/<plan-id>/draft.md`を日本語で作る。UI変更時は同じdirectoryに静的HTML prototypeも作る。
+1. `$implementation-planner`で`plans/template.md`を複製し、`plans/tmp/<plan-id>/draft.md`を日本語で作る。UI変更時は同じdirectoryに静的HTML prototypeも作り、既存実画面とのproduction parityを確認する。prototypeはwireframeではなく実装後の完成UI契約であり、mockにしてよいのはdata、永続化、backend side effectだけとする。
 2. 必要ならfreshな`$plan-critic`で計画を指摘し、採用する判断を確定する。
-3. `$final-plan-rewriter`で議論経緯を除いた`final.md`を作り、ユーザーがplanとprototypeを確認する。
+3. `$final-plan-rewriter`で議論経緯を除いた`final.md`を作り、ユーザーがplanとprototypeを確認する。UI承認は影響するroute・overlay・stateのparity matrixがdesktop、390×844、keyboard、focusまで完了し、実装者へ残す画面設計判断がない場合だけ記録する。
 4. `$implementation-executor plans/tmp/<plan-id>/final.md`で実装する。Terraを統合担当、Lunaを仕様判断のない限定taskに使う。
 5. 差分が大きい、または変更意図をファイル順では理解しにくい場合だけ、`$implementation-review`を明示実行する。
 6. HTML上のLLM指摘と人間コメントをまとめて元taskへ戻し、修正と自動検証・実画面確認を行う。
