@@ -8,10 +8,17 @@
 
 ## plan prototypeとHTMLレビュー
 
-`plans/tmp/<plan-id>/prototype/`と`plans/tmp/<plan-id>/implementation-review/`は次の軽量なloopback serverで配信する。
+`plans/tmp/<plan-id>/prototype/`は次の軽量なloopback serverで配信する。引数なしでは最終更新されたprototypeを自動選択し、過去のprototypeなどを指定する場合だけplan IDを渡す。
 
 ```sh
-node scripts/serve-plan-artifact.mjs plans/tmp/<plan-id>/<prototype|implementation-review>
+./dev-prototype.sh
+./dev-prototype.sh <plan-id>
+```
+
+`plans/tmp/<plan-id>/implementation-review/`は対象を明示して同じserver本体で配信する。
+
+```sh
+node scripts/serve-plan-artifact.mjs plans/tmp/<plan-id>/implementation-review
 ```
 
 - `127.0.0.1`の出力URLをCodexアプリ内Browserで開く。
