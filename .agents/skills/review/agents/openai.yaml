@@ -1,0 +1,6 @@
+interface:
+  display_name: "Review Implementation"
+  short_description: "Turn two review passes into an explanatory HTML report"
+  default_prompt: "Use $review to review the implementation against plans/<slug>.md."
+policy:
+  allow_implicit_invocation: false

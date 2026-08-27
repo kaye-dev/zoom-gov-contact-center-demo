@@ -1,9 +1,9 @@
 ---
-name: implementation-executor
-description: "Implement and verify one repository plan under plans with the current agent. Use only when explicitly invoked as $implementation-executor."
+name: implement
+description: "Implement and verify one repository plan under plans with the current agent. Use only when explicitly invoked as $implement."
 ---
 
-# Implementation Executor
+# Implement
 
 Treat the selected plan as a normal implementation specification. The current agent owns investigation, implementation, verification, and live behavior checks; do not route work through repository-specific implementer agents or fixed models.
 

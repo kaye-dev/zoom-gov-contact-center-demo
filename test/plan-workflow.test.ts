@@ -24,7 +24,7 @@ test("plans/template.mdは6見出しだけの最小構成を正しい順で持�
 });
 
 test("plannerはrepo調査後にtemplateから自己完結planを直接生成する", async () => {
-  const planner = await read(".agents/skills/implementation-planner/SKILL.md");
+  const planner = await read(".agents/skills/plan/SKILL.md");
   assert.match(planner, /Inspect the relevant code, tests, configuration, Git state, and runtime behavior/);
   assert.match(planner, /plans\/<slug>\.md/);
   assert.match(planner, /If that path already exists, stop before writing/);
@@ -50,8 +50,8 @@ test("criticはfresh reviewを基に同一planを原子的な自己完結版へ�
 
 test("executorとreviewは単一plan自動選択・複数停止・明示pathを共有する", async () => {
   const [executor, review] = await Promise.all([
-    read(".agents/skills/implementation-executor/SKILL.md"),
-    read(".agents/skills/implementation-review/SKILL.md"),
+    read(".agents/skills/implement/SKILL.md"),
+    read(".agents/skills/review/SKILL.md"),
   ]);
   for (const skill of [executor, review]) {
     assert.match(skill, /Use the explicit `plans\/<slug>\.md` path/);
@@ -60,7 +60,7 @@ test("executorとreviewは単一plan自動選択・複数停止・明示pathを�
     assert.match(skill, /stop[^.]*zero or multiple/i);
   }
   assert.match(executor, /current agent owns investigation, implementation, verification, and live behavior checks/);
-  assert.doesNotMatch(executor, /validate-plan-file|implementation-review.*automatically|gpt-5\.|G0[1-6]|plans\/tmp/);
+  assert.doesNotMatch(executor, /validate-plan-file|review.*automatically|gpt-5\.|G0[1-6]|plans\/tmp/);
   assert.match(review, /staged, unstaged, deleted, and relevant non-ignored untracked files/);
   assert.match(review, /require the user to state the Git base revision/);
   assert.match(review, /fresh no-history subagent for the blind diff review/);
@@ -74,7 +74,7 @@ test("executorとreviewは単一plan自動選択・複数停止・明示pathを�
 });
 
 test("全skill metadataは明示呼び出し専用でdefault promptにskill名を含む", async () => {
-  for (const name of ["implementation-planner", "plan-critic", "implementation-executor", "implementation-review", "git-commit-push-pr"]) {
+  for (const name of ["plan", "plan-critic", "implement", "review", "git-commit-push-pr"]) {
     const yaml = await read(`.agents/skills/${name}/agents/openai.yaml`);
     assert.match(yaml, /allow_implicit_invocation: false/);
     assert.match(yaml, new RegExp(`default_prompt: "[^\\n]*\\$${name.replaceAll("-", "\\-")}`));
