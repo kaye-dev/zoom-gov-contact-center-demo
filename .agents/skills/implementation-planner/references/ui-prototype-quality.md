@@ -47,6 +47,7 @@ The production application uses Tailwind CSS v4 and semantic tokens from `app/gl
    ```css
    @import "../../../../app/globals.css";
    @source "./index.html";
+   @source "./theme.js";
    @source "./app.js";
    ```
 
@@ -62,6 +63,26 @@ The production application uses Tailwind CSS v4 and semantic tokens from `app/gl
 Complete prototype styling with production Tailwind utilities and `app/globals.css`. Do not add handwritten declarations, `@apply` component classes, duplicated tokens, or parallel `.detail-row`, `.primary-button`, `.baseline-input`, or similar styling abstractions by default. If a concrete requirement cannot be expressed with the production Tailwind setup, stop before writing CSS, show the user the exact missing behavior and proposed rule, and obtain explicit approval. Record that approval and the narrow exception in `UI契約`.
 
 Tailwind source detection treats class names as text. Keep complete utility class names in HTML or JavaScript rather than constructing fragments such as `bg-${color}`. Register prototype files explicitly because `plans/tmp/` is ignored by Git and automatic detection can skip ignored files.
+
+### Implement every production theme
+
+Theme support is part of the completed UI, not an optional screenshot variant. Inspect the production root layout, theme store or bootstrap, toggle component, semantic tokens, and persistence behavior before implementing the prototype. This repository supports `light` and `dark`; both are required for every UI prototype.
+
+- Apply the same `light` and `dark` document classes and compile the same semantic tokens from `app/globals.css`. Do not duplicate color values or simulate dark mode with filters, opacity, or an alternate handwritten palette.
+- Match the production default, pre-paint synchronization, stored preference, transition suppression, and runtime switching behavior. A theme change must update the whole surface without reload-only assumptions, stale controls, a flash of the wrong theme, or a layout shift.
+- Preserve the production location and appearance of an existing theme toggle. Do not add a product-facing toggle to a route that does not have one. For reviewer access in that case, support stable local query entry points such as `?theme=light` and `?theme=dark`; query state must not add visible prototype controls or overwrite the user's stored production preference.
+- Exercise normal content and every visually distinct loading, empty, error, disabled, saving, success, overlay, focus, and hover state in both themes. Verify semantic foreground/background, borders, icons, focus rings, backdrops, disabled opacity, and status colors rather than assuming `dark:` utilities are sufficient.
+- Record the actual document theme class and computed semantic colors in the parity evidence. A class name in source without rendered verification does not prove theme support.
+
+### Treat responsiveness as a breakpoint contract
+
+Inspect the affected production utilities and compiled CSS to inventory every breakpoint that changes layout, wrapping, visibility, alignment, or control placement. Do not infer completion from a desktop screenshot plus a single mobile screenshot.
+
+- Always verify 390×844 and the representative desktop viewport.
+- For every relevant layout-changing breakpoint, verify one CSS pixel below and exactly at the breakpoint. For example, a surface using `sm:` and `md:` variants requires checks at 639/640 and 767/768 unless repository configuration defines different values.
+- Run the primary mobile and desktop comparisons in both themes. Repeat breakpoint-boundary comparisons for each state whose grid, flex, visibility, dialog sizing, navigation wrapping, or action placement changes at that breakpoint.
+- Check actual `innerWidth`, `innerHeight`, DPR, scroll offsets, document width, horizontal overflow, clipped content, text wrapping, modal fit, focus visibility, and downstream displacement caused by intentional insertions.
+- Record the responsive inventory and results in the parity matrix. State which breakpoint causes each transformation; `responsive: pass` without boundary evidence is insufficient.
 
 ### Inventory the baseline state graph
 
@@ -86,7 +107,7 @@ Adding a new control to an existing screen extends the existing mutual-exclusion
 - Use local files only. Do not load fonts, CSS, scripts, images, APIs, analytics, or other resources from external origins.
 - Keep review controls out of the product surface. When state switching is useful, place it in a visually separate reviewer toolbar or use query parameters; it must not be confused with shippable UI.
 - Preserve semantic HTML, native disabled behavior, pointer and disabled cursors, keyboard operation, focus visibility, focus return, announcements, and reduced-motion behavior.
-- At 390×844, follow the existing application's responsive model. Do not replace it with a newly invented mobile navigation pattern.
+- At every affected width, follow the existing application's responsive model. Do not replace it with a newly invented mobile navigation pattern.
 - Preserve unchanged copy exactly. A clearer label, extra helper, skip link, region wrapper, focus ring, or accessibility behavior is still a product change unless the requested scope includes it and the production implementation will make the same change.
 
 ## Compare before approval
@@ -98,7 +119,7 @@ Compare the baseline and prototype side by side. At minimum, verify and record:
 - shell: brand, header, navigation, main width, outer padding, and page background;
 - typography: font family and the computed size, weight, and line height of the main heading and controls;
 - primitives: primary and secondary buttons, inputs, tables or cards, borders, radii, colors, and focus styles;
-- behavior: desktop, 390×844, horizontal overflow, keyboard, focus, normal and applicable exceptional states, console errors, and failed local requests;
+- behavior: light and dark at desktop and 390×844, relevant breakpoint boundaries, horizontal overflow, keyboard, focus, theme switching, normal and applicable exceptional states, console errors, and failed local requests;
 - deviations: every intentional visual difference and the requirement that justifies it.
 
 Use paired evidence for the same route, viewport, locale, fixture, and state. For unchanged regions, compare bounding rectangles and the computed properties that control layout and appearance: display, direct parent, grid or flex tracks, span, gap, padding, margin, size, font, border, radius, color, shadow, outline, opacity, disabled state, and visibility. Exact token and state mismatches fail. Allow at most 1 CSS pixel only for raster or subpixel rounding; do not use that tolerance to excuse a different utility, border, grid track, or control structure.
@@ -116,6 +137,9 @@ The following are hard failures and must be fixed before approval:
 - the two pages report different comparison conditions;
 - unchanged production Tailwind utilities or DOM relationships were re-created with approximate handwritten CSS;
 - handwritten CSS was added without the user's explicit approval recorded in `UI契約`;
+- only one production-supported theme is implemented or a theme is represented only by unverified source classes;
+- a theme switch flashes the wrong theme, changes layout, leaves stale controls, or bypasses the production theme mechanism;
+- responsive evidence omits a relevant breakpoint boundary or hides clipping and overflow between the chosen endpoint widths;
 - an existing control remains enabled, visible, or focusable when production disables, removes, or hides it;
 - an existing interaction was replaced by a generic stand-in;
 - focus border, outline, button border, grid span, row height, copy, or fixture differs without an explicit requirement;
@@ -123,7 +147,7 @@ The following are hard failures and must be fixed before approval:
 
 Fix unexplained differences before asking the user to approve the UI. Functional completeness, accessibility, and responsive behavior do not compensate for visual divergence from the product baseline.
 
-Create a parity matrix in `UI契約` with one row per affected route or overlay and applicable state. For each row, record the prototype entry point, actual conditions from both surfaces, screenshot evidence, unchanged-region result, intentional difference IDs, desktop result, 390×844 result, keyboard/focus result, and whether any decision remains open.
+Create a parity matrix in `UI契約` with one row per affected route or overlay and applicable state. For each row, record the prototype entry point, light and dark results, actual conditions from both surfaces, screenshot evidence, unchanged-region result, intentional difference IDs, desktop result, 390×844 result, relevant breakpoint-boundary results, keyboard/focus/theme-switch result, and whether any decision remains open.
 
 Call the result `machine parity passed` only when every row passes. Do not convert that result into user approval. UI approval requires every row to pass, every material design decision to be resolved, and an explicit approval from the user after they inspect the rendered prototype.
 

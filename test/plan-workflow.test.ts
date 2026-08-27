@@ -119,6 +119,8 @@ test("plannerとexecutorは明示呼び出しの軽量handoffである", async (
   assert.match(planner, /references\/ui-prototype-quality\.md/);
   assert.match(planner, /Tailwind CSS utilities/);
   assert.match(planner, /user's explicit approval before adding any handwritten rule/);
+  assert.match(planner, /both light and dark modes are mandatory/);
+  assert.match(planner, /one pixel below plus exactly at each relevant breakpoint/);
   assert.match(prototypeQuality, /production UI acceptance contract/);
   assert.match(prototypeQuality, /parity matrix/);
   assert.match(prototypeQuality, /replace the prototype's in-memory data and simulated effects/);
@@ -126,6 +128,9 @@ test("plannerとexecutorは明示呼び出しの軽量handoffである", async (
   assert.match(prototypeQuality, /window\.innerWidth/);
   assert.match(prototypeQuality, /machine parity passed/);
   assert.match(prototypeQuality, /explicit approval/);
+  assert.match(prototypeQuality, /Implement every production theme/);
+  assert.match(prototypeQuality, /Treat responsiveness as a breakpoint contract/);
+  assert.match(prototypeQuality, /639\/640 and 767\/768/);
   assert.match(prototypeCssBuilder, /@tailwindcss\/postcss/);
   assert.match(prototypeCssBuilder, /plans\/tmp/);
   assert.match(prototypeCssBuilder, /realpath/);

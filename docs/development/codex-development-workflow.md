@@ -8,7 +8,7 @@
 
 1. `$implementation-planner`で`plans/template.md`を複製し、`plans/tmp/<plan-id>/draft.md`を日本語で作る。UI変更時は同じdirectoryに静的HTML prototypeも作り、既存実画面とのproduction parityを確認する。prototypeはwireframeではなく実装後の完成UI契約であり、mockにしてよいのはdata、永続化、backend side effectだけとする。
 2. 必要ならfreshな`$plan-critic`で計画を指摘し、採用する判断を確定する。
-3. `$final-plan-rewriter`で議論経緯を除いた`final.md`を作り、ユーザーがplanとprototypeを確認する。parity matrixは両画面が実際に報告した同一viewport、devicePixelRatio、scroll offset、locale、theme、fixtureを前提に、影響するroute・overlay・既存state・新規stateのscreenshot、unchanged region、DOM・a11y、desktop、390×844、keyboard、focusを検証する。Browserと自動検証の合格はmachine parityであり、ユーザーがrendered prototypeを明示承認し、実装者へ残す画面設計判断がない場合だけUI承認を記録する。
+3. `$final-plan-rewriter`で議論経緯を除いた`final.md`を作り、ユーザーがplanとprototypeを確認する。parity matrixは両画面が実際に報告した同一viewport、devicePixelRatio、scroll offset、locale、theme、fixtureを前提に、影響するroute・overlay・既存state・新規stateのscreenshot、unchanged region、DOM・a11y、light・dark双方のdesktop・390×844、layoutを変える各breakpointの1px手前・境界、keyboard、focus、theme切替を検証する。Browserと自動検証の合格はmachine parityであり、ユーザーがrendered prototypeを明示承認し、実装者へ残す画面設計判断がない場合だけUI承認を記録する。
 4. `$implementation-executor plans/tmp/<plan-id>/final.md`で実装する。Terraを統合担当、Lunaを仕様判断のない限定taskに使う。
 5. 差分が大きい、または変更意図をファイル順では理解しにくい場合だけ、`$implementation-review`を明示実行する。
 6. HTML上のLLM指摘と人間コメントをまとめて元taskへ戻し、修正と自動検証・実画面確認を行う。
