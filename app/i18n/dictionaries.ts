@@ -200,6 +200,9 @@ export type Dictionary = {
   docs: {
     viewAsMarkdown: string;
   };
+  links: {
+    opensInNewTab: string;
+  };
   auth: {
     loginTitle: string;
     loginDescription: string;
@@ -723,6 +726,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     docs: {
       viewAsMarkdown: 'Markdown 版を表示',
+    },
+    links: {
+      opensInNewTab: '新しいタブで開きます',
     },
     auth: {
       loginTitle: '管理ログイン',
@@ -1342,6 +1348,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
     docs: {
       viewAsMarkdown: 'View as Markdown',
     },
+    links: {
+      opensInNewTab: 'Opens in a new tab',
+    },
     auth: {
       loginTitle: 'Admin Login',
       loginDescription:
@@ -1950,6 +1959,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
     docs: {
       viewAsMarkdown: '查看 Markdown 版本',
     },
+    links: {
+      opensInNewTab: '在新标签页中打开',
+    },
     auth: {
       loginTitle: '管理登录',
       loginDescription: '访问面向演示运营者的文章编辑、电话号码变更等管理功能。',
@@ -2531,6 +2543,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     docs: {
       viewAsMarkdown: '檢視 Markdown 版本',
+    },
+    links: {
+      opensInNewTab: '在新分頁中開啟',
     },
     auth: {
       loginTitle: '管理登入',
@@ -3114,6 +3129,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     docs: {
       viewAsMarkdown: 'Markdown 버전 보기',
+    },
+    links: {
+      opensInNewTab: '새 탭에서 열립니다',
     },
     auth: {
       loginTitle: '관리 로그인',

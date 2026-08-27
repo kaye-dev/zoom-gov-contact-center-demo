@@ -107,3 +107,12 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans);
 }
+
+/* Link と素の a のどちらでも、クリック可能なリンクは明示的に pointer にする。 */
+a[href]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+a[href][aria-disabled="true"] {
+  cursor: not-allowed;
+}

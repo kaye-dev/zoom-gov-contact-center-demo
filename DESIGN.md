@@ -195,15 +195,15 @@ Zoom AI、Zoom Virtual Agent、Zoom Contact Center、Zoom Phone への導線は�
 
 画面に出るインタラクティブ要素の振る舞いについて、以下を確認なしで遵守する。
 
-- `<button>`、`href` を持たない `onClick` 付き要素、`role="button"` を持つ要素には必ず `cursor-pointer` を付与する。
+- `<button>`、`<a href="...">`、`Link`、`href` を持たない `onClick` 付き要素、`role="button"` を持つ要素には必ずポインターカーソルを表示する。
 - React のカスタムコンポーネントや SVG 要素でも、`onClick` または `role="button"` を持つ場合は同じ規約を適用する。
-- Tailwind では `cursor-pointer` クラスを使用する。
+- Tailwind では `cursor-pointer` クラスを使用する。`<a href="...">` と `Link` は `app/globals.css` の `a[href]` でも一括して保証し、個別実装の付け忘れを防ぐ。
 
 ```tsx
 <button type="button" className="... cursor-pointer ...">…</button>
 ```
 
-- `<a href="...">` と `Link` にはブラウザ標準のリンクカーソルがあるため、`cursor-pointer` を追加しない。
+- `<a href="...">` と `Link` も、ブラウザ既定値だけに依存せずポインターカーソルを明示する。
 - 無効状態ではポインターカーソルを表示しない。`disabled` と `aria-disabled={true}` のどちらでも、最終的な表示は `cursor-not-allowed` とする。
 - 無効状態を不透明度だけで表現せず、必要に応じて無効理由を近くへ表示する。
 
@@ -230,6 +230,9 @@ Zoom AI、Zoom Virtual Agent、Zoom Contact Center、Zoom Phone への導線は�
 - 危険操作は赤を使用し、ラベルだけで操作結果が分かるようにする。
 - 「こちら」「詳しく」だけの曖昧なリンク名を避け、文脈がなくても目的が分かるラベルにする。
 - `href="#"` の未実装リンクは追加しない。デモ上のプレースホルダーが必要な場合は、現在の依頼で明示する。
+- 外部サイトへ遷移するテキストリンクは `ExternalLink` を使用し、原則として新しいタブで開く。リンクには `target="_blank"` と `rel="noopener noreferrer"` を付ける。
+- 外部リンクのテキスト末尾には、Material Symbols Outlined の `Open In New` を元にした `OpenInNewIcon` を `currentColor` で表示する。本文中では `16 × 16px` を基本とし、テキストとの間隔とベースラインを揃える。
+- 外部リンクアイコンだけを次の行へ孤立させない。アイコンは装飾扱いとし、「新しいタブで開きます」を不可視テキストでリンク名へ補足する。
 - アイコンだけのボタンには `aria-label` を必須とし、必要に応じて `title` またはレイアウトを動かさないツールチップを付ける。
 - コピーなど即時操作の結果は、成功時に `role="status"` / `aria-live="polite"`、失敗時に `role="alert"` で伝える。
 
