@@ -9,6 +9,11 @@ import {
   type SiteLocale,
 } from '@/lib/site-settings';
 import type { AdminUserErrorCode } from '@/lib/admin-users';
+import type {
+  AdminAccessAction,
+  AdminAccessSystemRole,
+  AdminResourceKey,
+} from '@/lib/admin-access/types';
 
 export const locales = SITE_LOCALES;
 
@@ -276,6 +281,85 @@ export type Dictionary = {
     adminOnly: string;
     dashboardTitle: string;
     dashboardDescription: string;
+    accessControl: {
+      rolesNav: string;
+      listTitle: string;
+      listDescription: string;
+      roleCount: string;
+      addRole: string;
+      createTitle: string;
+      createDescription: string;
+      roleName: string;
+      roleDescription: string;
+      descriptionOptional: string;
+      memberCount: string;
+      actions: string;
+      edit: string;
+      systemRole: string;
+      noRoles: string;
+      cancel: string;
+      add: string;
+      saving: string;
+      save: string;
+      saved: string;
+      deleteRole: string;
+      backToRoles: string;
+      settingsTab: string;
+      membersTab: string;
+      adminPageAccessTitle: string;
+      adminPageAccessDescription: string;
+      adminPageColumn: string;
+      allow: string;
+      deny: string;
+      unset: string;
+      unsupported: string;
+      path: string;
+      assignedRoles: string;
+      noAssignedRoles: string;
+      effectiveAccess: string;
+      userAccessTitle: string;
+      userAccessHeading: string;
+      userAccessDescription: string;
+      viewAccess: string;
+      allowed: string;
+      denied: string;
+      allowSources: string;
+      denySources: string;
+      noSources: string;
+      infoLabel: string;
+      implicitDeny: string;
+      explicitDeny: string;
+      viewRequired: string;
+      adminRequired: string;
+      unsupportedReason: string;
+      genericError: string;
+      conflictError: string;
+      duplicateError: string;
+      listSearchPlaceholder: string;
+      memberSearchPlaceholder: string;
+      candidateSearchPlaceholder: string;
+      assignUsers: string;
+      assign: string;
+      removeAssignment: string;
+      noMembers: string;
+      noCandidates: string;
+      candidateDialogTitle: string;
+      candidateDialogDescription: string;
+      deleteRoleTitle: string;
+      deleteRoleDescription: string;
+      roleInUse: string;
+      readOnlyRoleAction: string;
+      adminAttributeHelp: string;
+      assignedRolesHelp: string;
+      loading: string;
+      accountSuspended: string;
+      passwordChangeRequired: string;
+      systemRoleNames: Record<AdminAccessSystemRole, string>;
+      systemRoleDescriptions: Record<AdminAccessSystemRole, string>;
+      resourceTitles: Record<AdminResourceKey, string>;
+      resourceDescriptions: Record<AdminResourceKey, string>;
+      actionLabels: Record<AdminAccessAction, string>;
+    };
     userManagement: {
       detailsTitle: string;
       detailsDescription: string;
@@ -812,6 +896,106 @@ export const dictionaries: Record<Locale, Dictionary> = {
       dashboardTitle: '管理画面',
       dashboardDescription:
         'ログイン済みです。ユーザー管理機能を利用するには管理者権限が必要です。',
+      accessControl: {
+        rolesNav: 'ロール',
+        listTitle: 'ロール',
+        listDescription: '複数のロールを組み合わせて管理ページへのアクセスを制御します。明示的な拒否は許可より優先されます。',
+        roleCount: 'ロール',
+        addRole: 'ロールを追加',
+        createTitle: 'ロールを追加',
+        createDescription: 'ロール名と説明を入力します。権限は次の画面で設定します。',
+        roleName: 'ロール名',
+        roleDescription: '説明',
+        descriptionOptional: '説明（任意）',
+        memberCount: 'メンバー数',
+        actions: 'アクション',
+        edit: '編集',
+        systemRole: 'システムロール',
+        noRoles: 'ロールはありません。',
+        cancel: 'キャンセル',
+        add: '追加',
+        saving: '保存中…',
+        save: '保存',
+        saved: 'ロール設定を保存しました。',
+        deleteRole: 'ロールを削除',
+        backToRoles: 'ロール一覧へ戻る',
+        settingsTab: 'ロール設定',
+        membersTab: 'ロールメンバー',
+        adminPageAccessTitle: '管理ページのアクセス権',
+        adminPageAccessDescription: '各アクションを未設定、許可、拒否から設定します。複数ロールを割り当てた場合は、明示的な拒否が許可より優先されます。',
+        adminPageColumn: '管理ページ',
+        allow: '許可',
+        deny: '拒否',
+        unset: '未設定',
+        unsupported: '対象外',
+        path: 'パス',
+        assignedRoles: '割り当てロール',
+        noAssignedRoles: '割り当てられたロールはありません。',
+        effectiveAccess: '実効アクセス',
+        userAccessTitle: 'ユーザーの実効アクセス',
+        userAccessHeading: '{name}のアクセス',
+        userAccessDescription: '割り当てられたすべてのロールを合成した判定結果です。拒否が許可より優先されます。',
+        viewAccess: '実効アクセスを表示',
+        allowed: '許可',
+        denied: '拒否',
+        allowSources: '許可元ロール',
+        denySources: '拒否元ロール',
+        noSources: '該当するロールはありません。',
+        infoLabel: '判定根拠を表示',
+        implicitDeny: '許可するロールがないため暗黙的に拒否されています。',
+        explicitDeny: '明示的な拒否が許可より優先されています。',
+        viewRequired: 'この操作には同じ項目の表示権限も必要です。',
+        adminRequired: 'この項目には管理者属性も必要です。',
+        unsupportedReason: 'このページはこのアクションに対応していません。',
+        genericError: 'ロールを処理できませんでした。',
+        conflictError: '他の変更と競合しました。再読み込みしてお試しください。',
+        duplicateError: '同じ名前のロールが既にあります。',
+        listSearchPlaceholder: 'ロール名またはIDで検索',
+        memberSearchPlaceholder: '氏名、メールアドレス、IDでメンバーを検索',
+        candidateSearchPlaceholder: '氏名、メールアドレス、IDで追加対象を検索',
+        assignUsers: 'ユーザーを追加',
+        assign: '割り当て',
+        removeAssignment: '割り当てを解除',
+        noMembers: 'このロールに割り当てられたユーザーはいません。',
+        noCandidates: '追加できるユーザーはいません。',
+        candidateDialogTitle: 'ロールメンバーを追加',
+        candidateDialogDescription: 'ユーザーの既存ロールにこのロールを追加します。',
+        deleteRoleTitle: 'ロールを削除しますか？',
+        deleteRoleDescription: 'ロールと権限設定は完全に削除され、元に戻せません。',
+        roleInUse: 'メンバーの割り当てをすべて解除すると削除できます。',
+        readOnlyRoleAction: 'この操作を行う権限がありません。',
+        adminAttributeHelp: 'この権限は管理者ユーザー向け操作の可否にのみ使用されます。',
+        assignedRolesHelp: '管理ページへのアクセスを制御するロールです。複数選択でき、明示的な拒否は許可より優先されます。',
+        loading: '読み込み中…',
+        accountSuspended: 'ユーザーが停止中のため、すべてのアクセスが拒否されます。',
+        passwordChangeRequired: '初回パスワード変更が完了するまで、すべてのアクセスが拒否されます。',
+        systemRoleNames: { FULL_ACCESS: '全権アクセス', NO_ACCESS: 'アクセスなし' },
+        systemRoleDescriptions: {
+          FULL_ACCESS: '対応するすべての管理アクションを許可します。',
+          NO_ACCESS: '権限を付与せず、すべての操作を暗黙的に拒否します。',
+        },
+        resourceTitles: {
+          users: '管理ユーザー',
+          'password-reset-requests': 'パスワード再設定申請',
+          roles: 'ロール',
+          'role-assignments': 'ロールメンバー',
+          'phone-settings': '電話設定',
+          'chat-settings': 'AIチャット設定',
+          'language-settings': '言語設定',
+          'maintenance-settings': 'メンテナンス設定',
+        },
+        resourceDescriptions: {
+          users: '管理ユーザーの一覧、詳細、作成、属性変更、停止、再開、パスワード再設定、削除、アクセス概要を扱います。',
+          'password-reset-requests': 'パスワード再設定申請の一覧、承認、却下を扱います。',
+          roles: 'アクセスロールの一覧、作成、名前、説明、権限設定、削除を扱います。',
+          'role-assignments': 'ロールのメンバーとユーザーへの複数ロール割り当てを扱います。',
+          'phone-settings': '代表電話番号とロケール別AI電話番号を表示、編集します。',
+          'chat-settings': 'Web Chatの動作モードと接続設定を表示、編集します。',
+          'language-settings': '公開サイトの利用言語と表示順を表示、編集します。',
+          'maintenance-settings': '環境別のメンテナンスモードとスケジュールを表示、編集します。',
+        },
+        actionLabels: { VIEW: '表示', CREATE: '追加', UPDATE: '編集', DELETE: '削除' },
+      },
       userManagement: {
         detailsTitle: 'ユーザー詳細',
         detailsDescription: 'ユーザー情報を項目ごとに確認・編集できます。',
@@ -1433,6 +1617,106 @@ export const dictionaries: Record<Locale, Dictionary> = {
       dashboardTitle: 'Admin',
       dashboardDescription:
         'You are signed in. Administrator features require the admin role.',
+      accessControl: {
+        rolesNav: 'Roles',
+        listTitle: 'Roles',
+        listDescription: 'Combine multiple roles to control access to administration pages. An explicit deny overrides an allow.',
+        roleCount: 'roles',
+        addRole: 'Add role',
+        createTitle: 'Add role',
+        createDescription: 'Enter a role name and description. Configure permissions on the next screen.',
+        roleName: 'Role name',
+        roleDescription: 'Description',
+        descriptionOptional: 'Description (optional)',
+        memberCount: 'Members',
+        actions: 'Actions',
+        edit: 'Edit',
+        systemRole: 'System role',
+        noRoles: 'No roles.',
+        cancel: 'Cancel',
+        add: 'Add',
+        saving: 'Saving…',
+        save: 'Save',
+        saved: 'Role settings saved.',
+        deleteRole: 'Delete role',
+        backToRoles: 'Back to roles',
+        settingsTab: 'Role settings',
+        membersTab: 'Role members',
+        adminPageAccessTitle: 'Administration page access',
+        adminPageAccessDescription: 'Set each action to not set, allow, or deny. When multiple roles are assigned, an explicit deny overrides an allow.',
+        adminPageColumn: 'Administration page',
+        allow: 'Allow',
+        deny: 'Deny',
+        unset: 'Not set',
+        unsupported: 'Not available',
+        path: 'Path',
+        assignedRoles: 'Assigned roles',
+        noAssignedRoles: 'No roles are assigned.',
+        effectiveAccess: 'Effective access',
+        userAccessTitle: 'Effective user access',
+        userAccessHeading: '{name}’s access',
+        userAccessDescription: 'This result combines every assigned role. An explicit deny overrides an allow.',
+        viewAccess: 'View effective access',
+        allowed: 'Allowed',
+        denied: 'Denied',
+        allowSources: 'Allowed by',
+        denySources: 'Denied by',
+        noSources: 'No matching roles.',
+        infoLabel: 'Show decision details',
+        implicitDeny: 'Implicitly denied because no role allows this action.',
+        explicitDeny: 'An explicit deny overrides every allow.',
+        viewRequired: 'This action also requires view access to the same resource.',
+        adminRequired: 'This resource also requires the administrator attribute.',
+        unsupportedReason: 'This page does not support this action.',
+        genericError: 'Unable to process the role.',
+        conflictError: 'The role changed elsewhere. Reload and try again.',
+        duplicateError: 'A role with this name already exists.',
+        listSearchPlaceholder: 'Search by role name or ID',
+        memberSearchPlaceholder: 'Search members by name, email, or ID',
+        candidateSearchPlaceholder: 'Search users to add by name, email, or ID',
+        assignUsers: 'Add users',
+        assign: 'Assign',
+        removeAssignment: 'Remove assignment',
+        noMembers: 'No users are assigned to this role.',
+        noCandidates: 'There are no users available to add.',
+        candidateDialogTitle: 'Add role members',
+        candidateDialogDescription: 'Add this role to each user’s existing roles.',
+        deleteRoleTitle: 'Delete this role?',
+        deleteRoleDescription: 'The role and its permission settings will be permanently deleted. This cannot be undone.',
+        roleInUse: 'Remove every member assignment before deleting this role.',
+        readOnlyRoleAction: 'You do not have permission to perform this action.',
+        adminAttributeHelp: 'This privilege is used only to authorize administrator-user operations.',
+        assignedRolesHelp: 'These roles control access to administration pages. You can select multiple roles, and an explicit deny overrides an allow.',
+        loading: 'Loading…',
+        accountSuspended: 'All access is denied because this user is suspended.',
+        passwordChangeRequired: 'All access is denied until the initial password change is complete.',
+        systemRoleNames: { FULL_ACCESS: 'Full access', NO_ACCESS: 'No access' },
+        systemRoleDescriptions: {
+          FULL_ACCESS: 'Allows every supported administration action.',
+          NO_ACCESS: 'Grants no permissions, so every action is implicitly denied.',
+        },
+        resourceTitles: {
+          users: 'Admin users',
+          'password-reset-requests': 'Password reset requests',
+          roles: 'Roles',
+          'role-assignments': 'Role members',
+          'phone-settings': 'Phone settings',
+          'chat-settings': 'AI chat settings',
+          'language-settings': 'Language settings',
+          'maintenance-settings': 'Maintenance settings',
+        },
+        resourceDescriptions: {
+          users: 'View, create, update, suspend, reactivate, reset passwords for, delete, and inspect access for admin users.',
+          'password-reset-requests': 'View, approve, and reject password reset requests.',
+          roles: 'List and create access roles, and manage their names, descriptions, permissions, and deletion.',
+          'role-assignments': 'Manage role members and assign multiple roles to a user.',
+          'phone-settings': 'View and edit the representative phone and locale-specific AI phone numbers.',
+          'chat-settings': 'View and edit Web Chat mode and connection settings.',
+          'language-settings': 'View and edit public-site languages and display order.',
+          'maintenance-settings': 'View and edit maintenance mode and schedules for each environment.',
+        },
+        actionLabels: { VIEW: 'View', CREATE: 'Create', UPDATE: 'Edit', DELETE: 'Delete' },
+      },
       userManagement: {
         detailsTitle: 'User details',
         detailsDescription: 'Review and edit each item of this user’s information.',
@@ -2038,6 +2322,67 @@ export const dictionaries: Record<Locale, Dictionary> = {
       adminOnly: '仅限管理员访问。',
       dashboardTitle: '管理页面',
       dashboardDescription: '您已登录。用户管理功能需要管理员权限。',
+      accessControl: {
+        rolesNav: '角色', listTitle: '角色',
+        listDescription: '组合多个角色来控制管理页面访问。明确拒绝优先于允许。',
+        roleCount: '个角色', addRole: '添加角色', createTitle: '添加角色',
+        createDescription: '输入角色名称和说明，然后在下一页设置权限。',
+        roleName: '角色名称', roleDescription: '说明', descriptionOptional: '说明（可选）',
+        memberCount: '成员数', actions: '操作', edit: '编辑', systemRole: '系统角色',
+        noRoles: '没有角色。', cancel: '取消', add: '添加', saving: '保存中…', save: '保存',
+        saved: '角色设置已保存。', deleteRole: '删除角色', backToRoles: '返回角色列表',
+        settingsTab: '角色设置', membersTab: '角色成员',
+        adminPageAccessTitle: '管理页面访问权限',
+        adminPageAccessDescription: '将各项操作设置为未设置、允许或拒绝。分配多个角色时，明确拒绝优先于允许。',
+        adminPageColumn: '管理页面', allow: '允许', deny: '拒绝',
+        unset: '未设置', unsupported: '不适用', path: '路径', assignedRoles: '已分配角色',
+        noAssignedRoles: '未分配角色。', effectiveAccess: '有效访问权限',
+        userAccessTitle: '用户有效访问权限', userAccessHeading: '{name}的访问权限',
+        userAccessDescription: '此结果合并所有已分配角色。明确拒绝优先于允许。',
+        viewAccess: '查看有效访问权限', allowed: '允许', denied: '拒绝',
+        allowSources: '允许来源角色', denySources: '拒绝来源角色', noSources: '没有相关角色。',
+        infoLabel: '显示判定依据', implicitDeny: '没有角色允许此操作，因此隐式拒绝。',
+        explicitDeny: '明确拒绝优先于所有允许。', viewRequired: '此操作还需要同一项目的查看权限。',
+        adminRequired: '此项目还需要管理员属性。', unsupportedReason: '此页面不支持该操作。',
+        genericError: '无法处理角色。', conflictError: '角色已在其他位置更改，请重新加载。',
+        duplicateError: '已存在同名角色。',
+        listSearchPlaceholder: '按角色名称或 ID 搜索',
+        memberSearchPlaceholder: '按姓名、电子邮件或 ID 搜索成员',
+        candidateSearchPlaceholder: '按姓名、电子邮件或 ID 搜索可添加用户',
+        assignUsers: '添加用户', assign: '分配', removeAssignment: '移除分配',
+        noMembers: '没有用户被分配到此角色。', noCandidates: '没有可添加的用户。',
+        candidateDialogTitle: '添加角色成员', candidateDialogDescription: '将此角色添加到用户的现有角色中。',
+        deleteRoleTitle: '要删除此角色吗？', deleteRoleDescription: '角色及其权限设置将被永久删除，此操作无法撤销。',
+        roleInUse: '删除此角色前，请移除所有成员分配。',
+        readOnlyRoleAction: '您没有执行此操作的权限。',
+        adminAttributeHelp: '此权限仅用于授权管理员用户操作。',
+        assignedRolesHelp: '这些角色用于控制管理页面访问。可以选择多个角色，明确拒绝优先于允许。',
+        loading: '正在加载…',
+        accountSuspended: '由于该用户已停用，所有访问均被拒绝。',
+        passwordChangeRequired: '完成首次密码更改之前，所有访问均被拒绝。',
+        systemRoleNames: { FULL_ACCESS: '完全访问权限', NO_ACCESS: '无访问权限' },
+        systemRoleDescriptions: {
+          FULL_ACCESS: '允许所有受支持的管理操作。',
+          NO_ACCESS: '不授予任何权限，因此所有操作都会被隐式拒绝。',
+        },
+        resourceTitles: {
+          users: '管理用户', 'password-reset-requests': '密码重置申请', roles: '角色',
+          'role-assignments': '角色成员', 'phone-settings': '电话设置',
+          'chat-settings': 'AI聊天设置', 'language-settings': '语言设置',
+          'maintenance-settings': '维护设置',
+        },
+        resourceDescriptions: {
+          users: '管理用户列表、详情、创建、属性更改、停用、恢复、密码重置、删除和访问概览。',
+          'password-reset-requests': '查看、批准和拒绝密码重置申请。',
+          roles: '管理访问角色的列表、创建、名称、说明、权限和删除。',
+          'role-assignments': '管理角色成员以及为用户分配多个角色。',
+          'phone-settings': '查看和编辑代表电话及各语言AI电话号码。',
+          'chat-settings': '查看和编辑Web Chat模式及连接设置。',
+          'language-settings': '查看和编辑公共网站语言及显示顺序。',
+          'maintenance-settings': '查看和编辑各环境的维护模式及计划。',
+        },
+        actionLabels: { VIEW: '查看', CREATE: '添加', UPDATE: '编辑', DELETE: '删除' },
+      },
       userManagement: {
         detailsTitle: '用户详情',
         detailsDescription: '可以逐项查看和编辑用户信息。',
@@ -2623,6 +2968,67 @@ export const dictionaries: Record<Locale, Dictionary> = {
       adminOnly: '僅限管理員存取。',
       dashboardTitle: '管理頁面',
       dashboardDescription: '您已登入。使用者管理功能需要管理員權限。',
+      accessControl: {
+        rolesNav: '角色', listTitle: '角色',
+        listDescription: '組合多個角色來控制管理頁面存取。明確拒絕優先於允許。',
+        roleCount: '個角色', addRole: '新增角色', createTitle: '新增角色',
+        createDescription: '輸入角色名稱和說明，然後在下一頁設定權限。',
+        roleName: '角色名稱', roleDescription: '說明', descriptionOptional: '說明（選填）',
+        memberCount: '成員數', actions: '動作', edit: '編輯', systemRole: '系統角色',
+        noRoles: '沒有角色。', cancel: '取消', add: '新增', saving: '儲存中…', save: '儲存',
+        saved: '角色設定已儲存。', deleteRole: '刪除角色', backToRoles: '返回角色清單',
+        settingsTab: '角色設定', membersTab: '角色成員',
+        adminPageAccessTitle: '管理頁面存取權',
+        adminPageAccessDescription: '將各項動作設定為未設定、允許或拒絕。指派多個角色時，明確拒絕優先於允許。',
+        adminPageColumn: '管理頁面', allow: '允許', deny: '拒絕',
+        unset: '未設定', unsupported: '不適用', path: '路徑', assignedRoles: '已指派角色',
+        noAssignedRoles: '未指派角色。', effectiveAccess: '有效存取權',
+        userAccessTitle: '使用者有效存取權', userAccessHeading: '{name}的存取權',
+        userAccessDescription: '此結果合併所有已指派角色。明確拒絕優先於允許。',
+        viewAccess: '檢視有效存取權', allowed: '允許', denied: '拒絕',
+        allowSources: '允許來源角色', denySources: '拒絕來源角色', noSources: '沒有相關角色。',
+        infoLabel: '顯示判定依據', implicitDeny: '沒有角色允許此動作，因此隱含拒絕。',
+        explicitDeny: '明確拒絕優先於所有允許。', viewRequired: '此動作還需要同一項目的檢視權限。',
+        adminRequired: '此項目還需要管理員屬性。', unsupportedReason: '此頁面不支援該動作。',
+        genericError: '無法處理角色。', conflictError: '角色已在其他位置變更，請重新載入。',
+        duplicateError: '已存在同名角色。',
+        listSearchPlaceholder: '以角色名稱或 ID 搜尋',
+        memberSearchPlaceholder: '以姓名、電子郵件或 ID 搜尋成員',
+        candidateSearchPlaceholder: '以姓名、電子郵件或 ID 搜尋可新增使用者',
+        assignUsers: '新增使用者', assign: '指派', removeAssignment: '移除指派',
+        noMembers: '沒有使用者被指派到此角色。', noCandidates: '沒有可新增的使用者。',
+        candidateDialogTitle: '新增角色成員', candidateDialogDescription: '將此角色新增至使用者的現有角色。',
+        deleteRoleTitle: '要刪除此角色嗎？', deleteRoleDescription: '角色及其權限設定將被永久刪除，此操作無法復原。',
+        roleInUse: '刪除此角色前，請移除所有成員指派。',
+        readOnlyRoleAction: '您沒有執行此操作的權限。',
+        adminAttributeHelp: '此權限僅用於授權管理員使用者操作。',
+        assignedRolesHelp: '這些角色用於控制管理頁面存取。可選擇多個角色，明確拒絕優先於允許。',
+        loading: '載入中…',
+        accountSuspended: '由於該使用者已停用，所有存取均被拒絕。',
+        passwordChangeRequired: '完成首次密碼變更前，所有存取均被拒絕。',
+        systemRoleNames: { FULL_ACCESS: '完全存取權限', NO_ACCESS: '無存取權限' },
+        systemRoleDescriptions: {
+          FULL_ACCESS: '允許所有支援的管理動作。',
+          NO_ACCESS: '不授予任何權限，因此所有動作都會被隱含拒絕。',
+        },
+        resourceTitles: {
+          users: '管理使用者', 'password-reset-requests': '密碼重設申請', roles: '角色',
+          'role-assignments': '角色成員', 'phone-settings': '電話設定',
+          'chat-settings': 'AI聊天設定', 'language-settings': '語言設定',
+          'maintenance-settings': '維護設定',
+        },
+        resourceDescriptions: {
+          users: '管理使用者清單、詳細資料、建立、屬性變更、停用、恢復、密碼重設、刪除和存取概覽。',
+          'password-reset-requests': '檢視、核准和拒絕密碼重設申請。',
+          roles: '管理存取角色的清單、建立、名稱、說明、權限和刪除。',
+          'role-assignments': '管理角色成員以及為使用者指派多個角色。',
+          'phone-settings': '檢視和編輯代表電話及各語言AI電話號碼。',
+          'chat-settings': '檢視和編輯Web Chat模式及連線設定。',
+          'language-settings': '檢視和編輯公開網站語言及顯示順序。',
+          'maintenance-settings': '檢視和編輯各環境的維護模式及排程。',
+        },
+        actionLabels: { VIEW: '檢視', CREATE: '新增', UPDATE: '編輯', DELETE: '刪除' },
+      },
       userManagement: {
         detailsTitle: '使用者詳細資料',
         detailsDescription: '可以逐項檢視及編輯使用者資訊。',
@@ -3209,6 +3615,67 @@ export const dictionaries: Record<Locale, Dictionary> = {
       adminOnly: '관리자만 접근할 수 있습니다.',
       dashboardTitle: '관리 화면',
       dashboardDescription: '로그인되어 있습니다. 사용자 관리 기능에는 관리자 권한이 필요합니다.',
+      accessControl: {
+        rolesNav: '역할', listTitle: '역할',
+        listDescription: '여러 역할을 조합하여 관리 페이지 접근을 제어합니다. 명시적 거부가 허용보다 우선합니다.',
+        roleCount: '개 역할', addRole: '역할 추가', createTitle: '역할 추가',
+        createDescription: '역할 이름과 설명을 입력한 다음 다음 화면에서 권한을 설정합니다.',
+        roleName: '역할 이름', roleDescription: '설명', descriptionOptional: '설명(선택)',
+        memberCount: '멤버 수', actions: '작업', edit: '편집', systemRole: '시스템 역할',
+        noRoles: '역할이 없습니다.', cancel: '취소', add: '추가', saving: '저장 중…', save: '저장',
+        saved: '역할 설정을 저장했습니다.', deleteRole: '역할 삭제', backToRoles: '역할 목록으로',
+        settingsTab: '역할 설정', membersTab: '역할 멤버',
+        adminPageAccessTitle: '관리 페이지 접근 권한',
+        adminPageAccessDescription: '각 작업을 미설정, 허용 또는 거부로 설정합니다. 여러 역할이 할당된 경우 명시적 거부가 허용보다 우선합니다.',
+        adminPageColumn: '관리 페이지', allow: '허용', deny: '거부',
+        unset: '미설정', unsupported: '해당 없음', path: '경로', assignedRoles: '할당된 역할',
+        noAssignedRoles: '할당된 역할이 없습니다.', effectiveAccess: '유효 접근 권한',
+        userAccessTitle: '사용자 유효 접근 권한', userAccessHeading: '{name}의 접근 권한',
+        userAccessDescription: '할당된 모든 역할을 조합한 결과입니다. 명시적 거부가 허용보다 우선합니다.',
+        viewAccess: '유효 접근 권한 보기', allowed: '허용', denied: '거부',
+        allowSources: '허용 역할', denySources: '거부 역할', noSources: '해당 역할이 없습니다.',
+        infoLabel: '판정 근거 표시', implicitDeny: '허용하는 역할이 없어 암시적으로 거부되었습니다.',
+        explicitDeny: '명시적 거부가 모든 허용보다 우선합니다.', viewRequired: '이 작업에는 같은 항목의 보기 권한도 필요합니다.',
+        adminRequired: '이 항목에는 관리자 속성도 필요합니다.', unsupportedReason: '이 페이지는 이 작업을 지원하지 않습니다.',
+        genericError: '역할을 처리할 수 없습니다.', conflictError: '다른 변경과 충돌했습니다. 새로고침 후 다시 시도하세요.',
+        duplicateError: '같은 이름의 역할이 이미 있습니다.',
+        listSearchPlaceholder: '역할 이름 또는 ID로 검색',
+        memberSearchPlaceholder: '이름, 이메일 또는 ID로 멤버 검색',
+        candidateSearchPlaceholder: '이름, 이메일 또는 ID로 추가할 사용자 검색',
+        assignUsers: '사용자 추가', assign: '할당', removeAssignment: '할당 해제',
+        noMembers: '이 역할에 할당된 사용자가 없습니다.', noCandidates: '추가할 수 있는 사용자가 없습니다.',
+        candidateDialogTitle: '역할 멤버 추가', candidateDialogDescription: '사용자의 기존 역할에 이 역할을 추가합니다.',
+        deleteRoleTitle: '이 역할을 삭제할까요?', deleteRoleDescription: '역할과 권한 설정이 영구적으로 삭제되며 되돌릴 수 없습니다.',
+        roleInUse: '이 역할을 삭제하기 전에 모든 멤버 할당을 해제하세요.',
+        readOnlyRoleAction: '이 작업을 수행할 권한이 없습니다.',
+        adminAttributeHelp: '이 권한은 관리자 사용자 작업을 승인하는 데만 사용됩니다.',
+        assignedRolesHelp: '관리 페이지 접근을 제어하는 역할입니다. 여러 역할을 선택할 수 있으며 명시적 거부가 허용보다 우선합니다.',
+        loading: '로딩 중…',
+        accountSuspended: '이 사용자가 정지되어 모든 접근이 거부됩니다.',
+        passwordChangeRequired: '초기 비밀번호 변경을 완료할 때까지 모든 접근이 거부됩니다.',
+        systemRoleNames: { FULL_ACCESS: '전체 접근', NO_ACCESS: '접근 없음' },
+        systemRoleDescriptions: {
+          FULL_ACCESS: '지원되는 모든 관리 작업을 허용합니다.',
+          NO_ACCESS: '권한을 부여하지 않으므로 모든 작업이 암시적으로 거부됩니다.',
+        },
+        resourceTitles: {
+          users: '관리 사용자', 'password-reset-requests': '비밀번호 재설정 요청', roles: '역할',
+          'role-assignments': '역할 멤버', 'phone-settings': '전화 설정',
+          'chat-settings': 'AI 채팅 설정', 'language-settings': '언어 설정',
+          'maintenance-settings': '유지보수 설정',
+        },
+        resourceDescriptions: {
+          users: '관리 사용자 목록, 상세, 생성, 속성 변경, 중지, 재개, 비밀번호 재설정, 삭제 및 접근 개요를 관리합니다.',
+          'password-reset-requests': '비밀번호 재설정 요청을 조회, 승인 및 거부합니다.',
+          roles: '접근 역할의 목록, 생성, 이름, 설명, 권한 및 삭제를 관리합니다.',
+          'role-assignments': '역할 멤버와 사용자별 복수 역할 할당을 관리합니다.',
+          'phone-settings': '대표 전화와 언어별 AI 전화번호를 조회하고 편집합니다.',
+          'chat-settings': 'Web Chat 모드와 연결 설정을 조회하고 편집합니다.',
+          'language-settings': '공개 사이트 언어와 표시 순서를 조회하고 편집합니다.',
+          'maintenance-settings': '환경별 유지보수 모드와 일정을 조회하고 편집합니다.',
+        },
+        actionLabels: { VIEW: '보기', CREATE: '추가', UPDATE: '편집', DELETE: '삭제' },
+      },
       userManagement: {
         detailsTitle: '사용자 상세 정보',
         detailsDescription: '사용자 정보를 항목별로 확인하고 편집할 수 있습니다.',

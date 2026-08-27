@@ -17,6 +17,7 @@ import { useI18n } from "../../i18n/LanguageProvider";
 type PhoneSettingsFormProps = {
   initialSettings: PhoneSettings;
   orderedLocales: LanguageSetting[];
+  canEdit: boolean;
 };
 
 type Feedback =
@@ -26,6 +27,7 @@ type Feedback =
 export function PhoneSettingsForm({
   initialSettings,
   orderedLocales,
+  canEdit,
 }: PhoneSettingsFormProps) {
   const { t } = useI18n();
   const router = useRouter();
@@ -67,6 +69,7 @@ export function PhoneSettingsForm({
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!canEdit) return;
     setFeedback(null);
     setIsSubmitting(true);
 
@@ -132,6 +135,7 @@ export function PhoneSettingsForm({
                 id="representative-phone-display"
                 name="representativePhoneDisplay"
                 required
+                readOnly={!canEdit}
                 value={settings.representativePhone.display}
                 onChange={(event) =>
                   updateRepresentativePhone("display", event.target.value)
@@ -160,6 +164,7 @@ export function PhoneSettingsForm({
                 id="representative-phone-e164"
                 name="representativePhoneE164"
                 required
+                readOnly={!canEdit}
                 value={settings.representativePhone.e164}
                 onChange={(event) =>
                   updateRepresentativePhone("e164", event.target.value)
@@ -205,6 +210,7 @@ export function PhoneSettingsForm({
                   <input
                     id={`ai-phone-${locale}`}
                     name={`aiPhoneNumbers.${locale}`}
+                    readOnly={!canEdit}
                     value={settings.aiPhoneNumbers[locale] ?? ""}
                     onChange={(event) =>
                       updateAiPhone(locale, event.target.value)
@@ -236,7 +242,7 @@ export function PhoneSettingsForm({
 
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || !canEdit}
           className="cursor-pointer rounded-md bg-primary px-5 py-2.5 font-semibold text-white transition-colors hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isSubmitting

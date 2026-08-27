@@ -1,0 +1,238 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+
+import { dictionaries, locales } from "../app/i18n/dictionaries";
+import { ADMIN_RESOURCE_CATALOG } from "../lib/admin-access/catalog";
+import { ADMIN_ACCESS_ACTIONS, ADMIN_RESOURCE_KEYS } from "../lib/admin-access/types";
+import {
+  ADMIN_ROLE_ERROR_CODES,
+  parsePermissionMatrix,
+} from "../lib/admin-access/validation";
+import { parseAdminRoleDirectoryInput } from "../lib/server/admin-access/queries";
+
+function source(path: string) {
+  return readFileSync(new URL(path, import.meta.url), "utf8");
+}
+
+test("every locale has the complete access-control catalog and action copy", () => {
+  for (const locale of locales) {
+    const copy = dictionaries[locale].admin.accessControl;
+    assert.deepEqual(Object.keys(copy.resourceTitles).sort(), [...ADMIN_RESOURCE_KEYS].sort(), locale);
+    assert.deepEqual(Object.keys(copy.resourceDescriptions).sort(), [...ADMIN_RESOURCE_KEYS].sort(), locale);
+    assert.deepEqual(Object.keys(copy.actionLabels).sort(), [...ADMIN_ACCESS_ACTIONS].sort(), locale);
+    assert.deepEqual(Object.keys(copy.systemRoleNames).sort(), ["FULL_ACCESS", "NO_ACCESS"], locale);
+    assert.deepEqual(Object.keys(copy.systemRoleDescriptions).sort(), ["FULL_ACCESS", "NO_ACCESS"], locale);
+    for (const value of [
+      ...Object.values(copy.resourceTitles),
+      ...Object.values(copy.resourceDescriptions),
+      ...Object.values(copy.actionLabels),
+      ...Object.values(copy.systemRoleNames),
+      ...Object.values(copy.systemRoleDescriptions),
+      copy.adminPageAccessTitle,
+      copy.adminPageAccessDescription,
+      copy.adminPageColumn,
+      copy.userAccessHeading,
+      copy.adminAttributeHelp,
+      copy.assignedRolesHelp,
+    ]) {
+      assert.ok(value.length > 0, locale);
+    }
+  }
+});
+
+test("role directory input normalizes search and enforces one-based bounded pagination", () => {
+  assert.deepEqual(
+    parseAdminRoleDirectoryInput({
+      query: "  Ｆｕｌｌ  ",
+      page: "2",
+      pageSize: "50",
+    }),
+    { ok: true, value: { query: "Full", page: 2, pageSize: 50 } },
+  );
+  assert.equal(parseAdminRoleDirectoryInput({ page: "0" }).ok, false);
+  assert.equal(parseAdminRoleDirectoryInput({ pageSize: "51" }).ok, false);
+  assert.equal(parseAdminRoleDirectoryInput({ page: "201", pageSize: "50" }).ok, true);
+  assert.equal(parseAdminRoleDirectoryInput({ page: "202", pageSize: "50" }).ok, false);
+  assert.equal(parseAdminRoleDirectoryInput({ query: "x".repeat(101) }).ok, false);
+});
+
+test("permission payload requires every supported cell exactly once", () => {
+  const valid = ADMIN_RESOURCE_CATALOG.flatMap((resource) =>
+    resource.supportedActions.map((action) => ({
+      resourceKey: resource.key,
+      action,
+      effect: null,
+    })),
+  );
+  assert.equal(parsePermissionMatrix(valid).ok, true);
+  assert.deepEqual(parsePermissionMatrix(valid.slice(1)), {
+    ok: false,
+    code: ADMIN_ROLE_ERROR_CODES.invalidPermissions,
+  });
+  assert.deepEqual(parsePermissionMatrix([...valid, valid[0]]), {
+    ok: false,
+    code: ADMIN_ROLE_ERROR_CODES.invalidPermissions,
+  });
+
+  const unsupported = structuredClone(valid);
+  unsupported[0] = {
+    resourceKey: "phone-settings",
+    action: "DELETE",
+    effect: "ALLOW",
+  } as unknown as (typeof valid)[number];
+  assert.deepEqual(parsePermissionMatrix(unsupported), {
+    ok: false,
+    code: ADMIN_ROLE_ERROR_CODES.invalidPermissions,
+  });
+});
+
+test("role UI creates metadata first and keeps unsupported permission controls disabled", () => {
+  const list = source("../app/admin/roles/RolesView.tsx");
+  const details = source("../app/admin/roles/[id]/RoleDetailsView.tsx");
+  assert.match(list, /<ModalDialog/);
+  assert.match(list, /JSON\.stringify\(\{ name, description \}\)/);
+  assert.match(list, /router\.push\(`\/admin\/roles\/\$\{encodeURIComponent\(body\.role\.id\)\}`\)/);
+  assert.match(details, /disabled=\{!editable \|\| !cell\.supported\}/);
+  assert.match(details, /checked=\{cell\.supported && cell\.effect === "ALLOW"\}/);
+  assert.match(details, /checked=\{cell\.supported && cell\.effect === "DENY"\}/);
+  assert.match(details, /resource\.displayPaths\.join/);
+  assert.match(details, /role="tablist"/);
+  assert.match(details, /role="tab"/);
+  assert.match(details, /adminPageAccessTitle/);
+  assert.match(details, /<table/);
+  assert.match(list, /name="query"/);
+  assert.match(list, /pageSize/);
+  assert.match(details, /#members/);
+  assert.match(details, /member-candidates/);
+  assert.match(details, /expectedAssignmentRevision/);
+  assert.match(
+    details,
+    /assignedRoleId !== "system-no-access"/,
+  );
+  assert.match(details, /roleId === "system-no-access"/);
+  assert.match(list, /<ConfirmationDialog/);
+  assert.match(list, /<DeleteIcon/);
+  assert.match(list, />—<\/span>/);
+  assert.doesNotMatch(details, /<ConfirmationDialog/);
+  assert.doesNotMatch(details, /window\.confirm/);
+  assert.doesNotMatch(details, /onMemberCountChange\(body\.total\)/);
+});
+
+test("role and user screens follow the compact prototype structure without reverting multi-role semantics", () => {
+  const list = source("../app/admin/roles/RolesView.tsx");
+  const details = source("../app/admin/roles/[id]/RoleDetailsView.tsx");
+  const access = source("../app/admin/users/[id]/access/UserAccessView.tsx");
+  const createUser = source("../app/admin/users/new/NewUserForm.tsx");
+  const createUserPage = source("../app/admin/users/new/page.tsx");
+  const userDetails = source("../app/admin/users/[id]/UserDetailsView.tsx");
+
+  assert.match(list, /text-2xl/);
+  assert.match(details, /min-w-\[980px\]/);
+  assert.match(details, /adminAttribute/);
+  assert.match(details, /banned/);
+  assert.match(access, /userAccessHeading/);
+  assert.match(access, /<table/);
+  assert.doesNotMatch(access, /<article/);
+  assert.match(userDetails, /isEditingAccessRoles/);
+  assert.match(userDetails, /viewAccess/);
+  assert.doesNotMatch(userDetails, /<section className="space-y-4 rounded-xl/);
+
+  const nameIndex = createUser.indexOf('name="name"');
+  const emailIndex = createUser.indexOf('name="email"');
+  const privilegeIndex = createUser.indexOf('name="role"');
+  const accessRolesIndex = createUser.indexOf('name="accessRoleIds"');
+  assert.ok(nameIndex < emailIndex);
+  assert.ok(emailIndex < privilegeIndex);
+  assert.ok(privilegeIndex < accessRolesIndex);
+  assert.match(createUser, /getAdminRoleDisplayName/);
+  assert.match(
+    createUserPage,
+    /OR: \[\{ systemKey: null \}, \{ systemKey: "FULL_ACCESS" \}\]/,
+  );
+  assert.doesNotMatch(
+    createUserPage,
+    /systemKey: \{ not: "NO_ACCESS" \}/,
+  );
+});
+
+test("role detail keeps member PII behind separately authorized directory APIs", () => {
+  const queries = source("../lib/server/admin-access/queries.ts");
+  const route = source("../app/api/[[...route]]/route.ts");
+  const page = source("../app/admin/roles/[id]/page.tsx");
+  const detailStart = queries.indexOf("export async function getAdminRoleDetail");
+  const memberStart = queries.indexOf("export async function listAdminRoleMembers");
+  const detailSource = queries.slice(detailStart, memberStart);
+
+  assert.doesNotMatch(detailSource, /email: true/);
+  assert.doesNotMatch(detailSource, /accessRoleAssignments/);
+  assert.doesNotMatch(detailSource, /user:\s*\{/);
+  assert.match(route, /app\.get\("\/admin\/roles\/:id\/members"/);
+  assert.match(route, /app\.get\("\/admin\/roles\/:id\/member-candidates"/);
+  assert.match(route, /canAdminAccess\(authorization\.actor, "users", "VIEW"\)/);
+  assert.match(route, /canAdminAccess\(authorization\.actor, "role-assignments", "VIEW"\)/);
+  assert.match(page, /role\.systemKey !== "NO_ACCESS"/);
+});
+
+test("effective access uses a local Info icon and exposes hover, focus, click, and Escape", () => {
+  const info = source("../app/components/admin/AccessDecisionInfo.tsx");
+  const icon = source("../app/components/svg/InfoIcon.tsx");
+  assert.match(info, /onMouseEnter/);
+  assert.match(info, /onFocus/);
+  assert.match(info, /onClick/);
+  assert.match(info, /const next = !current/);
+  assert.match(info, /event\.key (?:===|!==) "Escape"/);
+  assert.match(info, /role="tooltip"/);
+  assert.match(info, /maxHeight: "calc\(100vh - 24px\)"/);
+  assert.match(info, /overflow-y-auto/);
+  assert.match(info, /tooltipRef\.current\?\.getBoundingClientRect/);
+  assert.match(icon, /viewBox="0 -960 960 960"/);
+  assert.match(icon, /fill="currentColor"/);
+  assert.match(icon, /aria-hidden="true"/);
+});
+
+test("public Better Auth admin endpoints are blocked and omitted from the client bundle", () => {
+  const route = source("../app/api/auth/[...all]/route.ts");
+  const client = source("../lib/auth-client.ts");
+  assert.match(route, /ADMIN_AUTH_API_PREFIX = "\/api\/auth\/admin"/);
+  assert.match(route, /pathname === ADMIN_AUTH_API_PREFIX/);
+  assert.match(route, /pathname\.startsWith\(`\$\{ADMIN_AUTH_API_PREFIX\}\/`\)/);
+  assert.match(route, /status: 404/);
+  assert.doesNotMatch(client, /adminClient/);
+});
+
+test("VIEW-only settings preserve current values while disabling every mutation control", () => {
+  const phone = source(
+    "../app/admin/phone-settings/PhoneSettingsForm.tsx",
+  );
+  const chat = source("../app/admin/chat-settings/ChatSettingsForm.tsx");
+  const languages = source(
+    "../app/admin/languages/LanguageSettingsForm.tsx",
+  );
+  const maintenance = source(
+    "../app/admin/maintenance-settings/MaintenanceSettingsForm.tsx",
+  );
+
+  for (const form of [phone, chat, languages]) {
+    assert.doesNotMatch(form, /\binert=/);
+    assert.match(form, /disabled=\{isSubmitting \|\| !canEdit\}/);
+  }
+  assert.equal(phone.match(/readOnly=\{!canEdit\}/g)?.length, 3);
+  assert.equal(chat.match(/readOnly=\{!canEdit\}/g)?.length, 4);
+  assert.match(chat, /disabled=\{!canEdit \|\| isSubmitting\}/);
+  assert.match(
+    languages,
+    /disabled=\{!canEdit \|\| isJapanese \|\| isSubmitting\}/,
+  );
+  assert.match(
+    languages,
+    /disabled=\{!canEdit \|\| index === 0 \|\| isSubmitting\}/,
+  );
+  assert.match(
+    maintenance,
+    /const hasCurrentValue =\s*initialConfig !== null/,
+  );
+  assert.match(maintenance, /initialConfig\?\.mode \?\? null/);
+  assert.match(maintenance, /\{!hasCurrentValue \? \(/);
+  assert.doesNotMatch(maintenance, /canEdit \? initialConfig\?\.mode/);
+});

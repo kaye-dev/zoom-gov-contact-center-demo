@@ -40,6 +40,23 @@ enum MaintenanceMode {
   SCHEDULED
 }
 
+enum AdminAccessAction {
+  VIEW
+  CREATE
+  UPDATE
+  DELETE
+}
+
+enum AdminAccessEffect {
+  ALLOW
+  DENY
+}
+
+enum AdminAccessSystemRole {
+  FULL_ACCESS
+  NO_ACCESS
+}
+
 model user {
   id                        String    @id
   name                      String
@@ -55,11 +72,14 @@ model user {
   mustChangePassword        Boolean   @default(false)
   temporaryPasswordIssuedAt DateTime?
   passwordChangedAt         DateTime?
+  adminAccessRoleRevision   Int       @default(1)
 
   sessions                 session[]
   accounts                 account[]
   passwordResetRequests    PasswordResetRequest[] @relation("PasswordResetRequestUser")
   reviewedPasswordRequests PasswordResetRequest[] @relation("PasswordResetRequestReviewer")
+  accessRoleAssignments     AdminAccessRoleAssignment[] @relation("AdminAccessRoleAssignmentUser")
+  assignedRoleAssignments   AdminAccessRoleAssignment[] @relation("AdminAccessRoleAssignmentActor")
 
   @@unique([email])
   @@map("user")
@@ -189,4 +209,59 @@ model SiteMaintenanceSetting {
   updatedAt        DateTime               @default(now()) @updatedAt @db.Timestamptz(3)
 
   @@map("site_maintenance_settings")
+}
+
+model AdminAccessRole {
+  id          String                 @id @default(cuid())
+  name        String
+  nameKey     String                 @unique
+  description String?
+  systemKey   AdminAccessSystemRole? @unique
+  revision    Int                    @default(1)
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @default(now()) @updatedAt
+
+  permissions AdminAccessRolePermission[]
+  assignments AdminAccessRoleAssignment[]
+
+  @@map("admin_access_roles")
+}
+
+model AdminAccessRolePermission {
+  roleId      String
+  resourceKey String
+  action      AdminAccessAction
+  effect      AdminAccessEffect
+
+  role AdminAccessRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, resourceKey, action])
+  @@map("admin_access_role_permissions")
+}
+
+model AdminAccessRoleAssignment {
+  userId           String
+  roleId           String
+  assignedAt       DateTime @default(now())
+  assignedByUserId String?
+
+  user       user  @relation("AdminAccessRoleAssignmentUser", fields: [userId], references: [id], onDelete: Cascade)
+  assignedBy user? @relation("AdminAccessRoleAssignmentActor", fields: [assignedByUserId], references: [id], onDelete: SetNull)
+  role       AdminAccessRole @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+  @@index([assignedByUserId])
+  @@map("admin_access_role_assignments")
+}
+
+model AdminAccessMutationState {
+  id        String   @id
+  frozen    Boolean  @default(false)
+  freezeId  String?
+  frozenAt  DateTime?
+  reason    String?
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@map("admin_access_mutation_state")
 }

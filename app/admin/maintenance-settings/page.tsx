@@ -1,12 +1,17 @@
 import { headers } from "next/headers";
 
-import { requireAdminSession } from "@/lib/server/auth/server";
+import { canAdminAccess } from "@/lib/admin-access/authorization";
+import { requireAdminAccess } from "@/lib/server/admin-access/server";
 import { getMaintenanceSettingsSnapshot } from "@/lib/server/maintenance-settings-read";
 
 import { MaintenanceSettingsForm } from "./MaintenanceSettingsForm";
 
 export default async function MaintenanceSettingsPage() {
-  await requireAdminSession("/admin/maintenance-settings");
+  const { actor } = await requireAdminAccess(
+    "maintenance-settings",
+    "VIEW",
+    "/admin/maintenance-settings",
+  );
 
   const requestHeaders = await headers();
   const requestHostname = requestHeaders.get("host");
@@ -22,6 +27,7 @@ export default async function MaintenanceSettingsPage() {
       initialRevision={
         snapshot.readStatus === "VALID" ? snapshot.revision : null
       }
+      allowUpdate={canAdminAccess(actor, "maintenance-settings", "UPDATE")}
     />
   );
 }

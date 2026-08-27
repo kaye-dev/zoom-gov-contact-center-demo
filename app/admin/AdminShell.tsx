@@ -11,8 +11,18 @@ import { useI18n } from "../i18n/LanguageProvider";
 
 type AdminShellProps = {
   children: ReactNode;
-  isAdmin: boolean;
+  visibleItems: AdminNavigationItemKey[];
 };
+
+export type AdminNavigationItemKey =
+  | "users"
+  | "new-user"
+  | "password-reset-requests"
+  | "phone-settings"
+  | "chat-settings"
+  | "language-settings"
+  | "maintenance-settings"
+  | "roles";
 
 type AdminMenuKey = "users" | "settings";
 
@@ -20,12 +30,13 @@ type AdminMenuGroup = {
   key: AdminMenuKey;
   label: string;
   items: Array<{
+    key: AdminNavigationItemKey;
     href: string;
     label: string;
   }>;
 };
 
-export function AdminShell({ children, isAdmin }: AdminShellProps) {
+export function AdminShell({ children, visibleItems }: AdminShellProps) {
   const { t } = useI18n();
   const pathname = usePathname();
   const router = useRouter();
@@ -62,14 +73,15 @@ export function AdminShell({ children, isAdmin }: AdminShellProps) {
     };
   }, [openMenu]);
 
-  const menuGroups: AdminMenuGroup[] = [
+  const allMenuGroups: AdminMenuGroup[] = [
     {
       key: "users",
       label: t.admin.users,
       items: [
-        { href: "/admin/users", label: t.admin.users },
-        { href: "/admin/users/new", label: t.admin.newUser },
+        { key: "users", href: "/admin/users", label: t.admin.users },
+        { key: "new-user", href: "/admin/users/new", label: t.admin.newUser },
         {
+          key: "password-reset-requests",
           href: "/admin/password-reset-requests",
           label: t.admin.passwordResets,
         },
@@ -79,16 +91,26 @@ export function AdminShell({ children, isAdmin }: AdminShellProps) {
       key: "settings",
       label: t.admin.settingsMenu,
       items: [
-        { href: "/admin/phone-settings", label: t.admin.phoneSettings },
-        { href: "/admin/chat-settings", label: t.admin.chatSettings },
-        { href: "/admin/languages", label: t.admin.languageSettings },
+        { key: "phone-settings", href: "/admin/phone-settings", label: t.admin.phoneSettings },
+        { key: "chat-settings", href: "/admin/chat-settings", label: t.admin.chatSettings },
+        { key: "language-settings", href: "/admin/languages", label: t.admin.languageSettings },
         {
+          key: "maintenance-settings",
           href: "/admin/maintenance-settings",
           label: t.admin.maintenanceSettings,
+        },
+        {
+          key: "roles",
+          href: "/admin/roles",
+          label: t.admin.accessControl.rolesNav,
         },
       ],
     },
   ];
+  const menuGroups = allMenuGroups.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => visibleItems.includes(item.key)),
+  })).filter((group) => group.items.length > 0);
 
   const signOut = async () => {
     setIsSigningOut(true);
@@ -113,9 +135,7 @@ export function AdminShell({ children, isAdmin }: AdminShellProps) {
             aria-label={t.admin.title}
             className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto"
           >
-            {isAdmin ? (
-              <>
-                {menuGroups.map(({ key, label, items }) => {
+            {menuGroups.map(({ key, label, items }) => {
                   const isOpen = openMenu === key;
                   const menuId = `admin-${key}-menu`;
 
@@ -163,7 +183,7 @@ export function AdminShell({ children, isAdmin }: AdminShellProps) {
                           }`}
                         >
                           {items.map((item) => {
-                            const isCurrent = pathname === item.href;
+                            const isCurrent = isCurrentAdminItem(pathname, item.key);
 
                             return (
                               <li key={item.href}>
@@ -185,8 +205,6 @@ export function AdminShell({ children, isAdmin }: AdminShellProps) {
                     </div>
                   );
                 })}
-              </>
-            ) : null}
             <button
               type="button"
               onClick={signOut}
@@ -203,4 +221,23 @@ export function AdminShell({ children, isAdmin }: AdminShellProps) {
       </main>
     </div>
   );
+}
+
+function isCurrentAdminItem(pathname: string, key: AdminNavigationItemKey) {
+  if (key === "new-user") return pathname === "/admin/users/new";
+  if (key === "users") {
+    return (
+      pathname === "/admin/users" ||
+      (pathname.startsWith("/admin/users/") && pathname !== "/admin/users/new")
+    );
+  }
+  if (key === "roles") return pathname.startsWith("/admin/roles");
+  const exactPaths: Record<Exclude<AdminNavigationItemKey, "users" | "new-user" | "roles">, string> = {
+    "password-reset-requests": "/admin/password-reset-requests",
+    "phone-settings": "/admin/phone-settings",
+    "chat-settings": "/admin/chat-settings",
+    "language-settings": "/admin/languages",
+    "maintenance-settings": "/admin/maintenance-settings",
+  };
+  return pathname === exactPaths[key];
 }

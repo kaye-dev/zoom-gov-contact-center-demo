@@ -2,6 +2,11 @@
 
 import { useState } from "react";
 
+import {
+  getAdminRoleDisplayDescription,
+  getAdminRoleDisplayName,
+} from "@/app/components/admin/role-display";
+
 import { ContentCopyIcon } from "../../../components/svg/ContentCopyIcon";
 import { useI18n } from "../../../i18n/LanguageProvider";
 
@@ -15,7 +20,18 @@ type CopyFeedback = {
   message: string;
 };
 
-export function NewUserForm() {
+export function NewUserForm({
+  availableRoles,
+  canAssignRoles,
+}: {
+  availableRoles: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    systemKey: "FULL_ACCESS" | "NO_ACCESS" | null;
+  }>;
+  canAssignRoles: boolean;
+}) {
   const { t } = useI18n();
   const [createdUser, setCreatedUser] = useState<CreatedUser | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<CopyFeedback | null>(null);
@@ -37,6 +53,9 @@ export function NewUserForm() {
           name: String(formData.get("name") ?? ""),
           email: String(formData.get("email") ?? ""),
           role: String(formData.get("role") ?? "user"),
+          accessRoleIds: canAssignRoles
+            ? formData.getAll("accessRoleIds").map(String)
+            : [],
         }),
       },
     );
@@ -172,7 +191,42 @@ export function NewUserForm() {
             <option value="user">{t.auth.roleUser}</option>
             <option value="admin">{t.auth.roleAdmin}</option>
           </select>
+          <span className="block text-xs leading-5 text-fg-muted">
+            {t.admin.accessControl.adminAttributeHelp}
+          </span>
         </label>
+        {canAssignRoles ? (
+          <fieldset className="space-y-3">
+            <legend className="text-sm font-semibold">
+              {t.admin.accessControl.assignedRoles}
+            </legend>
+            <p className="text-xs leading-5 text-fg-muted">
+              {t.admin.accessControl.assignedRolesHelp}
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {availableRoles.map((role) => (
+                <label key={role.id} className="flex cursor-pointer items-center gap-3 rounded-md border border-line p-3 has-[:checked]:border-accent has-[:checked]:bg-surface-selected">
+                  <input
+                    type="checkbox"
+                    name="accessRoleIds"
+                    value={role.id}
+                    className="h-5 w-5 shrink-0 cursor-pointer accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  />
+                  <span>
+                    <span className="block font-semibold">
+                      {getAdminRoleDisplayName(role, t.admin.accessControl)}
+                    </span>
+                    {getAdminRoleDisplayDescription(role, t.admin.accessControl) ? (
+                      <span className="mt-1 block text-xs leading-5 text-fg-muted">
+                        {getAdminRoleDisplayDescription(role, t.admin.accessControl)}
+                      </span>
+                    ) : null}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        ) : null}
         {error ? (
           <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">
             {error}

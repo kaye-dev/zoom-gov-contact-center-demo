@@ -29,16 +29,31 @@ type ManagedUser = {
   mustChangePassword: boolean;
 };
 
+type AccessRoleOption = {
+  id: string;
+  name: string;
+  systemKey: "FULL_ACCESS" | "NO_ACCESS" | null;
+};
+
 type UserDetailsViewProps = {
   initialUser: ManagedUser;
   currentUserId: string;
   initialActiveAdminCount: number;
+  accessRoles: {
+    assignmentRevision: number;
+    assignedRoleIds: string[];
+    availableRoles: AccessRoleOption[];
+    canManageAccessRoles: boolean;
+  } | null;
+  canUpdateUser: boolean;
 };
 
 export function UserDetailsView({
   initialUser,
   currentUserId,
   initialActiveAdminCount,
+  accessRoles,
+  canUpdateUser,
 }: UserDetailsViewProps) {
   const { t } = useI18n();
   const router = useRouter();
@@ -59,6 +74,15 @@ export function UserDetailsView({
   const [confirmingPassword, setConfirmingPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [assignmentRevision, setAssignmentRevision] = useState(
+    accessRoles?.assignmentRevision ?? 0,
+  );
+  const [assignedRoleIds, setAssignedRoleIds] = useState(
+    accessRoles?.assignedRoleIds ?? [],
+  );
+  const [savedRoleIds, setSavedRoleIds] = useState(assignedRoleIds);
+  const [isSavingRoles, setIsSavingRoles] = useState(false);
+  const [isEditingAccessRoles, setIsEditingAccessRoles] = useState(false);
 
   const protectedRoleReason = getRoleProtectionReason({
     user,
@@ -263,6 +287,73 @@ export function UserDetailsView({
     },
   ];
 
+  const toggleAccessRole = (roleId: string, checked: boolean) => {
+    setAssignedRoleIds((current) => {
+      if (!checked) return current.filter((id) => id !== roleId);
+      if (roleId === "system-no-access") return [roleId];
+      return [
+        ...new Set([
+          ...current.filter((id) => id !== "system-no-access"),
+          roleId,
+        ]),
+      ];
+    });
+    setError(null);
+    setSuccessMessage(null);
+  };
+
+  const saveAccessRoles = async () => {
+    if (!accessRoles) return;
+    setIsSavingRoles(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        `/api/admin/users/${encodeURIComponent(user.id)}/access-roles`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            roleIds: assignedRoleIds,
+            expectedAssignmentRevision: assignmentRevision,
+          }),
+        },
+      );
+      const body = (await response.json().catch(() => null)) as
+        | {
+            assignment?: { roleIds: string[]; assignmentRevision: number };
+            error?: string;
+          }
+        | null;
+      if (!response.ok || !body?.assignment) {
+        setError(
+          response.status === 409
+            ? t.admin.accessControl.conflictError
+            : t.admin.accessControl.genericError,
+        );
+        return;
+      }
+      setAssignedRoleIds(body.assignment.roleIds);
+      setSavedRoleIds(body.assignment.roleIds);
+      setAssignmentRevision(body.assignment.assignmentRevision);
+      setIsEditingAccessRoles(false);
+      setSuccessMessage(t.admin.accessControl.saved);
+      router.refresh();
+    } catch {
+      setError(t.admin.accessControl.genericError);
+    } finally {
+      setIsSavingRoles(false);
+    }
+  };
+
+  const accessRolesChanged =
+    [...assignedRoleIds].sort().join("\0") !==
+    [...savedRoleIds].sort().join("\0");
+  const accessRolesProtected =
+    user.id === currentUserId || !accessRoles?.canManageAccessRoles;
+  const selectedAccessRoles = accessRoles?.availableRoles.filter((role) =>
+    savedRoleIds.includes(role.id),
+  ) ?? [];
+
   return (
     <section className="mx-auto max-w-4xl space-y-6">
       <Link
@@ -296,7 +387,11 @@ export function UserDetailsView({
           const isEditing = editingField === field;
           const roleEditProtected = field === "role" && protectedRoleReason !== null;
           const editDisabled =
-            editingField !== null || isEditingPassword || roleEditProtected;
+            !canUpdateUser ||
+            editingField !== null ||
+            isEditingPassword ||
+            isEditingAccessRoles ||
+            roleEditProtected;
 
           return (
             <div
@@ -384,6 +479,148 @@ export function UserDetailsView({
             </div>
           );
         })}
+        {accessRoles ? (
+          <div className="grid gap-3 border-b border-line-subtle px-5 py-6 sm:grid-cols-[11rem_minmax(0,1fr)_auto] sm:items-start sm:gap-6">
+            <p className="text-sm font-semibold text-fg-muted">
+              {t.admin.accessControl.assignedRoles}
+            </p>
+            {isEditingAccessRoles ? (
+              <div className="space-y-4 sm:col-span-2">
+                <fieldset
+                  disabled={accessRolesProtected || isSavingRoles}
+                  className="grid gap-3 sm:grid-cols-2"
+                >
+                  <legend className="sr-only">
+                    {t.admin.accessControl.assignedRoles}
+                  </legend>
+                  {accessRoles.availableRoles.map((role) => (
+                    <label
+                      key={role.id}
+                      className="flex cursor-pointer items-center gap-3 rounded-md border border-line p-3 has-[:checked]:border-accent has-[:checked]:bg-surface-selected has-[:disabled]:cursor-not-allowed"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={assignedRoleIds.includes(role.id)}
+                        onChange={(event) =>
+                          toggleAccessRole(role.id, event.target.checked)
+                        }
+                        className="h-5 w-5 shrink-0 cursor-pointer accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed"
+                      />
+                      <span className="min-w-0">
+                        <span className="block font-semibold">
+                          {role.systemKey
+                            ? t.admin.accessControl.systemRoleNames[role.systemKey]
+                            : role.name}
+                        </span>
+                        {role.systemKey ? (
+                          <span className="mt-1 block text-xs leading-5 text-fg-muted">
+                            {t.admin.accessControl.systemRoleDescriptions[role.systemKey]}
+                          </span>
+                        ) : null}
+                      </span>
+                    </label>
+                  ))}
+                </fieldset>
+                {error && !editingField && !isEditingPassword ? (
+                  <p
+                    role="alert"
+                    className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200"
+                  >
+                    {error}
+                  </p>
+                ) : null}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void saveAccessRoles()}
+                    disabled={
+                      accessRolesProtected || isSavingRoles || !accessRolesChanged
+                    }
+                    className="cursor-pointer rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isSavingRoles
+                      ? t.admin.accessControl.saving
+                      : t.admin.accessControl.save}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isSavingRoles) return;
+                      setAssignedRoleIds(savedRoleIds);
+                      setIsEditingAccessRoles(false);
+                      setError(null);
+                    }}
+                    disabled={isSavingRoles}
+                    className="cursor-pointer rounded-md border border-line bg-surface px-4 py-2 text-sm font-semibold hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {t.admin.accessControl.cancel}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="min-w-0">
+                  {selectedAccessRoles.length > 0 ? (
+                    <ul className="flex flex-wrap gap-x-2 gap-y-1">
+                      {selectedAccessRoles.map((role) => (
+                        <li
+                          key={role.id}
+                          title={
+                            role.systemKey
+                              ? t.admin.accessControl.systemRoleDescriptions[role.systemKey]
+                              : undefined
+                          }
+                          className="font-medium"
+                        >
+                          {role.systemKey
+                            ? t.admin.accessControl.systemRoleNames[role.systemKey]
+                            : role.name}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-fg-muted">
+                      {t.admin.accessControl.noAssignedRoles}
+                    </p>
+                  )}
+                  <Link
+                    href={`/admin/users/${encodeURIComponent(user.id)}/access`}
+                    className="mt-2 inline-flex text-sm font-semibold text-accent hover:underline"
+                  >
+                    {t.admin.accessControl.viewAccess}
+                  </Link>
+                  {accessRolesProtected ? (
+                    <p className="mt-2 text-xs leading-5 text-fg-muted">
+                      {t.admin.accessControl.readOnlyRoleAction}
+                    </p>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAssignedRoleIds(savedRoleIds);
+                    setError(null);
+                    setSuccessMessage(null);
+                    setIsEditingAccessRoles(true);
+                  }}
+                  disabled={
+                    accessRolesProtected ||
+                    editingField !== null ||
+                    isEditingPassword
+                  }
+                  title={
+                    accessRolesProtected
+                      ? t.admin.accessControl.readOnlyRoleAction
+                      : undefined
+                  }
+                  className="cursor-pointer justify-self-start rounded-md px-2 py-1 text-sm font-semibold text-accent transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-45 sm:justify-self-end"
+                >
+                  {t.admin.userManagement.edit}
+                </button>
+              </>
+            )}
+          </div>
+        ) : null}
         <div className="grid gap-3 px-5 py-6 sm:grid-cols-[11rem_minmax(0,1fr)_auto] sm:items-start sm:gap-6">
           <p className="text-sm font-semibold text-fg-muted">
             {t.admin.userManagement.password}
@@ -582,7 +819,9 @@ export function UserDetailsView({
                 disabled={
                   editingField !== null ||
                   isEditingPassword ||
-                  passwordResetProtected
+                  isEditingAccessRoles ||
+                  passwordResetProtected ||
+                  !canUpdateUser
                 }
                 title={
                   passwordResetProtected

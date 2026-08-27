@@ -9,7 +9,13 @@ import {
   type CommandRunner,
 } from "./process";
 
-const REVIEWED_MIGRATION_COUNT = 5;
+const REVIEWED_MIGRATION_COUNT = 8;
+const REVIEWED_SCHEMA_INVISIBLE_MIGRATION_HASHES = new Map([
+  [
+    "20260828120000_separate_admin_access_cas_revisions",
+    "1c6be2aaf76e7f185eb8605b16263484aa9de9ec827374f7d58a205349236e27",
+  ],
+]);
 
 export type LocalMigration = {
   name: string;
@@ -117,7 +123,17 @@ export async function createMigrationPlan(
         "Prisma did not confirm the expected pending migrations; refusing to continue.",
       );
     }
-    if (diff.status !== 2 || !predictedDiff) {
+    const reviewedSchemaInvisibleOnly =
+      pending.length > 0 &&
+      pending.every(isReviewedSchemaInvisibleMigration);
+    if (
+      (diff.status !== 2 || !predictedDiff) &&
+      !(
+        reviewedSchemaInvisibleOnly &&
+        diff.status === 0 &&
+        predictedDiff === ""
+      )
+    ) {
       throw new Error(
         "Pending migrations did not produce a schema diff; refusing to infer a safe migration state.",
       );
@@ -130,9 +146,11 @@ export async function createMigrationPlan(
     pending.length === migrations.length &&
     database.userObjects.length === 0;
   const destructive = pending.flatMap((migration) =>
-    migration.destructiveStatements.map(
-      (statement) => `${migration.name}: ${statement}`,
-    ),
+    isReviewedSchemaInvisibleMigration(migration)
+      ? []
+      : migration.destructiveStatements.map(
+          (statement) => `${migration.name}: ${statement}`,
+        ),
   );
   if (destructive.length > 0 && !freshDatabase) {
     throw new Error(
@@ -170,6 +188,15 @@ export async function createMigrationPlan(
     statusSummary: statusOutput,
     totalMigrationCount: migrations.length,
   };
+}
+
+function isReviewedSchemaInvisibleMigration(
+  migration: LocalMigration,
+): boolean {
+  return (
+    REVIEWED_SCHEMA_INVISIBLE_MIGRATION_HASHES.get(migration.name) ===
+    migration.hash
+  );
 }
 
 export function readLocalMigrations(directory: string): LocalMigration[] {

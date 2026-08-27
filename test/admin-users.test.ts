@@ -154,28 +154,55 @@ test("admin password resets validate mode, length, confirmation, and session pol
   }
 });
 
-test("admin user routes use Better Auth lifecycle operations", () => {
+test("admin user routes keep password lifecycle in Better Auth and protect account-state mutations", () => {
   const source = readFileSync(
     new URL("../app/api/[[...route]]/route.ts", import.meta.url),
     "utf8",
   );
+  const authoritySource = readFileSync(
+    new URL(
+      "../lib/server/admin-access/authority-service.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const userPageSources = [
+    readFileSync(new URL("../app/admin/users/page.tsx", import.meta.url), "utf8"),
+    readFileSync(
+      new URL("../app/admin/users/[id]/page.tsx", import.meta.url),
+      "utf8",
+    ),
+  ];
 
   assert.match(source, /app\.patch\("\/admin\/users\/:id"/);
-  assert.match(source, /auth\.api\.adminUpdateUser/);
-  assert.match(source, /auth\.api\.setRole/);
-  assert.match(source, /auth\.api\.banUser/);
-  assert.match(source, /auth\.api\.unbanUser/);
-  assert.match(source, /auth\.api\.removeUser/);
+  assert.match(source, /createAuth\(transaction\)\.api\.adminUpdateUser/);
+  assert.match(source, /updateProtectedAdminUserRole/);
+  assert.match(source, /suspendProtectedAdminUser/);
+  assert.match(source, /reactivateAdminUser/);
+  assert.match(source, /deleteProtectedAdminUser/);
   assert.match(source, /app\.post\("\/admin\/users\/:id\/reset-password"/);
-  assert.match(source, /auth\.api\.setUserPassword/);
-  assert.match(source, /auth\.api\.revokeUserSessions/);
+  assert.match(source, /createAuth\(transaction\)\.api\.setUserPassword/);
+  assert.match(source, /transactionAuth\.api\.revokeUserSessions/);
   assert.match(source, /status: "PENDING"/);
   assert.match(source, /status: "REJECTED"/);
   assert.match(source, /status: "APPROVED"/);
   assert.match(source, /status: "CONSUMED"/);
   assert.match(source, /export const PATCH = handler/);
   assert.match(source, /export const DELETE = handler/);
-  assert.match(source, /NOT: \{ banned: true \}/);
+  assert.match(authoritySource, /FOR UPDATE/);
+  assert.match(authoritySource, /assertRecoveryAdminExists/);
+  assert.match(
+    authoritySource,
+    /OR: \[\{ banned: false \}, \{ banned: null \}\]/,
+  );
+  assert.doesNotMatch(authoritySource, /NOT: \{ banned: true \}/);
+  for (const pageSource of userPageSources) {
+    assert.match(
+      pageSource,
+      /OR: \[\{ banned: false \}, \{ banned: null \}\]/,
+    );
+    assert.doesNotMatch(pageSource, /NOT: \{ banned: true \}/);
+  }
 });
 
 test("all locales include complete user-management copy and errors", () => {

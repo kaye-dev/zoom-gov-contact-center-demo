@@ -28,8 +28,10 @@ type IssuedPassword = {
 
 export function PasswordResetRequestsView({
   requests,
+  canUpdate,
 }: {
   requests: ResetRequest[];
+  canUpdate: boolean;
 }) {
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -141,7 +143,7 @@ export function PasswordResetRequestsView({
                     : "-"}
                 </td>
                 <td className="px-4 py-3">
-                  {request.status === "PENDING" ? (
+                  {request.status === "PENDING" && canUpdate ? (
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
