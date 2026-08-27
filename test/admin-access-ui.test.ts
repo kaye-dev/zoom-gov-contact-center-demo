@@ -32,6 +32,12 @@ test("every locale has the complete access-control catalog and action copy", () 
       copy.adminPageAccessTitle,
       copy.adminPageAccessDescription,
       copy.adminPageColumn,
+      copy.roleNameRequired,
+      copy.roleNameTooLong,
+      copy.editRoleTitle,
+      copy.editRoleDescription,
+      copy.systemRoleReadOnly,
+      copy.reload,
       copy.userAccessHeading,
       copy.adminAttributeHelp,
       copy.assignedRolesHelp,
@@ -87,16 +93,29 @@ test("permission payload requires every supported cell exactly once", () => {
   });
 });
 
-test("role UI creates metadata first and keeps unsupported permission controls disabled", () => {
-  const list = source("../app/admin/roles/RolesView.tsx");
-  const details = source("../app/admin/roles/[id]/RoleDetailsView.tsx");
+test('role UI creates metadata first and keeps unsupported permission controls disabled', () => {
+  const list = source('../app/admin/roles/RolesView.tsx');
+  const modal = source('../app/components/admin/ModalDialog.tsx');
+  const details = source('../app/admin/roles/[id]/RoleDetailsView.tsx');
   assert.match(list, /<ModalDialog/);
   assert.match(list, /JSON\.stringify\(\{ name, description \}\)/);
   assert.match(list, /router\.push\(`\/admin\/roles\/\$\{encodeURIComponent\(body\.role\.id\)\}`\)/);
   assert.match(details, /disabled=\{!editable \|\| !cell\.supported\}/);
-  assert.match(details, /checked=\{cell\.supported && cell\.effect === "ALLOW"\}/);
-  assert.match(details, /checked=\{cell\.supported && cell\.effect === "DENY"\}/);
-  assert.match(details, /resource\.displayPaths\.join/);
+  assert.match(
+    details,
+    /checked=\{cell\.supported && cell\.effect === "ALLOW"\}/,
+  );
+  assert.match(
+    details,
+    /checked=\{cell\.supported && cell\.effect === "DENY"\}/,
+  );
+  assert.match(details, /resource\.displayPaths\.map/);
+  assert.match(details, /title=\{copy\.allow\}/);
+  assert.match(details, /title=\{copy\.deny\}/);
+  assert.match(details, /<span>\{copy\.allow\}<\/span>/);
+  assert.match(details, /<span>\{copy\.deny\}<\/span>/);
+  assert.match(details, /min-h-8 min-w-\[4\.5rem\]/);
+  assert.match(details, /title=\{copy\.editRoleTitle\}/);
   assert.match(details, /role="tablist"/);
   assert.match(details, /role="tab"/);
   assert.match(details, /adminPageAccessTitle/);
@@ -113,6 +132,43 @@ test("role UI creates metadata first and keeps unsupported permission controls d
   assert.match(details, /roleId === "system-no-access"/);
   assert.match(list, /<ConfirmationDialog/);
   assert.match(list, /<DeleteIcon/);
+  assert.match(list, /min-w-\[880px\]/);
+  assert.match(list, /w-\[24%\]/);
+  assert.match(list, /min-h-10 min-w-10/);
+  assert.match(list, /flex flex-col-reverse gap-3 pt-2 sm:flex-row/);
+  assert.match(list, /h-32 min-h-24 max-h-32/);
+  assert.match(modal, /max-h-\[calc\(100dvh-2rem\)\]/);
+  assert.match(modal, /aria-busy=\{locked\}/);
+  assert.match(list, /ROLE_NAME_REQUIRED/);
+  assert.match(list, /ROLE_NAME_TOO_LONG/);
+  assert.match(list, /copy\.roleNameRequired/);
+  assert.match(list, /copy\.roleNameTooLong/);
+  assert.match(list, /create-role-name-error/);
+  assert.match(list, /aria-invalid=\{nameError !== null\}/);
+  assert.match(
+    list,
+    /aria-describedby=\{nameError \? 'create-role-name-error' : undefined\}/,
+  );
+  assert.match(
+    list,
+    /requestAnimationFrame\(\(\) => nameRef\.current\?\.focus\(\)\)/,
+  );
+  assert.match(details, /ROLE_NAME_REQUIRED/);
+  assert.match(details, /ROLE_NAME_TOO_LONG/);
+  assert.match(details, /copy\.roleNameRequired/);
+  assert.match(details, /copy\.roleNameTooLong/);
+  assert.match(details, /aria-invalid=\{metadataNameError !== null\}/);
+  assert.match(
+    details,
+    /aria-describedby=\{\s*metadataNameError \? 'edit-role-name-error' : undefined\s*\}/,
+  );
+  assert.match(
+    details,
+    /requestAnimationFrame\(\(\) => metadataNameRef\.current\?\.focus\(\)\)/,
+  );
+  assert.match(details, /role-saving-reason/);
+  assert.match(details, /disabled=\{locked\}/);
+  assert.match(details, /disabled=\{disabled \|\| page <= 1\}/);
   assert.match(list, />—<\/span>/);
   assert.doesNotMatch(details, /<ConfirmationDialog/);
   assert.doesNotMatch(details, /window\.confirm/);
@@ -136,6 +192,20 @@ test("role and user screens follow the compact prototype structure without rever
   assert.doesNotMatch(access, /<article/);
   assert.match(userDetails, /isEditingAccessRoles/);
   assert.match(userDetails, /viewAccess/);
+  assert.match(userDetails, /userManagement\.name/);
+  assert.match(userDetails, /userManagement\.accessRoles/);
+  assert.match(userDetails, /userManagement\.detailsDescription/);
+  assert.match(userDetails, /userManagement\.detailsReadOnly/);
+  assert.match(userDetails, /accessControl\.adminAttributeHelp/);
+  assert.match(userDetails, /accessControl\.assignedRolesHelp/);
+  assert.match(userDetails, /userManagement\.passwordVisibilityHelp/);
+  assert.match(userDetails, /id=\{`user-\$\{field\}-label`\}/);
+  assert.equal(
+    userDetails.match(/aria-labelledby=\{`user-\$\{field\}-label`\}/g)?.length,
+    2,
+  );
+  assert.match(userDetails, /rounded-full px-2\.5 py-1 text-xs/);
+  assert.doesNotMatch(userDetails, /sm:ml-auto/);
   assert.doesNotMatch(userDetails, /<section className="space-y-4 rounded-xl/);
 
   const nameIndex = createUser.indexOf('name="name"');

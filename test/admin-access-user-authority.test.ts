@@ -648,11 +648,8 @@ test("user details do not fetch or serialize access roles without both read perm
   assert.doesNotMatch(managedUserType, /accessRoleAssignments/);
   assert.match(viewSource, /\{accessRoles \? \(/);
   assert.match(viewSource, /accessRoles\.availableRoles\.map/);
-  assert.match(viewSource, /systemRoleNames\[role\.systemKey\]/);
-  assert.match(
-    viewSource,
-    /systemRoleDescriptions\[\s*role\.systemKey\s*\]/,
-  );
+  assert.match(viewSource, /systemRoleNames\[\s*role\.systemKey\s*\]/);
+  assert.match(viewSource, /systemRoleDescriptions\[\s*role\.systemKey\s*\]/);
 });
 
 test("role and assignment mutations enforce the potentially active authority ceiling", async () => {

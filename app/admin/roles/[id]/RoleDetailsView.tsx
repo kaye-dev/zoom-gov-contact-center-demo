@@ -92,6 +92,7 @@ export function RoleDetailsView({
   const { t } = useI18n();
   const copy = t.admin.accessControl;
   const router = useRouter();
+  const metadataNameRef = useRef<HTMLInputElement>(null);
   const [role, setRole] = useState(initialRole);
   const [section, setSection] = useState<"settings" | "members">("settings");
   const [isEditingMetadata, setIsEditingMetadata] = useState(false);
@@ -100,6 +101,10 @@ export function RoleDetailsView({
   const [matrix, setMatrix] = useState(role.matrix);
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [metadataError, setMetadataError] = useState<string | null>(null);
+  const [metadataNameError, setMetadataNameError] = useState<string | null>(
+    null,
+  );
   const editable = canUpdate && role.systemKey === null;
   const displayName = getAdminRoleDisplayName(role, copy);
   const displayDescription = getAdminRoleDisplayDescription(role, copy);
@@ -216,7 +221,8 @@ export function RoleDetailsView({
   const saveMetadata = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsSaving(true);
-    setFeedback(null);
+    setMetadataError(null);
+    setMetadataNameError(null);
     try {
       const response = await fetch(`/api/admin/roles/${encodeURIComponent(role.id)}`, {
         method: "PATCH",
@@ -227,8 +233,21 @@ export function RoleDetailsView({
         | { role?: Pick<RoleDetails, "name" | "description" | "revision">; error?: string }
         | null;
       if (!response.ok || !body?.role) {
-        setFeedback(
-          body?.error === "ROLE_NAME_CONFLICT"
+        if (
+          body?.error === 'ROLE_NAME_REQUIRED' ||
+          body?.error === 'ROLE_NAME_TOO_LONG'
+        ) {
+          setMetadataNameError(
+            body.error === 'ROLE_NAME_REQUIRED'
+              ? copy.roleNameRequired
+              : copy.roleNameTooLong,
+          );
+          setIsSaving(false);
+          window.requestAnimationFrame(() => metadataNameRef.current?.focus());
+          return;
+        }
+        setMetadataError(
+          body?.error === 'ROLE_NAME_CONFLICT'
             ? copy.duplicateError
             : response.status === 409
               ? copy.conflictError
@@ -241,82 +260,265 @@ export function RoleDetailsView({
       setFeedback(copy.saved);
       router.refresh();
     } catch {
-      setFeedback(copy.genericError);
+      setMetadataError(copy.genericError);
     } finally {
       setIsSaving(false);
     }
   };
 
+  const openMetadataEditor = () => {
+    setName(role.name);
+    setDescription(role.description ?? '');
+    setMetadataError(null);
+    setMetadataNameError(null);
+    setIsEditingMetadata(true);
+  };
+
+  const closeMetadataEditor = () => {
+    if (isSaving) return;
+    setMetadataError(null);
+    setMetadataNameError(null);
+    setIsEditingMetadata(false);
+  };
+
   return (
-    <section className="space-y-6">
-      <Link href="/admin/roles" className="font-semibold text-accent hover:underline">
+    <section className="mx-auto min-w-0 max-w-6xl overflow-x-hidden">
+      <Link
+        href="/admin/roles"
+        className="inline-flex text-sm font-semibold text-accent transition-colors hover:text-primary-700 dark:hover:text-primary-300"
+      >
         ← {copy.backToRoles}
       </Link>
 
-      <div className="flex flex-wrap items-start gap-4">
-        {isEditingMetadata ? (
-          <form onSubmit={saveMetadata} className="grid w-full max-w-2xl gap-4">
-            <label className="space-y-2 text-sm font-semibold">
-              <span>{copy.roleName}</span>
-              <input required maxLength={64} value={name} onChange={(event) => setName(event.target.value)} disabled={isSaving} className="w-full rounded-md border border-line bg-surface px-3 py-2 font-normal outline-none focus:border-accent focus:ring-2 focus:ring-accent/30" />
-            </label>
-            <label className="space-y-2 text-sm font-semibold">
-              <span>{copy.descriptionOptional}</span>
-              <textarea rows={3} maxLength={100} value={description} onChange={(event) => setDescription(event.target.value)} disabled={isSaving} className="w-full resize-y rounded-md border border-line bg-surface px-3 py-2 font-normal outline-none focus:border-accent focus:ring-2 focus:ring-accent/30" />
-            </label>
-            <div className="flex gap-3">
-              <button type="button" onClick={() => setIsEditingMetadata(false)} disabled={isSaving} className="cursor-pointer rounded-md border border-line px-4 py-2 font-semibold hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50">{copy.cancel}</button>
-              <button type="submit" disabled={isSaving} className="cursor-pointer rounded-md bg-primary px-4 py-2 font-semibold text-white hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50">{isSaving ? copy.saving : copy.save}</button>
-            </div>
-          </form>
-        ) : (
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-2xl font-bold">{displayName}</h1>
-              {role.systemKey ? <span className="rounded-full bg-surface-accent-subtle px-2 py-1 text-xs font-semibold text-accent">{copy.systemRole}</span> : null}
-              {editable ? (
-                <button type="button" onClick={() => setIsEditingMetadata(true)} aria-label={`${copy.edit}: ${displayName}`} className="cursor-pointer rounded-md p-2 text-fg-muted hover:bg-surface-hover hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
-                  <EditSquareIcon className="h-5 w-5" />
-                </button>
-              ) : null}
-            </div>
-            <p className="text-sm leading-6 text-fg-muted">{displayDescription ?? "—"}</p>
+      <div className="mt-5 flex flex-wrap items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="break-words text-2xl font-bold">{displayName}</h1>
+            {role.systemKey ? (
+              <span className="inline-flex rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-700 dark:bg-gray-700 dark:text-gray-100">
+                {copy.systemRole}
+              </span>
+            ) : null}
+            {editable ? (
+              <button
+                type="button"
+                onClick={openMetadataEditor}
+                disabled={isSaving}
+                aria-describedby={isSaving ? 'role-saving-reason' : undefined}
+                aria-label={`${copy.edit}: ${displayName}`}
+                className="inline-flex min-h-10 min-w-10 cursor-pointer items-center justify-center rounded-md text-fg-muted transition-colors hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                <EditSquareIcon className="h-6 w-6" />
+              </button>
+            ) : null}
+            {isSaving ? (
+              <span id="role-saving-reason" className="sr-only">
+                {copy.saving}
+              </span>
+            ) : null}
           </div>
-        )}
+          <p className="mt-2 text-sm leading-6 text-fg-muted">
+            {displayDescription ?? '—'}
+          </p>
+        </div>
       </div>
 
-      <nav role="tablist" aria-label={copy.listTitle} className="flex gap-6 border-b border-line">
-        <button id="role-settings-tab" role="tab" type="button" tabIndex={section === "settings" ? 0 : -1} onClick={() => selectSection("settings")} onKeyDown={handleTabKeyDown} aria-selected={section === "settings"} aria-controls="role-settings-panel" className={`cursor-pointer border-b-2 px-1 py-3 font-semibold ${section === "settings" ? "border-accent text-accent" : "border-transparent text-fg-muted"}`}>{copy.settingsTab}</button>
+      {!editable ? (
+        <p
+          role="status"
+          className="mt-4 rounded-md border border-line bg-surface-accent-subtle px-4 py-3 text-sm font-semibold text-accent"
+        >
+          {role.systemKey ? copy.systemRoleReadOnly : copy.readOnlyRoleAction}
+        </p>
+      ) : null}
+
+      <nav
+        role="tablist"
+        aria-label={copy.listTitle}
+        className="mt-6 border-b border-line"
+      >
+        <button
+          id="role-settings-tab"
+          role="tab"
+          type="button"
+          tabIndex={section === 'settings' ? 0 : -1}
+          onClick={() => selectSection('settings')}
+          onKeyDown={handleTabKeyDown}
+          aria-selected={section === 'settings'}
+          aria-controls="role-settings-panel"
+          className={`inline-flex cursor-pointer border-b-2 px-3 py-3 text-sm font-semibold ${section === 'settings' ? 'border-accent text-accent' : 'border-transparent text-fg-muted hover:text-accent'}`}
+        >
+          {copy.settingsTab}
+        </button>
         {canViewMembers ? (
-          <button id="role-members-tab" role="tab" type="button" tabIndex={section === "members" ? 0 : -1} onClick={() => selectSection("members")} onKeyDown={handleTabKeyDown} aria-selected={section === "members"} aria-controls="role-members-panel" className={`cursor-pointer border-b-2 px-1 py-3 font-semibold ${section === "members" ? "border-accent text-accent" : "border-transparent text-fg-muted"}`}>{copy.membersTab}</button>
+          <button
+            id="role-members-tab"
+            role="tab"
+            type="button"
+            tabIndex={section === 'members' ? 0 : -1}
+            onClick={() => selectSection('members')}
+            onKeyDown={handleTabKeyDown}
+            aria-selected={section === 'members'}
+            aria-controls="role-members-panel"
+            className={`inline-flex cursor-pointer border-b-2 px-3 py-3 text-sm font-semibold ${section === 'members' ? 'border-accent text-accent' : 'border-transparent text-fg-muted hover:text-accent'}`}
+          >
+            {copy.membersTab}
+          </button>
         ) : null}
       </nav>
 
-      {feedback ? <p role={feedback === copy.saved ? "status" : "alert"} className="rounded-md border border-line bg-surface-raised px-4 py-3 text-sm">{feedback}</p> : null}
-
-      {section === "settings" ? (
-        <div id="role-settings-panel" role="tabpanel" aria-labelledby="role-settings-tab" className="space-y-5">
-          <div className="space-y-2">
-            <h2 className="text-xl font-bold">{copy.adminPageAccessTitle}</h2>
-            <p className="max-w-4xl text-sm leading-6 text-fg-muted">{copy.adminPageAccessDescription}</p>
+      <div className="mt-6">
+        {feedback ? (
+          <div
+            role={feedback === copy.saved ? 'status' : 'alert'}
+            className={`mb-5 rounded-md border px-4 py-3 text-sm font-semibold ${
+              feedback === copy.saved
+                ? 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200'
+                : feedback === copy.conflictError
+                  ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-100'
+                  : 'border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200'
+            }`}
+          >
+            <p>{feedback}</p>
+            {feedback === copy.conflictError ? (
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="mt-3 cursor-pointer rounded-md border border-current px-3 py-2 text-sm font-semibold"
+              >
+                {copy.reload}
+              </button>
+            ) : null}
           </div>
-          <PermissionMatrix matrix={matrix} editable={editable && !isSaving} onChange={setEffect} />
-          {editable ? (
-            <div className="flex justify-end">
-              <button type="button" onClick={savePermissions} disabled={!changed || isSaving} className="cursor-pointer rounded-md bg-primary px-5 py-2.5 font-semibold text-white hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50">{isSaving ? copy.saving : copy.save}</button>
+        ) : null}
+
+        {section === 'settings' ? (
+          <div
+            id="role-settings-panel"
+            role="tabpanel"
+            aria-labelledby="role-settings-tab"
+            className="space-y-5"
+          >
+            <div className="space-y-2">
+              <h2 className="text-xl font-bold">{copy.adminPageAccessTitle}</h2>
+              <p className="text-sm leading-6 text-fg-muted">
+                {copy.adminPageAccessDescription}
+              </p>
             </div>
-          ) : null}
-        </div>
-      ) : canViewMembers ? (
-        <div id="role-members-panel" role="tabpanel" aria-labelledby="role-members-tab">
-          <MembersPanel
-            roleId={role.id}
-            memberCount={role.memberCount}
-            currentUserId={currentUserId}
-            canManageMembers={canManageMembers}
-            onMemberCountChange={handleMemberCountChange}
-          />
-        </div>
+            <PermissionMatrix
+              matrix={matrix}
+              editable={editable && !isSaving}
+              onChange={setEffect}
+            />
+            {editable ? (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={savePermissions}
+                  disabled={!changed || isSaving}
+                  className="cursor-pointer rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isSaving ? copy.saving : copy.save}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : canViewMembers ? (
+          <div
+            id="role-members-panel"
+            role="tabpanel"
+            aria-labelledby="role-members-tab"
+          >
+            <MembersPanel
+              roleId={role.id}
+              memberCount={role.memberCount}
+              currentUserId={currentUserId}
+              canManageMembers={canManageMembers}
+              onMemberCountChange={handleMemberCountChange}
+            />
+          </div>
+        ) : null}
+      </div>
+
+      {isEditingMetadata ? (
+        <ModalDialog
+          title={copy.editRoleTitle}
+          description={copy.editRoleDescription}
+          locked={isSaving}
+          initialFocusRef={metadataNameRef}
+          onRequestClose={closeMetadataEditor}
+        >
+          <form onSubmit={saveMetadata} className="mt-5 space-y-4">
+            <label htmlFor="edit-role-name" className="block space-y-2">
+              <span className="text-sm font-semibold">{copy.roleName}</span>
+              <input
+                ref={metadataNameRef}
+                id="edit-role-name"
+                required
+                maxLength={64}
+                value={name}
+                onChange={(event) => {
+                  setName(event.target.value);
+                  setMetadataNameError(null);
+                }}
+                disabled={isSaving}
+                aria-invalid={metadataNameError !== null}
+                aria-describedby={
+                  metadataNameError ? 'edit-role-name-error' : undefined
+                }
+                className="w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
+              />
+              {metadataNameError ? (
+                <p
+                  id="edit-role-name-error"
+                  role="alert"
+                  className="text-sm font-semibold text-red-700 dark:text-red-200"
+                >
+                  {metadataNameError}
+                </p>
+              ) : null}
+            </label>
+            <label htmlFor="edit-role-description" className="block space-y-2">
+              <span className="text-sm font-semibold">
+                {copy.descriptionOptional}
+              </span>
+              <textarea
+                id="edit-role-description"
+                rows={4}
+                maxLength={100}
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                disabled={isSaving}
+                className="h-32 min-h-24 max-h-32 w-full resize-y rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
+              />
+            </label>
+            {metadataError ? (
+              <p
+                role="alert"
+                className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200"
+              >
+                {metadataError}
+              </p>
+            ) : null}
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={closeMetadataEditor}
+                disabled={isSaving}
+                className="cursor-pointer rounded-md border border-line bg-surface px-4 py-2 text-sm font-semibold transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {copy.cancel}
+              </button>
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="cursor-pointer rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isSaving ? copy.saving : copy.save}
+              </button>
+            </div>
+          </form>
+        </ModalDialog>
       ) : null}
     </section>
   );
@@ -334,56 +536,67 @@ function PermissionMatrix({
   const { t } = useI18n();
   const copy = t.admin.accessControl;
   return (
-    <div className="overflow-x-auto border-y border-line bg-surface-raised">
-      <table className="w-full min-w-[980px] border-collapse text-left text-sm">
-        <thead>
-          <tr className="border-b border-line text-fg-muted">
-            <th scope="col" className="w-[38%] px-4 py-3 font-semibold">
+    <div className="max-w-full overflow-x-auto rounded-lg border border-line">
+      <table className="w-full min-w-[980px] divide-y divide-line-subtle text-left text-sm">
+        <thead className="bg-surface-raised">
+          <tr>
+            <th scope="col" className="px-4 py-3 font-semibold">
               {copy.adminPageColumn}
             </th>
-            {(["VIEW", "CREATE", "UPDATE", "DELETE"] as const).map(
-              (action) => (
-                <th
-                  key={action}
-                  scope="col"
-                  className="w-[15.5%] px-3 py-3 text-center font-semibold"
-                >
-                  {copy.actionLabels[action]}
-                </th>
-              ),
-            )}
+            {(['VIEW', 'CREATE', 'UPDATE', 'DELETE'] as const).map((action) => (
+              <th
+                key={action}
+                scope="col"
+                className="w-28 px-3 py-3 text-center font-semibold"
+              >
+                {copy.actionLabels[action]}
+              </th>
+            ))}
           </tr>
         </thead>
-        <tbody>
+        <tbody className="divide-y divide-line-subtle">
           {matrix.map((resource) => (
-            <tr
-              key={resource.resourceKey}
-              className="border-b border-line last:border-b-0"
-            >
+            <tr key={resource.resourceKey}>
               <th scope="row" className="px-4 py-4 align-top font-normal">
                 <span className="block font-semibold text-fg">
                   {copy.resourceTitles[resource.resourceKey]}
                 </span>
-                <span className="mt-1 block text-xs leading-5 text-fg-muted">
+                <span className="mt-1 block leading-6 text-fg-muted">
                   {copy.resourceDescriptions[resource.resourceKey]}
                 </span>
-                <span className="mt-1 block break-all text-xs text-fg-muted">
-                  <span className="font-semibold">{copy.path}:</span>{" "}
-                  {resource.displayPaths.join(", ")}
+                <span className="mt-2 block space-y-1 text-xs">
+                  <span className="block font-semibold text-fg-muted">
+                    {copy.path}
+                  </span>
+                  <span className="block">
+                    {resource.displayPaths.map((path) => (
+                      <code key={path} className="mr-2 inline-block break-all">
+                        {path}
+                      </code>
+                    ))}
+                  </span>
                 </span>
               </th>
               {resource.actions.map((cell) => {
                 const unsupportedId = `${resource.resourceKey}-${cell.action}-unsupported`;
                 const cellLabel = `${copy.resourceTitles[resource.resourceKey]} / ${copy.actionLabels[cell.action]}`;
                 return (
-                  <td key={cell.action} className="px-3 py-4 align-top">
+                  <td
+                    key={cell.action}
+                    className="px-3 py-4 text-center align-top"
+                  >
                     <fieldset
                       disabled={!editable || !cell.supported}
-                      aria-describedby={!cell.supported ? unsupportedId : undefined}
-                      className="mx-auto w-fit min-w-24 space-y-2"
+                      aria-describedby={
+                        !cell.supported ? unsupportedId : undefined
+                      }
+                      className="mx-auto inline-flex flex-col items-start justify-center gap-1"
                     >
                       <legend className="sr-only">{cellLabel}</legend>
-                      <label className="flex cursor-pointer items-center gap-2 whitespace-nowrap has-[:disabled]:cursor-not-allowed">
+                      <label
+                        title={copy.allow}
+                        className="inline-flex min-h-8 min-w-[4.5rem] cursor-pointer items-center gap-1.5 rounded-md px-1.5 text-xs font-semibold transition-colors hover:bg-surface-hover has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
+                      >
                         <input
                           type="checkbox"
                           checked={cell.supported && cell.effect === "ALLOW"}
@@ -400,7 +613,10 @@ function PermissionMatrix({
                         />
                         <span>{copy.allow}</span>
                       </label>
-                      <label className="flex cursor-pointer items-center gap-2 whitespace-nowrap has-[:disabled]:cursor-not-allowed">
+                      <label
+                        title={copy.deny}
+                        className="inline-flex min-h-8 min-w-[4.5rem] cursor-pointer items-center gap-1.5 rounded-md px-1.5 text-xs font-semibold transition-colors hover:bg-surface-hover has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
+                      >
                         <input
                           type="checkbox"
                           checked={cell.supported && cell.effect === "DENY"}
@@ -419,13 +635,9 @@ function PermissionMatrix({
                       </label>
                     </fieldset>
                     {!cell.supported ? (
-                      <p id={unsupportedId} className="mt-2 text-center text-xs text-fg-muted">
+                      <span id={unsupportedId} className="sr-only">
                         {copy.unsupported}
-                      </p>
-                    ) : cell.effect === null ? (
-                      <p className="mt-2 text-center text-xs text-fg-muted">
-                        {copy.unset}
-                      </p>
+                      </span>
                     ) : null}
                   </td>
                 );
@@ -537,50 +749,127 @@ function MembersPanel({
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start gap-3">
+      {!canManageMembers ? (
+        <p
+          id="member-read-only-reason"
+          role="status"
+          className="rounded-md border border-line bg-surface-accent-subtle px-4 py-3 text-sm font-semibold text-accent"
+        >
+          {copy.readOnlyRoleAction}
+        </p>
+      ) : null}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
         <div>
           <h2 className="text-xl font-bold">{copy.membersTab}</h2>
           <p className="mt-1 text-sm text-fg-muted">
             {memberCount} {copy.memberCount}
           </p>
         </div>
-        {canManageMembers ? (
-          <button type="button" onClick={() => setIsCandidateOpen(true)} className="cursor-pointer rounded-md bg-primary px-4 py-2 font-semibold text-white hover:bg-primary-900 sm:ml-auto">+ {copy.assignUsers}</button>
-        ) : null}
+        <button
+          type="button"
+          onClick={() => setIsCandidateOpen(true)}
+          disabled={!canManageMembers}
+          aria-describedby={
+            !canManageMembers ? 'member-read-only-reason' : undefined
+          }
+          className="cursor-pointer rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50 sm:ml-auto"
+        >
+          {copy.assignUsers}
+        </button>
       </div>
 
       <div>
-        <form onSubmit={search} className="flex min-w-0 flex-wrap gap-3">
-          <label className="min-w-0 flex-1 sm:max-w-md">
+        <form
+          onSubmit={search}
+          className="flex min-w-0 flex-col gap-3 sm:flex-row"
+        >
+          <label className="min-w-0 flex-1">
             <span className="sr-only">{t.admin.search}</span>
             <input
               value={draftQuery}
               onChange={(event) => setDraftQuery(event.target.value)}
               maxLength={100}
               placeholder={copy.memberSearchPlaceholder}
-              className="w-full rounded-md border border-line bg-surface px-3 py-2 outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
+              className="w-full rounded-md border border-line bg-surface px-3 py-2 outline-none focus:border-accent focus:ring-2 focus:ring-accent/30 disabled:cursor-not-allowed disabled:opacity-60"
             />
           </label>
-          <button type="submit" className="cursor-pointer rounded-md bg-primary px-4 py-2 font-semibold text-white hover:bg-primary-900">{t.admin.search}</button>
+          <button
+            type="submit"
+            className="cursor-pointer rounded-md border border-line bg-surface-raised px-4 py-2 text-sm font-semibold hover:bg-surface-hover"
+          >
+            {t.admin.search}
+          </button>
           {query ? (
-            <button type="button" onClick={() => { setDraftQuery(""); setQuery(""); setPage(1); }} className="cursor-pointer rounded-md border border-line px-4 py-2 font-semibold hover:bg-surface-hover">{t.admin.clear}</button>
+            <button
+              type="button"
+              onClick={() => {
+                setDraftQuery('');
+                setQuery('');
+                setPage(1);
+              }}
+              className="cursor-pointer rounded-md border border-line px-4 py-2 text-sm font-semibold hover:bg-surface-hover"
+            >
+              {t.admin.clear}
+            </button>
           ) : null}
         </form>
       </div>
 
-      {error ? <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">{error}</p> : null}
-      {isLoading ? <p role="status" className="py-8 text-center text-fg-muted">{copy.loading}</p> : (
-        <div className="overflow-x-auto border-y border-line bg-surface-raised">
-          <table className="w-full min-w-[820px] text-left text-sm">
-            <thead><tr className="border-b border-line text-fg-muted"><th scope="col" className="px-4 py-3">{t.admin.name}</th><th scope="col" className="px-4 py-3">{t.admin.email}</th><th scope="col" className="px-4 py-3">{t.admin.role}</th><th scope="col" className="px-4 py-3">{t.admin.status}</th><th scope="col" className="px-4 py-3 text-right">{copy.actions}</th></tr></thead>
-            <tbody>
+      {error ? (
+        <p
+          role="alert"
+          className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200"
+        >
+          {error}
+        </p>
+      ) : null}
+      {isLoading ? (
+        <p role="status" className="py-8 text-center text-fg-muted">
+          {copy.loading}
+        </p>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-line">
+          <table className="w-full min-w-[760px] divide-y divide-line-subtle text-left text-sm">
+            <thead className="bg-surface-raised">
+              <tr>
+                <th scope="col" className="px-4 py-3 font-semibold">
+                  {t.admin.name}
+                </th>
+                <th scope="col" className="px-4 py-3 font-semibold">
+                  {t.admin.email}
+                </th>
+                <th scope="col" className="px-4 py-3 font-semibold">
+                  {t.admin.role}
+                </th>
+                <th scope="col" className="px-4 py-3 font-semibold">
+                  {t.admin.status}
+                </th>
+                <th scope="col" className="px-4 py-3 text-right font-semibold">
+                  {copy.actions}
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line-subtle">
               {result?.members.map((member) => (
-                <tr key={member.id} className="border-b border-line last:border-0">
-                  <td className="px-4 py-3 font-semibold"><Link href={`/admin/users/${encodeURIComponent(member.id)}`} className="text-accent hover:underline">{member.name}</Link></td>
-                  <td className="px-4 py-3 text-fg-muted">{member.email}</td>
-                  <td className="px-4 py-3">{member.adminAttribute === "admin" ? t.auth.roleAdmin : t.auth.roleUser}</td>
-                  <td className="px-4 py-3"><StatusBadge banned={member.banned} /></td>
-                  <td className="px-4 py-3 text-right">
+                <tr key={member.id}>
+                  <td className="px-4 py-4 font-semibold">
+                    <Link
+                      href={`/admin/users/${encodeURIComponent(member.id)}`}
+                      className="text-accent hover:underline"
+                    >
+                      {member.name}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-4">{member.email}</td>
+                  <td className="px-4 py-4">
+                    {member.adminAttribute === 'admin'
+                      ? t.auth.roleAdmin
+                      : t.auth.roleUser}
+                  </td>
+                  <td className="px-4 py-4">
+                    <StatusBadge banned={member.banned} />
+                  </td>
+                  <td className="px-4 py-4 text-right">
                     {canManageMembers ? (
                       <button type="button" onClick={() => void removeAssignment(member)} disabled={pendingUserId !== null || member.id === currentUserId} title={member.id === currentUserId ? t.admin.userManagement.selfProtected : undefined} className="cursor-pointer rounded-md px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950/40">{copy.removeAssignment}</button>
                     ) : null}
@@ -713,12 +1002,13 @@ function CandidateDialog({
       setPendingUserId(null);
     }
   };
+  const locked = pendingUserId !== null;
 
   return (
     <ModalDialog
       title={copy.candidateDialogTitle}
       description={copy.candidateDialogDescription}
-      locked={pendingUserId !== null}
+      locked={locked}
       initialFocusRef={inputRef}
       onRequestClose={onClose}
       maxWidthClassName="max-w-3xl"
@@ -732,12 +1022,32 @@ function CandidateDialog({
               value={draftQuery}
               onChange={(event) => setDraftQuery(event.target.value)}
               maxLength={100}
+              disabled={locked}
               placeholder={copy.candidateSearchPlaceholder}
               className="w-full rounded-md border border-line bg-surface px-3 py-2 outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
             />
           </label>
-          <button type="submit" disabled={pendingUserId !== null} className="cursor-pointer rounded-md bg-primary px-4 py-2 font-semibold text-white hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50">{t.admin.search}</button>
-          {query ? <button type="button" onClick={() => { setDraftQuery(""); setQuery(""); setPage(1); }} disabled={pendingUserId !== null} className="cursor-pointer rounded-md border border-line px-4 py-2 font-semibold hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50">{t.admin.clear}</button> : null}
+          <button
+            type="submit"
+            disabled={locked}
+            className="cursor-pointer rounded-md bg-primary px-4 py-2 font-semibold text-white hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {t.admin.search}
+          </button>
+          {query ? (
+            <button
+              type="button"
+              onClick={() => {
+                setDraftQuery('');
+                setQuery('');
+                setPage(1);
+              }}
+              disabled={locked}
+              className="cursor-pointer rounded-md border border-line px-4 py-2 font-semibold hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {t.admin.clear}
+            </button>
+          ) : null}
         </form>
 
         {error ? <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">{error}</p> : null}
@@ -747,12 +1057,34 @@ function CandidateDialog({
               <thead className="sticky top-0 bg-surface-raised"><tr className="border-b border-line text-sm text-fg-muted"><th scope="col" className="px-4 py-3">{t.admin.name}</th><th scope="col" className="px-4 py-3">{t.admin.email}</th><th scope="col" className="px-4 py-3">{t.admin.role}</th><th scope="col" className="px-4 py-3">{t.admin.status}</th><th scope="col" className="px-4 py-3 text-right">{copy.actions}</th></tr></thead>
               <tbody>
                 {result?.candidates.map((candidate) => (
-                  <tr key={candidate.id} className="border-b border-line last:border-0">
-                    <td className="px-4 py-3 font-semibold">{candidate.name}</td>
-                    <td className="px-4 py-3 text-sm text-fg-muted">{candidate.email}</td>
-                    <td className="px-4 py-3 text-sm">{candidate.adminAttribute === "admin" ? t.auth.roleAdmin : t.auth.roleUser}</td>
-                    <td className="px-4 py-3"><StatusBadge banned={candidate.banned} /></td>
-                    <td className="px-4 py-3 text-right"><button type="button" onClick={() => void assign(candidate)} disabled={pendingUserId !== null} className="cursor-pointer rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50">{copy.assign}</button></td>
+                  <tr
+                    key={candidate.id}
+                    className="border-b border-line last:border-0"
+                  >
+                    <td className="px-4 py-3 font-semibold">
+                      {candidate.name}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-fg-muted">
+                      {candidate.email}
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      {candidate.adminAttribute === 'admin'
+                        ? t.auth.roleAdmin
+                        : t.auth.roleUser}
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge banned={candidate.banned} />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => void assign(candidate)}
+                        disabled={locked}
+                        className="cursor-pointer rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {copy.assign}
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {result?.candidates.length === 0 ? <tr><td colSpan={5} className="px-4 py-10 text-center text-fg-muted">{copy.noCandidates}</td></tr> : null}
@@ -760,9 +1092,23 @@ function CandidateDialog({
             </table>
           </div>
         )}
-        {result && result.totalPages > 1 ? <DirectoryPagination page={result.page} totalPages={result.totalPages} onChange={setPage} /> : null}
+        {result && result.totalPages > 1 ? (
+          <DirectoryPagination
+            page={result.page}
+            totalPages={result.totalPages}
+            onChange={setPage}
+            disabled={locked}
+          />
+        ) : null}
         <div className="flex justify-end">
-          <button type="button" onClick={onClose} disabled={pendingUserId !== null} className="cursor-pointer rounded-md border border-line px-4 py-2 font-semibold hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50">{copy.cancel}</button>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={locked}
+            className="cursor-pointer rounded-md border border-line px-4 py-2 font-semibold hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {copy.cancel}
+          </button>
         </div>
       </div>
     </ModalDialog>
@@ -775,8 +1121,8 @@ function StatusBadge({ banned }: { banned: boolean }) {
     <span
       className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
         banned
-          ? "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-100"
-          : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-200"
+          ? 'bg-red-100 text-red-800 dark:bg-red-950/70 dark:text-red-200'
+          : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-200'
       }`}
     >
       {banned
@@ -790,17 +1136,40 @@ function DirectoryPagination({
   page,
   totalPages,
   onChange,
+  disabled = false,
 }: {
   page: number;
   totalPages: number;
   onChange: (page: number) => void;
+  disabled?: boolean;
 }) {
   const { t } = useI18n();
   return (
-    <nav aria-label={t.admin.page} className="flex items-center justify-center gap-3">
-      <button type="button" onClick={() => onChange(page - 1)} disabled={page <= 1} className="cursor-pointer rounded-md border border-line px-4 py-2 font-semibold hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50">{t.admin.previous}</button>
-      <span className="text-sm text-fg-muted">{t.admin.page} {page} / {totalPages}</span>
-      <button type="button" onClick={() => onChange(page + 1)} disabled={page >= totalPages} className="cursor-pointer rounded-md border border-line px-4 py-2 font-semibold hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50">{t.admin.next}</button>
+    <nav
+      aria-label={t.admin.page}
+      className="flex items-center justify-between gap-4"
+    >
+      <span className="text-sm text-fg-muted">
+        {t.admin.page} {page} / {totalPages}
+      </span>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => onChange(page - 1)}
+          disabled={disabled || page <= 1}
+          className="cursor-pointer rounded-md border border-line px-3 py-2 text-sm font-semibold hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {t.admin.previous}
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange(page + 1)}
+          disabled={disabled || page >= totalPages}
+          className="cursor-pointer rounded-md border border-line px-3 py-2 text-sm font-semibold hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {t.admin.next}
+        </button>
+      </div>
     </nav>
   );
 }

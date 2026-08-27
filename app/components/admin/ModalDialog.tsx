@@ -135,14 +135,15 @@ export function ModalDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
+        aria-busy={locked}
         tabIndex={-1}
         onKeyDown={trapFocus}
-        className={`relative my-auto w-full ${maxWidthClassName} rounded-xl border border-line bg-surface-raised p-6 text-fg shadow-2xl`}
+        className={`relative my-auto max-h-[calc(100dvh-2rem)] w-full ${maxWidthClassName} overflow-y-auto rounded-xl border border-line bg-surface-raised p-6 text-fg shadow-2xl`}
       >
         <h2 id={titleId} className="text-xl font-bold">
           {title}
         </h2>
-        <p id={descriptionId} className="mt-3 text-sm leading-6 text-fg-muted">
+        <p id={descriptionId} className="mt-2 text-sm leading-6 text-fg-muted">
           {description}
         </p>
         {children}

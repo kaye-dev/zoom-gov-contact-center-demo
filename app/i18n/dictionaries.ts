@@ -290,18 +290,24 @@ export type Dictionary = {
       createTitle: string;
       createDescription: string;
       roleName: string;
+      roleNameRequired: string;
+      roleNameTooLong: string;
       roleDescription: string;
       descriptionOptional: string;
       memberCount: string;
       actions: string;
       edit: string;
+      editRoleTitle: string;
+      editRoleDescription: string;
       systemRole: string;
+      systemRoleReadOnly: string;
       noRoles: string;
       cancel: string;
       add: string;
       saving: string;
       save: string;
       saved: string;
+      reload: string;
       deleteRole: string;
       backToRoles: string;
       settingsTab: string;
@@ -363,6 +369,9 @@ export type Dictionary = {
     userManagement: {
       detailsTitle: string;
       detailsDescription: string;
+      detailsReadOnly: string;
+      name: string;
+      accessRoles: string;
       backToUsers: string;
       settings: string;
       actionsFor: string;
@@ -380,6 +389,7 @@ export type Dictionary = {
       resetPassword: string;
       passwordConfigured: string;
       passwordChangeRequired: string;
+      passwordVisibilityHelp: string;
       selfPasswordResetProtected: string;
       passwordMode: string;
       temporaryPasswordMode: string;
@@ -903,20 +913,27 @@ export const dictionaries: Record<Locale, Dictionary> = {
         roleCount: 'ロール',
         addRole: 'ロールを追加',
         createTitle: 'ロールを追加',
-        createDescription: 'ロール名と説明を入力します。権限は次の画面で設定します。',
+        createDescription:
+          'ロール名と説明を入力します。すべての管理ページ権限は未選択で作成されます。',
         roleName: 'ロール名',
+        roleNameRequired: 'ロール名を入力してください。',
+        roleNameTooLong: 'ロール名は64文字以内で入力してください。',
         roleDescription: '説明',
         descriptionOptional: '説明（任意）',
         memberCount: 'メンバー数',
         actions: 'アクション',
         edit: '編集',
+        editRoleTitle: 'ロールを編集',
+        editRoleDescription: 'ロール名と説明を編集します。',
         systemRole: 'システムロール',
+        systemRoleReadOnly: 'システムロールは変更できません。',
         noRoles: 'ロールはありません。',
         cancel: 'キャンセル',
         add: '追加',
         saving: '保存中…',
         save: '保存',
         saved: 'ロール設定を保存しました。',
+        reload: '最新情報を再読み込み',
         deleteRole: 'ロールを削除',
         backToRoles: 'ロール一覧へ戻る',
         settingsTab: 'ロール設定',
@@ -998,7 +1015,12 @@ export const dictionaries: Record<Locale, Dictionary> = {
       },
       userManagement: {
         detailsTitle: 'ユーザー詳細',
-        detailsDescription: 'ユーザー情報を項目ごとに確認・編集できます。',
+        detailsDescription:
+          'ユーザー情報、権限、アクセスロール、パスワードを管理します。',
+        detailsReadOnly:
+          'ユーザー情報は閲覧のみです。変更にはユーザーの編集権限が必要です。',
+        name: '名前',
+        accessRoles: 'アクセスロール',
         backToUsers: 'ユーザー管理へ戻る',
         settings: '設定',
         actionsFor: '設定対象',
@@ -1016,6 +1038,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
         resetPassword: '再設定',
         passwordConfigured: '設定済み',
         passwordChangeRequired: '次回ログイン後に変更が必要',
+        passwordVisibilityHelp: '本人以外のパスワードは表示できません。',
         selfPasswordResetProtected:
           '自分のパスワードはパスワード変更画面から変更してください。',
         passwordMode: 'パスワードの種類',
@@ -1624,20 +1647,27 @@ export const dictionaries: Record<Locale, Dictionary> = {
         roleCount: 'roles',
         addRole: 'Add role',
         createTitle: 'Add role',
-        createDescription: 'Enter a role name and description. Configure permissions on the next screen.',
+        createDescription:
+          'Enter a role name and description. All administration-page permissions start unselected.',
         roleName: 'Role name',
+        roleNameRequired: 'Enter a role name.',
+        roleNameTooLong: 'Enter a role name with no more than 64 characters.',
         roleDescription: 'Description',
         descriptionOptional: 'Description (optional)',
         memberCount: 'Members',
         actions: 'Actions',
         edit: 'Edit',
+        editRoleTitle: 'Edit role',
+        editRoleDescription: 'Edit the role name and description.',
         systemRole: 'System role',
+        systemRoleReadOnly: 'System roles cannot be changed.',
         noRoles: 'No roles.',
         cancel: 'Cancel',
         add: 'Add',
         saving: 'Saving…',
         save: 'Save',
         saved: 'Role settings saved.',
+        reload: 'Reload latest information',
         deleteRole: 'Delete role',
         backToRoles: 'Back to roles',
         settingsTab: 'Role settings',
@@ -1719,7 +1749,12 @@ export const dictionaries: Record<Locale, Dictionary> = {
       },
       userManagement: {
         detailsTitle: 'User details',
-        detailsDescription: 'Review and edit each item of this user’s information.',
+        detailsDescription:
+          'Manage user information, privilege, access roles, and password.',
+        detailsReadOnly:
+          'You can view this user. Changes require permission to edit users.',
+        name: 'Name',
+        accessRoles: 'Access roles',
         backToUsers: 'Back to User Management',
         settings: 'Settings',
         actionsFor: 'Settings for',
@@ -1737,6 +1772,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
         resetPassword: 'Reset',
         passwordConfigured: 'Configured',
         passwordChangeRequired: 'Change required after next sign-in',
+        passwordVisibilityHelp: 'Passwords cannot be shown to another user.',
         selfPasswordResetProtected:
           'Change your own password from the Change Password page.',
         passwordMode: 'Password type',
@@ -2325,13 +2361,34 @@ export const dictionaries: Record<Locale, Dictionary> = {
       accessControl: {
         rolesNav: '角色', listTitle: '角色',
         listDescription: '组合多个角色来控制管理页面访问。明确拒绝优先于允许。',
-        roleCount: '个角色', addRole: '添加角色', createTitle: '添加角色',
-        createDescription: '输入角色名称和说明，然后在下一页设置权限。',
-        roleName: '角色名称', roleDescription: '说明', descriptionOptional: '说明（可选）',
-        memberCount: '成员数', actions: '操作', edit: '编辑', systemRole: '系统角色',
-        noRoles: '没有角色。', cancel: '取消', add: '添加', saving: '保存中…', save: '保存',
-        saved: '角色设置已保存。', deleteRole: '删除角色', backToRoles: '返回角色列表',
-        settingsTab: '角色设置', membersTab: '角色成员',
+        roleCount: '个角色',
+        addRole: '添加角色',
+        createTitle: '添加角色',
+        createDescription:
+          '输入角色名称和说明。创建时所有管理页面权限均为未选择状态。',
+        roleName: '角色名称',
+        roleNameRequired: '请输入角色名称。',
+        roleNameTooLong: '角色名称不能超过64个字符。',
+        roleDescription: '说明',
+        descriptionOptional: '说明（可选）',
+        memberCount: '成员数',
+        actions: '操作',
+        edit: '编辑',
+        editRoleTitle: '编辑角色',
+        editRoleDescription: '编辑角色名称和说明。',
+        systemRole: '系统角色',
+        systemRoleReadOnly: '系统角色无法更改。',
+        noRoles: '没有角色。',
+        cancel: '取消',
+        add: '添加',
+        saving: '保存中…',
+        save: '保存',
+        saved: '角色设置已保存。',
+        reload: '重新加载最新信息',
+        deleteRole: '删除角色',
+        backToRoles: '返回角色列表',
+        settingsTab: '角色设置',
+        membersTab: '角色成员',
         adminPageAccessTitle: '管理页面访问权限',
         adminPageAccessDescription: '将各项操作设置为未设置、允许或拒绝。分配多个角色时，明确拒绝优先于允许。',
         adminPageColumn: '管理页面', allow: '允许', deny: '拒绝',
@@ -2385,7 +2442,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
       },
       userManagement: {
         detailsTitle: '用户详情',
-        detailsDescription: '可以逐项查看和编辑用户信息。',
+        detailsDescription: '管理用户信息、权限、访问角色和密码。',
+        detailsReadOnly: '您可以查看此用户。更改用户信息需要用户编辑权限。',
+        name: '姓名',
+        accessRoles: '访问角色',
         backToUsers: '返回用户管理',
         settings: '设置',
         actionsFor: '设置对象',
@@ -2403,6 +2463,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
         resetPassword: '重置',
         passwordConfigured: '已设置',
         passwordChangeRequired: '下次登录后需要更改',
+        passwordVisibilityHelp: '无法显示其他用户的密码。',
         selfPasswordResetProtected: '请从更改密码页面修改自己的密码。',
         passwordMode: '密码类型',
         temporaryPasswordMode: '临时密码',
@@ -2971,13 +3032,34 @@ export const dictionaries: Record<Locale, Dictionary> = {
       accessControl: {
         rolesNav: '角色', listTitle: '角色',
         listDescription: '組合多個角色來控制管理頁面存取。明確拒絕優先於允許。',
-        roleCount: '個角色', addRole: '新增角色', createTitle: '新增角色',
-        createDescription: '輸入角色名稱和說明，然後在下一頁設定權限。',
-        roleName: '角色名稱', roleDescription: '說明', descriptionOptional: '說明（選填）',
-        memberCount: '成員數', actions: '動作', edit: '編輯', systemRole: '系統角色',
-        noRoles: '沒有角色。', cancel: '取消', add: '新增', saving: '儲存中…', save: '儲存',
-        saved: '角色設定已儲存。', deleteRole: '刪除角色', backToRoles: '返回角色清單',
-        settingsTab: '角色設定', membersTab: '角色成員',
+        roleCount: '個角色',
+        addRole: '新增角色',
+        createTitle: '新增角色',
+        createDescription:
+          '輸入角色名稱和說明。建立時所有管理頁面權限皆為未選取狀態。',
+        roleName: '角色名稱',
+        roleNameRequired: '請輸入角色名稱。',
+        roleNameTooLong: '角色名稱不得超過 64 個字元。',
+        roleDescription: '說明',
+        descriptionOptional: '說明（選填）',
+        memberCount: '成員數',
+        actions: '動作',
+        edit: '編輯',
+        editRoleTitle: '編輯角色',
+        editRoleDescription: '編輯角色名稱和說明。',
+        systemRole: '系統角色',
+        systemRoleReadOnly: '系統角色無法變更。',
+        noRoles: '沒有角色。',
+        cancel: '取消',
+        add: '新增',
+        saving: '儲存中…',
+        save: '儲存',
+        saved: '角色設定已儲存。',
+        reload: '重新載入最新資訊',
+        deleteRole: '刪除角色',
+        backToRoles: '返回角色清單',
+        settingsTab: '角色設定',
+        membersTab: '角色成員',
         adminPageAccessTitle: '管理頁面存取權',
         adminPageAccessDescription: '將各項動作設定為未設定、允許或拒絕。指派多個角色時，明確拒絕優先於允許。',
         adminPageColumn: '管理頁面', allow: '允許', deny: '拒絕',
@@ -3031,7 +3113,11 @@ export const dictionaries: Record<Locale, Dictionary> = {
       },
       userManagement: {
         detailsTitle: '使用者詳細資料',
-        detailsDescription: '可以逐項檢視及編輯使用者資訊。',
+        detailsDescription: '管理使用者資訊、權限、存取角色及密碼。',
+        detailsReadOnly:
+          '您可以檢視此使用者。變更使用者資訊需要使用者編輯權限。',
+        name: '姓名',
+        accessRoles: '存取角色',
         backToUsers: '返回使用者管理',
         settings: '設定',
         actionsFor: '設定對象',
@@ -3049,6 +3135,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
         resetPassword: '重設',
         passwordConfigured: '已設定',
         passwordChangeRequired: '下次登入後需要變更',
+        passwordVisibilityHelp: '無法顯示其他使用者的密碼。',
         selfPasswordResetProtected: '請從變更密碼頁面修改自己的密碼。',
         passwordMode: '密碼類型',
         temporaryPasswordMode: '臨時密碼',
@@ -3616,15 +3703,38 @@ export const dictionaries: Record<Locale, Dictionary> = {
       dashboardTitle: '관리 화면',
       dashboardDescription: '로그인되어 있습니다. 사용자 관리 기능에는 관리자 권한이 필요합니다.',
       accessControl: {
-        rolesNav: '역할', listTitle: '역할',
-        listDescription: '여러 역할을 조합하여 관리 페이지 접근을 제어합니다. 명시적 거부가 허용보다 우선합니다.',
-        roleCount: '개 역할', addRole: '역할 추가', createTitle: '역할 추가',
-        createDescription: '역할 이름과 설명을 입력한 다음 다음 화면에서 권한을 설정합니다.',
-        roleName: '역할 이름', roleDescription: '설명', descriptionOptional: '설명(선택)',
-        memberCount: '멤버 수', actions: '작업', edit: '편집', systemRole: '시스템 역할',
-        noRoles: '역할이 없습니다.', cancel: '취소', add: '추가', saving: '저장 중…', save: '저장',
-        saved: '역할 설정을 저장했습니다.', deleteRole: '역할 삭제', backToRoles: '역할 목록으로',
-        settingsTab: '역할 설정', membersTab: '역할 멤버',
+        rolesNav: '역할',
+        listTitle: '역할',
+        listDescription:
+          '여러 역할을 조합하여 관리 페이지 접근을 제어합니다. 명시적 거부가 허용보다 우선합니다.',
+        roleCount: '개 역할',
+        addRole: '역할 추가',
+        createTitle: '역할 추가',
+        createDescription:
+          '역할 이름과 설명을 입력합니다. 모든 관리 페이지 권한은 선택되지 않은 상태로 생성됩니다.',
+        roleName: '역할 이름',
+        roleNameRequired: '역할 이름을 입력하세요.',
+        roleNameTooLong: '역할 이름은 64자 이내로 입력하세요.',
+        roleDescription: '설명',
+        descriptionOptional: '설명(선택)',
+        memberCount: '멤버 수',
+        actions: '작업',
+        edit: '편집',
+        editRoleTitle: '역할 편집',
+        editRoleDescription: '역할 이름과 설명을 편집합니다.',
+        systemRole: '시스템 역할',
+        systemRoleReadOnly: '시스템 역할은 변경할 수 없습니다.',
+        noRoles: '역할이 없습니다.',
+        cancel: '취소',
+        add: '추가',
+        saving: '저장 중…',
+        save: '저장',
+        saved: '역할 설정을 저장했습니다.',
+        reload: '최신 정보 다시 불러오기',
+        deleteRole: '역할 삭제',
+        backToRoles: '역할 목록으로',
+        settingsTab: '역할 설정',
+        membersTab: '역할 멤버',
         adminPageAccessTitle: '관리 페이지 접근 권한',
         adminPageAccessDescription: '각 작업을 미설정, 허용 또는 거부로 설정합니다. 여러 역할이 할당된 경우 명시적 거부가 허용보다 우선합니다.',
         adminPageColumn: '관리 페이지', allow: '허용', deny: '거부',
@@ -3678,7 +3788,12 @@ export const dictionaries: Record<Locale, Dictionary> = {
       },
       userManagement: {
         detailsTitle: '사용자 상세 정보',
-        detailsDescription: '사용자 정보를 항목별로 확인하고 편집할 수 있습니다.',
+        detailsDescription:
+          '사용자 정보, 권한, 접근 역할 및 비밀번호를 관리합니다.',
+        detailsReadOnly:
+          '사용자 정보를 볼 수 있습니다. 변경하려면 사용자 편집 권한이 필요합니다.',
+        name: '이름',
+        accessRoles: '접근 역할',
         backToUsers: '사용자 관리로 돌아가기',
         settings: '설정',
         actionsFor: '설정 대상',
@@ -3696,7 +3811,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
         resetPassword: '재설정',
         passwordConfigured: '설정됨',
         passwordChangeRequired: '다음 로그인 후 변경 필요',
-        selfPasswordResetProtected: '자신의 비밀번호는 비밀번호 변경 화면에서 변경하세요.',
+        passwordVisibilityHelp: '다른 사용자의 비밀번호는 표시할 수 없습니다.',
+        selfPasswordResetProtected:
+          '자신의 비밀번호는 비밀번호 변경 화면에서 변경하세요.',
         passwordMode: '비밀번호 유형',
         temporaryPasswordMode: '임시 비밀번호',
         temporaryPasswordModeDescription: '다음 로그인 후 사용자가 직접 변경해야 합니다.',

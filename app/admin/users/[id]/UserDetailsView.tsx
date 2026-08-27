@@ -277,13 +277,19 @@ export function UserDetailsView({
     field: AdminUserField;
     label: string;
     value: string;
+    description?: string;
   }> = [
-    { field: "name", label: t.admin.name, value: user.name },
-    { field: "email", label: t.admin.email, value: user.email },
+    {
+      field: 'name',
+      label: t.admin.userManagement.name,
+      value: user.name,
+    },
+    { field: 'email', label: t.admin.email, value: user.email },
     {
       field: "role",
       label: t.admin.role,
-      value: user.role === "admin" ? t.auth.roleAdmin : t.auth.roleUser,
+      value: user.role === 'admin' ? t.auth.roleAdmin : t.auth.roleUser,
+      description: t.admin.accessControl.adminAttributeHelp,
     },
   ];
 
@@ -373,6 +379,16 @@ export function UserDetailsView({
         <StatusBadge banned={user.banned} />
       </div>
 
+      {!canUpdateUser ? (
+        <div
+          id="user-details-read-only"
+          role="status"
+          className="rounded-md border border-line bg-surface-accent-subtle px-4 py-3 text-sm font-semibold text-accent"
+        >
+          {t.admin.userManagement.detailsReadOnly}
+        </div>
+      ) : null}
+
       {successMessage ? (
         <p
           role="status"
@@ -383,7 +399,7 @@ export function UserDetailsView({
       ) : null}
 
       <div className="overflow-hidden rounded-xl border border-line bg-surface-raised shadow-sm">
-        {fields.map(({ field, label, value }) => {
+        {fields.map(({ field, label, value, description }) => {
           const isEditing = editingField === field;
           const roleEditProtected = field === "role" && protectedRoleReason !== null;
           const editDisabled =
@@ -398,7 +414,12 @@ export function UserDetailsView({
               key={field}
               className="grid gap-3 border-b border-line-subtle px-5 py-6 last:border-b-0 sm:grid-cols-[11rem_minmax(0,1fr)_auto] sm:items-start sm:gap-6"
             >
-              <p className="text-sm font-semibold text-fg-muted">{label}</p>
+              <p
+                id={`user-${field}-label`}
+                className="text-sm font-semibold text-fg-muted"
+              >
+                {label}
+              </p>
               {isEditing ? (
                 <form
                   onSubmit={submitEdit}
@@ -410,6 +431,10 @@ export function UserDetailsView({
                       onChange={(event) => setDraftValue(event.target.value)}
                       disabled={isSubmitting}
                       autoFocus
+                      aria-labelledby={`user-${field}-label`}
+                      aria-describedby={
+                        description ? `user-${field}-description` : undefined
+                      }
                       className="w-full max-w-md rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent disabled:opacity-60"
                     >
                       <option value="user">{t.auth.roleUser}</option>
@@ -424,9 +449,18 @@ export function UserDetailsView({
                       autoFocus
                       autoComplete={field === "email" ? "email" : "name"}
                       disabled={isSubmitting}
+                      aria-labelledby={`user-${field}-label`}
                       className="w-full max-w-md rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent disabled:opacity-60"
                     />
                   )}
+                  {description ? (
+                    <p
+                      id={`user-${field}-description`}
+                      className="text-xs leading-5 text-fg-muted"
+                    >
+                      {description}
+                    </p>
+                  ) : null}
                   {error ? (
                     <p
                       role="alert"
@@ -459,8 +493,19 @@ export function UserDetailsView({
                 <>
                   <div className="min-w-0">
                     <p className="break-words font-medium">{value}</p>
+                    {description ? (
+                      <p
+                        id={`user-${field}-description`}
+                        className="mt-2 text-xs leading-5 text-fg-muted"
+                      >
+                        {description}
+                      </p>
+                    ) : null}
                     {roleEditProtected ? (
-                      <p className="mt-2 text-xs leading-5 text-fg-muted">
+                      <p
+                        id="user-role-protection-reason"
+                        className="mt-2 text-xs leading-5 text-fg-muted"
+                      >
                         {protectedRoleReason}
                       </p>
                     ) : null}
@@ -469,7 +514,20 @@ export function UserDetailsView({
                     type="button"
                     onClick={() => beginEdit(field)}
                     disabled={editDisabled}
-                    title={roleEditProtected ? protectedRoleReason ?? undefined : undefined}
+                    aria-describedby={
+                      !canUpdateUser
+                        ? 'user-details-read-only'
+                        : roleEditProtected
+                          ? 'user-role-protection-reason'
+                          : undefined
+                    }
+                    title={
+                      !canUpdateUser
+                        ? t.admin.userManagement.detailsReadOnly
+                        : roleEditProtected
+                          ? (protectedRoleReason ?? undefined)
+                          : undefined
+                    }
                     className="cursor-pointer justify-self-start rounded-md px-2 py-1 text-sm font-semibold text-accent transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-45 sm:justify-self-end"
                   >
                     {t.admin.userManagement.edit}
@@ -482,7 +540,7 @@ export function UserDetailsView({
         {accessRoles ? (
           <div className="grid gap-3 border-b border-line-subtle px-5 py-6 sm:grid-cols-[11rem_minmax(0,1fr)_auto] sm:items-start sm:gap-6">
             <p className="text-sm font-semibold text-fg-muted">
-              {t.admin.accessControl.assignedRoles}
+              {t.admin.userManagement.accessRoles}
             </p>
             {isEditingAccessRoles ? (
               <div className="space-y-4 sm:col-span-2">
@@ -521,6 +579,9 @@ export function UserDetailsView({
                     </label>
                   ))}
                 </fieldset>
+                <p className="text-xs leading-5 text-fg-muted">
+                  {t.admin.accessControl.assignedRolesHelp}
+                </p>
                 {error && !editingField && !isEditingPassword ? (
                   <p
                     role="alert"
@@ -561,7 +622,7 @@ export function UserDetailsView({
               <>
                 <div className="min-w-0">
                   {selectedAccessRoles.length > 0 ? (
-                    <ul className="flex flex-wrap gap-x-2 gap-y-1">
+                    <ul className="space-y-1">
                       {selectedAccessRoles.map((role) => (
                         <li
                           key={role.id}
@@ -583,14 +644,20 @@ export function UserDetailsView({
                       {t.admin.accessControl.noAssignedRoles}
                     </p>
                   )}
+                  <p className="mt-2 text-xs leading-5 text-fg-muted">
+                    {t.admin.accessControl.assignedRolesHelp}
+                  </p>
                   <Link
                     href={`/admin/users/${encodeURIComponent(user.id)}/access`}
-                    className="mt-2 inline-flex text-sm font-semibold text-accent hover:underline"
+                    className="mt-3 inline-flex text-sm font-semibold text-accent hover:underline"
                   >
                     {t.admin.accessControl.viewAccess}
                   </Link>
                   {accessRolesProtected ? (
-                    <p className="mt-2 text-xs leading-5 text-fg-muted">
+                    <p
+                      id="user-access-roles-protection-reason"
+                      className="mt-2 text-xs leading-5 text-fg-muted"
+                    >
                       {t.admin.accessControl.readOnlyRoleAction}
                     </p>
                   ) : null}
@@ -607,6 +674,11 @@ export function UserDetailsView({
                     accessRolesProtected ||
                     editingField !== null ||
                     isEditingPassword
+                  }
+                  aria-describedby={
+                    accessRolesProtected
+                      ? 'user-access-roles-protection-reason'
+                      : undefined
                   }
                   title={
                     accessRolesProtected
@@ -630,6 +702,12 @@ export function UserDetailsView({
               onSubmit={submitPasswordReset}
               className="space-y-5 sm:col-span-2"
             >
+              <p
+                id="user-password-visibility-help"
+                className="text-xs leading-5 text-fg-muted"
+              >
+                {t.admin.userManagement.passwordVisibilityHelp}
+              </p>
               <fieldset className="space-y-3">
                 <legend className="text-sm font-semibold">
                   {t.admin.userManagement.passwordMode}
@@ -807,8 +885,17 @@ export function UserDetailsView({
                     ? t.admin.userManagement.passwordChangeRequired
                     : t.admin.userManagement.passwordConfigured}
                 </p>
+                <p
+                  id="user-password-visibility-help"
+                  className="mt-2 text-xs leading-5 text-fg-muted"
+                >
+                  {t.admin.userManagement.passwordVisibilityHelp}
+                </p>
                 {passwordResetProtected ? (
-                  <p className="mt-2 text-xs leading-5 text-fg-muted">
+                  <p
+                    id="user-password-protection-reason"
+                    className="mt-2 text-xs leading-5 text-fg-muted"
+                  >
                     {t.admin.userManagement.selfPasswordResetProtected}
                   </p>
                 ) : null}
@@ -822,6 +909,13 @@ export function UserDetailsView({
                   isEditingAccessRoles ||
                   passwordResetProtected ||
                   !canUpdateUser
+                }
+                aria-describedby={
+                  !canUpdateUser
+                    ? 'user-details-read-only user-password-visibility-help'
+                    : passwordResetProtected
+                      ? 'user-password-visibility-help user-password-protection-reason'
+                      : 'user-password-visibility-help'
                 }
                 title={
                   passwordResetProtected
@@ -933,10 +1027,10 @@ function StatusBadge({ banned }: { banned: boolean | null }) {
 
   return (
     <span
-      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold sm:ml-auto ${
+      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
         suspended
-          ? "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-100"
-          : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-200"
+          ? 'bg-red-100 text-red-800 dark:bg-red-950/70 dark:text-red-200'
+          : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-200'
       }`}
     >
       {suspended

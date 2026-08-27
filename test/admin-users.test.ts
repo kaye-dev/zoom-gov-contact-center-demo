@@ -215,6 +215,10 @@ test("all locales include complete user-management copy and errors", () => {
     assert.ok(authCopy.temporaryPasswordCopied.length > 0, locale);
     assert.ok(authCopy.temporaryPasswordCopyFailed.length > 0, locale);
     assert.ok(copy.detailsTitle.length > 0, locale);
+    assert.ok(copy.detailsDescription.length > 0, locale);
+    assert.ok(copy.detailsReadOnly.length > 0, locale);
+    assert.ok(copy.name.length > 0, locale);
+    assert.ok(copy.accessRoles.length > 0, locale);
     assert.ok(copy.edit.length > 0, locale);
     assert.ok(copy.suspend.length > 0, locale);
     assert.ok(copy.reactivate.length > 0, locale);
@@ -224,6 +228,7 @@ test("all locales include complete user-management copy and errors", () => {
     assert.ok(copy.generateTemporaryPassword.length > 0, locale);
     assert.ok(copy.revokeSessionsDescription.length > 0, locale);
     assert.ok(copy.passwordDialogDescription.length > 0, locale);
+    assert.ok(copy.passwordVisibilityHelp.length > 0, locale);
     assert.ok(copy.passwordsMatch.length > 0, locale);
     assert.deepEqual(Object.keys(copy.errors).sort(), expectedErrorCodes, locale);
     for (const message of Object.values(copy.errors)) {
