@@ -123,7 +123,7 @@ export function LanguageSettingsForm({
           <h2 className="font-bold">
             {t.admin.languageManagement.enabledCountLabel}
           </h2>
-          <p className="rounded-full bg-primary-50 px-3 py-1 text-sm font-bold text-primary-1100 dark:bg-primary-950 dark:text-primary-100">
+          <p className="rounded-full bg-surface-accent-subtle px-3 py-1 text-sm font-bold text-accent">
             {enabledCount} / {SITE_LOCALES.length}
           </p>
         </div>
@@ -198,11 +198,11 @@ function LanguageRow({
           onChange={(event) =>
             onToggle(setting.locale, event.target.checked)
           }
-          className="h-5 w-5 cursor-pointer accent-primary disabled:cursor-not-allowed"
+          className="h-5 w-5 shrink-0 cursor-pointer accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed"
         />
         <span className="font-semibold">{localeNames[setting.locale]}</span>
         {isJapanese ? (
-          <span className="rounded-full bg-primary-50 px-2 py-0.5 text-xs font-semibold text-primary-1100 dark:bg-primary-950 dark:text-primary-100">
+          <span className="rounded-full bg-surface-accent-subtle px-2 py-0.5 text-xs font-semibold text-accent">
             {t.admin.languageManagement.japaneseRequired}
           </span>
         ) : null}

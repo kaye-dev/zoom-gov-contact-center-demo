@@ -22,7 +22,7 @@ const languageStoreSource = readFileSync(
 test("language content stays hidden until storage, context and HTML lang agree", () => {
   assert.match(
     layoutSource,
-    /className="theme-loading language-loading h-full antialiased"/,
+    /className="theme-loading language-loading scheme-light h-full antialiased dark:scheme-dark"/,
   );
   assert.match(layoutSource, /lang={toHtmlLanguageTag\(DEFAULT_SITE_LOCALE\)}/);
   assert.match(

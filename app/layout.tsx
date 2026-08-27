@@ -46,7 +46,7 @@ export default async function RootLayout({
   return (
     <html
       lang={toHtmlLanguageTag(DEFAULT_SITE_LOCALE)}
-      className="theme-loading language-loading h-full antialiased"
+      className="theme-loading language-loading scheme-light h-full antialiased dark:scheme-dark"
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
