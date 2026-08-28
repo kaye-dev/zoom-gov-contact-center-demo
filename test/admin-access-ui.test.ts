@@ -114,12 +114,13 @@ test('role UI creates metadata first and renders the prototype permission contro
     details,
     /const checked = cell\.supported && cell\.effect === "ALLOW"/,
   );
-  assert.match(details, /input\.indeterminate = !cell\.supported/);
+  assert.match(details, /indeterminate=\{!cell\.supported\}/);
+  assert.doesNotMatch(details, /input\.indeterminate/);
   assert.match(details, /cell\.action !== "VIEW" && !viewAllowed/);
   assert.match(details, /action === "VIEW" && !checked/);
   assert.match(details, /resource\.displayPaths\.map/);
   assert.match(details, /copy\.targetPaths/);
-  assert.match(details, /className="h-5 w-5 shrink-0 cursor-pointer/);
+  assert.match(details, /<Checkbox\b/);
   assert.match(details, /overflow-x-auto[^"\n]*\[contain:paint\]/);
   assert.doesNotMatch(details, /title=\{copy\.deny\}/);
   assert.doesNotMatch(details, /checked=\{cell\.supported && cell\.effect === "DENY"\}/);
@@ -205,7 +206,8 @@ test("role and user screens follow the compact prototype structure and single-ro
   assert.match(access, /rounded-lg border border-line/);
   assert.match(access, /min-w-\[980px\] divide-y divide-line-subtle/);
   assert.match(access, /w-28 px-3 py-3/);
-  assert.match(access, /input\.indeterminate = !decision\.supported/);
+  assert.match(access, /indeterminate=\{!decision\.supported\}/);
+  assert.doesNotMatch(access, /input\.indeterminate/);
   assert.doesNotMatch(access, /AccessDecisionInfo/);
   assert.doesNotMatch(access, /href=\{`\/admin\/roles\//);
   assert.doesNotMatch(access, /mt-1 block text-xs font-semibold/);
@@ -279,7 +281,8 @@ test("role detail keeps member PII behind separately authorized directory APIs",
 
 test("effective access follows the prototype's checkbox-only decision cells", () => {
   const access = source("../app/admin/users/[id]/access/UserAccessView.tsx");
-  assert.match(access, /type="checkbox"/);
+  assert.match(access, /<Checkbox\b/);
+  assert.doesNotMatch(access, /type="checkbox"/);
   assert.match(access, /disabled/);
   assert.doesNotMatch(access, /AccessDecisionInfo/);
   assert.doesNotMatch(access, /InfoIcon/);
@@ -319,6 +322,7 @@ test("VIEW-only settings preserve current values while disabling every mutation 
     languages,
     /disabled=\{!canEdit \|\| isJapanese \|\| isSubmitting\}/,
   );
+  assert.match(languages, /<Checkbox\b/);
   assert.match(
     languages,
     /disabled=\{!canEdit \|\| index === 0 \|\| isSubmitting\}/,

@@ -12,6 +12,7 @@ import {
   type KeyboardEvent,
 } from "react";
 
+import { Checkbox } from "@/app/components/Checkbox";
 import { ModalDialog } from "@/app/components/admin/ModalDialog";
 import {
   getAdminRoleDisplayDescription,
@@ -598,11 +599,8 @@ function PermissionMatrix({
                       key={cell.action}
                       className="px-3 py-4 text-center align-top"
                     >
-                      <input
-                        ref={(input) => {
-                          if (input) input.indeterminate = !cell.supported;
-                        }}
-                        type="checkbox"
+                      <Checkbox
+                        indeterminate={!cell.supported}
                         checked={checked}
                         disabled={
                           !editable || !cell.supported || dependencyDisabled
@@ -624,7 +622,6 @@ function PermissionMatrix({
                         aria-describedby={
                           !cell.supported ? unsupportedId : undefined
                         }
-                        className="h-5 w-5 shrink-0 cursor-pointer accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
                       />
                       {!cell.supported ? (
                         <span id={unsupportedId} className="sr-only">

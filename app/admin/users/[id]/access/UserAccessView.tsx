@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect } from "react";
 
+import { Checkbox } from "@/app/components/Checkbox";
 import { getAdminRoleDisplayName } from "@/app/components/admin/role-display";
 import { useI18n } from "@/app/i18n/LanguageProvider";
 import type {
@@ -151,15 +152,11 @@ export function UserAccessView({ summary }: { summary: UserAccessSummary }) {
                       key={decision.action}
                       className="px-3 py-4 text-center align-top"
                     >
-                      <input
-                        type="checkbox"
-                        ref={(input) => {
-                          if (input) input.indeterminate = !decision.supported;
-                        }}
+                      <Checkbox
+                        indeterminate={!decision.supported}
                         checked={decision.supported && decision.allowed}
                         disabled
                         aria-label={`${copy.resourceTitles[resource.resourceKey]} / ${actionLabel}: ${decision.supported ? resultLabel : copy.unsupported}`}
-                        className="h-5 w-5 shrink-0 accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
                       />
                     </td>
                   );

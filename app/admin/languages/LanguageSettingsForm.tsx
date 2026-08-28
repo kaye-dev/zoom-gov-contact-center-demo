@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
+import { Checkbox } from "@/app/components/Checkbox";
 import { localeNames } from "@/app/i18n/dictionaries";
 import {
   DEFAULT_SITE_LOCALE,
@@ -197,14 +198,12 @@ function LanguageRow({
   return (
     <li className="flex flex-col gap-3 rounded-md border border-line p-4 sm:flex-row sm:items-center">
       <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 has-[:disabled]:cursor-not-allowed">
-        <input
-          type="checkbox"
+        <Checkbox
           checked={setting.enabled}
           disabled={!canEdit || isJapanese || isSubmitting}
           onChange={(event) =>
             onToggle(setting.locale, event.target.checked)
           }
-          className="h-5 w-5 shrink-0 cursor-pointer accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed"
         />
         <span className="font-semibold">{localeNames[setting.locale]}</span>
         {isJapanese ? (
