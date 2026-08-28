@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { copyFile, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { type IncomingHttpHeaders, request } from "node:http";
+import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
@@ -126,14 +127,14 @@ async function startServer(context: TestContext, repository: TestRepository, rel
     stderr += chunk;
   });
 
-  return new Promise<string>((resolve, reject) => {
+  return new Promise<{ child: ReturnType<typeof spawn>; url: string }>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`server start timeout\nstdout: ${stdout}\nstderr: ${stderr}`)), 5_000);
     child.stdout.on("data", (chunk: string) => {
       stdout += chunk;
       const match = stdout.match(/URL=(http:\/\/127\.0\.0\.1:\d+\/)/);
       if (match) {
         clearTimeout(timer);
-        resolve(match[1]);
+        resolve({ child, url: match[1] });
       }
     });
     child.once("error", (error) => {
@@ -266,7 +267,7 @@ test("canonicalとlegacy prototypeは複数HTML・nested asset・query・HEADを
   for (const relativeArtifact of surfaces) {
     await context.test(relativeArtifact, async (surfaceContext) => {
       const { files } = await createPrototypeFixture(repository, relativeArtifact);
-      const url = await startServer(surfaceContext, repository, relativeArtifact);
+      const { url } = await startServer(surfaceContext, repository, relativeArtifact);
       await assertPrototypeSurface(url, files);
     });
   }
@@ -284,7 +285,7 @@ test("canonicalと2種類のlegacy reviewは固定5ファイルだけを配信�
   for (const relativeArtifact of surfaces) {
     await context.test(relativeArtifact, async (surfaceContext) => {
       await createReviewFixture(repository, relativeArtifact);
-      const url = await startServer(surfaceContext, repository, relativeArtifact);
+      const { url } = await startServer(surfaceContext, repository, relativeArtifact);
 
       const rootResponse = await fetchArtifact(url, "/");
       assert.equal(rootResponse.status, 200);
@@ -314,7 +315,7 @@ test("HTTP境界はHost・method・encoded path・symlink・未対応対象を�
   await symlink("assets/nested/data.json", path.join(artifact, "internal-link.json"));
   await symlink(path.join(artifact, "assets", "nested"), path.join(artifact, "linked-assets"), "dir");
 
-  const url = await startServer(context, repository, relativeArtifact);
+  const { url } = await startServer(context, repository, relativeArtifact);
   const target = new URL(url);
 
   const wrongHost = await rawRequest(url, { path: "/", headers: { Host: "attacker.example" } });
@@ -354,6 +355,37 @@ test("HTTP境界はHost・method・encoded path・symlink・未対応対象を�
     assert.equal(response.status, 404, rejectedPath);
     assert.equal(response.body, "Not Found", rejectedPath);
   }
+});
+
+test("SIGINTは処理中のHTTP接続が残っていてもserverを終了する", async (context) => {
+  const repository = await createTestRepository(context);
+  const slug = uniqueSlug("shutdown-server-test");
+  const relativeArtifact = `plans/${slug}/prototype`;
+  await createPrototypeFixture(repository, relativeArtifact);
+
+  const { child, url } = await startServer(context, repository, relativeArtifact);
+  const target = new URL(url);
+  const socket = connect(Number(target.port), target.hostname);
+  socket.on("error", () => {});
+  context.after(() => socket.destroy());
+  await once(socket, "connect");
+  await new Promise<void>((resolve, reject) => {
+    socket.write(`GET / HTTP/1.1\r\nHost: ${target.host}\r\n`, (error) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
+
+  const exitResult = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("server did not exit after SIGINT")), 2_000);
+    child.once("exit", (code, signal) => {
+      clearTimeout(timer);
+      resolve({ code, signal });
+    });
+  });
+  child.kill("SIGINT");
+
+  assert.deepEqual(await exitResult, { code: 0, signal: null });
 });
 
 test("artifact root/index symlinkと不正なCLI引数を起動前に拒否する", async (context) => {

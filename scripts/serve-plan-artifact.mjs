@@ -164,5 +164,9 @@ server.listen(0, "127.0.0.1", () => {
 });
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, () => server.close(() => process.exit(0)));
+  process.on(signal, () => {
+    if (signal === "SIGINT" && process.stdout.isTTY) process.stdout.write("\n");
+    server.close(() => process.exit(0));
+    server.closeAllConnections();
+  });
 }
