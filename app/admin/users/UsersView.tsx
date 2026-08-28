@@ -35,6 +35,9 @@ type UsersViewProps = {
   totalPages: number;
   currentUserId: string;
   activeAdminCount: number;
+  canCreate: boolean;
+  canUpdate: boolean;
+  canDelete: boolean;
 };
 
 type UserAction = "suspend" | "reactivate" | "delete";
@@ -51,6 +54,9 @@ export function UsersView({
   totalPages,
   currentUserId,
   activeAdminCount,
+  canCreate,
+  canUpdate,
+  canDelete,
 }: UsersViewProps) {
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -108,12 +114,14 @@ export function UsersView({
             {t.admin.page} {page} / {totalPages}
           </p>
         </div>
-        <Link
-          href="/admin/users/new"
-          className="ml-auto rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-900"
-        >
-          {t.admin.newUser}
-        </Link>
+        {canCreate ? (
+          <Link
+            href="/admin/users/new"
+            className="ml-auto rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-900"
+          >
+            {t.admin.newUser}
+          </Link>
+        ) : null}
       </div>
 
       <form className="flex flex-col gap-3 sm:flex-row" action="/admin/users">
@@ -195,6 +203,8 @@ export function UsersView({
                       user={user}
                       isOpen={openMenuUserId === user.id}
                       protectionReason={protectionReason}
+                      canUpdate={canUpdate}
+                      canDelete={canDelete}
                       onOpenChange={(open) =>
                         setOpenMenuUserId(open ? user.id : null)
                       }
@@ -290,12 +300,16 @@ function UserActionsMenu({
   user,
   isOpen,
   protectionReason,
+  canUpdate,
+  canDelete,
   onOpenChange,
   onAction,
 }: {
   user: UserRow;
   isOpen: boolean;
   protectionReason: string | null;
+  canUpdate: boolean;
+  canDelete: boolean;
   onOpenChange: (open: boolean) => void;
   onAction: (action: UserAction) => void;
 }) {
@@ -391,8 +405,9 @@ function UserActionsMenu({
           {t.admin.userManagement.edit}
         </Link>
       </li>
-      <li role="none">
-        <button
+      {canUpdate ? (
+        <li role="none">
+          <button
           type="button"
           role="menuitem"
           disabled={user.banned !== true && protectionReason !== null}
@@ -405,10 +420,12 @@ function UserActionsMenu({
           {user.banned === true
             ? t.admin.userManagement.reactivate
             : t.admin.userManagement.suspend}
-        </button>
-      </li>
-      <li role="none">
-        <button
+          </button>
+        </li>
+      ) : null}
+      {canDelete ? (
+        <li role="none">
+          <button
           type="button"
           role="menuitem"
           disabled={protectionReason !== null}
@@ -417,8 +434,9 @@ function UserActionsMenu({
           className="w-full cursor-pointer px-4 py-2 text-left text-sm font-semibold text-red-700 transition-colors hover:bg-red-50 focus:bg-red-50 focus:outline-none dark:text-red-300 dark:hover:bg-red-950/50 dark:focus:bg-red-950/50 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-transparent"
         >
           {t.admin.userManagement.delete}
-        </button>
-      </li>
+          </button>
+        </li>
+      ) : null}
     </ul>
   ) : null;
 

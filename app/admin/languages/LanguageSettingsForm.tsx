@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
+import { Checkbox } from "@/app/components/Checkbox";
 import { localeNames } from "@/app/i18n/dictionaries";
 import {
   DEFAULT_SITE_LOCALE,
@@ -18,6 +19,7 @@ import { useI18n } from "../../i18n/LanguageProvider";
 
 type LanguageSettingsFormProps = {
   initialSettings: LanguageSettings;
+  canEdit: boolean;
 };
 
 type Feedback =
@@ -26,6 +28,7 @@ type Feedback =
 
 export function LanguageSettingsForm({
   initialSettings,
+  canEdit,
 }: LanguageSettingsFormProps) {
   const { t } = useI18n();
   const router = useRouter();
@@ -70,6 +73,7 @@ export function LanguageSettingsForm({
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!canEdit) return;
     setFeedback(null);
     setIsSubmitting(true);
 
@@ -135,6 +139,7 @@ export function LanguageSettingsForm({
               setting={setting}
               index={index}
               total={locales.length}
+              canEdit={canEdit}
               isSubmitting={isSubmitting}
               onToggle={toggleLocale}
               onMove={moveLocale}
@@ -158,7 +163,7 @@ export function LanguageSettingsForm({
 
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || !canEdit}
           className="cursor-pointer rounded-md bg-primary px-5 py-2.5 font-semibold text-white transition-colors hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isSubmitting
@@ -174,6 +179,7 @@ function LanguageRow({
   setting,
   index,
   total,
+  canEdit,
   isSubmitting,
   onToggle,
   onMove,
@@ -181,6 +187,7 @@ function LanguageRow({
   setting: LanguageSetting;
   index: number;
   total: number;
+  canEdit: boolean;
   isSubmitting: boolean;
   onToggle: (locale: SiteLocale, enabled: boolean) => void;
   onMove: (index: number, offset: -1 | 1) => void;
@@ -191,14 +198,12 @@ function LanguageRow({
   return (
     <li className="flex flex-col gap-3 rounded-md border border-line p-4 sm:flex-row sm:items-center">
       <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 has-[:disabled]:cursor-not-allowed">
-        <input
-          type="checkbox"
+        <Checkbox
           checked={setting.enabled}
-          disabled={isJapanese || isSubmitting}
+          disabled={!canEdit || isJapanese || isSubmitting}
           onChange={(event) =>
             onToggle(setting.locale, event.target.checked)
           }
-          className="h-5 w-5 shrink-0 cursor-pointer accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed"
         />
         <span className="font-semibold">{localeNames[setting.locale]}</span>
         {isJapanese ? (
@@ -211,7 +216,7 @@ function LanguageRow({
       <div className="flex gap-2 sm:shrink-0">
         <button
           type="button"
-          disabled={index === 0 || isSubmitting}
+          disabled={!canEdit || index === 0 || isSubmitting}
           onClick={() => onMove(index, -1)}
           aria-label={`${localeNames[setting.locale]}: ${t.admin.languageManagement.moveUp}`}
           className="cursor-pointer rounded-md border border-line px-3 py-2 text-sm font-semibold transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
@@ -221,7 +226,7 @@ function LanguageRow({
         </button>
         <button
           type="button"
-          disabled={index === total - 1 || isSubmitting}
+          disabled={!canEdit || index === total - 1 || isSubmitting}
           onClick={() => onMove(index, 1)}
           aria-label={`${localeNames[setting.locale]}: ${t.admin.languageManagement.moveDown}`}
           className="cursor-pointer rounded-md border border-line px-3 py-2 text-sm font-semibold transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"

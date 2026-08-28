@@ -3,7 +3,7 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { nextCookies } from "better-auth/next-js";
 import { admin } from "better-auth/plugins";
 
-import type { PrismaClient } from "@/lib/generated/prisma/client";
+import type { Prisma, PrismaClient } from "@/lib/generated/prisma/client";
 import {
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
@@ -29,7 +29,7 @@ type CreateAuthOptions = {
 };
 
 export function createAuth(
-  prisma: PrismaClient,
+  prisma: PrismaClient | Prisma.TransactionClient,
   options: CreateAuthOptions = {},
 ) {
   const env = options.env ?? process.env;

@@ -1,18 +1,20 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { handle } from "hono/vercel";
 
 import { createAuth, type AppAuth } from "@/lib/auth";
+import { canAdminAccess } from "@/lib/admin-access/authorization";
+import {
+  parseAdminRoleMetadata,
+  parsePermissionMatrix,
+} from "@/lib/admin-access/validation";
 import {
   ADMIN_USER_ERROR_CODES,
-  getProtectedAdminActionError,
-  isActiveAdmin,
   parseAdminUserPasswordReset,
   parseAdminUserUpdate,
-  type AdminUserErrorCode,
 } from "@/lib/admin-users";
 import { generateTemporaryPassword } from "@/lib/password-policy";
-import type { PrismaClient } from "@/lib/generated/prisma/client";
+import type { Prisma, PrismaClient } from "@/lib/generated/prisma/client";
 import {
   countDemoRecords,
   createDemoRecord,
@@ -23,9 +25,30 @@ import {
 import {
   getAppSession,
   getSessionUser,
-  isAdminSession,
   shouldChangePassword,
 } from "@/lib/server/auth/helpers";
+import { authorizeAdminApi } from "@/lib/server/admin-access/api-guard";
+import {
+  AdminAccessServiceError,
+  createAdminRole,
+  deleteProtectedAdminUser,
+  deleteAdminRole,
+  reactivateAdminUser,
+  replaceAdminRolePermissions,
+  replaceUserAdminAccessRoles,
+  runAuthorizedAdminUserCreation,
+  runAuthorizedAdminUserOperation,
+  suspendProtectedAdminUser,
+  updateAdminRoleMetadata,
+  updateProtectedAdminUserRole,
+} from "@/lib/server/admin-access/authority-service";
+import {
+  getAdminRoleDetail,
+  listAdminRoleMemberCandidates,
+  listAdminRoleMembers,
+  listAdminRoles,
+  parseAdminRoleDirectoryInput,
+} from "@/lib/server/admin-access/queries";
 import {
   connectDatabaseWithRetry,
   createDatabaseContext,
@@ -35,7 +58,6 @@ import { saveChatSettings } from "@/lib/server/chat-settings";
 import { savePhoneSettings } from "@/lib/server/phone-settings";
 import { saveLanguageSettings } from "@/lib/server/site-settings";
 import { saveMaintenanceSettings } from "@/lib/server/maintenance-settings-write";
-import { getSettingsAuthorizationFailure } from "@/lib/server/settings-authorization";
 import { createBoundedPasswordResetRequest } from "@/lib/server/password-reset-requests";
 import { parseChatSettings } from "@/lib/chat-settings";
 import { parsePhoneSettings } from "@/lib/phone-settings";
@@ -151,11 +173,15 @@ app.post("/password-reset-requests", async (c) => {
 app.get("/admin/password-reset-requests", async (c) => {
   const auth = c.get("auth");
   const prisma = c.get("prisma");
-  const session = await getAppSession(auth, c.req.raw.headers);
-  const unauthorized = rejectNonAdmin(session);
-
-  if (unauthorized) {
-    return c.json(unauthorized.body, unauthorized.status);
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "password-reset-requests",
+    "VIEW",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
   }
 
   const requests = await prisma.passwordResetRequest.findMany({
@@ -187,12 +213,17 @@ app.get("/admin/password-reset-requests", async (c) => {
 app.post("/admin/password-reset-requests/:id/approve", async (c) => {
   const auth = c.get("auth");
   const prisma = c.get("prisma");
-  const session = await getAppSession(auth, c.req.raw.headers);
-  const unauthorized = rejectNonAdmin(session);
-
-  if (unauthorized) {
-    return c.json(unauthorized.body, unauthorized.status);
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "password-reset-requests",
+    "UPDATE",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
   }
+  const session = authorization.session;
 
   const reviewer = getSessionUser(session);
   const request = await prisma.passwordResetRequest.findUnique({
@@ -208,39 +239,55 @@ app.post("/admin/password-reset-requests/:id/approve", async (c) => {
     return c.json({ error: "The requested email does not match a user." }, 400);
   }
 
+  const targetUserId = request.user.id;
   const temporaryPassword = generateTemporaryPassword();
   const issuedAt = new Date();
 
   try {
-    await auth.api.setUserPassword({
-      headers: c.req.raw.headers,
-      body: {
-        userId: request.user.id,
-        newPassword: temporaryPassword,
+    await runAuthorizedAdminUserOperation(
+      prisma,
+      authorization.actor.id,
+      targetUserId,
+      { resourceKey: "password-reset-requests", action: "UPDATE" },
+      { requireSystemFullActorForFullAccessTarget: true },
+      async (transaction) => {
+        const approved = await transaction.passwordResetRequest.updateMany({
+          where: { id: request.id, status: "PENDING" },
+          data: {
+            status: "APPROVED",
+            reviewedAt: issuedAt,
+            reviewedByUserId: reviewer?.id,
+            issuedAt,
+          },
+        });
+        if (approved.count !== 1) {
+          throw new AdminAccessServiceError(
+            "PASSWORD_RESET_REQUEST_CONFLICT",
+            409,
+          );
+        }
+        await createAuth(transaction).api.setUserPassword({
+          headers: c.req.raw.headers,
+          body: {
+            userId: targetUserId,
+            newPassword: temporaryPassword,
+          },
+        });
+        await transaction.user.update({
+          where: { id: targetUserId },
+          data: {
+            mustChangePassword: true,
+            temporaryPasswordIssuedAt: issuedAt,
+          },
+        });
       },
-    });
+    );
   } catch (error) {
+    if (error instanceof AdminAccessServiceError) {
+      return c.json({ error: error.code }, error.status);
+    }
     return c.json({ error: getAuthErrorMessage(error) }, getAuthErrorStatus(error));
   }
-
-  await prisma.$transaction([
-    prisma.user.update({
-      where: { id: request.user.id },
-      data: {
-        mustChangePassword: true,
-        temporaryPasswordIssuedAt: issuedAt,
-      },
-    }),
-    prisma.passwordResetRequest.update({
-      where: { id: request.id },
-      data: {
-        status: "APPROVED",
-        reviewedAt: issuedAt,
-        reviewedByUserId: reviewer?.id,
-        issuedAt,
-      },
-    }),
-  ]);
 
   return c.json({ temporaryPassword });
 });
@@ -248,12 +295,17 @@ app.post("/admin/password-reset-requests/:id/approve", async (c) => {
 app.post("/admin/password-reset-requests/:id/reject", async (c) => {
   const auth = c.get("auth");
   const prisma = c.get("prisma");
-  const session = await getAppSession(auth, c.req.raw.headers);
-  const unauthorized = rejectNonAdmin(session);
-
-  if (unauthorized) {
-    return c.json(unauthorized.body, unauthorized.status);
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "password-reset-requests",
+    "UPDATE",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
   }
+  const session = authorization.session;
 
   const reviewer = getSessionUser(session);
 
@@ -276,14 +328,86 @@ app.post("/admin/password-reset-requests/:id/reject", async (c) => {
   return c.json({ ok: true });
 });
 
+app.get("/admin/users", async (c) => {
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "users",
+    "VIEW",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
+  }
+
+  const query = (c.req.query("query") ?? c.req.query("search") ?? "")
+    .trim()
+    .normalize("NFKC")
+    .slice(0, 100);
+  const commonUserQuery = {
+    where: query
+      ? {
+          OR: [
+            { id: { contains: query, mode: "insensitive" } },
+            { name: { contains: query, mode: "insensitive" } },
+            { email: { contains: query, mode: "insensitive" } },
+          ],
+        }
+      : undefined,
+    orderBy: [{ name: "asc" }, { email: "asc" }, { id: "asc" }],
+    take: 50,
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      banned: true,
+      mustChangePassword: true,
+    },
+  } satisfies Prisma.userFindManyArgs;
+  const canViewAssignedRoles =
+    canAdminAccess(authorization.actor, "roles", "VIEW") &&
+    canAdminAccess(authorization.actor, "role-assignments", "VIEW");
+
+  if (!canViewAssignedRoles) {
+    const users = await prisma.user.findMany(commonUserQuery);
+    return c.json({ users, total: users.length });
+  }
+
+  const users = await prisma.user.findMany({
+    ...commonUserQuery,
+    select: {
+      ...commonUserQuery.select,
+      adminAccessRoleRevision: true,
+      accessRoleAssignments: {
+        orderBy: { roleId: "asc" },
+        select: { roleId: true },
+      },
+    },
+  });
+  return c.json({
+    users: users.map(({ accessRoleAssignments, ...user }) => ({
+      ...user,
+      assignedRoleIds: accessRoleAssignments.map(({ roleId }) => roleId),
+    })),
+    total: users.length,
+  });
+});
+
 app.post("/admin/users", async (c) => {
   const auth = c.get("auth");
   const prisma = c.get("prisma");
-  const session = await getAppSession(auth, c.req.raw.headers);
-  const unauthorized = rejectNonAdmin(session);
-
-  if (unauthorized) {
-    return c.json(unauthorized.body, unauthorized.status);
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "users",
+    "CREATE",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
   }
 
   const body = await readJsonBody(c.req.raw);
@@ -315,37 +439,46 @@ app.post("/admin/users", async (c) => {
   const issuedAt = new Date();
 
   try {
-    const result = await auth.api.createUser({
-      headers: c.req.raw.headers,
-      body: {
-        name,
-        email,
-        role,
-        password: temporaryPassword,
-        data: {
-          mustChangePassword: true,
-          temporaryPasswordIssuedAt: issuedAt,
-        },
+    const user = await runAuthorizedAdminUserCreation(
+      prisma,
+      authorization.actor.id,
+      body.accessRoleIds,
+      async (transaction) => {
+        const result = await createAuth(transaction).api.createUser({
+          headers: c.req.raw.headers,
+          body: {
+            name,
+            email,
+            role,
+            password: temporaryPassword,
+            data: {
+              mustChangePassword: true,
+              temporaryPasswordIssuedAt: issuedAt,
+            },
+          },
+        });
+        const user = await transaction.user.update({
+          where: { id: result.user.id },
+          data: {
+            mustChangePassword: true,
+            temporaryPasswordIssuedAt: issuedAt,
+          },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            mustChangePassword: true,
+          },
+        });
+        return { userId: user.id, value: user };
       },
-    });
-
-    const user = await prisma.user.update({
-      where: { id: result.user.id },
-      data: {
-        mustChangePassword: true,
-        temporaryPasswordIssuedAt: issuedAt,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        mustChangePassword: true,
-      },
-    });
-
+    );
     return c.json({ user, temporaryPassword }, 201);
   } catch (error) {
+    if (error instanceof AdminAccessServiceError) {
+      return respondWithAdminAccessServiceError(c, error);
+    }
     return c.json({ error: getAuthErrorMessage(error) }, getAuthErrorStatus(error));
   }
 });
@@ -353,12 +486,17 @@ app.post("/admin/users", async (c) => {
 app.patch("/admin/users/:id", async (c) => {
   const auth = c.get("auth");
   const prisma = c.get("prisma");
-  const session = await getAppSession(auth, c.req.raw.headers);
-  const unauthorized = rejectNonAdminUserManagement(session);
-
-  if (unauthorized) {
-    return c.json(unauthorized.body, unauthorized.status);
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "users",
+    "UPDATE",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
   }
+  const session = authorization.session;
 
   const actor = getSessionUser(session);
   const parsed = parseAdminUserUpdate(await readJsonBody(c.req.raw));
@@ -388,43 +526,37 @@ app.patch("/admin/users/:id", async (c) => {
     }
   }
 
-  if (
-    parsed.value.field === "role" &&
-    parsed.value.value === "user" &&
-    target.role === "admin"
-  ) {
-    const protectedError = await getProtectedMutationError(
-      prisma,
-      actor!.id,
-      target,
-    );
-
-    if (protectedError) {
-      return c.json({ error: protectedError }, 409);
-    }
-  }
-
   try {
     if (parsed.value.field === "role") {
-      const result = await auth.api.setRole({
-        headers: c.req.raw.headers,
-        body: {
-          userId,
-          role: parsed.value.value,
-        },
-      });
-      return c.json({ user: result.user });
+      const user = await updateProtectedAdminUserRole(
+        prisma,
+        actor!.id,
+        userId,
+        parsed.value.value,
+      );
+      return c.json({ user });
     }
 
-    const user = await auth.api.adminUpdateUser({
-      headers: c.req.raw.headers,
-      body: {
-        userId,
-        data: { [parsed.value.field]: parsed.value.value },
-      },
-    });
+    const user = await runAuthorizedAdminUserOperation(
+      prisma,
+      actor!.id,
+      userId,
+      { resourceKey: "users", action: "UPDATE" },
+      {},
+      (transaction) =>
+        createAuth(transaction).api.adminUpdateUser({
+          headers: c.req.raw.headers,
+          body: {
+            userId,
+            data: { [parsed.value.field]: parsed.value.value },
+          },
+        }),
+    );
     return c.json({ user });
-  } catch {
+  } catch (error) {
+    if (error instanceof AdminAccessServiceError) {
+      return c.json({ error: error.code }, error.status);
+    }
     if (parsed.value.field === "email") {
       const existing = await prisma.user.findFirst({
         where: {
@@ -448,12 +580,17 @@ app.patch("/admin/users/:id", async (c) => {
 app.post("/admin/users/:id/reset-password", async (c) => {
   const auth = c.get("auth");
   const prisma = c.get("prisma");
-  const session = await getAppSession(auth, c.req.raw.headers);
-  const unauthorized = rejectNonAdminUserManagement(session);
-
-  if (unauthorized) {
-    return c.json(unauthorized.body, unauthorized.status);
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "users",
+    "UPDATE",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
   }
+  const session = authorization.session;
 
   const parsed = parseAdminUserPasswordReset(await readJsonBody(c.req.raw));
 
@@ -474,89 +611,82 @@ app.post("/admin/users/:id/reset-password", async (c) => {
     return c.json({ error: ADMIN_USER_ERROR_CODES.selfProtected }, 409);
   }
 
+  const changedAt = new Date();
+  let updatedUser: { id: string; mustChangePassword: boolean };
+
   try {
-    await auth.api.setUserPassword({
-      headers: c.req.raw.headers,
-      body: {
-        userId,
-        newPassword: parsed.value.password,
+    updatedUser = await runAuthorizedAdminUserOperation(
+      prisma,
+      actor.id,
+      userId,
+      { resourceKey: "users", action: "UPDATE" },
+      { requireSystemFullActorForFullAccessTarget: true },
+      async (transaction) => {
+        const transactionAuth = createAuth(transaction);
+        await transactionAuth.api.setUserPassword({
+          headers: c.req.raw.headers,
+          body: {
+            userId,
+            newPassword: parsed.value.password,
+          },
+        });
+        const user = await transaction.user.update({
+          where: { id: userId },
+          data:
+            parsed.value.mode === "temporary"
+              ? {
+                  mustChangePassword: true,
+                  temporaryPasswordIssuedAt: changedAt,
+                }
+              : {
+                  mustChangePassword: false,
+                  temporaryPasswordIssuedAt: null,
+                  passwordChangedAt: changedAt,
+                },
+          select: {
+            id: true,
+            mustChangePassword: true,
+          },
+        });
+        await transaction.passwordResetRequest.updateMany({
+          where: {
+            userId,
+            status: "PENDING",
+          },
+          data: {
+            status: "REJECTED",
+            reviewedAt: changedAt,
+            reviewedByUserId: actor.id,
+          },
+        });
+        await transaction.passwordResetRequest.updateMany({
+          where: {
+            userId,
+            status: "APPROVED",
+          },
+          data: {
+            status: "CONSUMED",
+            consumedAt: changedAt,
+          },
+        });
+        if (parsed.value.revokeSessions) {
+          await transactionAuth.api.revokeUserSessions({
+            headers: c.req.raw.headers,
+            body: { userId },
+          });
+        }
+        return user;
       },
-    });
-  } catch {
+    );
+  } catch (error) {
+    if (error instanceof AdminAccessServiceError) {
+      return c.json({ error: error.code }, error.status);
+    }
     console.error("Failed to reset an admin-managed user password.");
     return c.json(
       { error: ADMIN_USER_ERROR_CODES.resetPasswordFailed },
       500,
     );
-  }
-
-  const changedAt = new Date();
-  let updatedUser: { id: string; mustChangePassword: boolean };
-
-  try {
-    const [user] = await prisma.$transaction([
-      prisma.user.update({
-        where: { id: userId },
-        data:
-          parsed.value.mode === "temporary"
-            ? {
-                mustChangePassword: true,
-                temporaryPasswordIssuedAt: changedAt,
-              }
-            : {
-                mustChangePassword: false,
-                temporaryPasswordIssuedAt: null,
-                passwordChangedAt: changedAt,
-              },
-        select: {
-          id: true,
-          mustChangePassword: true,
-        },
-      }),
-      prisma.passwordResetRequest.updateMany({
-        where: {
-          userId,
-          status: "PENDING",
-        },
-        data: {
-          status: "REJECTED",
-          reviewedAt: changedAt,
-          reviewedByUserId: actor.id,
-        },
-      }),
-      prisma.passwordResetRequest.updateMany({
-        where: {
-          userId,
-          status: "APPROVED",
-        },
-        data: {
-          status: "CONSUMED",
-          consumedAt: changedAt,
-        },
-      }),
-    ]);
-    updatedUser = user;
-  } catch {
-    console.error("Failed to save admin-managed password reset metadata.");
-    return c.json(
-      { error: ADMIN_USER_ERROR_CODES.resetPasswordFailed },
-      500,
-    );
-  }
-
-  if (parsed.value.revokeSessions) {
-    try {
-      await auth.api.revokeUserSessions({
-        headers: c.req.raw.headers,
-        body: { userId },
-      });
-    } catch {
-      console.error("Failed to revoke sessions after an admin password reset.");
-      return c.json(
-        { error: ADMIN_USER_ERROR_CODES.sessionRevocationFailed },
-        500,
-      );
-    }
   }
 
   return c.json({ ok: true, user: updatedUser });
@@ -565,12 +695,17 @@ app.post("/admin/users/:id/reset-password", async (c) => {
 app.post("/admin/users/:id/suspend", async (c) => {
   const auth = c.get("auth");
   const prisma = c.get("prisma");
-  const session = await getAppSession(auth, c.req.raw.headers);
-  const unauthorized = rejectNonAdminUserManagement(session);
-
-  if (unauthorized) {
-    return c.json(unauthorized.body, unauthorized.status);
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "users",
+    "UPDATE",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
   }
+  const session = authorization.session;
 
   const userId = c.req.param("id");
   const target = await findManagedUser(prisma, userId);
@@ -579,26 +714,17 @@ app.post("/admin/users/:id/suspend", async (c) => {
     return c.json({ error: ADMIN_USER_ERROR_CODES.userNotFound }, 404);
   }
 
-  const protectedError = await getProtectedMutationError(
-    prisma,
-    getSessionUser(session)!.id,
-    target,
-  );
-
-  if (protectedError) {
-    return c.json({ error: protectedError }, 409);
-  }
-
   try {
-    const result = await auth.api.banUser({
-      headers: c.req.raw.headers,
-      body: {
-        userId,
-        banReason: "Suspended by an administrator.",
-      },
-    });
-    return c.json({ user: result.user });
-  } catch {
+    const user = await suspendProtectedAdminUser(
+      prisma,
+      getSessionUser(session)!.id,
+      userId,
+    );
+    return c.json({ user });
+  } catch (error) {
+    if (error instanceof AdminAccessServiceError) {
+      return c.json({ error: error.code }, error.status);
+    }
     console.error("Failed to suspend an admin-managed user.");
     return c.json({ error: ADMIN_USER_ERROR_CODES.suspendFailed }, 500);
   }
@@ -607,11 +733,15 @@ app.post("/admin/users/:id/suspend", async (c) => {
 app.post("/admin/users/:id/reactivate", async (c) => {
   const auth = c.get("auth");
   const prisma = c.get("prisma");
-  const session = await getAppSession(auth, c.req.raw.headers);
-  const unauthorized = rejectNonAdminUserManagement(session);
-
-  if (unauthorized) {
-    return c.json(unauthorized.body, unauthorized.status);
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "users",
+    "UPDATE",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
   }
 
   const userId = c.req.param("id");
@@ -620,12 +750,16 @@ app.post("/admin/users/:id/reactivate", async (c) => {
   }
 
   try {
-    const result = await auth.api.unbanUser({
-      headers: c.req.raw.headers,
-      body: { userId },
-    });
-    return c.json({ user: result.user });
-  } catch {
+    const user = await reactivateAdminUser(
+      prisma,
+      authorization.actor.id,
+      userId,
+    );
+    return c.json({ user });
+  } catch (error) {
+    if (error instanceof AdminAccessServiceError) {
+      return c.json({ error: error.code }, error.status);
+    }
     console.error("Failed to reactivate an admin-managed user.");
     return c.json({ error: ADMIN_USER_ERROR_CODES.reactivateFailed }, 500);
   }
@@ -634,12 +768,17 @@ app.post("/admin/users/:id/reactivate", async (c) => {
 app.delete("/admin/users/:id", async (c) => {
   const auth = c.get("auth");
   const prisma = c.get("prisma");
-  const session = await getAppSession(auth, c.req.raw.headers);
-  const unauthorized = rejectNonAdminUserManagement(session);
-
-  if (unauthorized) {
-    return c.json(unauthorized.body, unauthorized.status);
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "users",
+    "DELETE",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
   }
+  const session = authorization.session;
 
   const userId = c.req.param("id");
   const target = await findManagedUser(prisma, userId);
@@ -648,23 +787,17 @@ app.delete("/admin/users/:id", async (c) => {
     return c.json({ error: ADMIN_USER_ERROR_CODES.userNotFound }, 404);
   }
 
-  const protectedError = await getProtectedMutationError(
-    prisma,
-    getSessionUser(session)!.id,
-    target,
-  );
-
-  if (protectedError) {
-    return c.json({ error: protectedError }, 409);
-  }
-
   try {
-    await auth.api.removeUser({
-      headers: c.req.raw.headers,
-      body: { userId },
-    });
+    await deleteProtectedAdminUser(
+      prisma,
+      getSessionUser(session)!.id,
+      userId,
+    );
     return c.json({ ok: true });
-  } catch {
+  } catch (error) {
+    if (error instanceof AdminAccessServiceError) {
+      return c.json({ error: error.code }, error.status);
+    }
     console.error("Failed to delete an admin-managed user.");
     return c.json({ error: ADMIN_USER_ERROR_CODES.deleteFailed }, 500);
   }
@@ -673,11 +806,15 @@ app.delete("/admin/users/:id", async (c) => {
 app.put("/admin/phone-settings", async (c) => {
   const auth = c.get("auth");
   const prisma = c.get("prisma");
-  const session = await getAppSession(auth, c.req.raw.headers);
-  const unauthorized = rejectNonAdminForSettings(session);
-
-  if (unauthorized) {
-    return c.json(unauthorized.body, unauthorized.status);
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "phone-settings",
+    "UPDATE",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
   }
 
   const parsed = parsePhoneSettings(await readJsonBody(c.req.raw));
@@ -697,11 +834,15 @@ app.put("/admin/phone-settings", async (c) => {
 app.put("/admin/chat-settings", async (c) => {
   const auth = c.get("auth");
   const prisma = c.get("prisma");
-  const session = await getAppSession(auth, c.req.raw.headers);
-  const unauthorized = rejectNonAdminForSettings(session);
-
-  if (unauthorized) {
-    return c.json(unauthorized.body, unauthorized.status);
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "chat-settings",
+    "UPDATE",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
   }
 
   const parsed = parseChatSettings(await readJsonBody(c.req.raw));
@@ -722,11 +863,15 @@ app.put("/admin/chat-settings", async (c) => {
 app.put("/admin/language-settings", async (c) => {
   const auth = c.get("auth");
   const prisma = c.get("prisma");
-  const session = await getAppSession(auth, c.req.raw.headers);
-  const unauthorized = rejectNonAdminForSettings(session);
-
-  if (unauthorized) {
-    return c.json(unauthorized.body, unauthorized.status);
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "language-settings",
+    "UPDATE",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
   }
 
   const parsed = parseLanguageSettings(await readJsonBody(c.req.raw));
@@ -746,11 +891,15 @@ app.put("/admin/language-settings", async (c) => {
 app.put("/admin/maintenance-settings", async (c) => {
   const auth = c.get("auth");
   const prisma = c.get("prisma");
-  const session = await getAppSession(auth, c.req.raw.headers);
-  const unauthorized = rejectNonAdminForSettings(session);
-
-  if (unauthorized) {
-    return c.json(unauthorized.body, unauthorized.status);
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "maintenance-settings",
+    "UPDATE",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
   }
 
   try {
@@ -781,6 +930,302 @@ app.put("/admin/maintenance-settings", async (c) => {
     // body, credentials, or original error.
     console.error("Failed to save maintenance settings.");
     return c.json({ error: SETTINGS_ERROR_CODES.saveFailed }, 500);
+  }
+});
+
+app.get("/admin/roles", async (c) => {
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "roles",
+    "VIEW",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
+  }
+
+  const directory = parseAdminRoleDirectoryInput({
+    query: c.req.query("query"),
+    page: c.req.query("page"),
+    pageSize: c.req.query("pageSize"),
+  });
+  if (!directory.ok) {
+    return c.json({ error: directory.error }, 400);
+  }
+
+  const result = await listAdminRoles(prisma, directory.value);
+  return c.json({
+    roles: result.roles.map(({ _count, ...role }) => ({
+      ...role,
+      memberCount: _count.assignments,
+    })),
+    total: result.total,
+    page: result.page,
+    pageSize: result.pageSize,
+    totalPages: result.totalPages,
+  });
+});
+
+app.post("/admin/roles", async (c) => {
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "roles",
+    "CREATE",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
+  }
+
+  const metadata = parseAdminRoleMetadata(await readJsonBody(c.req.raw));
+  if (!metadata.ok) return c.json({ error: metadata.code }, 400);
+
+  try {
+    const role = await createAdminRole(
+      prisma,
+      authorization.actor.id,
+      metadata.value,
+    );
+    return c.json({ role }, 201);
+  } catch (error) {
+    return respondWithAdminAccessServiceError(c, error);
+  }
+});
+
+app.get("/admin/roles/:id", async (c) => {
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "roles",
+    "VIEW",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
+  }
+
+  const role = await getAdminRoleDetail(prisma, c.req.param("id"));
+  return role
+    ? c.json({ role })
+    : c.json({ error: "ROLE_NOT_FOUND" }, 404);
+});
+
+app.get("/admin/roles/:id/members", async (c) => {
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "roles",
+    "VIEW",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
+  }
+  if (
+    !canAdminAccess(authorization.actor, "users", "VIEW") ||
+    !canAdminAccess(authorization.actor, "role-assignments", "VIEW")
+  ) {
+    return c.json({ error: "ADMIN_ACCESS_DENIED" }, 403);
+  }
+
+  const directory = parseAdminRoleDirectoryInput({
+    query: c.req.query("query"),
+    page: c.req.query("page"),
+    pageSize: c.req.query("pageSize"),
+  });
+  if (!directory.ok) return c.json({ error: directory.error }, 400);
+
+  const result = await listAdminRoleMembers(
+    prisma,
+    c.req.param("id"),
+    directory.value,
+  );
+  return result
+    ? c.json(result)
+    : c.json({ error: "ROLE_NOT_FOUND" }, 404);
+});
+
+app.get("/admin/roles/:id/member-candidates", async (c) => {
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "roles",
+    "VIEW",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
+  }
+  if (
+    !canAdminAccess(authorization.actor, "users", "VIEW") ||
+    !canAdminAccess(authorization.actor, "role-assignments", "VIEW")
+  ) {
+    return c.json({ error: "ADMIN_ACCESS_DENIED" }, 403);
+  }
+
+  const directory = parseAdminRoleDirectoryInput({
+    query: c.req.query("query"),
+    page: c.req.query("page"),
+    pageSize: c.req.query("pageSize"),
+  });
+  if (!directory.ok) return c.json({ error: directory.error }, 400);
+
+  const result = await listAdminRoleMemberCandidates(
+    prisma,
+    c.req.param("id"),
+    directory.value,
+    authorization.actor.id,
+  );
+  return result
+    ? c.json(result)
+    : c.json({ error: "ROLE_NOT_FOUND" }, 404);
+});
+
+app.patch("/admin/roles/:id", async (c) => {
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "roles",
+    "UPDATE",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
+  }
+
+  const body = await readJsonBody(c.req.raw);
+  if (!isObjectWithRevision(body)) {
+    return c.json({ error: "INVALID_ROLE_REQUEST" }, 400);
+  }
+  const metadata = parseAdminRoleMetadata(body);
+  if (!metadata.ok) return c.json({ error: metadata.code }, 400);
+
+  try {
+    const role = await updateAdminRoleMetadata(
+      prisma,
+      authorization.actor.id,
+      c.req.param("id"),
+      body.expectedRevision,
+      metadata.value,
+    );
+    return c.json({ role });
+  } catch (error) {
+    return respondWithAdminAccessServiceError(c, error);
+  }
+});
+
+app.put("/admin/roles/:id/permissions", async (c) => {
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "roles",
+    "UPDATE",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
+  }
+
+  const body = await readJsonBody(c.req.raw);
+  if (
+    !isObjectWithRevision(body) ||
+    !("permissions" in body)
+  ) {
+    return c.json({ error: "INVALID_ROLE_PERMISSIONS" }, 400);
+  }
+  const permissions = parsePermissionMatrix(body.permissions);
+  if (!permissions.ok) return c.json({ error: permissions.code }, 400);
+
+  try {
+    const role = await replaceAdminRolePermissions(
+      prisma,
+      authorization.actor.id,
+      c.req.param("id"),
+      body.expectedRevision,
+      permissions.value,
+    );
+    return c.json({ role });
+  } catch (error) {
+    return respondWithAdminAccessServiceError(c, error);
+  }
+});
+
+app.delete("/admin/roles/:id", async (c) => {
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "roles",
+    "DELETE",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
+  }
+
+  const body = await readJsonBody(c.req.raw);
+  if (!isObjectWithRevision(body)) {
+    return c.json({ error: "INVALID_ROLE_REQUEST" }, 400);
+  }
+  try {
+    await deleteAdminRole(
+      prisma,
+      authorization.actor.id,
+      c.req.param("id"),
+      body.expectedRevision,
+    );
+    return c.body(null, 204);
+  } catch (error) {
+    return respondWithAdminAccessServiceError(c, error);
+  }
+});
+
+app.put("/admin/users/:id/access-roles", async (c) => {
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "role-assignments",
+    "UPDATE",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
+  }
+
+  const body = await readJsonBody(c.req.raw);
+  if (!isAccessRoleAssignmentPayload(body)) {
+    return c.json({ error: "INVALID_ROLE_REQUEST" }, 400);
+  }
+  try {
+    const assignment = await replaceUserAdminAccessRoles(
+      prisma,
+      authorization.actor.id,
+      c.req.param("id"),
+      body.roleIds,
+      body.expectedAssignmentRevision,
+    );
+    return c.json({ assignment });
+  } catch (error) {
+    return respondWithAdminAccessServiceError(c, error);
   }
 });
 
@@ -893,7 +1338,12 @@ function isEmailPayload(value: unknown): value is { email: string } {
 
 function isCreateUserPayload(
   value: unknown,
-): value is { name: string; email: string; role: string } {
+): value is {
+  name: string;
+  email: string;
+  role: string;
+  accessRoleIds?: string[];
+} {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -902,7 +1352,39 @@ function isCreateUserPayload(
     "role" in value &&
     typeof value.name === "string" &&
     typeof value.email === "string" &&
-    typeof value.role === "string"
+    typeof value.role === "string" &&
+    (!("accessRoleIds" in value) ||
+      (Array.isArray(value.accessRoleIds) &&
+        value.accessRoleIds.length <= 1 &&
+        value.accessRoleIds.every((roleId) => typeof roleId === "string")))
+  );
+}
+
+function isObjectWithRevision(
+  value: unknown,
+): value is Record<string, unknown> & { expectedRevision: number } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "expectedRevision" in value &&
+    Number.isSafeInteger(value.expectedRevision) &&
+    Number(value.expectedRevision) > 0
+  );
+}
+
+function isAccessRoleAssignmentPayload(
+  value: unknown,
+): value is { roleIds: string[]; expectedAssignmentRevision: number } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "roleIds" in value &&
+    Array.isArray(value.roleIds) &&
+    value.roleIds.length <= 1 &&
+    value.roleIds.every((roleId) => typeof roleId === "string") &&
+    "expectedAssignmentRevision" in value &&
+    Number.isSafeInteger(value.expectedAssignmentRevision) &&
+    Number(value.expectedAssignmentRevision) > 0
   );
 }
 
@@ -931,45 +1413,6 @@ function isEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-function rejectNonAdmin(session: Awaited<ReturnType<typeof getAppSession>>) {
-  if (!session) {
-    return { status: 401 as const, body: { error: "Authentication is required." } };
-  }
-
-  if (!isAdminSession(session)) {
-    return { status: 403 as const, body: { error: "Administrator role is required." } };
-  }
-
-  return null;
-}
-
-function rejectNonAdminUserManagement(
-  session: Awaited<ReturnType<typeof getAppSession>>,
-) {
-  if (!session) {
-    return {
-      status: 401 as const,
-      body: { error: ADMIN_USER_ERROR_CODES.authenticationRequired },
-    };
-  }
-
-  if (!isAdminSession(session)) {
-    return {
-      status: 403 as const,
-      body: { error: ADMIN_USER_ERROR_CODES.administratorRequired },
-    };
-  }
-
-  if (shouldChangePassword(session)) {
-    return {
-      status: 403 as const,
-      body: { error: ADMIN_USER_ERROR_CODES.passwordChangeRequired },
-    };
-  }
-
-  return null;
-}
-
 async function findManagedUser(prisma: PrismaClient, id: string) {
   return prisma.user.findUnique({
     where: { id },
@@ -979,33 +1422,6 @@ async function findManagedUser(prisma: PrismaClient, id: string) {
       banned: true,
     },
   });
-}
-
-async function getProtectedMutationError(
-  prisma: PrismaClient,
-  actorUserId: string,
-  target: NonNullable<Awaited<ReturnType<typeof findManagedUser>>>,
-): Promise<AdminUserErrorCode | null> {
-  const activeAdminCount = isActiveAdmin(target)
-    ? await prisma.user.count({
-        where: {
-          role: "admin",
-          NOT: { banned: true },
-        },
-      })
-    : 2;
-
-  return getProtectedAdminActionError({
-    activeAdminCount,
-    actorUserId,
-    target,
-  });
-}
-
-function rejectNonAdminForSettings(
-  session: Awaited<ReturnType<typeof getAppSession>>,
-) {
-  return getSettingsAuthorizationFailure(session);
 }
 
 function getAuthErrorMessage(error: unknown) {
@@ -1037,4 +1453,15 @@ function getAuthErrorStatus(error: unknown): ContentfulStatusCode {
 
 function isContentfulStatusCode(value: number): value is ContentfulStatusCode {
   return value !== 101 && value !== 204 && value !== 205 && value !== 304;
+}
+
+function respondWithAdminAccessServiceError(
+  c: Context<AppEnvironment>,
+  error: unknown,
+) {
+  if (error instanceof AdminAccessServiceError) {
+    return c.json({ error: error.code }, error.status);
+  }
+  console.error("Admin access operation failed.");
+  return c.json({ error: "ADMIN_ACCESS_OPERATION_FAILED" }, 500);
 }

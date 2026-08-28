@@ -1,10 +1,14 @@
-import { requireAdminSession } from "@/lib/server/auth/server";
+import { requireAdminAccess } from "@/lib/server/admin-access/server";
 import { withPrisma } from "@/lib/server/prisma";
 
 import { PasswordResetRequestsView } from "./PasswordResetRequestsView";
 
 export default async function PasswordResetRequestsPage() {
-  await requireAdminSession("/admin/password-reset-requests");
+  const { actor } = await requireAdminAccess(
+    "password-reset-requests",
+    "VIEW",
+    "/admin/password-reset-requests",
+  );
 
   const requests = await withPrisma((prisma) =>
     prisma.passwordResetRequest.findMany({
@@ -24,6 +28,7 @@ export default async function PasswordResetRequestsPage() {
 
   return (
     <PasswordResetRequestsView
+      canUpdate={canAdminAccess(actor, "password-reset-requests", "UPDATE")}
       requests={requests.map((request) => ({
         id: request.id,
         email: request.email,
@@ -41,3 +46,4 @@ export default async function PasswordResetRequestsPage() {
     />
   );
 }
+import { canAdminAccess } from "@/lib/admin-access/authorization";

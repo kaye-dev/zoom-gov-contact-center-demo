@@ -7,6 +7,7 @@ import {
 } from "@/lib/server/prisma";
 
 export const runtime = "nodejs";
+const ADMIN_AUTH_API_PREFIX = "/api/auth/admin";
 
 export async function GET(request: Request) {
   return handleAuthRequest("GET", request);
@@ -17,6 +18,14 @@ export async function POST(request: Request) {
 }
 
 async function handleAuthRequest(method: "GET" | "POST", request: Request) {
+  const pathname = new URL(request.url).pathname;
+  if (
+    pathname === ADMIN_AUTH_API_PREFIX ||
+    pathname.startsWith(`${ADMIN_AUTH_API_PREFIX}/`)
+  ) {
+    return Response.json({ error: "Not found." }, { status: 404 });
+  }
+
   const database = createDatabaseContext();
 
   try {

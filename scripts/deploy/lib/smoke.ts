@@ -18,6 +18,7 @@ export type RequestFunction = (
 ) => Promise<Response>;
 
 export type SmokeOptions = {
+  adminAccessExpectation?: AdminAccessSmokeExpectation;
   canonicalOrigin?: URL;
   cleanupRetryDelayMs?: number;
   publicSiteExpectation?: MaintenancePublicExpectation;
@@ -25,6 +26,7 @@ export type SmokeOptions = {
 };
 
 export type SearchIndexingExpectation = "required" | "legacy-compatible";
+export type AdminAccessSmokeExpectation = "required" | "legacy-compatible";
 
 export async function runSmokeChecks(
   baseUrl: URL,
@@ -623,6 +625,8 @@ async function verifyAdminCrud(
   let temporaryUserId = "";
   let primaryError: unknown;
   let creationAttempted = false;
+  const adminAccessExpectation =
+    options.adminAccessExpectation ?? "required";
   const temporaryEmail = `deployment-smoke-${randomUUID()}@example.invalid`;
 
   try {
@@ -661,6 +665,9 @@ async function verifyAdminCrud(
     ) {
       throw new Error("Authenticated session is not the expected administrator.");
     }
+    if (adminAccessExpectation === "required") {
+      await assertLegacyAdminAuthEndpointsRemoved(baseUrl, cookie, request);
+    }
 
     for (const path of ["/api/admin/password-reset-requests", "/admin/users"]) {
       const response = await fetchWithTimeout(
@@ -694,18 +701,35 @@ async function verifyAdminCrud(
       }
     }
 
-    await assertTemporaryUserAbsent(baseUrl, cookie, temporaryEmail, request);
+    await assertTemporaryUserAbsent(
+      baseUrl,
+      cookie,
+      temporaryEmail,
+      request,
+      adminAccessExpectation,
+    );
 
     creationAttempted = true;
     const createdResponse = await fetchWithTimeout(
       baseUrl,
       "/api/admin/users",
       request,
-      jsonRequest(baseUrl, cookie, {
-        email: temporaryEmail,
-        name: "Deployment verification",
-        role: "user",
-      }),
+      jsonRequest(
+        baseUrl,
+        cookie,
+        adminAccessExpectation === "required"
+          ? {
+              email: temporaryEmail,
+              name: "Deployment verification",
+              role: "user",
+              accessRoleIds: [],
+            }
+          : {
+              email: temporaryEmail,
+              name: "Deployment verification",
+              role: "user",
+            },
+      ),
     );
     const created = (await createdResponse.json().catch(() => null)) as {
       user?: { id?: unknown; email?: unknown };
@@ -725,8 +749,29 @@ async function verifyAdminCrud(
         `Temporary user creation returned HTTP ${createdResponse.status}.`,
       );
     }
-    await removeTemporaryUser(baseUrl, cookie, temporaryUserId, request);
-    await assertTemporaryUserAbsent(baseUrl, cookie, temporaryEmail, request);
+    if (adminAccessExpectation === "required") {
+      await assertTemporaryUserHasNoAccess(
+        baseUrl,
+        cookie,
+        temporaryEmail,
+        temporaryUserId,
+        request,
+      );
+    }
+    await removeTemporaryUser(
+      baseUrl,
+      cookie,
+      temporaryUserId,
+      request,
+      adminAccessExpectation,
+    );
+    await assertTemporaryUserAbsent(
+      baseUrl,
+      cookie,
+      temporaryEmail,
+      request,
+      adminAccessExpectation,
+    );
     temporaryUserId = "";
 
     const signOut = await fetchWithTimeout(
@@ -754,6 +799,7 @@ async function verifyAdminCrud(
           temporaryUserId,
           creationAttempted,
           options.cleanupRetryDelayMs ?? 1_000,
+          adminAccessExpectation,
         );
       } catch (error) {
         cleanupError = error;
@@ -778,17 +824,46 @@ async function verifyAdminCrud(
   }
 }
 
+async function assertLegacyAdminAuthEndpointsRemoved(
+  baseUrl: URL,
+  cookie: string,
+  request: RequestFunction,
+): Promise<void> {
+  const legacyRequests: Array<[string, RequestInit]> = [
+    ["/api/auth/admin/list-users", cookieRequest(baseUrl, cookie)],
+    [
+      "/api/auth/admin/remove-user",
+      jsonRequest(baseUrl, cookie, { userId: "deployment-smoke-nonexistent" }),
+    ],
+  ];
+  for (const [path, init] of legacyRequests) {
+    const response = await fetchWithTimeout(baseUrl, path, request, init);
+    if (response.status !== 404) {
+      throw new Error(
+        `Removed Better Auth admin endpoint ${path} returned HTTP ${response.status}; expected 404.`,
+      );
+    }
+    await response.arrayBuffer();
+  }
+}
+
 async function removeTemporaryUser(
   baseUrl: URL,
   cookie: string,
   userId: string,
   request: RequestFunction,
+  adminAccessExpectation: AdminAccessSmokeExpectation,
 ): Promise<void> {
+  const legacyCompatible = adminAccessExpectation === "legacy-compatible";
   const response = await fetchWithTimeout(
     baseUrl,
-    "/api/auth/admin/remove-user",
+    legacyCompatible
+      ? "/api/auth/admin/remove-user"
+      : `/api/admin/users/${encodeURIComponent(userId)}`,
     request,
-    jsonRequest(baseUrl, cookie, { userId }),
+    legacyCompatible
+      ? jsonRequest(baseUrl, cookie, { userId })
+      : { ...cookieRequest(baseUrl, cookie), method: "DELETE" },
   );
   if (!response.ok) {
     throw new Error(`remove-user returned HTTP ${response.status}.`);
@@ -804,6 +879,7 @@ async function cleanupTemporaryUserWithRetry(
   knownUserId: string,
   ambiguousCreationAttempt: boolean,
   retryDelayMs: number,
+  adminAccessExpectation: AdminAccessSmokeExpectation,
 ): Promise<void> {
   const attempts = ambiguousCreationAttempt ? 3 : 1;
   let candidateId = knownUserId;
@@ -815,12 +891,25 @@ async function cleanupTemporaryUserWithRetry(
         cookie,
         email,
         request,
+        adminAccessExpectation,
       );
       if (candidateId) {
-        await removeTemporaryUser(baseUrl, cookie, candidateId, request);
+        await removeTemporaryUser(
+          baseUrl,
+          cookie,
+          candidateId,
+          request,
+          adminAccessExpectation,
+        );
         candidateId = "";
       }
-      await assertTemporaryUserAbsent(baseUrl, cookie, email, request);
+      await assertTemporaryUserAbsent(
+        baseUrl,
+        cookie,
+        email,
+        request,
+        adminAccessExpectation,
+      );
       lastError = undefined;
       if (!ambiguousCreationAttempt || attempt === attempts) {
         return;
@@ -842,10 +931,47 @@ async function assertTemporaryUserAbsent(
   cookie: string,
   email: string,
   request: RequestFunction,
+  adminAccessExpectation: AdminAccessSmokeExpectation,
 ): Promise<void> {
-  const payload = await listTemporaryUsers(baseUrl, cookie, email, request);
+  const payload = await listTemporaryUsers(
+    baseUrl,
+    cookie,
+    email,
+    request,
+    adminAccessExpectation,
+  );
   if (payload.users.length !== 0 || payload.total !== 0) {
     throw new Error("Temporary smoke user still exists after cleanup.");
+  }
+}
+
+async function assertTemporaryUserHasNoAccess(
+  baseUrl: URL,
+  cookie: string,
+  email: string,
+  expectedUserId: string,
+  request: RequestFunction,
+): Promise<void> {
+  const payload = await listTemporaryUsers(
+    baseUrl,
+    cookie,
+    email,
+    request,
+    "required",
+  );
+  const user = payload.users[0];
+  if (
+    payload.total !== 1 ||
+    payload.users.length !== 1 ||
+    user?.id !== expectedUserId ||
+    user.email !== email ||
+    !Array.isArray(user.assignedRoleIds) ||
+    user.assignedRoleIds.length !== 1 ||
+    user.assignedRoleIds[0] !== "system-no-access"
+  ) {
+    throw new Error(
+      "Temporary smoke user did not receive exactly the NO_ACCESS system role.",
+    );
   }
 }
 
@@ -854,8 +980,15 @@ async function findTemporaryUserId(
   cookie: string,
   email: string,
   request: RequestFunction,
+  adminAccessExpectation: AdminAccessSmokeExpectation,
 ): Promise<string> {
-  const payload = await listTemporaryUsers(baseUrl, cookie, email, request);
+  const payload = await listTemporaryUsers(
+    baseUrl,
+    cookie,
+    email,
+    request,
+    adminAccessExpectation,
+  );
   if (payload.total === 0 && payload.users.length === 0) {
     return "";
   }
@@ -875,21 +1008,36 @@ async function listTemporaryUsers(
   cookie: string,
   email: string,
   request: RequestFunction,
-): Promise<{ users: Array<{ id?: unknown; email?: unknown }>; total: number }> {
-  const query = new URLSearchParams({
-    filterField: "email",
-    filterOperator: "eq",
-    filterValue: email,
-    limit: "1",
-  });
+  adminAccessExpectation: AdminAccessSmokeExpectation,
+): Promise<{
+  users: Array<{
+    id?: unknown;
+    email?: unknown;
+    assignedRoleIds?: unknown;
+  }>;
+  total: number;
+}> {
+  const legacyCompatible = adminAccessExpectation === "legacy-compatible";
+  const query = legacyCompatible
+    ? new URLSearchParams({
+        filterField: "email",
+        filterOperator: "eq",
+        filterValue: email,
+        limit: "1",
+      })
+    : new URLSearchParams({ query: email });
   const response = await fetchWithTimeout(
     baseUrl,
-    `/api/auth/admin/list-users?${query.toString()}`,
+    `${legacyCompatible ? "/api/auth/admin/list-users" : "/api/admin/users"}?${query.toString()}`,
     request,
     cookieRequest(baseUrl, cookie),
   );
   const payload = (await response.json().catch(() => null)) as {
-    users?: Array<{ id?: unknown; email?: unknown }>;
+    users?: Array<{
+      id?: unknown;
+      email?: unknown;
+      assignedRoleIds?: unknown;
+    }>;
     total?: unknown;
   } | null;
   if (

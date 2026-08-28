@@ -28,6 +28,7 @@ type MaintenanceSettingsFormProps = {
   initialConfig: MaintenanceConfig | null;
   initialEffective: MaintenanceEffectiveState | null;
   initialRevision: number | null;
+  allowUpdate: boolean;
 };
 
 type Feedback =
@@ -62,13 +63,15 @@ export function MaintenanceSettingsForm({
   initialConfig,
   initialEffective,
   initialRevision,
+  allowUpdate,
 }: MaintenanceSettingsFormProps) {
   const { locale, t } = useI18n();
   const router = useRouter();
-  const canEdit =
+  const hasCurrentValue =
     initialConfig !== null && isValidMaintenanceRevision(initialRevision);
+  const canEdit = allowUpdate && hasCurrentValue;
   const [mode, setMode] = useState<MaintenanceMode | null>(
-    canEdit ? initialConfig?.mode ?? null : null,
+    initialConfig?.mode ?? null,
   );
   const [scheduledStartAtJst, setScheduledStartAtJst] = useState(
     toJstDateTimeLocal(initialConfig?.scheduledStartAt ?? null),
@@ -305,7 +308,7 @@ export function MaintenanceSettingsForm({
         </p>
       </div>
 
-      {!canEdit ? (
+      {!hasCurrentValue ? (
         <div
           role="alert"
           className="space-y-1 rounded-lg border border-red-300 bg-red-50 p-4 text-red-800 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200"

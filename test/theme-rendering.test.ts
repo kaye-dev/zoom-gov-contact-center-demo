@@ -143,15 +143,15 @@ test("selected and accent surfaces use theme-aware semantic roles", () => {
   );
 });
 
-test("native checkboxes and radios keep semantic accent and fixed geometry", () => {
-  const selectionControls = [
+test("native radios keep semantic accent and fixed geometry", () => {
+  const radioControls = [
     ...combinedAppTsxSource.matchAll(/<input\b[\s\S]*?\/>/g),
   ]
     .map(([source]) => source)
-    .filter((source) => /type="(?:checkbox|radio)"/.test(source));
+    .filter((source) => /type="radio"/.test(source));
 
-  assert.ok(selectionControls.length >= 4);
-  selectionControls.forEach((source) => {
+  assert.ok(radioControls.length >= 3);
+  radioControls.forEach((source) => {
     assert.match(source, /accent-accent/);
     assert.match(source, /shrink-0/);
     assert.match(source, /focus-visible:outline-accent/);

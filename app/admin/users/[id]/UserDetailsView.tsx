@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { PasswordInput } from "@/app/components/PasswordInput";
 import {
@@ -29,19 +29,44 @@ type ManagedUser = {
   mustChangePassword: boolean;
 };
 
+type AccessRoleOption = {
+  id: string;
+  name: string;
+  systemKey: "FULL_ACCESS" | "NO_ACCESS" | null;
+};
+
 type UserDetailsViewProps = {
   initialUser: ManagedUser;
   currentUserId: string;
   initialActiveAdminCount: number;
+  accessRoles: {
+    assignmentRevision: number;
+    assignedRoleIds: string[];
+    availableRoles: AccessRoleOption[];
+    canManageAccessRoles: boolean;
+  } | null;
+  canUpdateUser: boolean;
 };
 
 export function UserDetailsView({
   initialUser,
   currentUserId,
   initialActiveAdminCount,
+  accessRoles,
+  canUpdateUser,
 }: UserDetailsViewProps) {
   const { t } = useI18n();
   const router = useRouter();
+
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = t.admin.userManagement.detailsPageTitle;
+
+    return () => {
+      document.title = previousTitle;
+    };
+  }, [t.admin.userManagement.detailsPageTitle]);
+
   const [user, setUser] = useState(initialUser);
   const [activeAdminCount, setActiveAdminCount] = useState(
     initialActiveAdminCount,
@@ -59,6 +84,15 @@ export function UserDetailsView({
   const [confirmingPassword, setConfirmingPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [assignmentRevision, setAssignmentRevision] = useState(
+    accessRoles?.assignmentRevision ?? 0,
+  );
+  const [assignedRoleIds, setAssignedRoleIds] = useState(
+    accessRoles?.assignedRoleIds ?? [],
+  );
+  const [savedRoleIds, setSavedRoleIds] = useState(assignedRoleIds);
+  const [isSavingRoles, setIsSavingRoles] = useState(false);
+  const [isEditingAccessRoles, setIsEditingAccessRoles] = useState(false);
 
   const protectedRoleReason = getRoleProtectionReason({
     user,
@@ -253,15 +287,85 @@ export function UserDetailsView({
     field: AdminUserField;
     label: string;
     value: string;
+    description?: string;
   }> = [
-    { field: "name", label: t.admin.name, value: user.name },
-    { field: "email", label: t.admin.email, value: user.email },
+    {
+      field: 'name',
+      label: t.admin.userManagement.name,
+      value: user.name,
+    },
+    { field: 'email', label: t.admin.email, value: user.email },
     {
       field: "role",
       label: t.admin.role,
-      value: user.role === "admin" ? t.auth.roleAdmin : t.auth.roleUser,
+      value: user.role === 'admin' ? t.auth.roleAdmin : t.auth.roleUser,
+      description: t.admin.accessControl.adminAttributeHelp,
     },
   ];
+
+  const changeAccessRole = (roleId: string) => {
+    setAssignedRoleIds(roleId ? [roleId] : []);
+    setError(null);
+    setSuccessMessage(null);
+  };
+
+  const saveAccessRoles = async () => {
+    if (!accessRoles) return;
+    if (assignedRoleIds.length !== 1) {
+      setError(t.admin.accessControl.genericError);
+      return;
+    }
+    setIsSavingRoles(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        `/api/admin/users/${encodeURIComponent(user.id)}/access-roles`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            roleIds: assignedRoleIds,
+            expectedAssignmentRevision: assignmentRevision,
+          }),
+        },
+      );
+      const body = (await response.json().catch(() => null)) as
+        | {
+            assignment?: { roleIds: string[]; assignmentRevision: number };
+            error?: string;
+          }
+        | null;
+      if (
+        !response.ok ||
+        !body?.assignment ||
+        body.assignment.roleIds.length !== 1
+      ) {
+        setError(
+          response.status === 409
+            ? t.admin.accessControl.conflictError
+            : t.admin.accessControl.genericError,
+        );
+        return;
+      }
+      setAssignedRoleIds(body.assignment.roleIds);
+      setSavedRoleIds(body.assignment.roleIds);
+      setAssignmentRevision(body.assignment.assignmentRevision);
+      setIsEditingAccessRoles(false);
+      setSuccessMessage(t.admin.accessControl.saved);
+      router.refresh();
+    } catch {
+      setError(t.admin.accessControl.genericError);
+    } finally {
+      setIsSavingRoles(false);
+    }
+  };
+
+  const accessRolesChanged = assignedRoleIds[0] !== savedRoleIds[0];
+  const accessRolesProtected =
+    user.id === currentUserId || !accessRoles?.canManageAccessRoles;
+  const selectedAccessRole =
+    accessRoles?.availableRoles.find((role) => role.id === savedRoleIds[0]) ??
+    null;
 
   return (
     <section className="mx-auto max-w-4xl space-y-6">
@@ -272,15 +376,24 @@ export function UserDetailsView({
         ← {t.admin.userManagement.backToUsers}
       </Link>
 
-      <div className="flex flex-wrap items-start gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">{t.admin.userManagement.detailsTitle}</h1>
-          <p className="mt-1 text-sm leading-6 text-fg-muted">
-            {t.admin.userManagement.detailsDescription}
-          </p>
-        </div>
-        <StatusBadge banned={user.banned} />
+      <div>
+        <h1 className="text-2xl font-bold">
+          {t.admin.userManagement.detailsTitle}
+        </h1>
+        <p className="mt-1 text-sm leading-6 text-fg-muted">
+          {t.admin.userManagement.detailsDescription}
+        </p>
       </div>
+
+      {!canUpdateUser ? (
+        <div
+          id="user-details-read-only"
+          role="status"
+          className="rounded-md border border-line bg-surface-accent-subtle px-4 py-3 text-sm font-semibold text-accent"
+        >
+          {t.admin.userManagement.detailsReadOnly}
+        </div>
+      ) : null}
 
       {successMessage ? (
         <p
@@ -292,18 +405,27 @@ export function UserDetailsView({
       ) : null}
 
       <div className="overflow-hidden rounded-xl border border-line bg-surface-raised shadow-sm">
-        {fields.map(({ field, label, value }) => {
+        {fields.map(({ field, label, value, description }) => {
           const isEditing = editingField === field;
           const roleEditProtected = field === "role" && protectedRoleReason !== null;
           const editDisabled =
-            editingField !== null || isEditingPassword || roleEditProtected;
+            !canUpdateUser ||
+            editingField !== null ||
+            isEditingPassword ||
+            isEditingAccessRoles ||
+            roleEditProtected;
 
           return (
             <div
               key={field}
               className="grid gap-3 border-b border-line-subtle px-5 py-6 last:border-b-0 sm:grid-cols-[11rem_minmax(0,1fr)_auto] sm:items-start sm:gap-6"
             >
-              <p className="text-sm font-semibold text-fg-muted">{label}</p>
+              <p
+                id={`user-${field}-label`}
+                className="text-sm font-semibold text-fg-muted"
+              >
+                {label}
+              </p>
               {isEditing ? (
                 <form
                   onSubmit={submitEdit}
@@ -315,6 +437,10 @@ export function UserDetailsView({
                       onChange={(event) => setDraftValue(event.target.value)}
                       disabled={isSubmitting}
                       autoFocus
+                      aria-labelledby={`user-${field}-label`}
+                      aria-describedby={
+                        description ? `user-${field}-description` : undefined
+                      }
                       className="w-full max-w-md rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent disabled:opacity-60"
                     >
                       <option value="user">{t.auth.roleUser}</option>
@@ -329,9 +455,18 @@ export function UserDetailsView({
                       autoFocus
                       autoComplete={field === "email" ? "email" : "name"}
                       disabled={isSubmitting}
+                      aria-labelledby={`user-${field}-label`}
                       className="w-full max-w-md rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent disabled:opacity-60"
                     />
                   )}
+                  {description ? (
+                    <p
+                      id={`user-${field}-description`}
+                      className="text-xs leading-5 text-fg-muted"
+                    >
+                      {description}
+                    </p>
+                  ) : null}
                   {error ? (
                     <p
                       role="alert"
@@ -363,9 +498,25 @@ export function UserDetailsView({
               ) : (
                 <>
                   <div className="min-w-0">
-                    <p className="break-words font-medium">{value}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="break-words font-medium">{value}</p>
+                      {field === "name" ? (
+                        <StatusBadge banned={user.banned} />
+                      ) : null}
+                    </div>
+                    {description ? (
+                      <p
+                        id={`user-${field}-description`}
+                        className="mt-2 text-xs leading-5 text-fg-muted"
+                      >
+                        {description}
+                      </p>
+                    ) : null}
                     {roleEditProtected ? (
-                      <p className="mt-2 text-xs leading-5 text-fg-muted">
+                      <p
+                        id="user-role-protection-reason"
+                        className="mt-2 text-xs leading-5 text-fg-muted"
+                      >
                         {protectedRoleReason}
                       </p>
                     ) : null}
@@ -374,7 +525,20 @@ export function UserDetailsView({
                     type="button"
                     onClick={() => beginEdit(field)}
                     disabled={editDisabled}
-                    title={roleEditProtected ? protectedRoleReason ?? undefined : undefined}
+                    aria-describedby={
+                      !canUpdateUser
+                        ? 'user-details-read-only'
+                        : roleEditProtected
+                          ? 'user-role-protection-reason'
+                          : undefined
+                    }
+                    title={
+                      !canUpdateUser
+                        ? t.admin.userManagement.detailsReadOnly
+                        : roleEditProtected
+                          ? (protectedRoleReason ?? undefined)
+                          : undefined
+                    }
                     className="cursor-pointer justify-self-start rounded-md px-2 py-1 text-sm font-semibold text-accent transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-45 sm:justify-self-end"
                   >
                     {t.admin.userManagement.edit}
@@ -384,6 +548,149 @@ export function UserDetailsView({
             </div>
           );
         })}
+        {accessRoles ? (
+          <div className="grid gap-3 border-b border-line-subtle px-5 py-6 sm:grid-cols-[11rem_minmax(0,1fr)_auto] sm:items-start sm:gap-6">
+            <p
+              id="user-access-roles-label"
+              className="text-sm font-semibold text-fg-muted"
+            >
+              {t.admin.userManagement.accessRoles}
+            </p>
+            {isEditingAccessRoles ? (
+              <div className="space-y-3 sm:col-span-2">
+                <select
+                  value={assignedRoleIds[0] ?? ""}
+                  onChange={(event) => changeAccessRole(event.target.value)}
+                  disabled={accessRolesProtected || isSavingRoles}
+                  aria-labelledby="user-access-roles-label"
+                  className="w-full max-w-md cursor-pointer rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {assignedRoleIds.length === 0 ? (
+                    <option value="" disabled>
+                      {t.admin.accessControl.noAssignedRoles}
+                    </option>
+                  ) : null}
+                  {accessRoles.availableRoles.map((role) => (
+                    <option key={role.id} value={role.id}>
+                      {role.systemKey
+                        ? t.admin.accessControl.systemRoleNames[role.systemKey]
+                        : role.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs leading-5 text-fg-muted">
+                  {t.admin.accessControl.replaceAccessRoleHelp}
+                </p>
+                {error && !editingField && !isEditingPassword ? (
+                  <p
+                    role="alert"
+                    className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200"
+                  >
+                    {error}
+                  </p>
+                ) : null}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void saveAccessRoles()}
+                    disabled={
+                      accessRolesProtected || isSavingRoles || !accessRolesChanged
+                    }
+                    className="cursor-pointer rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isSavingRoles
+                      ? t.admin.accessControl.saving
+                      : t.admin.accessControl.save}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isSavingRoles) return;
+                      setAssignedRoleIds(savedRoleIds);
+                      setIsEditingAccessRoles(false);
+                      setError(null);
+                    }}
+                    disabled={isSavingRoles}
+                    className="cursor-pointer rounded-md border border-line bg-surface px-4 py-2 text-sm font-semibold hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {t.admin.accessControl.cancel}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="min-w-0">
+                  {selectedAccessRole ? (
+                    <p
+                      title={
+                        selectedAccessRole.systemKey
+                          ? t.admin.accessControl.systemRoleDescriptions[
+                              selectedAccessRole.systemKey
+                            ]
+                          : undefined
+                      }
+                      className="font-medium"
+                    >
+                      {selectedAccessRole.systemKey
+                        ? t.admin.accessControl.systemRoleNames[
+                            selectedAccessRole.systemKey
+                          ]
+                        : selectedAccessRole.name}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-fg-muted">
+                      {t.admin.accessControl.noAssignedRoles}
+                    </p>
+                  )}
+                  <p className="mt-2 text-xs leading-5 text-fg-muted">
+                    {t.admin.accessControl.accessRoleSummaryHelp}
+                  </p>
+                  <Link
+                    href={`/admin/users/${encodeURIComponent(user.id)}/access`}
+                    className="mt-3 inline-flex text-sm font-semibold text-accent transition-colors hover:text-primary-700 dark:hover:text-primary-300"
+                  >
+                    {t.admin.accessControl.viewAccess}
+                  </Link>
+                  {accessRolesProtected ? (
+                    <p
+                      id="user-access-roles-protection-reason"
+                      className="mt-2 text-xs leading-5 text-fg-muted"
+                    >
+                      {t.admin.accessControl.readOnlyRoleAction}
+                    </p>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAssignedRoleIds(savedRoleIds);
+                    setError(null);
+                    setSuccessMessage(null);
+                    setIsEditingAccessRoles(true);
+                  }}
+                  disabled={
+                    accessRolesProtected ||
+                    editingField !== null ||
+                    isEditingPassword
+                  }
+                  aria-describedby={
+                    accessRolesProtected
+                      ? 'user-access-roles-protection-reason'
+                      : undefined
+                  }
+                  title={
+                    accessRolesProtected
+                      ? t.admin.accessControl.readOnlyRoleAction
+                      : undefined
+                  }
+                  className="cursor-pointer justify-self-start rounded-md px-2 py-1 text-sm font-semibold text-accent transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-45 sm:justify-self-end"
+                >
+                  {t.admin.userManagement.edit}
+                </button>
+              </>
+            )}
+          </div>
+        ) : null}
         <div className="grid gap-3 px-5 py-6 sm:grid-cols-[11rem_minmax(0,1fr)_auto] sm:items-start sm:gap-6">
           <p className="text-sm font-semibold text-fg-muted">
             {t.admin.userManagement.password}
@@ -393,6 +700,12 @@ export function UserDetailsView({
               onSubmit={submitPasswordReset}
               className="space-y-5 sm:col-span-2"
             >
+              <p
+                id="user-password-visibility-help"
+                className="text-xs leading-5 text-fg-muted"
+              >
+                {t.admin.userManagement.passwordVisibilityHelp}
+              </p>
               <fieldset className="space-y-3">
                 <legend className="text-sm font-semibold">
                   {t.admin.userManagement.passwordMode}
@@ -570,8 +883,17 @@ export function UserDetailsView({
                     ? t.admin.userManagement.passwordChangeRequired
                     : t.admin.userManagement.passwordConfigured}
                 </p>
+                <p
+                  id="user-password-visibility-help"
+                  className="mt-2 text-xs leading-5 text-fg-muted"
+                >
+                  {t.admin.userManagement.passwordVisibilityHelp}
+                </p>
                 {passwordResetProtected ? (
-                  <p className="mt-2 text-xs leading-5 text-fg-muted">
+                  <p
+                    id="user-password-protection-reason"
+                    className="mt-2 text-xs leading-5 text-fg-muted"
+                  >
                     {t.admin.userManagement.selfPasswordResetProtected}
                   </p>
                 ) : null}
@@ -582,7 +904,16 @@ export function UserDetailsView({
                 disabled={
                   editingField !== null ||
                   isEditingPassword ||
-                  passwordResetProtected
+                  isEditingAccessRoles ||
+                  passwordResetProtected ||
+                  !canUpdateUser
+                }
+                aria-describedby={
+                  !canUpdateUser
+                    ? 'user-details-read-only user-password-visibility-help'
+                    : passwordResetProtected
+                      ? 'user-password-visibility-help user-password-protection-reason'
+                      : 'user-password-visibility-help'
                 }
                 title={
                   passwordResetProtected
@@ -694,10 +1025,10 @@ function StatusBadge({ banned }: { banned: boolean | null }) {
 
   return (
     <span
-      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold sm:ml-auto ${
+      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
         suspended
-          ? "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-100"
-          : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-200"
+          ? 'bg-red-100 text-red-800 dark:bg-red-950/70 dark:text-red-200'
+          : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-200'
       }`}
     >
       {suspended

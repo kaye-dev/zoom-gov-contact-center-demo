@@ -1,4 +1,5 @@
-import { requireAdminSession } from "@/lib/server/auth/server";
+import { canAdminAccess } from "@/lib/admin-access/authorization";
+import { requireAdminAccess } from "@/lib/server/admin-access/server";
 import { getSessionUser } from "@/lib/server/auth/helpers";
 import { withPrisma } from "@/lib/server/prisma";
 
@@ -14,7 +15,7 @@ type UsersPageProps = {
 const PAGE_SIZE = 20;
 
 export default async function UsersPage({ searchParams }: UsersPageProps) {
-  const session = await requireAdminSession("/admin/users");
+  const { session, actor } = await requireAdminAccess("users", "VIEW", "/admin/users");
 
   const params = await searchParams;
   const search = readSearchParam(params.search).trim();
@@ -49,7 +50,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
       prisma.user.count({
         where: {
           role: "admin",
-          NOT: { banned: true },
+          OR: [{ banned: false }, { banned: null }],
         },
       }),
     ]),
@@ -66,6 +67,9 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
       totalPages={Math.max(1, Math.ceil(total / PAGE_SIZE))}
       currentUserId={getSessionUser(session)!.id}
       activeAdminCount={activeAdminCount}
+      canCreate={canAdminAccess(actor, "users", "CREATE")}
+      canUpdate={canAdminAccess(actor, "users", "UPDATE")}
+      canDelete={canAdminAccess(actor, "users", "DELETE")}
     />
   );
 }

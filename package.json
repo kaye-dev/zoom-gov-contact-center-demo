@@ -9,6 +9,7 @@
     "dev": "next dev",
     "test": "node --import tsx --test test/*.test.ts scripts/deploy/test/*.test.ts",
     "test:deploy": "node --import tsx --test scripts/deploy/test/*.test.ts",
+    "test:admin-access:db": "node --import tsx --test scripts/deploy/integration-test/admin-access-database.test.ts",
     "plans:cleanup": "node scripts/cleanup-plan-files.mjs",
     "audit:runtime": "npm audit --omit=dev",
     "typecheck": "tsc --noEmit",
@@ -40,7 +41,8 @@
     "prisma": "7.9.1",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "unicode-case-folding": "1.1.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
