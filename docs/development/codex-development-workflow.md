@@ -19,7 +19,7 @@ plans/
 
 `prototype/`はUI変更時、`review/`は`$review`実行時だけ作る。生成directoryはGitへ追加しない。
 
-旧`plans/tmp/<slug>/prototype/`は、閲覧とCSS buildだけに使える後方互換pathである。parity、承認、実装、reviewの前にcanonical directoryへ移行する。
+`plans/tmp/<slug>/prototype/`は、閲覧とCSS buildだけに使える後方互換pathである。parity、承認、実装、reviewの前にcanonical directoryへ移行する。
 
 ## 標準フロー
 
@@ -177,7 +177,7 @@ drift、未説明差分、欠落rowがあればproduction編集前に停止す�
 
 実装後は、承認済みprototypeとのlive parityを同じmatrixで確認する。最後の関連変更後に全rowを再実行し、`implementationParityResults`へ`<row-id>=pass|fail`を記録する。
 
-prototypeまたはmaterialなUI契約を変更した場合はrevisionを更新する。旧row evidence、machine parity、UI承認は失効する。
+prototypeまたはmaterialなUI契約を変更した場合はrevisionを更新し、既存のrow evidence、machine parity、UI承認を失効させる。
 
 ## Skill behavioral eval
 

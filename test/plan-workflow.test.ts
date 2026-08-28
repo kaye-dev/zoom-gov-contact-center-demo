@@ -222,7 +222,7 @@ test("implementは未承認UIで停止し、承認済みmatrixでimplementation 
     assert.match(contract, /build後[\s\S]+同じrepository標準導線/);
     assert.match(contract, /baseline[\s\S]+差分[\s\S]+cleanup|baselineとの差分だけをcleanup/);
     assert.match(contract, /docker compose down/);
-    assert.match(contract, /旧[^\n]*(?:閲覧|view)[^\n]*CSS build[^\n]*(?:canonical|移行)/iu);
+    assert.match(contract, /plans\/tmp\/(?:<slug>\/prototype\/)?[^\n]*(?:閲覧|view)[^\n]*CSS build[^\n]*(?:canonical|移行)/iu);
   }
   assert.match(workflow, /manual integration gate/);
   assert.match(workflow, /OS-level security boundaryではない/);
@@ -299,7 +299,7 @@ test("全skill metadataは明示呼び出し専用でdefault promptにskill名�
   }
 });
 
-test("旧skill・validator・専用agent・固定model・lifecycleは復元しない", async () => {
+test("独自skill・validator・専用agent・固定model・lifecycleは追加しない", async () => {
   const removed = [
     ".agents/skills/implementation-planner/SKILL.md",
     ".agents/skills/implementation-executor/SKILL.md",
@@ -337,7 +337,7 @@ test("旧skill・validator・専用agent・固定model・lifecycleは復元し�
   assert.doesNotMatch(activeConfig, /^\s*model(?:_reasoning_effort)?\s*=/m);
 });
 
-test(".gitignoreはtemplateを追跡可能にしcanonicalと旧top-level planをignoreする", async () => {
+test(".gitignoreはtemplateを追跡可能にしplan生成物をignoreする", async () => {
   const gitignore = await read(".gitignore");
   assert.match(gitignore, /^\/plans\/\*\.md$/m);
   assert.match(gitignore, /^!\/plans\/template\.md$/m);

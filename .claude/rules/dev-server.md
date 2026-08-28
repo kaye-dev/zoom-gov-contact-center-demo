@@ -11,7 +11,7 @@
 
 ## plan prototypeとHTMLレビュー
 
-`plans/<slug>/prototype/`は次の軽量なloopback serverで配信する。引数なしではcanonical prototypeから最終更新されたものを自動選択し、canonicalが1件もない場合だけ旧`plans/tmp/<slug>/prototype/`へフォールバックする。旧pathは閲覧とCSS buildの後方互換だけであり、machine parity、UI承認、実装、reviewには使わない。それらの前にcanonical `plans/<slug>/prototype/`へ移行し、version 1 manifestとrevision-bound evidenceを再作成する。対象を指定する場合だけslugを渡す。
+`plans/<slug>/prototype/`は次の軽量なloopback serverで配信する。引数なしではcanonical prototypeから最終更新されたものを自動選択し、canonicalが1件もない場合だけ`plans/tmp/<slug>/prototype/`へフォールバックする。このpathは閲覧とCSS buildの後方互換だけであり、machine parity、UI承認、実装、reviewには使わない。それらの前にcanonical `plans/<slug>/prototype/`へ移行し、version 1 manifestとrevision-bound evidenceを再作成する。対象を指定する場合だけslugを渡す。
 
 ```sh
 ./dev-prototype.sh
@@ -29,7 +29,7 @@ node scripts/serve-plan-artifact.mjs plans/<slug>/review
 - UI prototypeは作成前に最も近い実画面、shell、token、共通componentを確認する。mockにしてよいのはdata、永続化、authorization、backend side effectだけであり、brand、navigation、layout、typography、color、control、icon、responsive behaviorは本番相当とする。
 - prototypeは本番と同じTailwind utilityと`app/globals.css`を使い、light・dark、desktop、390×844、関連breakpoint境界、主要state、keyboard、focus、DOM・a11y、computed style、console、networkを比較する。
 - Browserや自動比較の合格はmachine parityであり、ユーザーのUI承認ではない。rendered prototypeの明示承認前にproduction実装を開始しない。
-- prototypeの最終CSS build後に`prototype-revision.mjs`を実行し、goalの`approval contract: plans/<slug>/prototype/ui-contract.json — version 1`、`prototype revision`、row ID別`parity evidence`、machine parity、UI承認を照合する。後ろの4記録には同じ`sha256:<64hex>`を記録する。`ui-contract.json`はpage・shell・共通component・global style・tokenを含む完全な`sources` inventory、runtime owner・checkout・commit・route、fixture・authorization・queryとexact `scroll: {x, y}`を含むcomparison conditions、`comparisonTargets`、各matrix rowの`targetId`を保持する。`scroll.x`と`scroll.y`は各surfaceの`window.scrollX`と`window.scrollY`実測値にする。manifest外の`machineParityResults`と`implementationParityResults`は全rowを未実行時の`<row-id>=pending`または実行後の`<row-id>=pass|fail`として過不足なく1回ずつ持ち、bare IDや`all N`で代用しない。内容変更後はrevisionを再計算し、旧row evidence、machine parity、承認を失効させる。
+- prototypeの最終CSS build後に`prototype-revision.mjs`を実行し、goalの`approval contract: plans/<slug>/prototype/ui-contract.json — version 1`、`prototype revision`、row ID別`parity evidence`、machine parity、UI承認を照合する。後ろの4記録には同じ`sha256:<64hex>`を記録する。`ui-contract.json`はpage・shell・共通component・global style・tokenを含む完全な`sources` inventory、runtime owner・checkout・commit・route、fixture・authorization・queryとexact `scroll: {x, y}`を含むcomparison conditions、`comparisonTargets`、各matrix rowの`targetId`を保持する。`scroll.x`と`scroll.y`は各surfaceの`window.scrollX`と`window.scrollY`実測値にする。manifest外の`machineParityResults`と`implementationParityResults`は全rowを未実行時の`<row-id>=pending`または実行後の`<row-id>=pass|fail`として過不足なく1回ずつ持ち、bare IDや`all N`で代用しない。内容変更後はrevisionを再計算し、既存のrow evidence、machine parity、承認を失効させる。
 - HTML reviewはdesktopと390×844でリスクfilter、判断button、コメント、Markdown生成・copy、keyboard、focus、console、networkを確認する。
 - `file://`、外部CDN、外部API、analytics、repo全体を公開するserverは使わない。
 - prototype確認、HTML review、実装後の実アプリ確認は別の証拠として扱う。

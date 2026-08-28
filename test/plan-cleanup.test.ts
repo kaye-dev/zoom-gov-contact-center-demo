@@ -18,12 +18,12 @@ async function createFixture(context: test.TestContext) {
     writeFile(path.join(root, "plans/example/goal.md"), "canonical goal\n"),
     writeFile(path.join(root, "plans/example/prototype/index.html"), "<!doctype html>\n"),
     writeFile(path.join(root, "plans/example/review/review-data.json"), "{}\n"),
-    writeFile(path.join(root, "plans/legacy-plan.md"), "legacy top-level plan\n"),
+    writeFile(path.join(root, "plans/top-level-plan.md"), "top-level plan\n"),
   ]);
   return root;
 }
 
-test("previewはcanonical goal・prototype・reviewと旧planを安定順で列挙し、変更しない", async (context) => {
+test("previewはcanonical goal・prototype・reviewとtop-level planを安定順で列挙し、変更しない", async (context) => {
   const root = await createFixture(context);
   const observed: string[][] = [];
   const result = await cleanupPlanFiles({ repositoryRoot: root, onCandidates: (items) => observed.push(items) });
@@ -35,7 +35,7 @@ test("previewはcanonical goal・prototype・reviewと旧planを安定順で列�
     "plans/example/prototype/index.html",
     "plans/example/review/",
     "plans/example/review/review-data.json",
-    "plans/legacy-plan.md",
+    "plans/top-level-plan.md",
   ];
   assert.deepEqual(result, { candidates: expected, removed: [] });
   assert.deepEqual(observed, [expected]);
@@ -43,7 +43,7 @@ test("previewはcanonical goal・prototype・reviewと旧planを安定順で列�
   assert.equal(await readFile(path.join(root, "plans/example/goal.md"), "utf8"), "canonical goal\n");
   assert.equal(await readFile(path.join(root, "plans/example/prototype/index.html"), "utf8"), "<!doctype html>\n");
   assert.equal(await readFile(path.join(root, "plans/example/review/review-data.json"), "utf8"), "{}\n");
-  assert.equal(await readFile(path.join(root, "plans/legacy-plan.md"), "utf8"), "legacy top-level plan\n");
+  assert.equal(await readFile(path.join(root, "plans/top-level-plan.md"), "utf8"), "top-level plan\n");
 });
 
 test("applyはtemplateだけを保持し、symlinkの参照先を変更しない", async (context) => {
@@ -59,8 +59,8 @@ test("applyはtemplateだけを保持し、symlinkの参照先を変更しない
   assert.equal(await readFile(outside, "utf8"), "outside target\n");
   assert.deepEqual(result.removed, [
     "plans/example/",
-    "plans/legacy-plan.md",
     "plans/outside-link",
+    "plans/top-level-plan.md",
   ]);
 });
 
@@ -70,7 +70,7 @@ test("template欠落時は候補を一切削除しない", async (context) => {
 
   await assert.rejects(cleanupPlanFiles({ repositoryRoot: root, apply: true }), /plans\/template\.md is unavailable/);
   assert.equal(await readFile(path.join(root, "plans/example/goal.md"), "utf8"), "canonical goal\n");
-  assert.equal(await readFile(path.join(root, "plans/legacy-plan.md"), "utf8"), "legacy top-level plan\n");
+  assert.equal(await readFile(path.join(root, "plans/top-level-plan.md"), "utf8"), "top-level plan\n");
 });
 
 test("templateまたはplans directoryのsymlinkを拒否する", async (context) => {
@@ -82,7 +82,7 @@ test("templateまたはplans directoryのsymlinkを拒否する", async (context
 
   await assert.rejects(cleanupPlanFiles({ repositoryRoot: templateRoot, apply: true }), /plans\/template\.md must be a regular file, not a symlink/);
   assert.equal(await readFile(path.join(templateRoot, "plans/example/goal.md"), "utf8"), "canonical goal\n");
-  assert.equal(await readFile(path.join(templateRoot, "plans/legacy-plan.md"), "utf8"), "legacy top-level plan\n");
+  assert.equal(await readFile(path.join(templateRoot, "plans/top-level-plan.md"), "utf8"), "top-level plan\n");
   assert.equal(await readFile(outsideTemplate, "utf8"), "outside template\n");
 
   const plansRoot = await mkdtemp(path.join(tmpdir(), "plan-cleanup-symlink-"));
