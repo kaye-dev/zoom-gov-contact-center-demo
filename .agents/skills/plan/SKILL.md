@@ -1,11 +1,11 @@
 ---
 name: plan
-description: "Investigate this repository and create a self-contained implementation plan under plans from plans/template.md. Use only when explicitly invoked as $plan."
+description: "Investigate this repository and create a self-contained implementation goal in a plan directory, including a production-parity prototype for user-visible changes. Use only when explicitly invoked as $plan."
 ---
 
 # Plan
 
-Create the implementation specification; do not implement it.
+Create the implementation specification and, for a user-visible change, its approval-ready UI prototype. Do not implement production code.
 
 ## Investigate first
 
@@ -15,8 +15,8 @@ Create the implementation specification; do not implement it.
 
 ## Choose the output
 
-- Derive a concise English lowercase kebab-case slug matching `^[a-z0-9][a-z0-9-]*$` and write `plans/<slug>.md`.
-- If that path already exists, stop before writing unless the user explicitly asked to replace that exact plan.
+- Derive a concise English lowercase kebab-case slug matching `^[a-z0-9][a-z0-9-]*$`; `tmp` and `reviews` are reserved legacy names.
+- Write the goal to `plans/<slug>/goal.md`. If that path already exists, stop before writing unless the user explicitly asked to revise or replace that exact goal.
 - Read `plans/template.md` immediately before authoring. Preserve its six headings and their order exactly; add subsections only when they make the implementation unambiguous.
 - Write the plan in Japanese unless the user requests another language.
 
@@ -26,8 +26,18 @@ Write a self-contained plan that a new implementer can execute without the prece
 
 Describe only the adopted design in logical order. Remove rejected alternatives, discussion history, draft language, stale conclusions, and instructions that no longer apply. Do not invent decisions to close a high-impact unknown or requirement conflict; surface it to the user instead of writing a falsely complete plan.
 
-For every inapplicable section or subsection, write `変更なし` or `なし`. Do not add metadata, status, task tables, lifecycle gates, progress logs, prototype contracts, hashes, or draft/final files.
+For every inapplicable section or subsection, write `変更なし` or `なし`. Do not add global metadata, lifecycle status, task tables, lifecycle gates, progress logs, hashes, or draft/final files. Preserve the template's compact `UI契約` subsection.
+
+## Align user-visible UI before implementation
+
+- For every user-visible change, read [references/ui-prototype-quality.md](references/ui-prototype-quality.md) and follow it before finalizing the goal.
+- Inspect the closest live route and its source, then create the production-parity artifact under `plans/<slug>/prototype/`. Mock only unavailable data, persistence, authorization, and backend side effects.
+- Build prototype styling from production Tailwind utilities and `app/globals.css` with `.agents/skills/plan/scripts/build-prototype-css.mjs`; do not create an approximate parallel stylesheet.
+- Record the baseline, actual comparison conditions, state inventory, themes, responsive boundaries, invariants, intentional deltas, parity matrix, machine result, and UI approval in `## UI契約` under `# 実装方針`.
+- Automated and Browser comparisons may establish `machine parity: 合格 — YYYY-MM-DD — <evidence summary>` but never user approval. Keep `UI承認記録: 未承認` until the user explicitly approves the rendered prototype, then record `UI承認記録: YYYY-MM-DD — <explicit approval basis>` in that exact goal.
+- If the user explicitly requests a revision or records approval for an existing goal, update that exact `goal.md`. Any material prototype or UI-contract change invalidates prior UI approval.
+- When there is no user-visible change, keep `UI変更: なし`, `prototype: なし`, and `UI承認記録: UI変更なし`; do not create a prototype.
 
 ## Finish
 
-Re-read the generated file against `plans/template.md`, repository evidence, and the request. Confirm the heading order, output path, overwrite decision, unresolved high-impact matters, and absence of obsolete workflow language. Report the created plan path and the most important assumptions. Do not edit production code, stage changes, commit, push, or create a pull request.
+Re-read the generated goal against `plans/template.md`, repository evidence, and the request. Confirm the heading order, output path, overwrite decision, unresolved high-impact matters, and UI approval state. Report the exact goal and prototype paths plus the most important assumptions. Do not edit production code, stage changes, commit, push, or create a pull request.

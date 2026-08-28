@@ -1,6 +1,6 @@
 interface:
   display_name: "Create Plan"
-  short_description: "Create a self-contained, evidence-backed implementation plan"
-  default_prompt: "Use $plan to create an implementation plan for this change."
+  short_description: "Create an evidence-backed goal and UI prototype"
+  default_prompt: "Use $plan to create plans/<slug>/goal.md and any required UI prototype."
 policy:
   allow_implicit_invocation: false

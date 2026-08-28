@@ -1,6 +1,6 @@
 interface:
   display_name: "Review Plan"
-  short_description: "Independently review and make the plan self-contained"
-  default_prompt: "Use $plan-critic to review and update plans/<slug>.md."
+  short_description: "Independently review and make the goal self-contained"
+  default_prompt: "Use $plan-critic to review and update plans/<slug>/goal.md and its optional prototype."
 policy:
   allow_implicit_invocation: false
