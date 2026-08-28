@@ -99,28 +99,30 @@ test("permission payload requires every supported cell exactly once", () => {
   });
 });
 
-test('role UI creates metadata first and keeps unsupported permission controls disabled', () => {
+test('role UI creates metadata first and renders the prototype permission controls', () => {
   const list = source('../app/admin/roles/RolesView.tsx');
   const modal = source('../app/components/admin/ModalDialog.tsx');
   const details = source('../app/admin/roles/[id]/RoleDetailsView.tsx');
   assert.match(list, /<ModalDialog/);
   assert.match(list, /JSON\.stringify\(\{ name, description \}\)/);
   assert.match(list, /router\.push\(`\/admin\/roles\/\$\{encodeURIComponent\(body\.role\.id\)\}`\)/);
-  assert.match(details, /disabled=\{!editable \|\| !cell\.supported\}/);
   assert.match(
     details,
-    /checked=\{cell\.supported && cell\.effect === "ALLOW"\}/,
+    /!editable \|\| !cell\.supported \|\| dependencyDisabled/,
   );
   assert.match(
     details,
-    /checked=\{cell\.supported && cell\.effect === "DENY"\}/,
+    /const checked = cell\.supported && cell\.effect === "ALLOW"/,
   );
+  assert.match(details, /input\.indeterminate = !cell\.supported/);
+  assert.match(details, /cell\.action !== "VIEW" && !viewAllowed/);
+  assert.match(details, /action === "VIEW" && !checked/);
   assert.match(details, /resource\.displayPaths\.map/);
-  assert.match(details, /title=\{copy\.allow\}/);
-  assert.match(details, /title=\{copy\.deny\}/);
-  assert.match(details, /<span>\{copy\.allow\}<\/span>/);
-  assert.match(details, /<span>\{copy\.deny\}<\/span>/);
-  assert.match(details, /min-h-8 min-w-\[4\.5rem\]/);
+  assert.match(details, /copy\.targetPaths/);
+  assert.match(details, /className="h-5 w-5 shrink-0 cursor-pointer/);
+  assert.match(details, /overflow-x-auto[^"\n]*\[contain:paint\]/);
+  assert.doesNotMatch(details, /title=\{copy\.deny\}/);
+  assert.doesNotMatch(details, /checked=\{cell\.supported && cell\.effect === "DENY"\}/);
   assert.match(details, /title=\{copy\.editRoleTitle\}/);
   assert.match(details, /role="tablist"/);
   assert.match(details, /role="tab"/);

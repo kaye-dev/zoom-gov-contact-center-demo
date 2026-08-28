@@ -156,10 +156,9 @@ export function RoleDetailsView({
     document.getElementById(`role-${nextSection}-tab`)?.focus();
   };
 
-  const setEffect = (
+  const setAllowed = (
     resourceKey: AdminResourceKey,
     action: AdminAccessAction,
-    effect: AdminAccessEffect,
     checked: boolean,
   ) => {
     setMatrix((current) =>
@@ -168,11 +167,16 @@ export function RoleDetailsView({
           ? resource
           : {
               ...resource,
-              actions: resource.actions.map((cell) =>
-                cell.action !== action
-                  ? cell
-                  : { ...cell, effect: checked ? effect : null },
-              ),
+              actions: resource.actions.map((cell) => {
+                if (!cell.supported) return cell;
+                if (cell.action === action) {
+                  return { ...cell, effect: checked ? "ALLOW" : null };
+                }
+                if (action === "VIEW" && !checked) {
+                  return { ...cell, effect: null };
+                }
+                return cell;
+              }),
             },
       ),
     );
@@ -408,7 +412,7 @@ export function RoleDetailsView({
             <PermissionMatrix
               matrix={matrix}
               editable={editable && !isSaving}
-              onChange={setEffect}
+              onChange={setAllowed}
             />
             {editable ? (
               <div className="flex justify-end">
@@ -531,12 +535,16 @@ function PermissionMatrix({
 }: {
   matrix: RoleDetails["matrix"];
   editable: boolean;
-  onChange: (resourceKey: AdminResourceKey, action: AdminAccessAction, effect: AdminAccessEffect, checked: boolean) => void;
+  onChange: (
+    resourceKey: AdminResourceKey,
+    action: AdminAccessAction,
+    checked: boolean,
+  ) => void;
 }) {
   const { t } = useI18n();
   const copy = t.admin.accessControl;
   return (
-    <div className="max-w-full overflow-x-auto rounded-lg border border-line">
+    <div className="max-w-full overflow-x-auto rounded-lg border border-line [contain:paint]">
       <table className="w-full min-w-[980px] divide-y divide-line-subtle text-left text-sm">
         <thead className="bg-surface-raised">
           <tr>
@@ -555,95 +563,80 @@ function PermissionMatrix({
           </tr>
         </thead>
         <tbody className="divide-y divide-line-subtle">
-          {matrix.map((resource) => (
-            <tr key={resource.resourceKey}>
-              <th scope="row" className="px-4 py-4 align-top font-normal">
-                <span className="block font-semibold text-fg">
-                  {copy.resourceTitles[resource.resourceKey]}
-                </span>
-                <span className="mt-1 block leading-6 text-fg-muted">
-                  {copy.resourceDescriptions[resource.resourceKey]}
-                </span>
-                <span className="mt-2 block space-y-1 text-xs">
-                  <span className="block font-semibold text-fg-muted">
-                    {copy.path}
-                  </span>
-                  <span className="block">
+          {matrix.map((resource) => {
+            const viewAllowed = resource.actions.some(
+              (cell) => cell.action === "VIEW" && cell.effect === "ALLOW",
+            );
+            return (
+              <tr key={resource.resourceKey}>
+                <th scope="row" className="px-4 py-4 align-top font-normal">
+                  <p className="font-semibold text-fg">
+                    {copy.resourceTitles[resource.resourceKey]}
+                  </p>
+                  <p className="mt-1 leading-6 text-fg-muted">
+                    {copy.resourceDescriptions[resource.resourceKey]}
+                  </p>
+                  <div className="mt-2 space-y-1 text-xs">
+                    <p className="font-semibold text-fg-muted">
+                      {copy.targetPaths}
+                    </p>
                     {resource.displayPaths.map((path) => (
                       <code key={path} className="mr-2 inline-block break-all">
                         {path}
                       </code>
                     ))}
-                  </span>
-                </span>
-              </th>
-              {resource.actions.map((cell) => {
-                const unsupportedId = `${resource.resourceKey}-${cell.action}-unsupported`;
-                const cellLabel = `${copy.resourceTitles[resource.resourceKey]} / ${copy.actionLabels[cell.action]}`;
-                return (
-                  <td
-                    key={cell.action}
-                    className="px-3 py-4 text-center align-top"
-                  >
-                    <fieldset
-                      disabled={!editable || !cell.supported}
-                      aria-describedby={
-                        !cell.supported ? unsupportedId : undefined
-                      }
-                      className="mx-auto inline-flex flex-col items-start justify-center gap-1"
+                  </div>
+                </th>
+                {resource.actions.map((cell) => {
+                  const unsupportedId = `${resource.resourceKey}-${cell.action}-unsupported`;
+                  const cellLabel = `${copy.resourceTitles[resource.resourceKey]} / ${copy.actionLabels[cell.action]}`;
+                  const checked = cell.supported && cell.effect === "ALLOW";
+                  const dependencyDisabled =
+                    cell.action !== "VIEW" && !viewAllowed;
+                  return (
+                    <td
+                      key={cell.action}
+                      className="px-3 py-4 text-center align-top"
                     >
-                      <legend className="sr-only">{cellLabel}</legend>
-                      <label
-                        title={copy.allow}
-                        className="inline-flex min-h-8 min-w-[4.5rem] cursor-pointer items-center gap-1.5 rounded-md px-1.5 text-xs font-semibold transition-colors hover:bg-surface-hover has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={cell.supported && cell.effect === "ALLOW"}
-                          onChange={(event) =>
-                            onChange(
-                              resource.resourceKey,
-                              cell.action,
-                              "ALLOW",
-                              event.target.checked,
-                            )
-                          }
-                          aria-label={`${cellLabel}: ${copy.allow}`}
-                          className="h-4 w-4 shrink-0 cursor-pointer accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed"
-                        />
-                        <span>{copy.allow}</span>
-                      </label>
-                      <label
-                        title={copy.deny}
-                        className="inline-flex min-h-8 min-w-[4.5rem] cursor-pointer items-center gap-1.5 rounded-md px-1.5 text-xs font-semibold transition-colors hover:bg-surface-hover has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={cell.supported && cell.effect === "DENY"}
-                          onChange={(event) =>
-                            onChange(
-                              resource.resourceKey,
-                              cell.action,
-                              "DENY",
-                              event.target.checked,
-                            )
-                          }
-                          aria-label={`${cellLabel}: ${copy.deny}`}
-                          className="h-4 w-4 shrink-0 cursor-pointer accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed"
-                        />
-                        <span>{copy.deny}</span>
-                      </label>
-                    </fieldset>
-                    {!cell.supported ? (
-                      <span id={unsupportedId} className="sr-only">
-                        {copy.unsupported}
-                      </span>
-                    ) : null}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
+                      <input
+                        ref={(input) => {
+                          if (input) input.indeterminate = !cell.supported;
+                        }}
+                        type="checkbox"
+                        checked={checked}
+                        disabled={
+                          !editable || !cell.supported || dependencyDisabled
+                        }
+                        onChange={(event) =>
+                          onChange(
+                            resource.resourceKey,
+                            cell.action,
+                            event.target.checked,
+                          )
+                        }
+                        aria-label={`${cellLabel}: ${
+                          !cell.supported
+                            ? copy.unsupported
+                            : checked
+                              ? copy.allow
+                              : copy.unset
+                        }`}
+                        aria-describedby={
+                          !cell.supported ? unsupportedId : undefined
+                        }
+                        className="h-5 w-5 shrink-0 cursor-pointer accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
+                      />
+                      {!cell.supported ? (
+                        <span id={unsupportedId} className="sr-only">
+                          {copy.unsupported}
+                        </span>
+                      ) : null}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
