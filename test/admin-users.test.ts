@@ -215,6 +215,7 @@ test("all locales include complete user-management copy and errors", () => {
     assert.ok(authCopy.temporaryPasswordCopied.length > 0, locale);
     assert.ok(authCopy.temporaryPasswordCopyFailed.length > 0, locale);
     assert.ok(copy.detailsTitle.length > 0, locale);
+    assert.ok(copy.detailsPageTitle.length > 0, locale);
     assert.ok(copy.detailsDescription.length > 0, locale);
     assert.ok(copy.detailsReadOnly.length > 0, locale);
     assert.ok(copy.name.length > 0, locale);
@@ -268,6 +269,14 @@ test("user management UI keeps editing and destructive actions behind explicit c
   assert.match(detailsSource, /admin-confirm-password-\$\{passwordMode\}/);
   assert.match(detailsSource, /passwordsMatch/);
   assert.match(detailsSource, /role="status"/);
+  assert.match(
+    detailsSource,
+    /field === "name" \? \(\s*<StatusBadge banned=\{user\.banned\} \/>/,
+  );
+  assert.equal(
+    detailsSource.match(/<StatusBadge banned=\{user\.banned\} \/>/g)?.length,
+    1,
+  );
 });
 
 test("new-user temporary passwords can be copied with accessible feedback", () => {
@@ -290,6 +299,18 @@ test("new-user temporary passwords can be copied with accessible feedback", () =
   assert.match(formSource, /focus-visible:outline-none focus-visible:text-accent/);
   assert.doesNotMatch(formSource, /hover:bg-primary-100/);
   assert.doesNotMatch(formSource, /execCommand/);
+  assert.match(formSource, /accessRoleName: string/);
+  assert.match(formSource, /getAdminRoleDisplayName\(selectedAccessRole/);
+  assert.match(formSource, /systemRoleNames\.NO_ACCESS/);
+  const resultEmailIndex = formSource.indexOf("<dd>{createdUser.email}</dd>");
+  const resultAccessRoleIndex = formSource.indexOf(
+    "<dd>{createdUser.accessRoleName}</dd>",
+  );
+  const resultPasswordIndex = formSource.indexOf(
+    "{createdUser.temporaryPassword}",
+  );
+  assert.ok(resultEmailIndex < resultAccessRoleIndex);
+  assert.ok(resultAccessRoleIndex < resultPasswordIndex);
 
   assert.match(copyIconSource, /viewBox="0 -960 960 960"/);
   assert.match(copyIconSource, /M360-240q-33 0-56\.5-23\.5T280-320/);

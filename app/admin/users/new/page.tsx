@@ -17,9 +17,6 @@ export default async function NewUserPage() {
   const roles = canAssignRoles
     ? await withPrisma((prisma) =>
         prisma.adminAccessRole.findMany({
-          where: {
-            OR: [{ systemKey: null }, { systemKey: "FULL_ACCESS" }],
-          },
           orderBy: [{ systemKey: "asc" }, { name: "asc" }, { id: "asc" }],
           select: { id: true, name: true, description: true, systemKey: true },
         }),

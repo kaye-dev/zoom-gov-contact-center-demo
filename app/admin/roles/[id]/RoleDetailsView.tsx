@@ -728,7 +728,7 @@ function MembersPanel({
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            roleIds: member.assignedRoleIds.filter((id) => id !== roleId),
+            roleIds: [],
             expectedAssignmentRevision: member.assignmentRevision,
           }),
         },
@@ -973,18 +973,7 @@ function CandidateDialog({
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            roleIds:
-              roleId === "system-no-access"
-                ? [roleId]
-                : [
-                    ...new Set([
-                      ...candidate.assignedRoleIds.filter(
-                        (assignedRoleId) =>
-                          assignedRoleId !== "system-no-access",
-                      ),
-                      roleId,
-                    ]),
-                  ],
+            roleIds: [roleId],
             expectedAssignmentRevision: candidate.assignmentRevision,
           }),
         },

@@ -32,6 +32,9 @@ test("every locale has the complete access-control catalog and action copy", () 
       copy.adminPageAccessTitle,
       copy.adminPageAccessDescription,
       copy.adminPageColumn,
+      copy.backToUserDetails,
+      copy.targetPaths,
+      copy.userAccessPageTitle,
       copy.roleNameRequired,
       copy.roleNameTooLong,
       copy.editRoleTitle,
@@ -39,8 +42,11 @@ test("every locale has the complete access-control catalog and action copy", () 
       copy.systemRoleReadOnly,
       copy.reload,
       copy.userAccessHeading,
+      copy.userAccessDescription,
       copy.adminAttributeHelp,
       copy.assignedRolesHelp,
+      copy.accessRoleSummaryHelp,
+      copy.replaceAccessRoleHelp,
     ]) {
       assert.ok(value.length > 0, locale);
     }
@@ -125,11 +131,9 @@ test('role UI creates metadata first and keeps unsupported permission controls d
   assert.match(details, /#members/);
   assert.match(details, /member-candidates/);
   assert.match(details, /expectedAssignmentRevision/);
-  assert.match(
-    details,
-    /assignedRoleId !== "system-no-access"/,
-  );
-  assert.match(details, /roleId === "system-no-access"/);
+  assert.match(details, /roleIds: \[roleId\]/);
+  assert.match(details, /roleIds: \[\]/);
+  assert.doesNotMatch(details, /candidate\.assignedRoleIds\.filter/);
   assert.match(list, /<ConfirmationDialog/);
   assert.match(list, /<DeleteIcon/);
   assert.match(list, /min-w-\[880px\]/);
@@ -175,13 +179,15 @@ test('role UI creates metadata first and keeps unsupported permission controls d
   assert.doesNotMatch(details, /onMemberCountChange\(body\.total\)/);
 });
 
-test("role and user screens follow the compact prototype structure without reverting multi-role semantics", () => {
+test("role and user screens follow the compact prototype structure and single-role editor", () => {
   const list = source("../app/admin/roles/RolesView.tsx");
   const details = source("../app/admin/roles/[id]/RoleDetailsView.tsx");
   const access = source("../app/admin/users/[id]/access/UserAccessView.tsx");
+  const accessPage = source("../app/admin/users/[id]/access/page.tsx");
   const createUser = source("../app/admin/users/new/NewUserForm.tsx");
   const createUserPage = source("../app/admin/users/new/page.tsx");
   const userDetails = source("../app/admin/users/[id]/UserDetailsView.tsx");
+  const userDetailsPage = source("../app/admin/users/[id]/page.tsx");
 
   assert.match(list, /text-2xl/);
   assert.match(details, /min-w-\[980px\]/);
@@ -190,6 +196,20 @@ test("role and user screens follow the compact prototype structure without rever
   assert.match(access, /userAccessHeading/);
   assert.match(access, /<table/);
   assert.doesNotMatch(access, /<article/);
+  assert.match(access, /aria-labelledby="access-heading"/);
+  assert.match(access, /copy\.backToUserDetails/);
+  assert.match(access, /copy\.targetPaths/);
+  assert.doesNotMatch(access, /<div>\s*\{resource\.displayPaths\.map/);
+  assert.match(access, /rounded-lg border border-line/);
+  assert.match(access, /min-w-\[980px\] divide-y divide-line-subtle/);
+  assert.match(access, /w-28 px-3 py-3/);
+  assert.match(access, /input\.indeterminate = !decision\.supported/);
+  assert.doesNotMatch(access, /AccessDecisionInfo/);
+  assert.doesNotMatch(access, /href=\{`\/admin\/roles\//);
+  assert.doesNotMatch(access, /mt-1 block text-xs font-semibold/);
+  assert.match(access, /userAccessPageTitle/);
+  assert.match(accessPage, /export const metadata: Metadata/);
+  assert.match(accessPage, /userAccessPageTitle/);
   assert.match(userDetails, /isEditingAccessRoles/);
   assert.match(userDetails, /viewAccess/);
   assert.match(userDetails, /userManagement\.name/);
@@ -197,7 +217,15 @@ test("role and user screens follow the compact prototype structure without rever
   assert.match(userDetails, /userManagement\.detailsDescription/);
   assert.match(userDetails, /userManagement\.detailsReadOnly/);
   assert.match(userDetails, /accessControl\.adminAttributeHelp/);
-  assert.match(userDetails, /accessControl\.assignedRolesHelp/);
+  assert.match(userDetails, /accessControl\.replaceAccessRoleHelp/);
+  assert.match(userDetails, /accessControl\.accessRoleSummaryHelp/);
+  assert.match(userDetails, /detailsPageTitle/);
+  assert.match(userDetailsPage, /export const metadata: Metadata/);
+  assert.match(userDetails, /hover:text-primary-700 dark:hover:text-primary-300/);
+  assert.match(userDetails, /<select/);
+  assert.match(userDetails, /w-full max-w-md/);
+  assert.doesNotMatch(userDetails, /type="checkbox"/);
+  assert.doesNotMatch(userDetails, /aria-multiselectable/);
   assert.match(userDetails, /userManagement\.passwordVisibilityHelp/);
   assert.match(userDetails, /id=\{`user-\$\{field\}-label`\}/);
   assert.equal(
@@ -211,15 +239,18 @@ test("role and user screens follow the compact prototype structure without rever
   const nameIndex = createUser.indexOf('name="name"');
   const emailIndex = createUser.indexOf('name="email"');
   const privilegeIndex = createUser.indexOf('name="role"');
-  const accessRolesIndex = createUser.indexOf('name="accessRoleIds"');
+  const accessRolesIndex = createUser.indexOf('name="accessRoleId"');
   assert.ok(nameIndex < emailIndex);
   assert.ok(emailIndex < privilegeIndex);
   assert.ok(privilegeIndex < accessRolesIndex);
   assert.match(createUser, /getAdminRoleDisplayName/);
-  assert.match(
-    createUserPage,
-    /OR: \[\{ systemKey: null \}, \{ systemKey: "FULL_ACCESS" \}\]/,
-  );
+  assert.match(createUser, /name="accessRoleId"/);
+  assert.match(createUser, /formData\.get\("accessRoleId"\)/);
+  assert.doesNotMatch(createUser, /formData\.getAll/);
+  assert.match(createUser, /defaultAccessRoleId/);
+  assert.match(createUser, /systemKey === "NO_ACCESS"/);
+  assert.doesNotMatch(createUser, /type="checkbox"/);
+  assert.doesNotMatch(createUserPage, /OR: \[\{ systemKey: null \}/);
   assert.doesNotMatch(
     createUserPage,
     /systemKey: \{ not: "NO_ACCESS" \}/,
@@ -244,21 +275,13 @@ test("role detail keeps member PII behind separately authorized directory APIs",
   assert.match(page, /role\.systemKey !== "NO_ACCESS"/);
 });
 
-test("effective access uses a local Info icon and exposes hover, focus, click, and Escape", () => {
-  const info = source("../app/components/admin/AccessDecisionInfo.tsx");
-  const icon = source("../app/components/svg/InfoIcon.tsx");
-  assert.match(info, /onMouseEnter/);
-  assert.match(info, /onFocus/);
-  assert.match(info, /onClick/);
-  assert.match(info, /const next = !current/);
-  assert.match(info, /event\.key (?:===|!==) "Escape"/);
-  assert.match(info, /role="tooltip"/);
-  assert.match(info, /maxHeight: "calc\(100vh - 24px\)"/);
-  assert.match(info, /overflow-y-auto/);
-  assert.match(info, /tooltipRef\.current\?\.getBoundingClientRect/);
-  assert.match(icon, /viewBox="0 -960 960 960"/);
-  assert.match(icon, /fill="currentColor"/);
-  assert.match(icon, /aria-hidden="true"/);
+test("effective access follows the prototype's checkbox-only decision cells", () => {
+  const access = source("../app/admin/users/[id]/access/UserAccessView.tsx");
+  assert.match(access, /type="checkbox"/);
+  assert.match(access, /disabled/);
+  assert.doesNotMatch(access, /AccessDecisionInfo/);
+  assert.doesNotMatch(access, /InfoIcon/);
+  assert.doesNotMatch(access, /role="tooltip"/);
 });
 
 test("public Better Auth admin endpoints are blocked and omitted from the client bundle", () => {

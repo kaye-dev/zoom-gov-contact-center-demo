@@ -1,10 +1,16 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import { defaultLocale, dictionaries } from "@/app/i18n/dictionaries";
 import { requireAdminAccess } from "@/lib/server/admin-access/server";
 import { getUserAccessSummary } from "@/lib/server/admin-access/queries";
 import { withPrisma } from "@/lib/server/prisma";
 
 import { UserAccessView } from "./UserAccessView";
+
+export const metadata: Metadata = {
+  title: dictionaries[defaultLocale].admin.accessControl.userAccessPageTitle,
+};
 
 export default async function UserAccessPage({
   params,

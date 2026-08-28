@@ -250,6 +250,7 @@ model AdminAccessRoleAssignment {
   role       AdminAccessRole @relation(fields: [roleId], references: [id], onDelete: Restrict)
 
   @@id([userId, roleId])
+  @@unique([userId])
   @@index([roleId])
   @@index([assignedByUserId])
   @@map("admin_access_role_assignments")

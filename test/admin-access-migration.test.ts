@@ -14,6 +14,10 @@ const mutationFreezeMigrationPath = new URL(
   "../prisma/migrations/20260828180000_add_admin_access_mutation_freeze/migration.sql",
   import.meta.url,
 );
+const singleRoleMigrationPath = new URL(
+  "../prisma/migrations/20260828210000_enforce_single_admin_access_role/migration.sql",
+  import.meta.url,
+);
 
 test("admin access migration is additive and backfills every existing user", async () => {
   const sql = await readFile(migrationPath, "utf8");
@@ -65,4 +69,34 @@ test("mutation freeze migration adds a coherent singleton without destructive ch
   assert.match(sql, /INSERT INTO "admin_access_mutation_state"/);
   assert.match(sql, /\("id"\) VALUES \('global'\)/);
   assert.doesNotMatch(sql, /DROP TABLE|DROP COLUMN|DELETE FROM|TRUNCATE/);
+});
+
+test("single-role migration serializes authority writes and fails closed on invalid cardinality", async () => {
+  const sql = await readFile(singleRoleMigrationPath, "utf8");
+
+  assert.match(sql, /SELECT pg_advisory_xact_lock\(1515344707, 1\)/);
+  assert.match(
+    sql,
+    /LOCK TABLE "user" IN SHARE MODE;\s+LOCK TABLE "admin_access_role_assignments" IN SHARE MODE;/,
+  );
+  assert.match(sql, /FROM "user" AS u/);
+  assert.match(sql, /LEFT JOIN "admin_access_role_assignments" AS a/);
+  assert.match(sql, /GROUP BY u\."id"/);
+  assert.match(sql, /HAVING count\(a\."roleId"\) <> 1/);
+  assert.match(sql, /RAISE EXCEPTION/);
+  assert.match(
+    sql,
+    /CREATE UNIQUE INDEX "admin_access_role_assignments_userId_key"/,
+  );
+  assert.match(sql, /CREATE FUNCTION "assert_exactly_one_admin_access_role"/);
+  assert.match(sql, /CREATE CONSTRAINT TRIGGER "admin_access_role_assignment_exactly_one"/);
+  assert.match(sql, /DEFERRABLE INITIALLY DEFERRED/);
+  assert.match(
+    sql,
+    /CREATE TRIGGER "admin_access_role_assignment_no_truncate"\s+BEFORE TRUNCATE ON "admin_access_role_assignments"\s+FOR EACH STATEMENT/,
+  );
+  assert.doesNotMatch(
+    sql,
+    /DELETE FROM|^\s*TRUNCATE(?:\s+TABLE)?\s+|DROP TABLE|DROP COLUMN/im,
+  );
 });

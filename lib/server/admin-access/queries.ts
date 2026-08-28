@@ -376,6 +376,11 @@ export async function getUserAccessSummary(
   });
 
   if (!user) return null;
+  if (user.accessRoleAssignments.length !== 1) {
+    throw new Error(
+      "Every admin user must have exactly one access role assignment.",
+    );
+  }
 
   const actor: AdminAccessActor = {
     id: user.id,

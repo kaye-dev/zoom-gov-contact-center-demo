@@ -2,16 +2,14 @@
 
 import { useState } from "react";
 
-import {
-  getAdminRoleDisplayDescription,
-  getAdminRoleDisplayName,
-} from "@/app/components/admin/role-display";
+import { getAdminRoleDisplayName } from "@/app/components/admin/role-display";
 
 import { ContentCopyIcon } from "../../../components/svg/ContentCopyIcon";
 import { useI18n } from "../../../i18n/LanguageProvider";
 
 type CreatedUser = {
   email: string;
+  accessRoleName: string;
   temporaryPassword: string;
 };
 
@@ -37,12 +35,20 @@ export function NewUserForm({
   const [copyFeedback, setCopyFeedback] = useState<CopyFeedback | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const defaultAccessRoleId =
+    availableRoles.find((role) => role.systemKey === "NO_ACCESS")?.id ?? "";
 
   const submit = async (formData: FormData) => {
     setError(null);
     setCopyFeedback(null);
     setCreatedUser(null);
     setIsSubmitting(true);
+    const accessRoleId = canAssignRoles
+      ? String(formData.get("accessRoleId") ?? "")
+      : "";
+    const selectedAccessRole = availableRoles.find(
+      (role) => role.id === accessRoleId,
+    );
 
     const response = await fetch(
       "/api/admin/users",
@@ -53,9 +59,7 @@ export function NewUserForm({
           name: String(formData.get("name") ?? ""),
           email: String(formData.get("email") ?? ""),
           role: String(formData.get("role") ?? "user"),
-          accessRoleIds: canAssignRoles
-            ? formData.getAll("accessRoleIds").map(String)
-            : [],
+          accessRoleIds: accessRoleId ? [accessRoleId] : [],
         }),
       },
     );
@@ -77,6 +81,9 @@ export function NewUserForm({
 
     setCreatedUser({
       email: body.user.email,
+      accessRoleName: selectedAccessRole
+        ? getAdminRoleDisplayName(selectedAccessRole, t.admin.accessControl)
+        : t.admin.accessControl.systemRoleNames.NO_ACCESS,
       temporaryPassword: body.temporaryPassword,
     });
   };
@@ -117,6 +124,12 @@ export function NewUserForm({
             <div>
               <dt className="font-semibold">{t.auth.email}</dt>
               <dd>{createdUser.email}</dd>
+            </div>
+            <div>
+              <dt className="font-semibold">
+                {t.admin.userManagement.accessRoles}
+              </dt>
+              <dd>{createdUser.accessRoleName}</dd>
             </div>
             <div>
               <dt className="font-semibold">{t.auth.temporaryPassword}</dt>
@@ -196,36 +209,31 @@ export function NewUserForm({
           </span>
         </label>
         {canAssignRoles ? (
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-semibold">
-              {t.admin.accessControl.assignedRoles}
-            </legend>
-            <p className="text-xs leading-5 text-fg-muted">
-              {t.admin.accessControl.assignedRolesHelp}
-            </p>
-            <div className="grid gap-2 sm:grid-cols-2">
+          <label className="block space-y-2">
+            <span className="text-sm font-semibold">
+              {t.admin.userManagement.accessRoles}
+            </span>
+            <select
+              name="accessRoleId"
+              required
+              defaultValue={defaultAccessRoleId}
+              className="w-full cursor-pointer rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              {defaultAccessRoleId === "" ? (
+                <option value="" disabled>
+                  {t.admin.accessControl.noAssignedRoles}
+                </option>
+              ) : null}
               {availableRoles.map((role) => (
-                <label key={role.id} className="flex cursor-pointer items-center gap-3 rounded-md border border-line p-3 has-[:checked]:border-accent has-[:checked]:bg-surface-selected">
-                  <input
-                    type="checkbox"
-                    name="accessRoleIds"
-                    value={role.id}
-                    className="h-5 w-5 shrink-0 cursor-pointer accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                  />
-                  <span>
-                    <span className="block font-semibold">
-                      {getAdminRoleDisplayName(role, t.admin.accessControl)}
-                    </span>
-                    {getAdminRoleDisplayDescription(role, t.admin.accessControl) ? (
-                      <span className="mt-1 block text-xs leading-5 text-fg-muted">
-                        {getAdminRoleDisplayDescription(role, t.admin.accessControl)}
-                      </span>
-                    ) : null}
-                  </span>
-                </label>
+                <option key={role.id} value={role.id}>
+                  {getAdminRoleDisplayName(role, t.admin.accessControl)}
+                </option>
               ))}
-            </div>
-          </fieldset>
+            </select>
+            <span className="block text-xs leading-5 text-fg-muted">
+              {t.admin.accessControl.assignedRolesHelp}
+            </span>
+          </label>
         ) : null}
         {error ? (
           <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">

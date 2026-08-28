@@ -356,7 +356,7 @@ export async function replaceUserAdminAccessRoles(
       403,
     );
   }
-  if (new Set(roleIds).size !== roleIds.length) {
+  if (roleIds.length > 1) {
     throw new AdminAccessServiceError(ADMIN_ROLE_ERROR_CODES.invalidRequest, 400);
   }
 
@@ -677,15 +677,9 @@ async function resolveCanonicalAdminAccessRoles(
   prisma: AdminAccessTransaction,
   roleIds: string[],
 ): Promise<ResolvedCanonicalAdminAccessRoles> {
-  if (new Set(roleIds).size !== roleIds.length) {
-    throw new AdminAccessServiceError(ADMIN_ROLE_ERROR_CODES.invalidRequest, 400);
-  }
   const canonicalRoleIds =
     roleIds.length === 0 ? [NO_ACCESS_ROLE_ID] : roleIds;
-  if (
-    canonicalRoleIds.includes(NO_ACCESS_ROLE_ID) &&
-    canonicalRoleIds.length > 1
-  ) {
+  if (canonicalRoleIds.length !== 1) {
     throw new AdminAccessServiceError(ADMIN_ROLE_ERROR_CODES.invalidRequest, 400);
   }
 

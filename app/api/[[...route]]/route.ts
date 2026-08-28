@@ -1355,6 +1355,7 @@ function isCreateUserPayload(
     typeof value.role === "string" &&
     (!("accessRoleIds" in value) ||
       (Array.isArray(value.accessRoleIds) &&
+        value.accessRoleIds.length <= 1 &&
         value.accessRoleIds.every((roleId) => typeof roleId === "string")))
   );
 }
@@ -1379,6 +1380,7 @@ function isAccessRoleAssignmentPayload(
     value !== null &&
     "roleIds" in value &&
     Array.isArray(value.roleIds) &&
+    value.roleIds.length <= 1 &&
     value.roleIds.every((roleId) => typeof roleId === "string") &&
     "expectedAssignmentRevision" in value &&
     Number.isSafeInteger(value.expectedAssignmentRevision) &&

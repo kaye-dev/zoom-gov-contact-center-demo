@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { PasswordInput } from "@/app/components/PasswordInput";
 import {
@@ -57,6 +57,16 @@ export function UserDetailsView({
 }: UserDetailsViewProps) {
   const { t } = useI18n();
   const router = useRouter();
+
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = t.admin.userManagement.detailsPageTitle;
+
+    return () => {
+      document.title = previousTitle;
+    };
+  }, [t.admin.userManagement.detailsPageTitle]);
+
   const [user, setUser] = useState(initialUser);
   const [activeAdminCount, setActiveAdminCount] = useState(
     initialActiveAdminCount,
@@ -293,23 +303,18 @@ export function UserDetailsView({
     },
   ];
 
-  const toggleAccessRole = (roleId: string, checked: boolean) => {
-    setAssignedRoleIds((current) => {
-      if (!checked) return current.filter((id) => id !== roleId);
-      if (roleId === "system-no-access") return [roleId];
-      return [
-        ...new Set([
-          ...current.filter((id) => id !== "system-no-access"),
-          roleId,
-        ]),
-      ];
-    });
+  const changeAccessRole = (roleId: string) => {
+    setAssignedRoleIds(roleId ? [roleId] : []);
     setError(null);
     setSuccessMessage(null);
   };
 
   const saveAccessRoles = async () => {
     if (!accessRoles) return;
+    if (assignedRoleIds.length !== 1) {
+      setError(t.admin.accessControl.genericError);
+      return;
+    }
     setIsSavingRoles(true);
     setError(null);
     try {
@@ -330,7 +335,11 @@ export function UserDetailsView({
             error?: string;
           }
         | null;
-      if (!response.ok || !body?.assignment) {
+      if (
+        !response.ok ||
+        !body?.assignment ||
+        body.assignment.roleIds.length !== 1
+      ) {
         setError(
           response.status === 409
             ? t.admin.accessControl.conflictError
@@ -351,14 +360,12 @@ export function UserDetailsView({
     }
   };
 
-  const accessRolesChanged =
-    [...assignedRoleIds].sort().join("\0") !==
-    [...savedRoleIds].sort().join("\0");
+  const accessRolesChanged = assignedRoleIds[0] !== savedRoleIds[0];
   const accessRolesProtected =
     user.id === currentUserId || !accessRoles?.canManageAccessRoles;
-  const selectedAccessRoles = accessRoles?.availableRoles.filter((role) =>
-    savedRoleIds.includes(role.id),
-  ) ?? [];
+  const selectedAccessRole =
+    accessRoles?.availableRoles.find((role) => role.id === savedRoleIds[0]) ??
+    null;
 
   return (
     <section className="mx-auto max-w-4xl space-y-6">
@@ -369,14 +376,13 @@ export function UserDetailsView({
         ← {t.admin.userManagement.backToUsers}
       </Link>
 
-      <div className="flex flex-wrap items-start gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">{t.admin.userManagement.detailsTitle}</h1>
-          <p className="mt-1 text-sm leading-6 text-fg-muted">
-            {t.admin.userManagement.detailsDescription}
-          </p>
-        </div>
-        <StatusBadge banned={user.banned} />
+      <div>
+        <h1 className="text-2xl font-bold">
+          {t.admin.userManagement.detailsTitle}
+        </h1>
+        <p className="mt-1 text-sm leading-6 text-fg-muted">
+          {t.admin.userManagement.detailsDescription}
+        </p>
       </div>
 
       {!canUpdateUser ? (
@@ -492,7 +498,12 @@ export function UserDetailsView({
               ) : (
                 <>
                   <div className="min-w-0">
-                    <p className="break-words font-medium">{value}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="break-words font-medium">{value}</p>
+                      {field === "name" ? (
+                        <StatusBadge banned={user.banned} />
+                      ) : null}
+                    </div>
                     {description ? (
                       <p
                         id={`user-${field}-description`}
@@ -539,48 +550,36 @@ export function UserDetailsView({
         })}
         {accessRoles ? (
           <div className="grid gap-3 border-b border-line-subtle px-5 py-6 sm:grid-cols-[11rem_minmax(0,1fr)_auto] sm:items-start sm:gap-6">
-            <p className="text-sm font-semibold text-fg-muted">
+            <p
+              id="user-access-roles-label"
+              className="text-sm font-semibold text-fg-muted"
+            >
               {t.admin.userManagement.accessRoles}
             </p>
             {isEditingAccessRoles ? (
-              <div className="space-y-4 sm:col-span-2">
-                <fieldset
+              <div className="space-y-3 sm:col-span-2">
+                <select
+                  value={assignedRoleIds[0] ?? ""}
+                  onChange={(event) => changeAccessRole(event.target.value)}
                   disabled={accessRolesProtected || isSavingRoles}
-                  className="grid gap-3 sm:grid-cols-2"
+                  aria-labelledby="user-access-roles-label"
+                  className="w-full max-w-md cursor-pointer rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <legend className="sr-only">
-                    {t.admin.accessControl.assignedRoles}
-                  </legend>
+                  {assignedRoleIds.length === 0 ? (
+                    <option value="" disabled>
+                      {t.admin.accessControl.noAssignedRoles}
+                    </option>
+                  ) : null}
                   {accessRoles.availableRoles.map((role) => (
-                    <label
-                      key={role.id}
-                      className="flex cursor-pointer items-center gap-3 rounded-md border border-line p-3 has-[:checked]:border-accent has-[:checked]:bg-surface-selected has-[:disabled]:cursor-not-allowed"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={assignedRoleIds.includes(role.id)}
-                        onChange={(event) =>
-                          toggleAccessRole(role.id, event.target.checked)
-                        }
-                        className="h-5 w-5 shrink-0 cursor-pointer accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed"
-                      />
-                      <span className="min-w-0">
-                        <span className="block font-semibold">
-                          {role.systemKey
-                            ? t.admin.accessControl.systemRoleNames[role.systemKey]
-                            : role.name}
-                        </span>
-                        {role.systemKey ? (
-                          <span className="mt-1 block text-xs leading-5 text-fg-muted">
-                            {t.admin.accessControl.systemRoleDescriptions[role.systemKey]}
-                          </span>
-                        ) : null}
-                      </span>
-                    </label>
+                    <option key={role.id} value={role.id}>
+                      {role.systemKey
+                        ? t.admin.accessControl.systemRoleNames[role.systemKey]
+                        : role.name}
+                    </option>
                   ))}
-                </fieldset>
+                </select>
                 <p className="text-xs leading-5 text-fg-muted">
-                  {t.admin.accessControl.assignedRolesHelp}
+                  {t.admin.accessControl.replaceAccessRoleHelp}
                 </p>
                 {error && !editingField && !isEditingPassword ? (
                   <p
@@ -621,35 +620,34 @@ export function UserDetailsView({
             ) : (
               <>
                 <div className="min-w-0">
-                  {selectedAccessRoles.length > 0 ? (
-                    <ul className="space-y-1">
-                      {selectedAccessRoles.map((role) => (
-                        <li
-                          key={role.id}
-                          title={
-                            role.systemKey
-                              ? t.admin.accessControl.systemRoleDescriptions[role.systemKey]
-                              : undefined
-                          }
-                          className="font-medium"
-                        >
-                          {role.systemKey
-                            ? t.admin.accessControl.systemRoleNames[role.systemKey]
-                            : role.name}
-                        </li>
-                      ))}
-                    </ul>
+                  {selectedAccessRole ? (
+                    <p
+                      title={
+                        selectedAccessRole.systemKey
+                          ? t.admin.accessControl.systemRoleDescriptions[
+                              selectedAccessRole.systemKey
+                            ]
+                          : undefined
+                      }
+                      className="font-medium"
+                    >
+                      {selectedAccessRole.systemKey
+                        ? t.admin.accessControl.systemRoleNames[
+                            selectedAccessRole.systemKey
+                          ]
+                        : selectedAccessRole.name}
+                    </p>
                   ) : (
                     <p className="text-sm text-fg-muted">
                       {t.admin.accessControl.noAssignedRoles}
                     </p>
                   )}
                   <p className="mt-2 text-xs leading-5 text-fg-muted">
-                    {t.admin.accessControl.assignedRolesHelp}
+                    {t.admin.accessControl.accessRoleSummaryHelp}
                   </p>
                   <Link
                     href={`/admin/users/${encodeURIComponent(user.id)}/access`}
-                    className="mt-3 inline-flex text-sm font-semibold text-accent hover:underline"
+                    className="mt-3 inline-flex text-sm font-semibold text-accent transition-colors hover:text-primary-700 dark:hover:text-primary-300"
                   >
                     {t.admin.accessControl.viewAccess}
                   </Link>

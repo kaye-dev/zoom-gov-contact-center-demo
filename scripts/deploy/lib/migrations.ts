@@ -9,7 +9,7 @@ import {
   type CommandRunner,
 } from "./process";
 
-const REVIEWED_MIGRATION_COUNT = 8;
+const REVIEWED_MIGRATION_COUNT = 9;
 const REVIEWED_SCHEMA_INVISIBLE_MIGRATION_HASHES = new Map([
   [
     "20260828120000_separate_admin_access_cas_revisions",
@@ -65,6 +65,14 @@ export async function createMigrationPlan(
   } catch (error) {
     throw new Error(
       `Could not inspect the Neon database: ${error instanceof Error ? error.message : "unknown connection error"}`,
+    );
+  }
+  if (
+    database.adminAccessRoleCardinalityViolations !== null &&
+    database.adminAccessRoleCardinalityViolations > 0
+  ) {
+    throw new Error(
+      `Administrative access-role cardinality preflight found ${database.adminAccessRoleCardinalityViolations} user(s) without exactly one role. Resolve the assignments before running Prisma migrations.`,
     );
   }
 
@@ -168,6 +176,14 @@ export async function createMigrationPlan(
       appliedNames,
       pending: pending.map(({ name, hash }) => ({ name, hash })),
       predictedDiffHash,
+      migrationAttempts: database.migrations.map(
+        ({ name, checksum, finished, rolledBack }) => ({
+          name,
+          checksum,
+          finished,
+          rolledBack,
+        }),
+      ),
       databaseTables: database.userTables,
       databaseObjects: database.userObjects,
       tablesWithData: database.tablesWithData,
@@ -228,32 +244,36 @@ export function validateMigrationHistory(
       `Failed or incomplete migration history detected: ${failed.map((item) => item.name).join(", ")}`,
     );
   }
-  const rolledBack = database.migrations.filter(
-    (migration) => migration.rolledBack,
-  );
-  if (rolledBack.length > 0) {
-    throw new Error(
-      `Rolled-back migration history requires manual review: ${rolledBack.map((item) => item.name).join(", ")}`,
-    );
-  }
 
-  const applied = database.migrations.filter((migration) => migration.finished);
-  if (new Set(applied.map((migration) => migration.name)).size !== applied.length) {
-    throw new Error("Duplicate applied migration names were found in Neon.");
-  }
-  for (let index = 0; index < applied.length; index += 1) {
-    const expected = local[index];
-    const actual = applied[index];
-    if (!expected || expected.name !== actual?.name) {
+  let appliedCount = 0;
+  const appliedNames = new Set<string>();
+  for (const attempt of database.migrations) {
+    if (attempt.finished && attempt.rolledBack) {
+      throw new Error(
+        `Contradictory migration history state detected for '${attempt.name}'.`,
+      );
+    }
+    if (attempt.finished && appliedNames.has(attempt.name)) {
+      throw new Error("Duplicate applied migration names were found in Neon.");
+    }
+
+    const expected = local[appliedCount];
+    if (!expected || expected.name !== attempt.name) {
       throw new Error(
         "Migration history has diverged from the ordered local migration chain.",
       );
     }
-    if (expected.hash !== actual.checksum) {
+    if (expected.hash !== attempt.checksum) {
       throw new Error(
         `Migration checksum mismatch for '${expected.name}'. The applied SQL must not be rewritten.`,
       );
     }
+
+    if (attempt.rolledBack) {
+      continue;
+    }
+    appliedNames.add(attempt.name);
+    appliedCount += 1;
   }
 }
 
@@ -362,7 +382,7 @@ export function applyMigrationPlan(
 function findAffectedTables(sql: string): string[] {
   const names = new Set<string>();
   const expression =
-    /\b(?:CREATE\s+TABLE|ALTER\s+TABLE|DROP\s+TABLE|TRUNCATE(?:\s+TABLE)?|INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:"public"\.)?(?:"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*))/gi;
+    /\b(?:CREATE\s+TABLE|ALTER\s+TABLE|DROP\s+TABLE|LOCK\s+TABLE|TRUNCATE(?:\s+TABLE)?(?!\s+ON\b)|INSERT\s+INTO|UPDATE(?!\s+(?:OF|OR)\b)|DELETE\s+FROM)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:"public"\.)?(?:"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*))/gi;
   for (const match of sql.matchAll(expression)) {
     const name = match[1] ?? match[2];
     if (name) {
@@ -379,7 +399,7 @@ export function findDestructiveStatements(sql: string): string[] {
     .split(";")
     .map((statement) => statement.replace(/\s+/g, " ").trim())
     .filter((statement) =>
-      /\bDROP\b|\bTRUNCATE\b|\bDELETE\s+FROM\b|\bALTER\s+TABLE\b.*(?:\bRENAME\b|\bALTER\b.*\bTYPE\b)/i.test(
+      /\bDROP\b|^TRUNCATE(?:\s+TABLE)?\b|\bDELETE\s+FROM\b|\bALTER\s+TABLE\b.*(?:\bRENAME\b|\bALTER\b.*\bTYPE\b)/i.test(
         statement,
       ),
     )

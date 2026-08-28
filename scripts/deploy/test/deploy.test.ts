@@ -1303,7 +1303,7 @@ function migrationPlan(planHash: string): MigrationPlan {
     databaseObjects: [],
     tablesWithData: [],
     statusSummary: "1 pending migration",
-    totalMigrationCount: 8,
+    totalMigrationCount: 9,
   };
 }
 
@@ -1317,7 +1317,149 @@ test("migration TOCTOU changes block execution", () => {
   );
 });
 
-test("failed, rolled-back, diverged, checksum, status, and drift states fail closed", async () => {
+test("rolled-back migration attempts can be retried only in verified order", () => {
+  const local = readLocalMigrations(
+    new URL("../../../prisma/migrations/", import.meta.url).pathname,
+  );
+  const appliedPrefix = local.slice(0, -1).map((migration) => ({
+    name: migration.name,
+    checksum: migration.hash,
+    finished: true,
+    rolledBack: false,
+    logs: null,
+  }));
+  const retryMigration = local.at(-1);
+  assert.ok(retryMigration);
+  const rolledBackAttempt = {
+    name: retryMigration.name,
+    checksum: retryMigration.hash,
+    finished: false,
+    rolledBack: true,
+    logs: "simulated resolved failure",
+  };
+  const successfulRetry = {
+    ...rolledBackAttempt,
+    finished: true,
+    rolledBack: false,
+    logs: null,
+  };
+  const database = {
+    migrationsTableExists: true,
+    migrations: appliedPrefix,
+    userTables: ["User"],
+    userObjects: ["table:User"],
+    tablesWithData: [],
+    adminAccessRoleCardinalityViolations: 0,
+  };
+
+  for (const migrations of [
+    [...appliedPrefix, rolledBackAttempt],
+    [...appliedPrefix, rolledBackAttempt, rolledBackAttempt],
+    [
+      ...appliedPrefix,
+      rolledBackAttempt,
+      rolledBackAttempt,
+      successfulRetry,
+    ],
+  ]) {
+    assert.doesNotThrow(() =>
+      validateMigrationHistory(local, { ...database, migrations }),
+    );
+  }
+
+  assert.throws(
+    () =>
+      validateMigrationHistory(local, {
+        ...database,
+        migrations: [
+          ...appliedPrefix,
+          { ...rolledBackAttempt, name: "unexpected_migration" },
+        ],
+      }),
+    /diverged/,
+  );
+  assert.throws(
+    () =>
+      validateMigrationHistory(local, {
+        ...database,
+        migrations: [...appliedPrefix.slice(0, -1), rolledBackAttempt],
+      }),
+    /diverged/,
+  );
+  assert.throws(
+    () =>
+      validateMigrationHistory(local, {
+        ...database,
+        migrations: [
+          ...appliedPrefix,
+          { ...rolledBackAttempt, checksum: "0".repeat(64) },
+        ],
+      }),
+    /checksum mismatch/i,
+  );
+});
+
+test("resolved migration attempts participate in the migration plan hash", async () => {
+  const local = readLocalMigrations(
+    new URL("../../../prisma/migrations/", import.meta.url).pathname,
+  );
+  const firstMigration = local[0];
+  assert.ok(firstMigration);
+  const rolledBackAttempt = {
+    name: firstMigration.name,
+    checksum: firstMigration.hash,
+    finished: false,
+    rolledBack: true,
+    logs: "simulated resolved failure",
+  };
+  const runner = new RecordingRunner((_command, arguments_) =>
+    arguments_.includes("status")
+      ? {
+          status: 1,
+          stdout: "The following migrations have not yet been applied",
+          stderr: "",
+        }
+      : {
+          status: 2,
+          stdout: 'CREATE TABLE "example" ("id" TEXT);',
+          stderr: "",
+        },
+  );
+  const inspect = (migrations: typeof rolledBackAttempt[]) => async () => ({
+    migrationsTableExists: true,
+    migrations,
+    userTables: [],
+    userObjects: [],
+    tablesWithData: [],
+    adminAccessRoleCardinalityViolations: null,
+  });
+  const firstPlan = await createMigrationPlan({
+    projectRoot: process.cwd(),
+    directUrl: "postgresql://redacted.invalid/database",
+    runner,
+    inspect: inspect([rolledBackAttempt]),
+  });
+  const changedPlan = await createMigrationPlan({
+    projectRoot: process.cwd(),
+    directUrl: "postgresql://redacted.invalid/database",
+    runner,
+    inspect: inspect([rolledBackAttempt, rolledBackAttempt]),
+  });
+  const changedLogsPlan = await createMigrationPlan({
+    projectRoot: process.cwd(),
+    directUrl: "postgresql://redacted.invalid/database",
+    runner,
+    inspect: inspect([
+      { ...rolledBackAttempt, logs: "different diagnostic text" },
+    ]),
+  });
+
+  assert.equal(firstPlan.state, "pending");
+  assert.notEqual(firstPlan.planHash, changedPlan.planHash);
+  assert.equal(firstPlan.planHash, changedLogsPlan.planHash);
+});
+
+test("unresolved, contradictory, diverged, checksum, status, and drift states fail closed", async () => {
   const local = readLocalMigrations(
     new URL("../../../prisma/migrations/", import.meta.url).pathname,
   );
@@ -1334,6 +1476,7 @@ test("failed, rolled-back, diverged, checksum, status, and drift states fail clo
     userTables: ["User"],
     userObjects: ["table:User"],
     tablesWithData: [],
+    adminAccessRoleCardinalityViolations: 0,
   };
 
   assert.throws(
@@ -1360,7 +1503,7 @@ test("failed, rolled-back, diverged, checksum, status, and drift states fail clo
           },
         ],
       }),
-    /Rolled-back/,
+    /Contradictory/,
   );
   assert.throws(
     () =>
@@ -1417,6 +1560,33 @@ test("failed, rolled-back, diverged, checksum, status, and drift states fail clo
   assert.equal(synchronized.predictedDiff, "");
 });
 
+test("access-role cardinality preflight stops before Prisma records a failed migration", async () => {
+  const runner = new RecordingRunner(() =>
+    success("runner must remain unused when cardinality is invalid"),
+  );
+
+  await assert.rejects(
+    createMigrationPlan({
+      projectRoot: process.cwd(),
+      directUrl: "postgresql://redacted.invalid/database",
+      runner,
+      inspect: async () => ({
+        migrationsTableExists: true,
+        migrations: [],
+        userTables: ["admin_access_role_assignments", "user"],
+        userObjects: [
+          "table:admin_access_role_assignments",
+          "table:user",
+        ],
+        tablesWithData: ["admin_access_role_assignments", "user"],
+        adminAccessRoleCardinalityViolations: 2,
+      }),
+    }),
+    /cardinality preflight found 2 user\(s\)/,
+  );
+  assert.equal(runner.calls.length, 0);
+});
+
 test("Prisma empty migration sentinel is not reported as schema drift", () => {
   assert.equal(normalizePrismaDiff("\n-- This is an empty migration.\n"), "");
   assert.equal(normalizePrismaDiff("  \n"), "");
@@ -1428,11 +1598,11 @@ test("Prisma empty migration sentinel is not reported as schema drift", () => {
   );
 });
 
-test("reviewed CAS cleanup remains safe when followed by the additive freeze migration", async () => {
+test("reviewed CAS cleanup remains safe with the additive authority migrations", async () => {
   const local = readLocalMigrations(
     new URL("../../../prisma/migrations/", import.meta.url).pathname,
   );
-  const applied = local.slice(0, -2).map((migration) => ({
+  const applied = local.slice(0, -3).map((migration) => ({
     name: migration.name,
     checksum: migration.hash,
     finished: true,
@@ -1464,6 +1634,7 @@ test("reviewed CAS cleanup remains safe when followed by the additive freeze mig
         "table:user",
       ],
       tablesWithData: ["admin_access_role_assignments", "admin_access_roles", "user"],
+      adminAccessRoleCardinalityViolations: 0,
     }),
   });
   assert.equal(plan.state, "pending");
@@ -1474,6 +1645,7 @@ test("reviewed CAS cleanup remains safe when followed by the additive freeze mig
     [
       "20260828120000_separate_admin_access_cas_revisions",
       "20260828180000_add_admin_access_mutation_freeze",
+      "20260828210000_enforce_single_admin_access_role",
     ],
   );
   assert.equal(plan.pending[0]?.destructiveStatements.length, 2);
@@ -1493,6 +1665,44 @@ test("destructive SQL detection is conservative beyond table drops", () => {
   assert.equal(destructive.length, 6);
   assert.match(destructive.join("\n"), /DROP VIEW/);
   assert.match(destructive.join("\n"), /ALTER COLUMN amount TYPE/);
+});
+
+test("destructive SQL detection ignores truncate references in trigger definitions", () => {
+  const triggerStatements = findDestructiveStatements(`
+    CREATE FUNCTION assert_not_truncated()
+    RETURNS TRIGGER AS $body$
+    BEGIN
+      IF TG_OP = 'TRUNCATE' THEN
+        RAISE EXCEPTION 'cannot truncate';
+      END IF;
+      RETURN NULL;
+    END
+    $body$ LANGUAGE plpgsql;
+
+    CREATE TRIGGER no_truncate
+    BEFORE TRUNCATE ON audit_log
+    FOR EACH STATEMENT EXECUTE FUNCTION assert_not_truncated();
+  `);
+  assert.deepEqual(triggerStatements, []);
+
+  const actualTruncates = findDestructiveStatements(`
+    TRUNCATE public.audit_log;
+    TRUNCATE TABLE public.audit_archive;
+  `);
+  assert.equal(actualTruncates.length, 2);
+});
+
+test("affected-table detection ignores trigger event grammar", () => {
+  const singleRoleMigration = readLocalMigrations(
+    new URL("../../../prisma/migrations/", import.meta.url).pathname,
+  ).find(
+    ({ name }) => name === "20260828210000_enforce_single_admin_access_role",
+  );
+  assert.ok(singleRoleMigration);
+  assert.deepEqual(singleRoleMigration.affectedTables, [
+    "admin_access_role_assignments",
+    "user",
+  ]);
 });
 
 test("destructive migration is eligible only for an object-empty fresh database", async () => {
@@ -1520,6 +1730,7 @@ test("destructive migration is eligible only for an object-empty fresh database"
     userTables: [],
     userObjects: [],
     tablesWithData: [],
+    adminAccessRoleCardinalityViolations: null,
   };
   const fresh = await createMigrationPlan({
     projectRoot: process.cwd(),

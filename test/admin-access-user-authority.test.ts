@@ -15,6 +15,7 @@ import {
   assertAdminUserTargetWithinActorAuthority,
   createAdminRole,
   replaceAdminRolePermissions,
+  replaceUserAdminAccessRoles,
   runAuthorizedAdminUserCreation,
   runAuthorizedAdminUserOperation,
 } from "../lib/server/admin-access/authority-service";
@@ -149,6 +150,14 @@ function prismaForAdminUserCreation() {
             roleId,
             role: roles.get(roleId)!,
           })),
+        };
+      },
+      findUniqueOrThrow: async ({ where }: { where: { id: string } }) => {
+        const record = users.get(where.id);
+        if (!record) throw new Error("USER_NOT_FOUND");
+        return {
+          adminAccessRoleRevision: record.revision,
+          accessRoleAssignments: record.roleIds.map((roleId) => ({ roleId })),
         };
       },
       updateMany: async ({
@@ -466,19 +475,72 @@ test("empty or omitted role selections need no role-assignment authority", async
   }
 });
 
-test("invalid role selections fail before the user operation", async () => {
-  const { prisma } = prismaForAdminUserCreation();
-  let operationCalled = false;
+test("empty assignment replacement resolves to NO_ACCESS", async () => {
+  const { prisma, users, roles } = prismaForAdminUserCreation();
+  const initialRole = roles.get("custom-viewer")!;
+  users.set("target", {
+    actor: actor("target", [initialRole]),
+    revision: 1,
+    roleIds: [initialRole.id],
+  });
+
+  const result = await replaceUserAdminAccessRoles(
+    prisma,
+    "actor",
+    "target",
+    [],
+    1,
+  );
+
+  assert.deepEqual(result, {
+    assignmentRevision: 2,
+    roleIds: ["system-no-access"],
+  });
+  assert.deepEqual(users.get("target")?.roleIds, ["system-no-access"]);
+  assert.equal(users.get("target")?.revision, 2);
+});
+
+test("assignment replacement leaves exactly the requested role", async () => {
+  const { prisma, users, roles } = prismaForAdminUserCreation();
+  const initialRole = roles.get("system-no-access")!;
+  users.set("target", {
+    actor: actor("target", [initialRole]),
+    revision: 1,
+    roleIds: [initialRole.id],
+  });
+
+  const result = await replaceUserAdminAccessRoles(
+    prisma,
+    "actor",
+    "target",
+    ["custom-viewer"],
+    1,
+  );
+
+  assert.deepEqual(result, {
+    assignmentRevision: 2,
+    roleIds: ["custom-viewer"],
+  });
+  assert.deepEqual(users.get("target")?.roleIds, ["custom-viewer"]);
+  assert.equal(users.get("target")?.revision, 2);
+});
+
+test("multiple assignment replacement is rejected without mutation", async () => {
+  const { prisma, users, roles, events } = prismaForAdminUserCreation();
+  const initialRole = roles.get("system-no-access")!;
+  users.set("target", {
+    actor: actor("target", [initialRole]),
+    revision: 1,
+    roleIds: [initialRole.id],
+  });
 
   await assert.rejects(
-    runAuthorizedAdminUserCreation(
+    replaceUserAdminAccessRoles(
       prisma,
       "actor",
-      ["missing-role"],
-      async () => {
-        operationCalled = true;
-        return { userId: "new-user", value: "created" };
-      },
+      "target",
+      ["custom-viewer", "system-full-access"],
+      1,
     ),
     (error: unknown) => {
       assert.ok(error instanceof AdminAccessServiceError);
@@ -486,7 +548,49 @@ test("invalid role selections fail before the user operation", async () => {
       return true;
     },
   );
-  assert.equal(operationCalled, false);
+  assert.deepEqual(users.get("target")?.roleIds, ["system-no-access"]);
+  assert.equal(users.get("target")?.revision, 1);
+  assert.deepEqual(events, []);
+});
+
+test("invalid or multiple creation role selections fail before user creation", async () => {
+  for (const requestedRoleIds of [
+    ["missing-role"],
+    ["custom-viewer", "system-full-access"],
+  ]) {
+    const { prisma } = prismaForAdminUserCreation();
+    let operationCalled = false;
+
+    await assert.rejects(
+      runAuthorizedAdminUserCreation(
+        prisma,
+        "actor",
+        requestedRoleIds,
+        async () => {
+          operationCalled = true;
+          return { userId: "new-user", value: "created" };
+        },
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof AdminAccessServiceError);
+        assert.equal(error.status, 400);
+        return true;
+      },
+    );
+    assert.equal(operationCalled, false);
+  }
+});
+
+test("create-user payload validation rejects more than one access role", async () => {
+  const routeSource = await readFile(
+    new URL("../app/api/[[...route]]/route.ts", import.meta.url),
+    "utf8",
+  );
+  const start = routeSource.indexOf("function isCreateUserPayload");
+  const end = routeSource.indexOf("function isObjectWithRevision", start);
+  const validatorSource = routeSource.slice(start, end);
+
+  assert.match(validatorSource, /value\.accessRoleIds\.length <= 1/);
 });
 
 test("role permission replacement rejects weakening a member above the actor ceiling", async () => {
@@ -649,7 +753,10 @@ test("user details do not fetch or serialize access roles without both read perm
   assert.match(viewSource, /\{accessRoles \? \(/);
   assert.match(viewSource, /accessRoles\.availableRoles\.map/);
   assert.match(viewSource, /systemRoleNames\[\s*role\.systemKey\s*\]/);
-  assert.match(viewSource, /systemRoleDescriptions\[\s*role\.systemKey\s*\]/);
+  assert.match(
+    viewSource,
+    /systemRoleDescriptions\[\s*selectedAccessRole\.systemKey\s*\]/,
+  );
 });
 
 test("role and assignment mutations enforce the potentially active authority ceiling", async () => {

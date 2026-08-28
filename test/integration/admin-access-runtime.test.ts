@@ -150,6 +150,26 @@ test(
           };
           assert.equal(createdBody.role.revision, 1);
 
+          const invalidCreateEmail = "multi-role-create@example.test";
+          const invalidCreateResponse = await invokeHono(
+            honoRoute.POST,
+            "POST",
+            "/api/admin/users",
+            fullCookie,
+            {
+              name: "Multi-role create",
+              email: invalidCreateEmail,
+              role: "user",
+              accessRoleIds: [NO_ACCESS_ROLE_ID, createdBody.role.id],
+            },
+          );
+          assert.equal(invalidCreateResponse.status, 400);
+          const invalidCreateCount = await client.query<{ count: string }>(
+            `SELECT count(*)::text AS count FROM "user" WHERE email = $1`,
+            [invalidCreateEmail],
+          );
+          assert.equal(Number(invalidCreateCount.rows[0]?.count), 0);
+
           const updatedResponse = await invokeHono(
             honoRoute.PATCH,
             "PATCH",
@@ -202,6 +222,13 @@ test(
               expectedAssignmentRevision: 999,
             })).status,
             409,
+          );
+          assert.equal(
+            (await invokeHono(honoRoute.PUT, "PUT", assignmentPath, fullCookie, {
+              roleIds: [NO_ACCESS_ROLE_ID, createdBody.role.id],
+              expectedAssignmentRevision: 1,
+            })).status,
+            400,
           );
           assert.deepEqual(await readUserAssignment(client, "route-target"), {
             revision: 1,
@@ -541,16 +568,23 @@ async function replaceAssignmentsDirectly(
   userId: string,
   roleIds: string[],
 ) {
-  await client.query(
-    `DELETE FROM admin_access_role_assignments WHERE "userId" = $1`,
-    [userId],
-  );
-  for (const roleId of roleIds) {
+  await client.query("BEGIN");
+  try {
     await client.query(
-      `INSERT INTO admin_access_role_assignments ("userId", "roleId")
-       VALUES ($1, $2)`,
-      [userId, roleId],
+      `DELETE FROM admin_access_role_assignments WHERE "userId" = $1`,
+      [userId],
     );
+    for (const roleId of roleIds) {
+      await client.query(
+        `INSERT INTO admin_access_role_assignments ("userId", "roleId")
+         VALUES ($1, $2)`,
+        [userId, roleId],
+      );
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
   }
 }
 

@@ -33,6 +33,8 @@ const ADMIN_ACCESS_CAS_FIX_MIGRATION =
   "20260828120000_separate_admin_access_cas_revisions";
 const ADMIN_ACCESS_FREEZE_MIGRATION =
   "20260828180000_add_admin_access_mutation_freeze";
+const ADMIN_ACCESS_SINGLE_ROLE_MIGRATION =
+  "20260828210000_enforce_single_admin_access_role";
 const MIGRATIONS_BEFORE_ADMIN_ACCESS = [
   "20260623105657_init",
   "20260804090000_add_site_settings",
@@ -55,17 +57,51 @@ test("fresh database applies and reapplies the complete migration chain", async 
          WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL
          ORDER BY started_at`,
       );
-      assert.equal(migrations.rowCount, 8);
+      assert.equal(migrations.rowCount, 9);
       assert.equal(
         migrations.rows.at(-1)?.migration_name,
-        ADMIN_ACCESS_FREEZE_MIGRATION,
+        ADMIN_ACCESS_SINGLE_ROLE_MIGRATION,
       );
       await assertSystemRoles(client);
       await assertAssignmentRevisionTriggerState(client, false);
+      await assertSingleRoleUniqueIndexState(client, true);
 
       const roleRevisions = await readRoleRevisions(client);
       await insertUser(client, "fresh-admin", "fresh-admin@example.test", "admin");
       await insertUser(client, "fresh-user", "fresh-user@example.test", "user");
+      assert.deepEqual(await readAssignments(client), [
+        { roleId: "system-full-access", userId: "fresh-admin" },
+        { roleId: "system-no-access", userId: "fresh-user" },
+      ]);
+      await assert.rejects(
+        client.query(
+          `INSERT INTO admin_access_role_assignments ("userId", "roleId")
+           VALUES ('fresh-user', 'system-full-access')`,
+        ),
+        (error: unknown) => {
+          assert.equal((error as { code?: string }).code, "23505");
+          return true;
+        },
+      );
+      assert.deepEqual(await readAssignments(client), [
+        { roleId: "system-full-access", userId: "fresh-admin" },
+        { roleId: "system-no-access", userId: "fresh-user" },
+      ]);
+      await assert.rejects(
+        client.query(
+          `DELETE FROM admin_access_role_assignments
+           WHERE "userId" = 'fresh-user'`,
+        ),
+        /Every user must retain exactly one access role assignment/,
+      );
+      assert.deepEqual(await readAssignments(client), [
+        { roleId: "system-full-access", userId: "fresh-admin" },
+        { roleId: "system-no-access", userId: "fresh-user" },
+      ]);
+      await assert.rejects(
+        client.query("TRUNCATE admin_access_role_assignments"),
+        /Administrative access role assignments cannot be truncated/,
+      );
       assert.deepEqual(await readAssignments(client), [
         { roleId: "system-full-access", userId: "fresh-admin" },
         { roleId: "system-no-access", userId: "fresh-user" },
@@ -98,7 +134,9 @@ test("upgrade migration backfills existing users and enables insert triggers", a
 
       await client.query(readMigration(ADMIN_ACCESS_CAS_FIX_MIGRATION));
       await client.query(readMigration(ADMIN_ACCESS_FREEZE_MIGRATION));
+      await client.query(readMigration(ADMIN_ACCESS_SINGLE_ROLE_MIGRATION));
       await assertAssignmentRevisionTriggerState(client, false);
+      await assertSingleRoleUniqueIndexState(client, true);
       const freezeState = await client.query<{
         frozen: boolean;
         freezeId: string | null;
@@ -120,6 +158,142 @@ test("upgrade migration backfills existing users and enables insert triggers", a
       assert.deepEqual(await readRoleRevisions(client), roleRevisions);
     } finally {
       await client.end();
+    }
+  });
+});
+
+test("single-role migration preserves invalid legacy rows until explicit repair", async () => {
+  await withIsolatedDatabase(async (databaseUrl) => {
+    const client = new Client({ connectionString: databaseUrl });
+    await client.connect();
+    try {
+      for (const migration of MIGRATIONS_BEFORE_ADMIN_ACCESS) {
+        await client.query(readMigration(migration));
+      }
+      await client.query(readMigration(ADMIN_ACCESS_MIGRATION));
+      await client.query(readMigration(ADMIN_ACCESS_CAS_FIX_MIGRATION));
+      await client.query(readMigration(ADMIN_ACCESS_FREEZE_MIGRATION));
+      await client.query(
+        `INSERT INTO admin_access_roles
+           (id, name, "nameKey", description, "systemKey")
+         VALUES ('legacy-custom', 'Legacy Custom', 'legacy custom', NULL, NULL)`,
+      );
+      await insertUser(
+        client,
+        "duplicate-assignment-user",
+        "duplicate-assignment-user@example.test",
+        "admin",
+      );
+      await insertUser(
+        client,
+        "missing-assignment-user",
+        "missing-assignment-user@example.test",
+        "user",
+      );
+      await client.query(
+        `INSERT INTO admin_access_role_assignments ("userId", "roleId")
+         VALUES ('duplicate-assignment-user', 'legacy-custom')`,
+      );
+      await client.query(
+        `DELETE FROM admin_access_role_assignments
+         WHERE "userId" = 'missing-assignment-user'`,
+      );
+
+      const invalidAssignments = await readAssignments(client);
+      await assert.rejects(
+        client.query(readMigration(ADMIN_ACCESS_SINGLE_ROLE_MIGRATION)),
+        /Cannot enforce exactly one access role per user/,
+      );
+      await client.query("ROLLBACK");
+      assert.deepEqual(await readAssignments(client), invalidAssignments);
+      await assertSingleRoleUniqueIndexState(client, false);
+
+      await client.query(
+        `DELETE FROM admin_access_role_assignments
+         WHERE "userId" = 'duplicate-assignment-user'
+           AND "roleId" = 'legacy-custom'`,
+      );
+      await client.query(
+        `INSERT INTO admin_access_role_assignments ("userId", "roleId")
+         VALUES ('missing-assignment-user', 'system-no-access')`,
+      );
+      await client.query(readMigration(ADMIN_ACCESS_SINGLE_ROLE_MIGRATION));
+      await assertSingleRoleUniqueIndexState(client, true);
+    } finally {
+      await client.query("ROLLBACK").catch(() => undefined);
+      await client.end();
+    }
+  });
+});
+
+test("single-role migration waits for direct writers and rechecks cardinality", async () => {
+  await withIsolatedDatabase(async (databaseUrl) => {
+    const migrator = new Client({ connectionString: databaseUrl });
+    const writer = new Client({ connectionString: databaseUrl });
+    await migrator.connect();
+    await writer.connect();
+    try {
+      for (const migration of MIGRATIONS_BEFORE_ADMIN_ACCESS) {
+        await migrator.query(readMigration(migration));
+      }
+      await migrator.query(readMigration(ADMIN_ACCESS_MIGRATION));
+      await migrator.query(readMigration(ADMIN_ACCESS_CAS_FIX_MIGRATION));
+      await migrator.query(readMigration(ADMIN_ACCESS_FREEZE_MIGRATION));
+      await insertUser(
+        migrator,
+        "concurrent-delete-user",
+        "concurrent-delete-user@example.test",
+        "user",
+      );
+
+      await writer.query("BEGIN");
+      await writer.query(
+        `DELETE FROM admin_access_role_assignments
+         WHERE "userId" = 'concurrent-delete-user'`,
+      );
+
+      const migration = migrator.query(
+        readMigration(ADMIN_ACCESS_SINGLE_ROLE_MIGRATION),
+      );
+      assert.equal(
+        await Promise.race([
+          migration.then(
+            () => "settled",
+            () => "settled",
+          ),
+          delay(100).then(() => "waiting"),
+        ]),
+        "waiting",
+      );
+
+      await writer.query("COMMIT");
+      await assert.rejects(
+        migration,
+        /Cannot enforce exactly one access role per user/,
+      );
+      await migrator.query("ROLLBACK");
+
+      const finalState = await migrator.query<{
+        assignmentCount: number;
+        userExists: boolean;
+      }>(
+        `SELECT
+           (SELECT count(*)::integer
+            FROM admin_access_role_assignments
+            WHERE "userId" = 'concurrent-delete-user') AS "assignmentCount",
+           EXISTS (
+             SELECT 1 FROM "user" WHERE id = 'concurrent-delete-user'
+           ) AS "userExists"`,
+      );
+      assert.deepEqual(finalState.rows, [
+        { assignmentCount: 0, userExists: true },
+      ]);
+      await assertSingleRoleUniqueIndexState(migrator, false);
+    } finally {
+      await writer.query("ROLLBACK").catch(() => undefined);
+      await migrator.query("ROLLBACK").catch(() => undefined);
+      await writer.end();
+      await migrator.end();
     }
   });
 });
@@ -535,13 +709,7 @@ test("seed, provisioning, and legacy rollback preparation converge atomically", 
         "limited-admin@example.test",
         "admin",
       );
-      await client.query(
-        `DELETE FROM admin_access_role_assignments WHERE "userId" = 'limited-admin'`,
-      );
-      await client.query(
-        `INSERT INTO admin_access_role_assignments ("userId", "roleId")
-         VALUES ('limited-admin', 'custom-limited')`,
-      );
+      await replaceAssignment(client, "limited-admin", "custom-limited");
       await client.query(
         `INSERT INTO session
            (id, "expiresAt", token, "createdAt", "updatedAt", "userId")
@@ -557,10 +725,7 @@ test("seed, provisioning, and legacy rollback preparation converge atomically", 
         "denied-full-admin@example.test",
         "admin",
       );
-      await client.query(
-        `INSERT INTO admin_access_role_assignments ("userId", "roleId")
-         VALUES ('denied-full-admin', 'custom-deny')`,
-      );
+      await replaceAssignment(client, "denied-full-admin", "custom-deny");
       await client.query(
         `INSERT INTO session
            (id, "expiresAt", token, "createdAt", "updatedAt", "userId")
@@ -586,8 +751,8 @@ test("seed, provisioning, and legacy rollback preparation converge atomically", 
           mustChangePassword: false,
           adminAccessRoleRevision: 1,
           hasCredential: false,
-          accessRoleIds: ["custom-deny", "system-full-access"],
-          hasFullAccess: true,
+          accessRoleIds: ["custom-deny"],
+          hasFullAccess: false,
           customDenyPermissions: [
             {
               roleId: "custom-deny",
@@ -633,10 +798,7 @@ test("seed, provisioning, and legacy rollback preparation converge atomically", 
         "stale-admin@example.test",
         "admin",
       );
-      await client.query(
-        `INSERT INTO admin_access_role_assignments ("userId", "roleId")
-         VALUES ('stale-admin', 'custom-drift')`,
-      );
+      await replaceAssignment(client, "stale-admin", "custom-drift");
       const staleRollbackPlan = await inspectLegacyRollbackAdmins(databaseUrl);
       assert.deepEqual(
         staleRollbackPlan.admins.find(({ id }) => id === "stale-admin")
@@ -684,11 +846,7 @@ test("seed, provisioning, and legacy rollback preparation converge atomically", 
         deniedRecoveryInput.email,
       );
       assert.ok(deniedRecovery.id);
-      await client.query(
-        `INSERT INTO admin_access_role_assignments ("userId", "roleId")
-         VALUES ($1, 'custom-deny')`,
-        [deniedRecovery.id],
-      );
+      await replaceAssignment(client, deniedRecovery.id, "custom-deny");
       await client.query(
         `UPDATE "user" SET role = 'user'
          WHERE role = 'admin' AND id <> $1`,
@@ -699,7 +857,7 @@ test("seed, provisioning, and legacy rollback preparation converge atomically", 
       assert.equal(deniedOnlyPlan.admins[0]?.hasCredential, true);
       assert.equal(deniedOnlyPlan.admins[0]?.banned, false);
       assert.equal(deniedOnlyPlan.admins[0]?.mustChangePassword, false);
-      assert.equal(deniedOnlyPlan.admins[0]?.hasFullAccess, true);
+      assert.equal(deniedOnlyPlan.admins[0]?.hasFullAccess, false);
       assert.equal(deniedOnlyPlan.admins[0]?.customDenyPermissions.length, 1);
       await assert.rejects(
         withAdminAccessSessionLock(databaseUrl, (lock) =>
@@ -853,6 +1011,29 @@ async function insertUser(
   );
 }
 
+async function replaceAssignment(
+  client: Client,
+  userId: string,
+  roleId: string,
+): Promise<void> {
+  await client.query("BEGIN");
+  try {
+    await client.query(
+      `DELETE FROM admin_access_role_assignments WHERE "userId" = $1`,
+      [userId],
+    );
+    await client.query(
+      `INSERT INTO admin_access_role_assignments ("userId", "roleId")
+       VALUES ($1, $2)`,
+      [userId, roleId],
+    );
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  }
+}
+
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
 }
@@ -917,6 +1098,22 @@ async function assertAssignmentRevisionTriggerState(
        AND pg_function_is_visible(oid)`,
   );
   assert.equal(functions.rows[0]?.count, expectedPresent ? "1" : "0");
+}
+
+async function assertSingleRoleUniqueIndexState(
+  client: Client,
+  expectedPresent: boolean,
+): Promise<void> {
+  const indexes = await client.query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM pg_indexes
+       WHERE schemaname = current_schema()
+         AND tablename = 'admin_access_role_assignments'
+         AND indexname = 'admin_access_role_assignments_userId_key'
+     ) AS exists`,
+  );
+  assert.equal(indexes.rows[0]?.exists, expectedPresent);
 }
 
 async function readRoleRevisions(

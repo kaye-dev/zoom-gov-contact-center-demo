@@ -1,11 +1,17 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import { defaultLocale, dictionaries } from "@/app/i18n/dictionaries";
 import { canAdminAccess } from "@/lib/admin-access/authorization";
 import { getSessionUser } from "@/lib/server/auth/helpers";
 import { requireAdminAccess } from "@/lib/server/admin-access/server";
 import { withPrisma } from "@/lib/server/prisma";
 
 import { UserDetailsView } from "./UserDetailsView";
+
+export const metadata: Metadata = {
+  title: dictionaries[defaultLocale].admin.userManagement.detailsPageTitle,
+};
 
 export default async function UserDetailsPage({
   params,
@@ -77,6 +83,11 @@ export default async function UserDetailsPage({
         ]);
       if (!record) {
         return { user: null, activeAdminCount, accessRoles: null };
+      }
+      if (record.accessRoleAssignments.length !== 1) {
+        throw new Error(
+          "Every admin user must have exactly one access role assignment.",
+        );
       }
       const {
         adminAccessRoleRevision,
