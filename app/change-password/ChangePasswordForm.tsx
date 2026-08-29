@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { PasswordInput } from "@/app/components/PasswordInput";
+
 import { useI18n } from "../i18n/LanguageProvider";
 
 export function ChangePasswordForm() {
@@ -53,37 +55,27 @@ export function ChangePasswordForm() {
         </p>
       </div>
       <form action={submit} className="space-y-4">
-        <label className="block space-y-2">
-          <span className="text-sm font-semibold">
-            {t.auth.currentPassword}
-          </span>
-          <input
-            name="currentPassword"
-            type="password"
-            required
-            autoComplete="current-password"
-            className="w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent"
-          />
-        </label>
-        <label className="block space-y-2">
-          <span className="text-sm font-semibold">{t.auth.newPassword}</span>
-          <input
-            name="newPassword"
-            type="password"
-            required
-            minLength={12}
-            maxLength={128}
-            autoComplete="new-password"
-            className="w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent"
-          />
-        </label>
+        <PasswordInput
+          label={t.auth.currentPassword}
+          name="currentPassword"
+          required
+          autoComplete="current-password"
+        />
+        <PasswordInput
+          label={t.auth.newPassword}
+          name="newPassword"
+          required
+          minLength={12}
+          maxLength={128}
+          autoComplete="new-password"
+        />
         {error ? (
           <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">
             {error}
           </p>
         ) : null}
         {success ? (
-          <p className="rounded-md bg-primary-50 px-3 py-2 text-sm text-primary-1100">
+          <p className="rounded-md bg-surface-accent-subtle px-3 py-2 text-sm text-fg">
             {t.auth.passwordChanged}
           </p>
         ) : null}

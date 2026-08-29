@@ -1,8 +1,18 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { ZoomWebChatScript } from "../app/components/ZoomWebChatScript";
 import type { ZoomWebChatTagConfig } from "../lib/zoom-web-chat-tag";
+
+const localeGateSource = readFileSync(
+  new URL("../app/components/ZoomWebChatLocaleGate.tsx", import.meta.url),
+  "utf8",
+);
+const launcherSource = readFileSync(
+  new URL("../app/components/ZoomWebChatLauncher.tsx", import.meta.url),
+  "utf8",
+);
 
 const campaignConfig: ZoomWebChatTagConfig = {
   mode: "CAMPAIGN",
@@ -54,4 +64,16 @@ test("Contact Center renders the selected Entry ID and preserves optional type",
     entryIdConfig.chatEntryId,
   );
   assert.equal(script.props.strategy, "afterInteractive");
+});
+
+test("Zoom SDK rendering waits for the synchronized site language", () => {
+  assert.match(localeGateSource, /const \{ isLocaleReady, locale \} = useI18n\(\);/);
+  assert.match(localeGateSource, /!isLocaleReady/);
+  assert.match(
+    localeGateSource,
+    /document\.documentElement\.lang !== toHtmlLanguageTag\(locale\)/,
+  );
+  assert.match(localeGateSource, /return <ZoomWebChatScript config={config} \/>;/);
+  assert.doesNotMatch(localeGateSource, /data-language|zoomCampaignSdkConfig/);
+  assert.match(launcherSource, /<ZoomWebChatLocaleGate config={config} \/>/);
 });

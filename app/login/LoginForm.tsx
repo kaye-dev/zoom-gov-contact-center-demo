@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { PasswordInput } from "@/app/components/PasswordInput";
 import { authClient } from "@/lib/auth-client";
 
 import { useI18n } from "../i18n/LanguageProvider";
@@ -59,16 +60,12 @@ export function LoginForm({ callbackURL }: { callbackURL: string }) {
             className="w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent"
           />
         </label>
-        <label className="block space-y-2">
-          <span className="text-sm font-semibold">{t.auth.password}</span>
-          <input
-            name="password"
-            type="password"
-            required
-            autoComplete="current-password"
-            className="w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent"
-          />
-        </label>
+        <PasswordInput
+          label={t.auth.password}
+          name="password"
+          required
+          autoComplete="current-password"
+        />
         {error ? (
           <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">
             {error}

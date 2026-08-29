@@ -832,7 +832,7 @@ function migrationPlan(planHash: string): MigrationPlan {
     databaseObjects: [],
     tablesWithData: [],
     statusSummary: "1 pending migration",
-    totalMigrationCount: 5,
+    totalMigrationCount: 9,
   };
 }
 
@@ -846,7 +846,154 @@ test("migration TOCTOU changes block execution", () => {
   );
 });
 
-test("failed, rolled-back, diverged, checksum, status, and drift states fail closed", async () => {
+test("rolled-back migration attempts can be retried only in verified order", () => {
+  const local = readLocalMigrations(
+    new URL("../../../prisma/migrations/", import.meta.url).pathname,
+  );
+  const appliedPrefix = local.slice(0, -1).map((migration) => ({
+    name: migration.name,
+    checksum: migration.hash,
+    finished: true,
+    rolledBack: false,
+    logs: null,
+  }));
+  const retryMigration = local.at(-1);
+  assert.ok(retryMigration);
+  const rolledBackAttempt = {
+    name: retryMigration.name,
+    checksum: retryMigration.hash,
+    finished: false,
+    rolledBack: true,
+    logs: "simulated resolved failure",
+  };
+  const successfulRetry = {
+    ...rolledBackAttempt,
+    finished: true,
+    rolledBack: false,
+    logs: null,
+  };
+  const database = {
+    migrationsTableExists: true,
+    migrations: appliedPrefix,
+    userTables: ["User"],
+    userObjects: ["table:User"],
+    tablesWithData: [],
+    adminAccessRoleCardinalityViolations: 0,
+  };
+
+  for (const migrations of [
+    [...appliedPrefix, rolledBackAttempt],
+    [...appliedPrefix, rolledBackAttempt, rolledBackAttempt],
+    [
+      ...appliedPrefix,
+      rolledBackAttempt,
+      rolledBackAttempt,
+      successfulRetry,
+    ],
+  ]) {
+    assert.doesNotThrow(() =>
+      validateMigrationHistory(local, { ...database, migrations }),
+    );
+  }
+
+  assert.throws(
+    () =>
+      validateMigrationHistory(local, {
+        ...database,
+        migrations: [
+          ...appliedPrefix,
+          { ...rolledBackAttempt, name: "unexpected_migration" },
+        ],
+      }),
+    /diverged/,
+  );
+  assert.throws(
+    () =>
+      validateMigrationHistory(local, {
+        ...database,
+        migrations: [...appliedPrefix.slice(0, -1), rolledBackAttempt],
+      }),
+    /diverged/,
+  );
+  assert.throws(
+    () =>
+      validateMigrationHistory(local, {
+        ...database,
+        migrations: [
+          ...appliedPrefix,
+          { ...rolledBackAttempt, checksum: "0".repeat(64) },
+        ],
+      }),
+    /checksum mismatch/i,
+  );
+});
+
+test("resolved migration attempts participate in the migration plan hash", async () => {
+  const local = readLocalMigrations(
+    new URL("../../../prisma/migrations/", import.meta.url).pathname,
+  );
+  const retryMigration = local.at(-1);
+  assert.ok(retryMigration);
+  const appliedPrefix = local.slice(0, -1).map((migration) => ({
+    name: migration.name,
+    checksum: migration.hash,
+    finished: true,
+    rolledBack: false,
+    logs: null,
+  }));
+  const rolledBackAttempt = {
+    name: retryMigration.name,
+    checksum: retryMigration.hash,
+    finished: false,
+    rolledBack: true,
+    logs: "simulated resolved failure",
+  };
+  const successfulRetry = {
+    ...rolledBackAttempt,
+    finished: true,
+    rolledBack: false,
+    logs: null,
+  };
+  const runner = new RecordingRunner((_command, arguments_) =>
+    arguments_.includes("status")
+      ? success("Database schema is up to date")
+      : success("-- This is an empty migration."),
+  );
+  const inspect = (attempts: typeof rolledBackAttempt[]) => async () => ({
+    migrationsTableExists: true,
+    migrations: [...appliedPrefix, ...attempts, successfulRetry],
+    userTables: ["user"],
+    userObjects: ["table:user"],
+    tablesWithData: [],
+    adminAccessRoleCardinalityViolations: 0,
+  });
+  const firstPlan = await createMigrationPlan({
+    projectRoot: process.cwd(),
+    directUrl: "postgresql://redacted.invalid/database",
+    runner,
+    inspect: inspect([rolledBackAttempt]),
+  });
+  const changedPlan = await createMigrationPlan({
+    projectRoot: process.cwd(),
+    directUrl: "postgresql://redacted.invalid/database",
+    runner,
+    inspect: inspect([rolledBackAttempt, rolledBackAttempt]),
+  });
+  const changedLogsPlan = await createMigrationPlan({
+    projectRoot: process.cwd(),
+    directUrl: "postgresql://redacted.invalid/database",
+    runner,
+    inspect: inspect([
+      { ...rolledBackAttempt, logs: "different diagnostic text" },
+    ]),
+  });
+
+  assert.equal(firstPlan.state, "up-to-date");
+  assert.notEqual(firstPlan.planHash, changedPlan.planHash);
+  assert.equal(firstPlan.planHash, changedLogsPlan.planHash);
+});
+
+test("unresolved, contradictory, diverged, checksum, status, and drift states fail closed", async () => {
   const local = readLocalMigrations(
     new URL("../../../prisma/migrations/", import.meta.url).pathname,
   );
@@ -863,6 +1010,7 @@ test("failed, rolled-back, diverged, checksum, status, and drift states fail clo
     userTables: ["User"],
     userObjects: ["table:User"],
     tablesWithData: [],
+    adminAccessRoleCardinalityViolations: 0,
   };
 
   assert.throws(
@@ -889,7 +1037,7 @@ test("failed, rolled-back, diverged, checksum, status, and drift states fail clo
           },
         ],
       }),
-    /Rolled-back/,
+    /Contradictory/,
   );
   assert.throws(
     () =>
@@ -946,6 +1094,33 @@ test("failed, rolled-back, diverged, checksum, status, and drift states fail clo
   assert.equal(synchronized.predictedDiff, "");
 });
 
+test("access-role cardinality preflight stops before Prisma records a failed migration", async () => {
+  const runner = new RecordingRunner(() =>
+    success("runner must remain unused when cardinality is invalid"),
+  );
+
+  await assert.rejects(
+    createMigrationPlan({
+      projectRoot: process.cwd(),
+      directUrl: "postgresql://redacted.invalid/database",
+      runner,
+      inspect: async () => ({
+        migrationsTableExists: true,
+        migrations: [],
+        userTables: ["admin_access_role_assignments", "user"],
+        userObjects: [
+          "table:admin_access_role_assignments",
+          "table:user",
+        ],
+        tablesWithData: ["admin_access_role_assignments", "user"],
+        adminAccessRoleCardinalityViolations: 2,
+      }),
+    }),
+    /cardinality preflight found 2 user\(s\)/,
+  );
+  assert.equal(runner.calls.length, 0);
+});
+
 test("Prisma empty migration sentinel is not reported as schema drift", () => {
   assert.equal(normalizePrismaDiff("\n-- This is an empty migration.\n"), "");
   assert.equal(normalizePrismaDiff("  \n"), "");
@@ -973,6 +1148,44 @@ test("destructive SQL detection is conservative beyond table drops", () => {
   assert.match(destructive.join("\n"), /ALTER COLUMN amount TYPE/);
 });
 
+test("destructive SQL detection ignores truncate references in trigger definitions", () => {
+  const triggerStatements = findDestructiveStatements(`
+    CREATE FUNCTION assert_not_truncated()
+    RETURNS TRIGGER AS $body$
+    BEGIN
+      IF TG_OP = 'TRUNCATE' THEN
+        RAISE EXCEPTION 'cannot truncate';
+      END IF;
+      RETURN NULL;
+    END
+    $body$ LANGUAGE plpgsql;
+
+    CREATE TRIGGER no_truncate
+    BEFORE TRUNCATE ON audit_log
+    FOR EACH STATEMENT EXECUTE FUNCTION assert_not_truncated();
+  `);
+  assert.deepEqual(triggerStatements, []);
+
+  const actualTruncates = findDestructiveStatements(`
+    TRUNCATE public.audit_log;
+    TRUNCATE TABLE public.audit_archive;
+  `);
+  assert.equal(actualTruncates.length, 2);
+});
+
+test("affected-table detection ignores trigger event grammar", () => {
+  const singleRoleMigration = readLocalMigrations(
+    new URL("../../../prisma/migrations/", import.meta.url).pathname,
+  ).find(
+    ({ name }) => name === "20260828210000_enforce_single_admin_access_role",
+  );
+  assert.ok(singleRoleMigration);
+  assert.deepEqual(singleRoleMigration.affectedTables, [
+    "admin_access_role_assignments",
+    "user",
+  ]);
+});
+
 test("an object-empty database requires a separately reviewed bootstrap path", async () => {
   const runner = new RecordingRunner(() => {
     throw new Error("Prisma must not run for an unsupported empty database.");
@@ -983,6 +1196,7 @@ test("an object-empty database requires a separately reviewed bootstrap path", a
     userTables: [],
     userObjects: [],
     tablesWithData: [],
+    adminAccessRoleCardinalityViolations: null,
   };
   await assert.rejects(
     createMigrationPlan({
@@ -1360,11 +1574,16 @@ function deploymentSitemapXml(origin: URL): string {
   return `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`;
 }
 
-test("ambiguous temporary-user write is found with retry and always removed", async () => {
-  const baseUrl = new URL("https://canonical.example.test");
+function createDeploymentSmokeHarness(
+  ambiguousCreation: boolean,
+  legacyAdminAccess = false,
+) {
+  const baseUrl = new URL("https://candidate.vercel.app");
   const temporary = { id: "", email: "" };
   let lookupCount = 0;
   let removeCount = 0;
+  let legacyEndpointCount = 0;
+  let createdWithAccessRoleIds = false;
   const request = async (
     input: RequestInfo | URL,
     init: RequestInit = {},
@@ -1459,25 +1678,83 @@ test("ambiguous temporary-user write is found with retry and always removed", as
         },
       });
     }
-    if (url.pathname === "/api/auth/admin/list-users") {
+    if (url.pathname === "/api/auth/admin/list-users" && method === "GET") {
+      legacyEndpointCount += 1;
+      if (!legacyAdminAccess) {
+        return response(url, "not found", { status: 404 });
+      }
       lookupCount += 1;
-      const visible = temporary.id && lookupCount >= 3;
+      const visible = Boolean(temporary.id);
       return response(
         url,
         JSON.stringify({
-          users: visible ? [{ id: temporary.id, email: temporary.email }] : [],
+          users: visible
+            ? [{ id: temporary.id, email: temporary.email }]
+            : [],
+          total: visible ? 1 : 0,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
+    if (url.pathname === "/api/auth/admin/remove-user" && method === "POST") {
+      legacyEndpointCount += 1;
+      if (!legacyAdminAccess) {
+        return response(url, "not found", { status: 404 });
+      }
+      temporary.id = "";
+      temporary.email = "";
+      removeCount += 1;
+      return response(url, "{}", {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (url.pathname === "/api/admin/users" && method === "GET") {
+      lookupCount += 1;
+      const visible =
+        temporary.id && lookupCount >= (ambiguousCreation ? 3 : 2);
+      return response(
+        url,
+        JSON.stringify({
+          users: visible
+            ? [
+                {
+                  id: temporary.id,
+                  email: temporary.email,
+                  assignedRoleIds: ["system-no-access"],
+                },
+              ]
+            : [],
           total: visible ? 1 : 0,
         }),
         { status: 200, headers: { "content-type": "application/json" } },
       );
     }
     if (url.pathname === "/api/admin/users" && method === "POST") {
-      const body = JSON.parse(String(init.body)) as { email: string };
+      const body = JSON.parse(String(init.body)) as {
+        email: string;
+        accessRoleIds?: unknown;
+      };
+      createdWithAccessRoleIds = "accessRoleIds" in body;
       temporary.id = "temporary-id";
       temporary.email = body.email;
-      throw new Error("ambiguous network failure after server commit");
+      if (ambiguousCreation) {
+        throw new Error("ambiguous network failure after server commit");
+      }
+      return response(
+        url,
+        JSON.stringify({
+          user: { id: temporary.id, email: temporary.email },
+          temporaryPassword: "generated-temporary-password",
+        }),
+        { status: 201, headers: { "content-type": "application/json" } },
+      );
     }
-    if (url.pathname === "/api/auth/admin/remove-user") {
+    if (
+      !legacyAdminAccess &&
+      url.pathname === "/api/admin/users/temporary-id" &&
+      method === "DELETE"
+    ) {
       temporary.id = "";
       temporary.email = "";
       removeCount += 1;
@@ -1495,17 +1772,69 @@ test("ambiguous temporary-user write is found with retry and always removed", as
     throw new Error(`Unexpected smoke request: ${method} ${url.pathname}`);
   };
 
+  return {
+    baseUrl,
+    request,
+    temporary,
+    get removeCount() {
+      return removeCount;
+    },
+    get legacyEndpointCount() {
+      return legacyEndpointCount;
+    },
+    get createdWithAccessRoleIds() {
+      return createdWithAccessRoleIds;
+    },
+  };
+}
+
+test("temporary user receives NO_ACCESS and removed admin auth endpoints stay 404", async () => {
+  const harness = createDeploymentSmokeHarness(false);
+  await runSmokeChecks(
+    harness.baseUrl,
+    { email: "admin@example.test", password: "password" },
+    harness.request,
+    { cleanupRetryDelayMs: 0 },
+  );
+  assert.equal(harness.temporary.id, "");
+  assert.equal(harness.removeCount, 1);
+  assert.equal(harness.legacyEndpointCount, 2);
+  assert.equal(harness.createdWithAccessRoleIds, true);
+});
+
+test("ambiguous temporary-user write is found with retry and always removed", async () => {
+  const harness = createDeploymentSmokeHarness(true);
+
   await assert.rejects(
     runSmokeChecks(
-      baseUrl,
+      harness.baseUrl,
       { email: "admin@example.test", password: "password" },
-      request,
+      harness.request,
       { cleanupRetryDelayMs: 0 },
     ),
     /ambiguous network failure/,
   );
-  assert.equal(temporary.id, "");
-  assert.equal(removeCount, 1);
+  assert.equal(harness.temporary.id, "");
+  assert.equal(harness.removeCount, 1);
+  assert.equal(harness.legacyEndpointCount, 2);
+  assert.equal(harness.createdWithAccessRoleIds, true);
+});
+
+test("legacy-compatible rollback smoke uses the prior admin endpoints", async () => {
+  const harness = createDeploymentSmokeHarness(false, true);
+  await runSmokeChecks(
+    harness.baseUrl,
+    { email: "admin@example.test", password: "password" },
+    harness.request,
+    {
+      adminAccessExpectation: "legacy-compatible",
+      cleanupRetryDelayMs: 0,
+    },
+  );
+  assert.equal(harness.temporary.id, "");
+  assert.equal(harness.removeCount, 1);
+  assert.equal(harness.legacyEndpointCount, 3);
+  assert.equal(harness.createdWithAccessRoleIds, false);
 });
 
 test("idle recovery observes idle, wakes once, then proves active", async () => {

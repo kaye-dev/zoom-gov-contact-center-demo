@@ -220,6 +220,22 @@ test("reviewed migration manifest exactly classifies the current SHA-verified ch
         name: "20260816090000_add_site_maintenance_settings",
         classification: "expand-compatible",
       },
+      {
+        name: "20260827150000_add_admin_access_roles",
+        classification: "destructive-reviewed",
+      },
+      {
+        name: "20260828120000_separate_admin_access_cas_revisions",
+        classification: "destructive-reviewed",
+      },
+      {
+        name: "20260828180000_add_admin_access_mutation_freeze",
+        classification: "expand-compatible",
+      },
+      {
+        name: "20260828210000_enforce_single_admin_access_role",
+        classification: "destructive-reviewed",
+      },
     ],
   );
 });
@@ -300,6 +316,7 @@ test("non-expand migration classifications block an existing database", async ()
         userTables: ["existing_data"],
         userObjects: ["table:existing_data"],
         tablesWithData: ["existing_data"],
+        adminAccessRoleCardinalityViolations: 0,
       }),
     }),
     /Only reviewed expand-compatible migrations/u,

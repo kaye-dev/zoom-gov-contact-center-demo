@@ -28,6 +28,7 @@ type MaintenanceSettingsFormProps = {
   initialConfig: MaintenanceConfig | null;
   initialEffective: MaintenanceEffectiveState | null;
   initialRevision: number | null;
+  allowUpdate: boolean;
 };
 
 type Feedback =
@@ -62,13 +63,15 @@ export function MaintenanceSettingsForm({
   initialConfig,
   initialEffective,
   initialRevision,
+  allowUpdate,
 }: MaintenanceSettingsFormProps) {
   const { locale, t } = useI18n();
   const router = useRouter();
-  const canEdit =
+  const hasCurrentValue =
     initialConfig !== null && isValidMaintenanceRevision(initialRevision);
+  const canEdit = allowUpdate && hasCurrentValue;
   const [mode, setMode] = useState<MaintenanceMode | null>(
-    canEdit ? initialConfig?.mode ?? null : null,
+    initialConfig?.mode ?? null,
   );
   const [scheduledStartAtJst, setScheduledStartAtJst] = useState(
     toJstDateTimeLocal(initialConfig?.scheduledStartAt ?? null),
@@ -305,7 +308,7 @@ export function MaintenanceSettingsForm({
         </p>
       </div>
 
-      {!canEdit ? (
+      {!hasCurrentValue ? (
         <div
           role="alert"
           className="space-y-1 rounded-lg border border-red-300 bg-red-50 p-4 text-red-800 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200"
@@ -348,7 +351,7 @@ export function MaintenanceSettingsForm({
                   htmlFor={inputId}
                   className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-colors has-[:disabled]:cursor-not-allowed focus-within:ring-2 focus-within:ring-accent/40 ${
                     isSelected
-                      ? "border-primary bg-primary-50 dark:bg-primary-950/40"
+                      ? "border-accent bg-surface-selected"
                       : "border-line bg-surface hover:bg-surface-hover"
                   }`}
                 >
@@ -360,7 +363,7 @@ export function MaintenanceSettingsForm({
                     checked={isSelected}
                     onChange={() => updateMode(option)}
                     aria-describedby={`${descriptionId} maintenance-mode-description`}
-                    className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-primary disabled:cursor-not-allowed"
+                    className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed"
                   />
                   <span className="min-w-0 space-y-1">
                     <span className="block font-bold">{optionCopy.label}</span>
@@ -617,7 +620,7 @@ function environmentBadgeClass(environment: MaintenanceEnvironment): string {
   }
 
   if (environment === "preview") {
-    return "border-primary-300 bg-primary-50 text-primary-1100 dark:border-primary-800 dark:bg-primary-950/50 dark:text-primary-100";
+    return "border-accent/40 bg-surface-accent-subtle text-fg";
   }
 
   return "border-line bg-surface-hover text-fg";

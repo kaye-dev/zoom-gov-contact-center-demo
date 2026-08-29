@@ -28,8 +28,10 @@ type IssuedPassword = {
 
 export function PasswordResetRequestsView({
   requests,
+  canUpdate,
 }: {
   requests: ResetRequest[];
+  canUpdate: boolean;
 }) {
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -80,7 +82,7 @@ export function PasswordResetRequestsView({
       </div>
 
       {issuedPassword ? (
-        <div className="rounded-lg border border-primary-200 bg-primary-50 p-4 text-primary-1100">
+        <div className="rounded-lg border border-accent/40 bg-surface-accent-subtle p-4 text-fg">
           <h2 className="text-lg font-bold">{t.admin.issuedPasswordTitle}</h2>
           <p className="mt-1 text-sm">{t.admin.issuedPasswordDescription}</p>
           <dl className="mt-4 space-y-2 text-sm">
@@ -90,7 +92,7 @@ export function PasswordResetRequestsView({
             </div>
             <div>
               <dt className="font-semibold">{t.auth.temporaryPassword}</dt>
-              <dd className="mt-1 rounded-md bg-white px-3 py-2 font-mono text-base text-primary-1200">
+              <dd className="mt-1 rounded-md bg-surface-raised px-3 py-2 font-mono text-base text-fg">
                 {issuedPassword.temporaryPassword}
               </dd>
             </div>
@@ -141,7 +143,7 @@ export function PasswordResetRequestsView({
                     : "-"}
                 </td>
                 <td className="px-4 py-3">
-                  {request.status === "PENDING" ? (
+                  {request.status === "PENDING" && canUpdate ? (
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"

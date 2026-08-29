@@ -17,6 +17,7 @@ import { useI18n } from "../../i18n/LanguageProvider";
 
 type ChatSettingsFormProps = {
   initialSettings: ChatSettings;
+  canEdit: boolean;
 };
 
 type Feedback =
@@ -25,6 +26,7 @@ type Feedback =
 
 export function ChatSettingsForm({
   initialSettings,
+  canEdit,
 }: ChatSettingsFormProps) {
   const { t } = useI18n();
   const router = useRouter();
@@ -80,6 +82,7 @@ export function ChatSettingsForm({
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!canEdit) return;
     setFeedback(null);
 
     if (
@@ -163,9 +166,9 @@ export function ChatSettingsForm({
                 <label
                   key={value}
                   htmlFor={inputId}
-                  className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-colors focus-within:ring-2 focus-within:ring-accent/40 ${
+                  className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-colors has-[:disabled]:cursor-not-allowed focus-within:ring-2 focus-within:ring-accent/40 ${
                     isSelected
-                      ? "border-primary bg-primary-50 dark:bg-primary-950/40"
+                      ? "border-accent bg-surface-selected"
                       : "border-line bg-surface hover:bg-surface-hover"
                   }`}
                 >
@@ -175,9 +178,10 @@ export function ChatSettingsForm({
                     type="radio"
                     value={value}
                     checked={isSelected}
+                    disabled={!canEdit || isSubmitting}
                     onChange={() => updateActiveMode(value)}
                     aria-describedby={`${descriptionId} chat-settings-mode-help`}
-                    className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-primary"
+                    className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                   />
                   <span className="min-w-0 space-y-1">
                     <span className="block font-bold">{label}</span>
@@ -211,6 +215,7 @@ export function ChatSettingsForm({
             <textarea
               id="chat-settings-campaign-web-tag"
               name="campaignWebTag"
+              readOnly={!canEdit}
               value={settings.campaignWebTag ?? ""}
               onChange={(event) =>
                 updateText("campaignWebTag", event.target.value)
@@ -240,6 +245,7 @@ export function ChatSettingsForm({
             <textarea
               id="chat-settings-campaign-memo"
               name="campaignMemo"
+              readOnly={!canEdit}
               value={settings.campaignMemo ?? ""}
               onChange={(event) =>
                 updateText("campaignMemo", event.target.value)
@@ -276,6 +282,7 @@ export function ChatSettingsForm({
             <textarea
               id="chat-settings-contact-center-entry-id-web-tag"
               name="contactCenterEntryIdWebTag"
+              readOnly={!canEdit}
               value={settings.contactCenterEntryIdWebTag ?? ""}
               onChange={(event) =>
                 updateText(
@@ -310,6 +317,7 @@ export function ChatSettingsForm({
             <textarea
               id="chat-settings-contact-center-entry-id-memo"
               name="contactCenterEntryIdMemo"
+              readOnly={!canEdit}
               value={settings.contactCenterEntryIdMemo ?? ""}
               onChange={(event) =>
                 updateText("contactCenterEntryIdMemo", event.target.value)
@@ -344,7 +352,7 @@ export function ChatSettingsForm({
 
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || !canEdit}
           className="cursor-pointer rounded-md bg-primary px-5 py-2.5 font-semibold text-white transition-colors hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isSubmitting
@@ -381,7 +389,7 @@ function ChatMethodFieldset({
         <span
           className={`rounded-full px-2.5 py-1 text-xs font-bold ${
             isActive
-              ? "bg-primary-50 text-primary-1100 dark:bg-primary-950 dark:text-primary-100"
+              ? "bg-surface-accent-subtle text-accent"
               : "bg-surface-hover text-fg-muted"
           }`}
         >

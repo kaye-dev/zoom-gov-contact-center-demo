@@ -46,7 +46,7 @@ export function ForgotPasswordForm() {
       </div>
       {isDone ? (
         <div className="space-y-4">
-          <p className="rounded-md bg-primary-50 px-3 py-2 text-sm text-primary-1100">
+          <p className="rounded-md bg-surface-accent-subtle px-3 py-2 text-sm text-fg">
             {t.auth.resetRequestSent}
           </p>
           <Link

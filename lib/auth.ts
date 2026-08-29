@@ -3,7 +3,11 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { nextCookies } from "better-auth/next-js";
 import { admin } from "better-auth/plugins";
 
-import type { PrismaClient } from "@/lib/generated/prisma/client";
+import type { Prisma, PrismaClient } from "@/lib/generated/prisma/client";
+import {
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+} from "@/lib/password-policy";
 import {
   connectDatabaseWithRetry,
   createDatabaseContext,
@@ -25,7 +29,7 @@ type CreateAuthOptions = {
 };
 
 export function createAuth(
-  prisma: PrismaClient,
+  prisma: PrismaClient | Prisma.TransactionClient,
   options: CreateAuthOptions = {},
 ) {
   const env = options.env ?? process.env;
@@ -53,8 +57,8 @@ export function createAuth(
     emailAndPassword: {
       enabled: true,
       disableSignUp: true,
-      minPasswordLength: 12,
-      maxPasswordLength: 128,
+      minPasswordLength: PASSWORD_MIN_LENGTH,
+      maxPasswordLength: PASSWORD_MAX_LENGTH,
     },
     user: {
       additionalFields: {

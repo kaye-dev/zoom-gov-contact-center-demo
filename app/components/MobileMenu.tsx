@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useI18n } from '../i18n/LanguageProvider';
 import { StarEmblem } from './svg/StarEmblemIcon';
 import { PinIcon } from './svg/PinIcon';
@@ -13,19 +13,73 @@ type MobileMenuProps = {
   onClose: () => void;
 };
 
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
 /**
  * 右からスライドインするモバイル/タブレット用ドロワー。
  * lg 未満でヘッダー右側に隠れるナビ項目（アクセス / 言語 / テーマ）をまとめて表示する。
  */
 export function MobileMenu({ open, onClose }: MobileMenuProps) {
   const { t } = useI18n();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   // Esc で閉じる + 開いている間は本文スクロールをロック
   useEffect(() => {
     if (!open) return;
 
+    const focusFrame = requestAnimationFrame(() => {
+      const closeButton = closeButtonRef.current;
+      if (closeButton?.isConnected) closeButton.focus();
+    });
+
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+
+      const tabbableElements = Array.from(
+        dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+      ).filter(
+        (element) =>
+          element.getAttribute('aria-hidden') !== 'true' &&
+          element.getClientRects().length > 0,
+      );
+
+      if (tabbableElements.length === 0) {
+        e.preventDefault();
+        const closeButton = closeButtonRef.current;
+        if (closeButton?.isConnected) closeButton.focus();
+        return;
+      }
+
+      const firstElement = tabbableElements[0];
+      const lastElement = tabbableElements[tabbableElements.length - 1];
+      const activeElement = document.activeElement;
+      const focusIsOutsideDialog = !dialog.contains(activeElement);
+
+      if (e.shiftKey && (activeElement === firstElement || focusIsOutsideDialog)) {
+        e.preventDefault();
+        lastElement.focus();
+      } else if (
+        !e.shiftKey &&
+        (activeElement === lastElement || focusIsOutsideDialog)
+      ) {
+        e.preventDefault();
+        firstElement.focus();
+      }
     };
     document.addEventListener('keydown', onKeyDown);
 
@@ -33,6 +87,7 @@ export function MobileMenu({ open, onClose }: MobileMenuProps) {
     document.body.style.overflow = 'hidden';
 
     return () => {
+      cancelAnimationFrame(focusFrame);
       document.removeEventListener('keydown', onKeyDown);
       document.body.style.overflow = prevOverflow;
     };
@@ -51,6 +106,7 @@ export function MobileMenu({ open, onClose }: MobileMenuProps) {
 
       {/* 右パネル */}
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         className="absolute right-0 top-0 flex h-full w-72 max-w-[80%] flex-col bg-surface-raised text-fg shadow-xl"
@@ -67,6 +123,7 @@ export function MobileMenu({ open, onClose }: MobileMenuProps) {
             </div>
           </div>
           <button
+            ref={closeButtonRef}
             type="button"
             onClick={onClose}
             aria-label={t.nav.closeMenu}

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { headers } from "next/headers";
 import { connection } from "next/server";
 import {
@@ -7,7 +8,11 @@ import {
 } from "@/lib/maintenance-request";
 import { NOINDEX_ROBOTS_METADATA } from "@/lib/search-indexing";
 import { getLanguageSettings } from "@/lib/server/site-settings";
-import { SITE_LOCALES } from "@/lib/site-settings";
+import {
+  DEFAULT_SITE_LOCALE,
+  SITE_LOCALES,
+  toHtmlLanguageTag,
+} from "@/lib/site-settings";
 import "./globals.css";
 import { ThemeSync } from "./components/ThemeSync";
 import { LanguageProvider } from "./i18n/LanguageProvider";
@@ -39,8 +44,19 @@ export default async function RootLayout({
   }
 
   return (
-    <html lang="ja" className="h-full antialiased" suppressHydrationWarning>
+    <html
+      lang={toHtmlLanguageTag(DEFAULT_SITE_LOCALE)}
+      className="theme-loading language-loading scheme-light h-full antialiased dark:scheme-dark"
+      suppressHydrationWarning
+    >
       <body className="min-h-full flex flex-col">
+        <Script
+          id="theme-init"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('theme');var d=t==='dark';document.documentElement.classList.toggle('dark',d);document.documentElement.classList.toggle('light',!d);}catch(e){document.documentElement.classList.remove('dark');document.documentElement.classList.add('light');}})();`,
+          }}
+        />
         <ThemeSync />
         <LanguageProvider availableLocales={availableLocales}>
           {children}

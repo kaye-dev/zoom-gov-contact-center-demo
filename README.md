@@ -40,17 +40,17 @@ Zoom 製品のデモ用に作成した、架空の市区町村ホームページ
 ./dev-compose.sh
 ```
 
-Web を起動する場合は、起動時にアクセス範囲を選択します。Enter のみ、または `1` を入力すると、この Mac だけでアクセスできる [http://localhost:3000](http://localhost:3000) を使用します。`2` を入力すると、Mac の LAN 内 IPv4 アドレスを自動検出し、同じネットワーク上のスマートフォンなどから開ける `http://192.168.x.x:3000` 形式の URL を表示します。`3` を入力すると、Cloudflare Tunnel 用の [https://zoom.keien.dev](https://zoom.keien.dev) で起動します。
+Web を起動する場合は、起動時にアクセス範囲を選択します。Enter のみ、または `1` を入力すると、この Mac だけでアクセスできる [http://localhost:3000](http://localhost:3000) を使用します。`2` を入力すると、Mac の LAN 内 IPv4 アドレスを自動検出し、同じネットワーク上のスマートフォンなどから開ける `http://192.168.x.x:3000` 形式の URL を表示します。`3` を入力すると、Cloudflare Tunnel 用の [https://demo.keien.dev](https://demo.keien.dev) で起動します。
 
 ```text
 Web access:
   1) This Mac only: http://localhost:3000 (default)
   2) Same network: http://192.168.x.x:3000
-  3) Cloudflare Tunnel: https://zoom.keien.dev
+  3) Cloudflare Tunnel: https://demo.keien.dev
 Select [1/2/3]:
 ```
 
-Cloudflare Tunnel の初回設定と起動手順は [docs/cloudflared-tunnel.md](docs/cloudflared-tunnel.md) を参照してください。
+Cloudflare Tunnel の初回設定と起動手順は [docs/development/cloudflared-tunnel.md](docs/development/cloudflared-tunnel.md) を参照してください。
 
 LAN 内 IPv4 アドレスは起動のたびに検出されるため、接続先の Wi-Fi などが変わると URL も変わる場合があります。スマートフォンは Mac と同じネットワークへ接続してください。VPN、ゲスト Wi-Fi の端末間通信制限、macOS Firewall などにより接続できない場合があります。
 
@@ -133,11 +133,36 @@ npm run dev
 
 [http://localhost:3000](http://localhost:3000) をブラウザで開くと表示されます。
 
+### UIプロトタイプを確認
+
+`plans/<slug>/prototype/`のモックは、Composeやデータベースを起動せずにlocalhostで確認できます。引数なしではcanonical prototypeから最終更新されたものを選び、canonicalが1件もない場合だけ`plans/tmp/<slug>/prototype/`へフォールバックします。この後方互換pathは閲覧とCSS buildのみです。machine parity、UI承認、`$implement`、`$review`の前に`plans/<slug>/prototype/`へ移行し、version 1 manifestとrevision-bound evidenceを作り直してください。OSが空きポートを自動で割り当てます。
+
+```bash
+./dev-prototype.sh
+```
+
+対象を明示する場合だけslugを指定します。
+
+```bash
+./dev-prototype.sh admin-role-based-access-control
+```
+
+表示された`http://127.0.0.1:<port>/`をブラウザで開き、停止するときは`Ctrl+C`を押します。serverはloopbackだけにbindし、対象prototype以外のrepository fileは配信しません。
+
+承認対象のprototypeは、goalに`approval contract: plans/<slug>/prototype/ui-contract.json — version 1`を記録し、page・shell・共通component・global style・tokenを含むbaselineの完全な`sources` inventory、runtime owner・checkout・40桁commit SHA・route、fixture・authorization・queryと`window.scrollX`/`window.scrollY`実測値によるexact `scroll: {x, y}`を含むcomparison conditions、state、theme、responsive、視覚的不変条件、意図した差分、interaction、`comparisonTargets`と不変なparity matrix行定義をmanifestへ同期します。Tailwind CSS build後にartifactと契約をまとめたrevisionを計算します。各targetはID、entry、production route、surface、各行はID、`targetId`、一致するentry/route/surface、state、viewport、theme、breakpoint、期待するinvariant/difference IDを保持します。結果やscreenshot等の可変証拠はmanifest外へ置き、承認時の`machineParityResults`と実装後の`implementationParityResults`で全行を`<row-id>=pending`（未実行）または`<row-id>=pass|fail`（実行後）として過不足なく記録します。bare IDや`all N`は結果になりません。goalの`parity evidence`・machine parity・UI承認を同じrevisionへ紐付け、`$implement`は承認時証跡の日付を流用せず、production編集直前に全sourceのworking tree状態を確認して現在条件で全行をCodexアプリ内Browser再実行します。
+
+```bash
+node .agents/skills/plan/scripts/prototype-revision.mjs plans/<slug>/prototype
+```
+
+実際のCodex promptでplan系skillをforward testする場合は`npm run eval:plan-skills`を実行します。evalはCodex CLIの`workspace-write` sandboxと一時repository、環境allowlist、出力量上限、artifact allowlistを使い、Codex CLIの認証が必要です。runnerはprocess identity、process group、run marker、一時fixtureをcwdとして保持するprocessを再照合して通常経路をcleanupし、必要なinspectorが利用できなければ結果を受理しません。ただしこれは任意のhostile executableを封じ込めるOS-level security boundaryではありません。CLIにはCodexアプリ内Browserがないため、`$implement`のruntime所有権、build停止・再起動、live parity、cleanupの成功経路は[開発workflowのmanual integration gate](docs/development/codex-development-workflow.md#skill-behavioral-eval)で別途確認します。
+
 ## スクリプト
 
 | コマンド | 説明 |
 | --- | --- |
 | `./dev-compose.sh` | Web のアクセス範囲、Colima、Prisma migration 状態を確認して Docker で開発サーバーを起動 |
+| `./dev-prototype.sh [slug]` | 最終更新または指定したUI prototypeを空きlocalhost portで配信 |
 | `docker compose down -v` | Docker volume を含めて停止・削除 |
 | `./dev-compose.sh up studio` | Prisma Studio を Docker 上で起動 |
 | `npm run dev` | 開発サーバーを起動 |
@@ -149,6 +174,7 @@ npm run dev
 | `npm run test:deploy` | Vercel/Neon/PostgreSQLデプロイの安全ゲートをstubで検証 |
 | `./setup-deploy-aws.sh` | 初回設定または明示したcredentialをAWS Parameter Storeへ安全に保存・更新 |
 | `./deploy.sh` | Docker上でpreflight、必要時のmigration承認、direct Production deploy、canonical smokeを実行 |
+| `npm run eval:plan-skills` | 一時repositoryでplan系skillの実prompt behavioral evalを実行 |
 | `npm run db:generate` | Prisma Client を生成 |
 | `npm run db:migrate` | Prisma migration を作成し、ローカル DB に適用 |
 | `npm run db:deploy` | Prisma migration をデプロイ先 DB に適用 |

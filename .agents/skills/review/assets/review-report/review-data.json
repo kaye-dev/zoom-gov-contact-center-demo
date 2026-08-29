@@ -1,0 +1,12 @@
+{
+  "title": "UNREPLACED_TEMPLATE",
+  "generatedAt": "UNREPLACED_TEMPLATE",
+  "planPath": "plans/unreplaced-template/goal.md",
+  "base": "HEAD",
+  "head": "working tree",
+  "summary": "UNREPLACED_TEMPLATE",
+  "reviewedPaths": ["UNREPLACED_TEMPLATE"],
+  "excludedPaths": [],
+  "validations": [],
+  "groups": []
+}

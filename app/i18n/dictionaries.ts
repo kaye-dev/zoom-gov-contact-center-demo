@@ -8,6 +8,12 @@ import {
   type SettingsErrorCode,
   type SiteLocale,
 } from '@/lib/site-settings';
+import type { AdminUserErrorCode } from '@/lib/admin-users';
+import type {
+  AdminAccessAction,
+  AdminAccessSystemRole,
+  AdminResourceKey,
+} from '@/lib/admin-access/types';
 
 export const locales = SITE_LOCALES;
 
@@ -76,6 +82,28 @@ export type LifeTopicDictionary = {
   holidayCounter: string;
   movingGuide: string;
   housingSupport: string;
+};
+
+export type DisasterRadioDictionary = {
+  title: string;
+  breadcrumb: string;
+  lead: string;
+  emailHeading: string;
+  emailDescription: string;
+  registrationHeading: string;
+  registrationSteps: readonly [string, string, string];
+  registrationLink: string;
+  registrationAddressLabel: string;
+  senderAddressLabel: string;
+  emailNote: string;
+  phoneHeading: string;
+  phoneDescription: string;
+  phoneNumberLabel: string;
+  demoSuffix: string;
+  phoneNote: string;
+  contactHeading: string;
+  contactNote: string;
+  contactPhoneLabel: string;
 };
 
 export type Dictionary = {
@@ -166,6 +194,7 @@ export type Dictionary = {
     backToCategory: string;
     publishedLabel: string;
     readMore: string;
+    disasterRadio: DisasterRadioDictionary;
     faq: {
       indexLead: string;
       departmentsHeading: string;
@@ -185,6 +214,7 @@ export type Dictionary = {
     terms: string;
     privacy: string;
     buildingGuide: string;
+    disasterRadio: string;
     feedback: string;
     sitemap: string;
     login: string;
@@ -199,6 +229,9 @@ export type Dictionary = {
   docs: {
     viewAsMarkdown: string;
   };
+  links: {
+    opensInNewTab: string;
+  };
   auth: {
     loginTitle: string;
     loginDescription: string;
@@ -206,6 +239,8 @@ export type Dictionary = {
     password: string;
     currentPassword: string;
     newPassword: string;
+    showPassword: string;
+    hidePassword: string;
     name: string;
     role: string;
     roleUser: string;
@@ -223,6 +258,9 @@ export type Dictionary = {
     passwordChanged: string;
     temporaryPassword: string;
     temporaryPasswordDescription: string;
+    copyTemporaryPassword: string;
+    temporaryPasswordCopied: string;
+    temporaryPasswordCopyFailed: string;
     required: string;
     error: string;
   };
@@ -267,6 +305,147 @@ export type Dictionary = {
     adminOnly: string;
     dashboardTitle: string;
     dashboardDescription: string;
+    accessControl: {
+      rolesNav: string;
+      listTitle: string;
+      listDescription: string;
+      roleCount: string;
+      addRole: string;
+      createTitle: string;
+      createDescription: string;
+      roleName: string;
+      roleNameRequired: string;
+      roleNameTooLong: string;
+      roleDescription: string;
+      descriptionOptional: string;
+      memberCount: string;
+      actions: string;
+      edit: string;
+      editRoleTitle: string;
+      editRoleDescription: string;
+      systemRole: string;
+      systemRoleReadOnly: string;
+      noRoles: string;
+      cancel: string;
+      add: string;
+      saving: string;
+      save: string;
+      saved: string;
+      reload: string;
+      deleteRole: string;
+      backToRoles: string;
+      backToUserDetails: string;
+      settingsTab: string;
+      membersTab: string;
+      adminPageAccessTitle: string;
+      adminPageAccessDescription: string;
+      adminPageColumn: string;
+      allow: string;
+      deny: string;
+      unset: string;
+      unsupported: string;
+      path: string;
+      targetPaths: string;
+      assignedRoles: string;
+      noAssignedRoles: string;
+      effectiveAccess: string;
+      userAccessPageTitle: string;
+      userAccessTitle: string;
+      userAccessHeading: string;
+      userAccessDescription: string;
+      viewAccess: string;
+      allowed: string;
+      denied: string;
+      genericError: string;
+      conflictError: string;
+      duplicateError: string;
+      listSearchPlaceholder: string;
+      memberSearchPlaceholder: string;
+      candidateSearchPlaceholder: string;
+      assignUsers: string;
+      assign: string;
+      removeAssignment: string;
+      noMembers: string;
+      noCandidates: string;
+      candidateDialogTitle: string;
+      candidateDialogDescription: string;
+      deleteRoleTitle: string;
+      deleteRoleDescription: string;
+      roleInUse: string;
+      readOnlyRoleAction: string;
+      adminAttributeHelp: string;
+      assignedRolesHelp: string;
+      accessRoleSummaryHelp: string;
+      replaceAccessRoleHelp: string;
+      loading: string;
+      accountSuspended: string;
+      passwordChangeRequired: string;
+      systemRoleNames: Record<AdminAccessSystemRole, string>;
+      systemRoleDescriptions: Record<AdminAccessSystemRole, string>;
+      resourceTitles: Record<AdminResourceKey, string>;
+      resourceDescriptions: Record<AdminResourceKey, string>;
+      actionLabels: Record<AdminAccessAction, string>;
+    };
+    userManagement: {
+      detailsPageTitle: string;
+      detailsTitle: string;
+      detailsDescription: string;
+      detailsReadOnly: string;
+      name: string;
+      accessRoles: string;
+      backToUsers: string;
+      settings: string;
+      actionsFor: string;
+      edit: string;
+      suspend: string;
+      reactivate: string;
+      delete: string;
+      active: string;
+      suspended: string;
+      save: string;
+      saving: string;
+      cancel: string;
+      saved: string;
+      password: string;
+      resetPassword: string;
+      passwordConfigured: string;
+      passwordChangeRequired: string;
+      passwordVisibilityHelp: string;
+      selfPasswordResetProtected: string;
+      passwordMode: string;
+      temporaryPasswordMode: string;
+      temporaryPasswordModeDescription: string;
+      standardPasswordMode: string;
+      standardPasswordModeDescription: string;
+      newPassword: string;
+      confirmPassword: string;
+      passwordsMatch: string;
+      passwordRequirements: string;
+      generateTemporaryPassword: string;
+      revokeSessions: string;
+      revokeSessionsDescription: string;
+      enabled: string;
+      disabled: string;
+      passwordDialogTitle: string;
+      passwordDialogDescription: string;
+      confirmPasswordReset: string;
+      passwordResetSaved: string;
+      selfProtected: string;
+      lastAdminProtected: string;
+      emailDialogTitle: string;
+      emailDialogDescription: string;
+      currentEmail: string;
+      newEmail: string;
+      changeEmail: string;
+      suspendDialogTitle: string;
+      suspendDialogDescription: string;
+      reactivateDialogTitle: string;
+      reactivateDialogDescription: string;
+      deleteDialogTitle: string;
+      deleteDialogDescription: string;
+      targetUser: string;
+      errors: Record<AdminUserErrorCode, string>;
+    };
     settings: {
       save: string;
       saving: string;
@@ -499,6 +678,37 @@ export const dictionaries: Record<Locale, Dictionary> = {
       backToCategory: 'このカテゴリに戻る',
       publishedLabel: '公開日',
       readMore: '詳しく見る',
+      disasterRadio: {
+        title: '防災行政無線の放送内容を確認する',
+        breadcrumb: '防災行政無線',
+        lead:
+          '未来市では、防災・行政情報などを防災行政無線でお知らせしています。メール配信サービスや電話応答サービスを利用すると、放送内容を確認できます。',
+        emailHeading: 'メール配信サービス',
+        emailDescription:
+          'メールアドレスを登録すると、防災行政無線の放送内容を携帯電話やパソコンで受信できます。',
+        registrationHeading: '登録方法',
+        registrationSteps: [
+          '「登録用メールを開く」を選択します。',
+          '件名に「ALL」と入力されていることを確認し、そのまま送信します。',
+          '登録完了メールが届いたら登録完了です。',
+        ],
+        registrationLink: '登録用メールを開く',
+        registrationAddressLabel: '登録先メールアドレス',
+        senderAddressLabel: '受信許可するアドレス',
+        emailNote:
+          '受信拒否を設定している場合は、登録前に上記の送信元アドレスを受信できるようにしてください。掲載しているアドレスはデモ用で、実際の登録は行われません。',
+        phoneHeading: '電話応答サービス',
+        phoneDescription:
+          '専用番号に電話をかけると、防災行政無線で放送した内容を音声で確認できます。',
+        phoneNumberLabel: '電話番号',
+        demoSuffix: '（デモ用）',
+        phoneNote:
+          'この番号は画面確認用のプレースホルダーで、実際の通話には接続しません。',
+        contactHeading: 'お問い合わせ',
+        contactNote:
+          '防災行政無線と配信サービスについては、未来市 防災課へお問い合わせください。',
+        contactPhoneLabel: '電話',
+      },
       faq: {
         indexLead: '未来市のよくある質問を課・局別にご案内します。',
         departmentsHeading: '課・局から探す',
@@ -649,6 +859,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       terms: '利用規約',
       privacy: 'プライバシーポリシー',
       buildingGuide: '庁舎案内',
+      disasterRadio: '防災無線',
       feedback: 'ご意見・ご要望',
       sitemap: 'サイトマップ',
       login: 'ログイン',
@@ -663,6 +874,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
     docs: {
       viewAsMarkdown: 'Markdown 版を表示',
     },
+    links: {
+      opensInNewTab: '新しいタブで開きます',
+    },
     auth: {
       loginTitle: '管理ログイン',
       loginDescription:
@@ -671,6 +885,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       password: 'パスワード',
       currentPassword: '現在のパスワード',
       newPassword: '新しいパスワード',
+      showPassword: 'パスワードを表示',
+      hidePassword: 'パスワードを非表示',
       name: '氏名',
       role: '権限',
       roleUser: '一般ユーザー',
@@ -692,6 +908,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
       temporaryPassword: '仮パスワード',
       temporaryPasswordDescription:
         'この仮パスワードは一度だけ表示されます。安全な方法で対象ユーザーに共有してください。',
+      copyTemporaryPassword: '仮パスワードをコピー',
+      temporaryPasswordCopied: '仮パスワードをコピーしました。',
+      temporaryPasswordCopyFailed:
+        'コピーできませんでした。仮パスワードを選択してコピーしてください。',
       required: '必須',
       error: '処理に失敗しました。',
     },
@@ -739,6 +959,201 @@ export const dictionaries: Record<Locale, Dictionary> = {
       dashboardTitle: '管理画面',
       dashboardDescription:
         'ログイン済みです。ユーザー管理機能を利用するには管理者権限が必要です。',
+      accessControl: {
+        rolesNav: 'ロール',
+        listTitle: 'ロール',
+        listDescription: 'ロールごとに管理ページへのアクセスを制御します。明示的な拒否は許可より優先されます。',
+        roleCount: 'ロール',
+        addRole: 'ロールを追加',
+        createTitle: 'ロールを追加',
+        createDescription:
+          'ロール名と説明を入力します。すべての管理ページ権限は未選択で作成されます。',
+        roleName: 'ロール名',
+        roleNameRequired: 'ロール名を入力してください。',
+        roleNameTooLong: 'ロール名は64文字以内で入力してください。',
+        roleDescription: '説明',
+        descriptionOptional: '説明（任意）',
+        memberCount: 'メンバー数',
+        actions: 'アクション',
+        edit: '編集',
+        editRoleTitle: 'ロールを編集',
+        editRoleDescription: 'ロール名と説明を編集します。',
+        systemRole: 'システムロール',
+        systemRoleReadOnly: 'システムロールは変更できません。',
+        noRoles: 'ロールはありません。',
+        cancel: 'キャンセル',
+        add: '追加',
+        saving: '保存中…',
+        save: '保存',
+        saved: 'ロール設定を保存しました。',
+        reload: '最新情報を再読み込み',
+        deleteRole: 'ロールを削除',
+        backToRoles: 'ロール一覧へ戻る',
+        backToUserDetails: 'ユーザー詳細へ戻る',
+        settingsTab: 'ロール設定',
+        membersTab: 'ロールメンバー',
+        adminPageAccessTitle: '管理ページのアクセス権',
+        adminPageAccessDescription: '「表示」を外すと、同じ管理ページの追加・編集・削除も許可されません。',
+        adminPageColumn: '管理ページ',
+        allow: '許可',
+        deny: '拒否',
+        unset: '未設定',
+        unsupported: '対象外',
+        path: 'パス',
+        targetPaths: '対象パス',
+        assignedRoles: '割り当てロール',
+        noAssignedRoles: '割り当てられたロールはありません。',
+        effectiveAccess: '実効アクセス',
+        userAccessPageTitle: 'ユーザーアクセス | 未来市 管理画面',
+        userAccessTitle: 'ユーザーの実効アクセス',
+        userAccessHeading: '{name}のアクセス',
+        userAccessDescription: '割り当てられた1つのアクセスロールと管理者権限の追加条件を反映した最終結果です。',
+        viewAccess: 'アクセスを確認',
+        allowed: '許可',
+        denied: '拒否',
+        genericError: 'ロールを処理できませんでした。',
+        conflictError: '他の変更と競合しました。再読み込みしてお試しください。',
+        duplicateError: '同じ名前のロールが既にあります。',
+        listSearchPlaceholder: 'ロール名またはIDで検索',
+        memberSearchPlaceholder: '氏名、メールアドレス、IDでメンバーを検索',
+        candidateSearchPlaceholder: '氏名、メールアドレス、IDで追加対象を検索',
+        assignUsers: 'ユーザーを追加',
+        assign: '割り当て',
+        removeAssignment: '割り当てを解除',
+        noMembers: 'このロールに割り当てられたユーザーはいません。',
+        noCandidates: '追加できるユーザーはいません。',
+        candidateDialogTitle: 'ロールメンバーを追加',
+        candidateDialogDescription: '選択したユーザーの現在のアクセスロールを置き換えます。',
+        deleteRoleTitle: 'ロールを削除しますか？',
+        deleteRoleDescription: 'ロールと権限設定は完全に削除され、元に戻せません。',
+        roleInUse: 'メンバーの割り当てをすべて解除すると削除できます。',
+        readOnlyRoleAction: 'この操作を行う権限がありません。',
+        adminAttributeHelp: '管理ユーザーに対する操作の追加条件として使用します。',
+        assignedRolesHelp: '管理ページごとの表示・追加・編集・削除を決定します。ユーザーが持てるロールは1つです。',
+        accessRoleSummaryHelp: '管理ページごとの表示・追加・編集・削除を決定します。',
+        replaceAccessRoleHelp: '保存すると現在のアクセスロールを選択した1つのロールへ置き換えます。',
+        loading: '読み込み中…',
+        accountSuspended: 'ユーザーが停止中のため、すべてのアクセスが拒否されます。',
+        passwordChangeRequired: '初回パスワード変更が完了するまで、すべてのアクセスが拒否されます。',
+        systemRoleNames: { FULL_ACCESS: '全権アクセス', NO_ACCESS: 'アクセスなし' },
+        systemRoleDescriptions: {
+          FULL_ACCESS: '対応するすべての管理アクションを許可します。',
+          NO_ACCESS: '権限を付与せず、すべての操作を暗黙的に拒否します。',
+        },
+        resourceTitles: {
+          users: '管理ユーザー',
+          'password-reset-requests': 'パスワード再設定申請',
+          roles: 'ロール管理',
+          'role-assignments': 'ロールメンバー',
+          'phone-settings': '電話設定',
+          'chat-settings': 'AIチャット設定',
+          'language-settings': '言語設定',
+          'maintenance-settings': 'メンテナンス設定',
+        },
+        resourceDescriptions: {
+          users: '管理ユーザーの一覧・詳細、作成、権限変更、停止、再開、削除、パスワード再設定、アクセス概要を扱います。',
+          'password-reset-requests': '申請の表示、承認、却下を扱います。',
+          roles: 'アクセスロール、説明、権限設定を扱います。',
+          'role-assignments': 'ユーザーの単一アクセスロールの表示と変更を扱います。',
+          'phone-settings': '代表電話番号とAI電話番号を扱います。',
+          'chat-settings': 'Web Chatの動作モードと接続設定を扱います。',
+          'language-settings': '公開サイトの利用言語と表示順を扱います。',
+          'maintenance-settings': '環境別モードとスケジュールを扱います。',
+        },
+        actionLabels: { VIEW: '表示', CREATE: '追加', UPDATE: '編集', DELETE: '削除' },
+      },
+      userManagement: {
+        detailsPageTitle: 'ユーザー詳細 | 未来市 管理画面',
+        detailsTitle: 'ユーザー詳細',
+        detailsDescription:
+          'ユーザー情報、権限、アクセスロール、パスワードを管理します。',
+        detailsReadOnly:
+          'ユーザー情報は閲覧のみです。変更にはユーザーの編集権限が必要です。',
+        name: '名前',
+        accessRoles: 'アクセスロール',
+        backToUsers: 'ユーザー管理へ戻る',
+        settings: '設定',
+        actionsFor: '設定対象',
+        edit: '編集',
+        suspend: '停止',
+        reactivate: '再開',
+        delete: '削除',
+        active: '有効',
+        suspended: '停止',
+        save: '保存',
+        saving: '保存中…',
+        cancel: 'キャンセル',
+        saved: '変更を保存しました。',
+        password: 'パスワード',
+        resetPassword: '再設定',
+        passwordConfigured: '設定済み',
+        passwordChangeRequired: '次回ログイン後に変更が必要',
+        passwordVisibilityHelp: '本人以外のパスワードは表示できません。',
+        selfPasswordResetProtected:
+          '自分のパスワードはパスワード変更画面から変更してください。',
+        passwordMode: 'パスワードの種類',
+        temporaryPasswordMode: '一時パスワード',
+        temporaryPasswordModeDescription:
+          '次回ログイン後にユーザー自身による変更を求めます。',
+        standardPasswordMode: '通常パスワード',
+        standardPasswordModeDescription:
+          '管理者が設定したパスワードをそのまま利用できます。',
+        newPassword: '新しいパスワード',
+        confirmPassword: '新しいパスワード（確認）',
+        passwordsMatch: 'パスワードが一致しています。',
+        passwordRequirements: '12文字以上128文字以下で入力してください。',
+        generateTemporaryPassword: '一時パスワードを自動生成',
+        revokeSessions: '変更後に強制ログアウトする',
+        revokeSessionsDescription:
+          '有効にすると、対象ユーザーのログイン中セッションをすべて終了します。',
+        enabled: 'する',
+        disabled: 'しない',
+        passwordDialogTitle: 'パスワードを再設定しますか？',
+        passwordDialogDescription:
+          '内容を確認してパスワードを再設定してください。この操作後、以前のパスワードは使用できません。',
+        confirmPasswordReset: 'パスワードを再設定',
+        passwordResetSaved: 'パスワードを再設定しました。',
+        selfProtected: '自分自身にはこの操作を実行できません。',
+        lastAdminProtected: '最後の有効な管理者にはこの操作を実行できません。',
+        emailDialogTitle: 'メールアドレスを変更しますか？',
+        emailDialogDescription:
+          '変更後は新しいメールアドレスがログインに使用されます。内容を確認して変更してください。',
+        currentEmail: '現在のメールアドレス',
+        newEmail: '新しいメールアドレス',
+        changeEmail: 'メールアドレスを変更',
+        suspendDialogTitle: 'ユーザーを停止しますか？',
+        suspendDialogDescription:
+          'ユーザーのログイン中セッションは終了し、再開するまでログインできなくなります。',
+        reactivateDialogTitle: 'ユーザーを再開しますか？',
+        reactivateDialogDescription:
+          '停止を解除し、このユーザーが再びログインできるようにします。',
+        deleteDialogTitle: 'ユーザーを削除しますか？',
+        deleteDialogDescription:
+          'ユーザーと認証情報は完全に削除されます。この操作は取り消せません。',
+        targetUser: '対象ユーザー',
+        errors: {
+          AUTHENTICATION_REQUIRED: 'ログインが必要です。',
+          ADMINISTRATOR_REQUIRED: '管理者権限が必要です。',
+          PASSWORD_CHANGE_REQUIRED: '先にパスワードを変更してください。',
+          INVALID_REQUEST: 'リクエストの内容が正しくありません。',
+          INVALID_NAME: '氏名を入力してください。',
+          INVALID_EMAIL: '有効なメールアドレスを入力してください。',
+          EMAIL_ALREADY_EXISTS: 'このメールアドレスは既に使用されています。',
+          INVALID_ROLE: '有効な権限を選択してください。',
+          INVALID_PASSWORD: 'パスワードは12文字以上128文字以下で入力してください。',
+          PASSWORD_MISMATCH: '確認用パスワードが一致していません。',
+          USER_NOT_FOUND: '対象ユーザーが見つかりません。',
+          SELF_PROTECTED: '自分自身にはこの操作を実行できません。',
+          LAST_ACTIVE_ADMIN: '最後の有効な管理者にはこの操作を実行できません。',
+          UPDATE_FAILED: 'ユーザー情報を更新できませんでした。',
+          SUSPEND_FAILED: 'ユーザーを停止できませんでした。',
+          REACTIVATE_FAILED: 'ユーザーを再開できませんでした。',
+          DELETE_FAILED: 'ユーザーを削除できませんでした。',
+          RESET_PASSWORD_FAILED: 'パスワードを再設定できませんでした。',
+          SESSION_REVOCATION_FAILED:
+            'パスワードは変更されましたが、ログイン中セッションを終了できませんでした。',
+        },
+      },
       settings: {
         save: '設定を保存',
         saving: '保存中…',
@@ -1025,6 +1440,37 @@ export const dictionaries: Record<Locale, Dictionary> = {
       backToCategory: 'Back to this category',
       publishedLabel: 'Published',
       readMore: 'Read more',
+      disasterRadio: {
+        title: 'Check Disaster Prevention Radio Broadcasts',
+        breadcrumb: 'Disaster Prevention Radio',
+        lead:
+          'Mirai City uses its disaster prevention radio system to share emergency and municipal information. You can check broadcasts by email or through the automated phone service.',
+        emailHeading: 'Email Notification Service',
+        emailDescription:
+          'Register an email address to receive disaster prevention radio broadcasts on a mobile phone or computer.',
+        registrationHeading: 'How to Register',
+        registrationSteps: [
+          'Select “Open registration email.”',
+          'Confirm that the subject is “ALL,” then send the message.',
+          'Registration is complete when you receive the confirmation email.',
+        ],
+        registrationLink: 'Open registration email',
+        registrationAddressLabel: 'Registration email address',
+        senderAddressLabel: 'Sender address to allow',
+        emailNote:
+          'If you block incoming mail, allow the sender address above before registering. These addresses are non-working demo placeholders and no registration will occur.',
+        phoneHeading: 'Automated Phone Service',
+        phoneDescription:
+          'Call the dedicated number to listen to disaster prevention radio broadcasts.',
+        phoneNumberLabel: 'Phone number',
+        demoSuffix: ' (demo)',
+        phoneNote:
+          'This number is a screen-demo placeholder and does not connect to a real call.',
+        contactHeading: 'Contact Us',
+        contactNote:
+          'For questions about disaster prevention radio and notification services, contact the Mirai City Disaster Prevention Division.',
+        contactPhoneLabel: 'Phone',
+      },
       faq: {
         indexLead:
           'Browse frequently asked questions from Mirai City by department or bureau.',
@@ -1176,6 +1622,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       terms: 'Terms of Service',
       privacy: 'Privacy Policy',
       buildingGuide: 'Building Guide',
+      disasterRadio: 'Disaster Radio',
       feedback: 'Feedback & Requests',
       sitemap: 'Site Map',
       login: 'Log in',
@@ -1190,6 +1637,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
     docs: {
       viewAsMarkdown: 'View as Markdown',
     },
+    links: {
+      opensInNewTab: 'Opens in a new tab',
+    },
     auth: {
       loginTitle: 'Admin Login',
       loginDescription:
@@ -1198,6 +1648,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       password: 'Password',
       currentPassword: 'Current password',
       newPassword: 'New password',
+      showPassword: 'Show password',
+      hidePassword: 'Hide password',
       name: 'Name',
       role: 'Role',
       roleUser: 'User',
@@ -1219,6 +1671,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
       temporaryPassword: 'Temporary password',
       temporaryPasswordDescription:
         'This temporary password is shown only once. Share it with the user through a secure channel.',
+      copyTemporaryPassword: 'Copy temporary password',
+      temporaryPasswordCopied: 'Temporary password copied.',
+      temporaryPasswordCopyFailed:
+        'Could not copy the temporary password. Select it and copy it manually.',
       required: 'Required',
       error: 'The request failed.',
     },
@@ -1266,6 +1722,203 @@ export const dictionaries: Record<Locale, Dictionary> = {
       dashboardTitle: 'Admin',
       dashboardDescription:
         'You are signed in. Administrator features require the admin role.',
+      accessControl: {
+        rolesNav: 'Roles',
+        listTitle: 'Roles',
+        listDescription: 'Control administration-page access with each role. An explicit deny overrides an allow.',
+        roleCount: 'roles',
+        addRole: 'Add role',
+        createTitle: 'Add role',
+        createDescription:
+          'Enter a role name and description. All administration-page permissions start unselected.',
+        roleName: 'Role name',
+        roleNameRequired: 'Enter a role name.',
+        roleNameTooLong: 'Enter a role name with no more than 64 characters.',
+        roleDescription: 'Description',
+        descriptionOptional: 'Description (optional)',
+        memberCount: 'Members',
+        actions: 'Actions',
+        edit: 'Edit',
+        editRoleTitle: 'Edit role',
+        editRoleDescription: 'Edit the role name and description.',
+        systemRole: 'System role',
+        systemRoleReadOnly: 'System roles cannot be changed.',
+        noRoles: 'No roles.',
+        cancel: 'Cancel',
+        add: 'Add',
+        saving: 'Saving…',
+        save: 'Save',
+        saved: 'Role settings saved.',
+        reload: 'Reload latest information',
+        deleteRole: 'Delete role',
+        backToRoles: 'Back to roles',
+        backToUserDetails: 'Back to user details',
+        settingsTab: 'Role settings',
+        membersTab: 'Role members',
+        adminPageAccessTitle: 'Administration page access',
+        adminPageAccessDescription: 'Clearing View also removes Create, Update, and Delete for that page.',
+        adminPageColumn: 'Administration page',
+        allow: 'Allow',
+        deny: 'Deny',
+        unset: 'Not set',
+        unsupported: 'Not available',
+        path: 'Path',
+        targetPaths: 'Paths',
+        assignedRoles: 'Assigned access role',
+        noAssignedRoles: 'No access role is assigned.',
+        effectiveAccess: 'Effective access',
+        userAccessPageTitle: 'User Access | Future City Admin',
+        userAccessTitle: 'Effective user access',
+        userAccessHeading: '{name}’s access',
+        userAccessDescription: 'Final access after applying the assigned role and administrator gate.',
+        viewAccess: 'Review access',
+        allowed: 'Allowed',
+        denied: 'Denied',
+        genericError: 'Unable to process the role.',
+        conflictError: 'The role changed elsewhere. Reload and try again.',
+        duplicateError: 'A role with this name already exists.',
+        listSearchPlaceholder: 'Search by role name or ID',
+        memberSearchPlaceholder: 'Search members by name, email, or ID',
+        candidateSearchPlaceholder: 'Search users to add by name, email, or ID',
+        assignUsers: 'Add users',
+        assign: 'Assign',
+        removeAssignment: 'Remove assignment',
+        noMembers: 'No users are assigned to this role.',
+        noCandidates: 'There are no users available to add.',
+        candidateDialogTitle: 'Add role members',
+        candidateDialogDescription: 'Replace the selected user’s current access role.',
+        deleteRoleTitle: 'Delete this role?',
+        deleteRoleDescription: 'The role and its permission settings will be permanently deleted. This cannot be undone.',
+        roleInUse: 'Remove every member assignment before deleting this role.',
+        readOnlyRoleAction: 'You do not have permission to perform this action.',
+        adminAttributeHelp: 'Used as an additional gate for admin-user operations.',
+        assignedRolesHelp: 'Determines view, create, update, and delete access for each administration page. A user has one role.',
+        accessRoleSummaryHelp: 'Determines view, create, update, and delete access for each administration page.',
+        replaceAccessRoleHelp: 'Saving replaces the current access role with the selected role.',
+        loading: 'Loading…',
+        accountSuspended: 'All access is denied because this user is suspended.',
+        passwordChangeRequired: 'All access is denied until the initial password change is complete.',
+        systemRoleNames: { FULL_ACCESS: 'Full access', NO_ACCESS: 'No access' },
+        systemRoleDescriptions: {
+          FULL_ACCESS: 'Allows every supported administration action.',
+          NO_ACCESS: 'Grants no permissions, so every action is implicitly denied.',
+        },
+        resourceTitles: {
+          users: 'Admin users',
+          'password-reset-requests': 'Password reset requests',
+          roles: 'Role management',
+          'role-assignments': 'Role members',
+          'phone-settings': 'Phone settings',
+          'chat-settings': 'AI chat settings',
+          'language-settings': 'Language settings',
+          'maintenance-settings': 'Maintenance settings',
+        },
+        resourceDescriptions: {
+          users: 'Lists and manages admin users, passwords, status, and access summaries.',
+          'password-reset-requests': 'Views, approves, and rejects requests.',
+          roles: 'Manages access roles, descriptions, and permissions.',
+          'role-assignments': 'Views and replaces each user’s single access role.',
+          'phone-settings': 'Manages representative and AI phone numbers.',
+          'chat-settings': 'Manages Web Chat mode and connection settings.',
+          'language-settings': 'Manages public-site languages and order.',
+          'maintenance-settings': 'Manages environment modes and schedules.',
+        },
+        actionLabels: { VIEW: 'View', CREATE: 'Create', UPDATE: 'Edit', DELETE: 'Delete' },
+      },
+      userManagement: {
+        detailsPageTitle: 'User Details | Future City Admin',
+        detailsTitle: 'User details',
+        detailsDescription:
+          'Manage user information, privilege, access role, and password.',
+        detailsReadOnly:
+          'You can view this user. Changes require permission to edit users.',
+        name: 'Name',
+        accessRoles: 'Access role',
+        backToUsers: 'Back to User Management',
+        settings: 'Settings',
+        actionsFor: 'Settings for',
+        edit: 'Edit',
+        suspend: 'Suspend',
+        reactivate: 'Reactivate',
+        delete: 'Delete',
+        active: 'Active',
+        suspended: 'Suspended',
+        save: 'Save',
+        saving: 'Saving…',
+        cancel: 'Cancel',
+        saved: 'Changes saved.',
+        password: 'Password',
+        resetPassword: 'Reset',
+        passwordConfigured: 'Configured',
+        passwordChangeRequired: 'Change required after next sign-in',
+        passwordVisibilityHelp: 'Passwords cannot be shown to another user.',
+        selfPasswordResetProtected:
+          'Change your own password from the Change Password page.',
+        passwordMode: 'Password type',
+        temporaryPasswordMode: 'Temporary password',
+        temporaryPasswordModeDescription:
+          'Require the user to change it after their next sign-in.',
+        standardPasswordMode: 'Standard password',
+        standardPasswordModeDescription:
+          'Allow the user to continue using the password set by the administrator.',
+        newPassword: 'New password',
+        confirmPassword: 'Confirm new password',
+        passwordsMatch: 'The passwords match.',
+        passwordRequirements: 'Enter between 12 and 128 characters.',
+        generateTemporaryPassword: 'Generate a temporary password',
+        revokeSessions: 'Force sign-out after changing',
+        revokeSessionsDescription:
+          'When enabled, all active sessions for this user will end.',
+        enabled: 'Yes',
+        disabled: 'No',
+        passwordDialogTitle: 'Reset this password?',
+        passwordDialogDescription:
+          'Review the settings before resetting the password. The previous password will no longer work.',
+        confirmPasswordReset: 'Reset password',
+        passwordResetSaved: 'Password reset successfully.',
+        selfProtected: 'You cannot perform this action on your own account.',
+        lastAdminProtected:
+          'You cannot perform this action on the last active administrator.',
+        emailDialogTitle: 'Change this email address?',
+        emailDialogDescription:
+          'The new email address will be used to log in. Review it before confirming the change.',
+        currentEmail: 'Current email address',
+        newEmail: 'New email address',
+        changeEmail: 'Change email address',
+        suspendDialogTitle: 'Suspend this user?',
+        suspendDialogDescription:
+          'The user’s active sessions will end, and they will be unable to log in until reactivated.',
+        reactivateDialogTitle: 'Reactivate this user?',
+        reactivateDialogDescription:
+          'Remove the suspension and allow this user to log in again.',
+        deleteDialogTitle: 'Delete this user?',
+        deleteDialogDescription:
+          'The user and authentication information will be permanently deleted. This cannot be undone.',
+        targetUser: 'Target user',
+        errors: {
+          AUTHENTICATION_REQUIRED: 'Please sign in.',
+          ADMINISTRATOR_REQUIRED: 'Administrator access is required.',
+          PASSWORD_CHANGE_REQUIRED: 'Change your password first.',
+          INVALID_REQUEST: 'The request is invalid.',
+          INVALID_NAME: 'Enter a name.',
+          INVALID_EMAIL: 'Enter a valid email address.',
+          EMAIL_ALREADY_EXISTS: 'This email address is already in use.',
+          INVALID_ROLE: 'Select a valid role.',
+          INVALID_PASSWORD: 'Enter a password between 12 and 128 characters.',
+          PASSWORD_MISMATCH: 'The confirmation password does not match.',
+          USER_NOT_FOUND: 'The user could not be found.',
+          SELF_PROTECTED: 'You cannot perform this action on your own account.',
+          LAST_ACTIVE_ADMIN:
+            'You cannot perform this action on the last active administrator.',
+          UPDATE_FAILED: 'Unable to update the user.',
+          SUSPEND_FAILED: 'Unable to suspend the user.',
+          REACTIVATE_FAILED: 'Unable to reactivate the user.',
+          DELETE_FAILED: 'Unable to delete the user.',
+          RESET_PASSWORD_FAILED: 'Unable to reset the password.',
+          SESSION_REVOCATION_FAILED:
+            'The password changed, but active sessions could not be ended.',
+        },
+      },
       settings: {
         save: 'Save settings',
         saving: 'Saving…',
@@ -1543,6 +2196,36 @@ export const dictionaries: Record<Locale, Dictionary> = {
       backToCategory: '返回分类页面',
       publishedLabel: '发布日期',
       readMore: '查看详情',
+      disasterRadio: {
+        title: '查看防灾行政无线广播内容',
+        breadcrumb: '防灾行政无线',
+        lead:
+          '未来市通过防灾行政无线发布防灾和行政信息。您可以使用邮件推送或电话语音服务查看广播内容。',
+        emailHeading: '邮件推送服务',
+        emailDescription:
+          '登记电子邮件地址后，即可通过手机或电脑接收防灾行政无线的广播内容。',
+        registrationHeading: '登记方法',
+        registrationSteps: [
+          '选择“打开登记邮件”。',
+          '确认主题为“ALL”后直接发送。',
+          '收到登记完成邮件后即表示登记成功。',
+        ],
+        registrationLink: '打开登记邮件',
+        registrationAddressLabel: '登记邮箱地址',
+        senderAddressLabel: '需要允许接收的发件地址',
+        emailNote:
+          '如设置了拒收邮件，请先允许接收上述发件地址。所列地址仅为不可用的演示占位符，不会实际登记。',
+        phoneHeading: '电话语音服务',
+        phoneDescription:
+          '拨打专用号码即可通过语音确认防灾行政无线的广播内容。',
+        phoneNumberLabel: '电话号码',
+        demoSuffix: '（演示用）',
+        phoneNote: '该号码仅用于画面演示，不会接通实际电话。',
+        contactHeading: '咨询',
+        contactNote:
+          '如对防灾行政无线和推送服务有疑问，请联系未来市防灾科。',
+        contactPhoneLabel: '电话',
+      },
       faq: {
         indexLead: '按部门和局分类查看未来市的常见问题。',
         departmentsHeading: '按部门或局查找',
@@ -1691,6 +2374,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       terms: '使用条款',
       privacy: '隐私政策',
       buildingGuide: '办公楼指南',
+      disasterRadio: '防灾无线',
       feedback: '意见・要望',
       sitemap: '网站地图',
       login: '登录',
@@ -1705,6 +2389,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
     docs: {
       viewAsMarkdown: '查看 Markdown 版本',
     },
+    links: {
+      opensInNewTab: '在新标签页中打开',
+    },
     auth: {
       loginTitle: '管理登录',
       loginDescription: '访问面向演示运营者的文章编辑、电话号码变更等管理功能。',
@@ -1712,6 +2399,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       password: '密码',
       currentPassword: '当前密码',
       newPassword: '新密码',
+      showPassword: '显示密码',
+      hidePassword: '隐藏密码',
       name: '姓名',
       role: '权限',
       roleUser: '普通用户',
@@ -1730,6 +2419,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
       temporaryPassword: '临时密码',
       temporaryPasswordDescription:
         '临时密码只会显示一次。请通过安全方式共享给目标用户。',
+      copyTemporaryPassword: '复制临时密码',
+      temporaryPasswordCopied: '已复制临时密码。',
+      temporaryPasswordCopyFailed:
+        '无法复制。请选择临时密码并手动复制。',
       required: '必填',
       error: '处理失败。',
     },
@@ -1775,6 +2468,169 @@ export const dictionaries: Record<Locale, Dictionary> = {
       adminOnly: '仅限管理员访问。',
       dashboardTitle: '管理页面',
       dashboardDescription: '您已登录。用户管理功能需要管理员权限。',
+      accessControl: {
+        rolesNav: '角色', listTitle: '角色',
+        listDescription: '通过各个角色控制管理页面访问。明确拒绝优先于允许。',
+        roleCount: '个角色',
+        addRole: '添加角色',
+        createTitle: '添加角色',
+        createDescription:
+          '输入角色名称和说明。创建时所有管理页面权限均为未选择状态。',
+        roleName: '角色名称',
+        roleNameRequired: '请输入角色名称。',
+        roleNameTooLong: '角色名称不能超过64个字符。',
+        roleDescription: '说明',
+        descriptionOptional: '说明（可选）',
+        memberCount: '成员数',
+        actions: '操作',
+        edit: '编辑',
+        editRoleTitle: '编辑角色',
+        editRoleDescription: '编辑角色名称和说明。',
+        systemRole: '系统角色',
+        systemRoleReadOnly: '系统角色无法更改。',
+        noRoles: '没有角色。',
+        cancel: '取消',
+        add: '添加',
+        saving: '保存中…',
+        save: '保存',
+        saved: '角色设置已保存。',
+        reload: '重新加载最新信息',
+        deleteRole: '删除角色',
+        backToRoles: '返回角色列表',
+        backToUserDetails: '返回用户详情',
+        settingsTab: '角色设置',
+        membersTab: '角色成员',
+        adminPageAccessTitle: '管理页面访问权限',
+        adminPageAccessDescription: '取消“查看”后，同一页面的创建、编辑和删除也将不被允许。',
+        adminPageColumn: '管理页面', allow: '允许', deny: '拒绝',
+        unset: '未设置', unsupported: '不适用', path: '路径', targetPaths: '目标路径', assignedRoles: '已分配角色',
+        noAssignedRoles: '未分配角色。', effectiveAccess: '有效访问权限',
+        userAccessPageTitle: '用户访问权限 | 未来市管理页面',
+        userAccessTitle: '用户有效访问权限', userAccessHeading: '{name}的访问权限',
+        userAccessDescription: '这是应用所分配角色和管理员附加条件后的最终结果。',
+        viewAccess: '查看访问权限', allowed: '允许', denied: '拒绝',
+        genericError: '无法处理角色。', conflictError: '角色已在其他位置更改，请重新加载。',
+        duplicateError: '已存在同名角色。',
+        listSearchPlaceholder: '按角色名称或 ID 搜索',
+        memberSearchPlaceholder: '按姓名、电子邮件或 ID 搜索成员',
+        candidateSearchPlaceholder: '按姓名、电子邮件或 ID 搜索可添加用户',
+        assignUsers: '添加用户', assign: '分配', removeAssignment: '移除分配',
+        noMembers: '没有用户被分配到此角色。', noCandidates: '没有可添加的用户。',
+        candidateDialogTitle: '添加角色成员', candidateDialogDescription: '替换所选用户的当前访问角色。',
+        deleteRoleTitle: '要删除此角色吗？', deleteRoleDescription: '角色及其权限设置将被永久删除，此操作无法撤销。',
+        roleInUse: '删除此角色前，请移除所有成员分配。',
+        readOnlyRoleAction: '您没有执行此操作的权限。',
+        adminAttributeHelp: '用作管理用户操作的附加条件。',
+        assignedRolesHelp: '决定每个管理页面的查看、创建、编辑和删除权限。每个用户只能拥有一个角色。',
+        accessRoleSummaryHelp: '决定每个管理页面的查看、创建、编辑和删除权限。',
+        replaceAccessRoleHelp: '保存后，当前访问角色将替换为所选角色。',
+        loading: '正在加载…',
+        accountSuspended: '由于该用户已停用，所有访问均被拒绝。',
+        passwordChangeRequired: '完成首次密码更改之前，所有访问均被拒绝。',
+        systemRoleNames: { FULL_ACCESS: '完全访问权限', NO_ACCESS: '无访问权限' },
+        systemRoleDescriptions: {
+          FULL_ACCESS: '允许所有受支持的管理操作。',
+          NO_ACCESS: '不授予任何权限，因此所有操作都会被隐式拒绝。',
+        },
+        resourceTitles: {
+          users: '管理用户', 'password-reset-requests': '密码重置申请', roles: '角色管理',
+          'role-assignments': '角色成员', 'phone-settings': '电话设置',
+          'chat-settings': 'AI聊天设置', 'language-settings': '语言设置',
+          'maintenance-settings': '维护设置',
+        },
+        resourceDescriptions: {
+          users: '管理用户列表、详情、创建、权限、状态、密码和访问摘要。',
+          'password-reset-requests': '查看、批准和拒绝申请。',
+          roles: '管理访问角色、说明和权限。',
+          'role-assignments': '查看和更改每个用户的单一访问角色。',
+          'phone-settings': '管理代表电话号码和AI电话号码。',
+          'chat-settings': '管理Web Chat模式和连接设置。',
+          'language-settings': '管理公共网站语言和显示顺序。',
+          'maintenance-settings': '管理各环境的模式和计划。',
+        },
+        actionLabels: { VIEW: '查看', CREATE: '添加', UPDATE: '编辑', DELETE: '删除' },
+      },
+      userManagement: {
+        detailsPageTitle: '用户详情 | 未来市管理页面',
+        detailsTitle: '用户详情',
+        detailsDescription: '管理用户信息、权限、访问角色和密码。',
+        detailsReadOnly: '您可以查看此用户。更改用户信息需要用户编辑权限。',
+        name: '姓名',
+        accessRoles: '访问角色',
+        backToUsers: '返回用户管理',
+        settings: '设置',
+        actionsFor: '设置对象',
+        edit: '编辑',
+        suspend: '停用',
+        reactivate: '重新启用',
+        delete: '删除',
+        active: '有效',
+        suspended: '已停用',
+        save: '保存',
+        saving: '正在保存…',
+        cancel: '取消',
+        saved: '更改已保存。',
+        password: '密码',
+        resetPassword: '重置',
+        passwordConfigured: '已设置',
+        passwordChangeRequired: '下次登录后需要更改',
+        passwordVisibilityHelp: '无法显示其他用户的密码。',
+        selfPasswordResetProtected: '请从更改密码页面修改自己的密码。',
+        passwordMode: '密码类型',
+        temporaryPasswordMode: '临时密码',
+        temporaryPasswordModeDescription: '要求用户在下次登录后自行更改密码。',
+        standardPasswordMode: '普通密码',
+        standardPasswordModeDescription: '用户可以继续使用管理员设置的密码。',
+        newPassword: '新密码',
+        confirmPassword: '确认新密码',
+        passwordsMatch: '两次输入的密码一致。',
+        passwordRequirements: '请输入12至128个字符。',
+        generateTemporaryPassword: '自动生成临时密码',
+        revokeSessions: '更改后强制退出登录',
+        revokeSessionsDescription: '启用后将结束此用户的所有现有会话。',
+        enabled: '是',
+        disabled: '否',
+        passwordDialogTitle: '要重置密码吗？',
+        passwordDialogDescription:
+          '请确认设置后再重置密码。重置后旧密码将无法继续使用。',
+        confirmPasswordReset: '重置密码',
+        passwordResetSaved: '密码已重置。',
+        selfProtected: '无法对自己的账户执行此操作。',
+        lastAdminProtected: '无法对最后一名有效管理员执行此操作。',
+        emailDialogTitle: '要更改电子邮件地址吗？',
+        emailDialogDescription: '更改后将使用新地址登录。请确认内容后再更改。',
+        currentEmail: '当前电子邮件地址',
+        newEmail: '新电子邮件地址',
+        changeEmail: '更改电子邮件地址',
+        suspendDialogTitle: '要停用此用户吗？',
+        suspendDialogDescription: '用户的现有会话将结束，重新启用前将无法登录。',
+        reactivateDialogTitle: '要重新启用此用户吗？',
+        reactivateDialogDescription: '解除停用状态，允许此用户再次登录。',
+        deleteDialogTitle: '要删除此用户吗？',
+        deleteDialogDescription: '用户及其身份验证信息将被永久删除。此操作无法撤销。',
+        targetUser: '目标用户',
+        errors: {
+          AUTHENTICATION_REQUIRED: '请先登录。',
+          ADMINISTRATOR_REQUIRED: '需要管理员权限。',
+          PASSWORD_CHANGE_REQUIRED: '请先更改密码。',
+          INVALID_REQUEST: '请求内容无效。',
+          INVALID_NAME: '请输入姓名。',
+          INVALID_EMAIL: '请输入有效的电子邮件地址。',
+          EMAIL_ALREADY_EXISTS: '此电子邮件地址已被使用。',
+          INVALID_ROLE: '请选择有效的权限。',
+          INVALID_PASSWORD: '请输入12至128个字符的密码。',
+          PASSWORD_MISMATCH: '两次输入的密码不一致。',
+          USER_NOT_FOUND: '找不到目标用户。',
+          SELF_PROTECTED: '无法对自己的账户执行此操作。',
+          LAST_ACTIVE_ADMIN: '无法对最后一名有效管理员执行此操作。',
+          UPDATE_FAILED: '无法更新用户信息。',
+          SUSPEND_FAILED: '无法停用用户。',
+          REACTIVATE_FAILED: '无法重新启用用户。',
+          DELETE_FAILED: '无法删除用户。',
+          RESET_PASSWORD_FAILED: '无法重置密码。',
+          SESSION_REVOCATION_FAILED: '密码已更改，但无法结束现有会话。',
+        },
+      },
       settings: {
         save: '保存设置',
         saving: '正在保存…',
@@ -2043,6 +2899,36 @@ export const dictionaries: Record<Locale, Dictionary> = {
       backToCategory: '返回分類頁面',
       publishedLabel: '發布日期',
       readMore: '查看詳情',
+      disasterRadio: {
+        title: '查看防災行政無線廣播內容',
+        breadcrumb: '防災行政無線',
+        lead:
+          '未來市透過防災行政無線發布防災及行政資訊。您可以使用電子郵件推播或電話語音服務查看廣播內容。',
+        emailHeading: '電子郵件推播服務',
+        emailDescription:
+          '登記電子郵件地址後，即可透過手機或電腦接收防災行政無線的廣播內容。',
+        registrationHeading: '登記方法',
+        registrationSteps: [
+          '選擇「開啟登記郵件」。',
+          '確認主旨為「ALL」後直接寄出。',
+          '收到登記完成郵件後即表示登記成功。',
+        ],
+        registrationLink: '開啟登記郵件',
+        registrationAddressLabel: '登記電子郵件地址',
+        senderAddressLabel: '需允許接收的寄件地址',
+        emailNote:
+          '若設定拒收郵件，請先允許接收上述寄件地址。所列地址僅為不可用的示範預留值，不會實際登記。',
+        phoneHeading: '電話語音服務',
+        phoneDescription:
+          '撥打專用號碼，即可透過語音確認防災行政無線的廣播內容。',
+        phoneNumberLabel: '電話號碼',
+        demoSuffix: '（示範用）',
+        phoneNote: '此號碼僅供畫面示範，不會接通實際電話。',
+        contactHeading: '聯絡我們',
+        contactNote:
+          '如對防災行政無線和推播服務有疑問，請聯絡未來市防災課。',
+        contactPhoneLabel: '電話',
+      },
       faq: {
         indexLead: '按部門和局分類查看未來市的常見問題。',
         departmentsHeading: '依部門或局查詢',
@@ -2191,6 +3077,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       terms: '使用條款',
       privacy: '隱私權政策',
       buildingGuide: '辦公大樓導覽',
+      disasterRadio: '防災無線',
       feedback: '意見・需求',
       sitemap: '網站地圖',
       login: '登入',
@@ -2205,6 +3092,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
     docs: {
       viewAsMarkdown: '檢視 Markdown 版本',
     },
+    links: {
+      opensInNewTab: '在新分頁中開啟',
+    },
     auth: {
       loginTitle: '管理登入',
       loginDescription: '存取面向示範營運者的文章編輯、電話號碼變更等管理功能。',
@@ -2212,6 +3102,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       password: '密碼',
       currentPassword: '目前密碼',
       newPassword: '新密碼',
+      showPassword: '顯示密碼',
+      hidePassword: '隱藏密碼',
       name: '姓名',
       role: '權限',
       roleUser: '一般使用者',
@@ -2230,6 +3122,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
       temporaryPassword: '臨時密碼',
       temporaryPasswordDescription:
         '臨時密碼只會顯示一次。請透過安全方式分享給目標使用者。',
+      copyTemporaryPassword: '複製臨時密碼',
+      temporaryPasswordCopied: '已複製臨時密碼。',
+      temporaryPasswordCopyFailed:
+        '無法複製。請選取臨時密碼並手動複製。',
       required: '必填',
       error: '處理失敗。',
     },
@@ -2275,6 +3171,170 @@ export const dictionaries: Record<Locale, Dictionary> = {
       adminOnly: '僅限管理員存取。',
       dashboardTitle: '管理頁面',
       dashboardDescription: '您已登入。使用者管理功能需要管理員權限。',
+      accessControl: {
+        rolesNav: '角色', listTitle: '角色',
+        listDescription: '透過各個角色控制管理頁面存取。明確拒絕優先於允許。',
+        roleCount: '個角色',
+        addRole: '新增角色',
+        createTitle: '新增角色',
+        createDescription:
+          '輸入角色名稱和說明。建立時所有管理頁面權限皆為未選取狀態。',
+        roleName: '角色名稱',
+        roleNameRequired: '請輸入角色名稱。',
+        roleNameTooLong: '角色名稱不得超過 64 個字元。',
+        roleDescription: '說明',
+        descriptionOptional: '說明（選填）',
+        memberCount: '成員數',
+        actions: '動作',
+        edit: '編輯',
+        editRoleTitle: '編輯角色',
+        editRoleDescription: '編輯角色名稱和說明。',
+        systemRole: '系統角色',
+        systemRoleReadOnly: '系統角色無法變更。',
+        noRoles: '沒有角色。',
+        cancel: '取消',
+        add: '新增',
+        saving: '儲存中…',
+        save: '儲存',
+        saved: '角色設定已儲存。',
+        reload: '重新載入最新資訊',
+        deleteRole: '刪除角色',
+        backToRoles: '返回角色清單',
+        backToUserDetails: '返回使用者詳細資料',
+        settingsTab: '角色設定',
+        membersTab: '角色成員',
+        adminPageAccessTitle: '管理頁面存取權',
+        adminPageAccessDescription: '取消「檢視」後，同一頁面的建立、編輯及刪除也不會獲准。',
+        adminPageColumn: '管理頁面', allow: '允許', deny: '拒絕',
+        unset: '未設定', unsupported: '不適用', path: '路徑', targetPaths: '目標路徑', assignedRoles: '已指派角色',
+        noAssignedRoles: '未指派角色。', effectiveAccess: '有效存取權',
+        userAccessPageTitle: '使用者存取權 | 未來市管理頁面',
+        userAccessTitle: '使用者有效存取權', userAccessHeading: '{name}的存取權',
+        userAccessDescription: '這是套用指派角色及管理員附加條件後的最終結果。',
+        viewAccess: '檢視存取權', allowed: '允許', denied: '拒絕',
+        genericError: '無法處理角色。', conflictError: '角色已在其他位置變更，請重新載入。',
+        duplicateError: '已存在同名角色。',
+        listSearchPlaceholder: '以角色名稱或 ID 搜尋',
+        memberSearchPlaceholder: '以姓名、電子郵件或 ID 搜尋成員',
+        candidateSearchPlaceholder: '以姓名、電子郵件或 ID 搜尋可新增使用者',
+        assignUsers: '新增使用者', assign: '指派', removeAssignment: '移除指派',
+        noMembers: '沒有使用者被指派到此角色。', noCandidates: '沒有可新增的使用者。',
+        candidateDialogTitle: '新增角色成員', candidateDialogDescription: '取代所選使用者目前的存取角色。',
+        deleteRoleTitle: '要刪除此角色嗎？', deleteRoleDescription: '角色及其權限設定將被永久刪除，此操作無法復原。',
+        roleInUse: '刪除此角色前，請移除所有成員指派。',
+        readOnlyRoleAction: '您沒有執行此操作的權限。',
+        adminAttributeHelp: '作為管理使用者操作的附加條件。',
+        assignedRolesHelp: '決定每個管理頁面的檢視、建立、編輯及刪除權限。每位使用者只能擁有一個角色。',
+        accessRoleSummaryHelp: '決定每個管理頁面的檢視、建立、編輯及刪除權限。',
+        replaceAccessRoleHelp: '儲存後，目前存取角色會替換為所選角色。',
+        loading: '載入中…',
+        accountSuspended: '由於該使用者已停用，所有存取均被拒絕。',
+        passwordChangeRequired: '完成首次密碼變更前，所有存取均被拒絕。',
+        systemRoleNames: { FULL_ACCESS: '完全存取權限', NO_ACCESS: '無存取權限' },
+        systemRoleDescriptions: {
+          FULL_ACCESS: '允許所有支援的管理動作。',
+          NO_ACCESS: '不授予任何權限，因此所有動作都會被隱含拒絕。',
+        },
+        resourceTitles: {
+          users: '管理使用者', 'password-reset-requests': '密碼重設申請', roles: '角色管理',
+          'role-assignments': '角色成員', 'phone-settings': '電話設定',
+          'chat-settings': 'AI聊天設定', 'language-settings': '語言設定',
+          'maintenance-settings': '維護設定',
+        },
+        resourceDescriptions: {
+          users: '管理使用者清單、詳細資料、建立、權限、狀態、密碼及存取摘要。',
+          'password-reset-requests': '檢視、核准及拒絕申請。',
+          roles: '管理存取角色、說明及權限。',
+          'role-assignments': '檢視及變更每位使用者的單一存取角色。',
+          'phone-settings': '管理代表電話號碼及 AI 電話號碼。',
+          'chat-settings': '管理 Web Chat 模式及連線設定。',
+          'language-settings': '管理公開網站語言及顯示順序。',
+          'maintenance-settings': '管理各環境的模式及排程。',
+        },
+        actionLabels: { VIEW: '檢視', CREATE: '新增', UPDATE: '編輯', DELETE: '刪除' },
+      },
+      userManagement: {
+        detailsPageTitle: '使用者詳細資料 | 未來市管理頁面',
+        detailsTitle: '使用者詳細資料',
+        detailsDescription: '管理使用者資訊、權限、存取角色及密碼。',
+        detailsReadOnly:
+          '您可以檢視此使用者。變更使用者資訊需要使用者編輯權限。',
+        name: '姓名',
+        accessRoles: '存取角色',
+        backToUsers: '返回使用者管理',
+        settings: '設定',
+        actionsFor: '設定對象',
+        edit: '編輯',
+        suspend: '停用',
+        reactivate: '重新啟用',
+        delete: '刪除',
+        active: '有效',
+        suspended: '已停用',
+        save: '儲存',
+        saving: '儲存中…',
+        cancel: '取消',
+        saved: '變更已儲存。',
+        password: '密碼',
+        resetPassword: '重設',
+        passwordConfigured: '已設定',
+        passwordChangeRequired: '下次登入後需要變更',
+        passwordVisibilityHelp: '無法顯示其他使用者的密碼。',
+        selfPasswordResetProtected: '請從變更密碼頁面修改自己的密碼。',
+        passwordMode: '密碼類型',
+        temporaryPasswordMode: '臨時密碼',
+        temporaryPasswordModeDescription: '要求使用者在下次登入後自行變更密碼。',
+        standardPasswordMode: '一般密碼',
+        standardPasswordModeDescription: '使用者可以繼續使用管理員設定的密碼。',
+        newPassword: '新密碼',
+        confirmPassword: '確認新密碼',
+        passwordsMatch: '兩次輸入的密碼一致。',
+        passwordRequirements: '請輸入12至128個字元。',
+        generateTemporaryPassword: '自動產生臨時密碼',
+        revokeSessions: '變更後強制登出',
+        revokeSessionsDescription: '啟用後將結束此使用者的所有現有工作階段。',
+        enabled: '是',
+        disabled: '否',
+        passwordDialogTitle: '要重設密碼嗎？',
+        passwordDialogDescription:
+          '請確認設定後再重設密碼。重設後舊密碼將無法繼續使用。',
+        confirmPasswordReset: '重設密碼',
+        passwordResetSaved: '密碼已重設。',
+        selfProtected: '無法對自己的帳戶執行此操作。',
+        lastAdminProtected: '無法對最後一名有效管理員執行此操作。',
+        emailDialogTitle: '要變更電子郵件地址嗎？',
+        emailDialogDescription: '變更後將使用新地址登入。請確認內容後再變更。',
+        currentEmail: '目前的電子郵件地址',
+        newEmail: '新的電子郵件地址',
+        changeEmail: '變更電子郵件地址',
+        suspendDialogTitle: '要停用此使用者嗎？',
+        suspendDialogDescription: '使用者目前的工作階段將結束，重新啟用前將無法登入。',
+        reactivateDialogTitle: '要重新啟用此使用者嗎？',
+        reactivateDialogDescription: '解除停用狀態，允許此使用者再次登入。',
+        deleteDialogTitle: '要刪除此使用者嗎？',
+        deleteDialogDescription: '使用者及其驗證資訊將被永久刪除。此操作無法復原。',
+        targetUser: '目標使用者',
+        errors: {
+          AUTHENTICATION_REQUIRED: '請先登入。',
+          ADMINISTRATOR_REQUIRED: '需要管理員權限。',
+          PASSWORD_CHANGE_REQUIRED: '請先變更密碼。',
+          INVALID_REQUEST: '要求內容無效。',
+          INVALID_NAME: '請輸入姓名。',
+          INVALID_EMAIL: '請輸入有效的電子郵件地址。',
+          EMAIL_ALREADY_EXISTS: '此電子郵件地址已被使用。',
+          INVALID_ROLE: '請選擇有效的權限。',
+          INVALID_PASSWORD: '請輸入12至128個字元的密碼。',
+          PASSWORD_MISMATCH: '兩次輸入的密碼不一致。',
+          USER_NOT_FOUND: '找不到目標使用者。',
+          SELF_PROTECTED: '無法對自己的帳戶執行此操作。',
+          LAST_ACTIVE_ADMIN: '無法對最後一名有效管理員執行此操作。',
+          UPDATE_FAILED: '無法更新使用者資訊。',
+          SUSPEND_FAILED: '無法停用使用者。',
+          REACTIVATE_FAILED: '無法重新啟用使用者。',
+          DELETE_FAILED: '無法刪除使用者。',
+          RESET_PASSWORD_FAILED: '無法重設密碼。',
+          SESSION_REVOCATION_FAILED: '密碼已變更，但無法結束現有工作階段。',
+        },
+      },
       settings: {
         save: '儲存設定',
         saving: '正在儲存…',
@@ -2543,6 +3603,36 @@ export const dictionaries: Record<Locale, Dictionary> = {
       backToCategory: '이 카테고리로 돌아가기',
       publishedLabel: '게시일',
       readMore: '자세히 보기',
+      disasterRadio: {
+        title: '방재 행정 무선 방송 내용 확인',
+        breadcrumb: '방재 행정 무선',
+        lead:
+          '미래시는 방재 행정 무선으로 재난 및 행정 정보를 안내합니다. 이메일 알림 서비스나 전화 음성 서비스를 이용해 방송 내용을 확인할 수 있습니다.',
+        emailHeading: '이메일 알림 서비스',
+        emailDescription:
+          '이메일 주소를 등록하면 휴대전화나 컴퓨터로 방재 행정 무선 방송 내용을 받을 수 있습니다.',
+        registrationHeading: '등록 방법',
+        registrationSteps: [
+          '“등록 이메일 열기”를 선택합니다.',
+          '제목이 “ALL”인지 확인한 후 그대로 전송합니다.',
+          '등록 완료 이메일을 받으면 등록이 완료됩니다.',
+        ],
+        registrationLink: '등록 이메일 열기',
+        registrationAddressLabel: '등록 이메일 주소',
+        senderAddressLabel: '수신 허용 발신 주소',
+        emailNote:
+          '수신 거부를 설정한 경우 등록 전에 위 발신 주소를 허용해 주세요. 표시된 주소는 작동하지 않는 데모용 값이며 실제 등록은 이루어지지 않습니다.',
+        phoneHeading: '전화 음성 서비스',
+        phoneDescription:
+          '전용 번호로 전화하면 방재 행정 무선 방송 내용을 음성으로 확인할 수 있습니다.',
+        phoneNumberLabel: '전화번호',
+        demoSuffix: '（데모용）',
+        phoneNote: '이 번호는 화면 확인용이며 실제 통화에는 연결되지 않습니다.',
+        contactHeading: '문의',
+        contactNote:
+          '방재 행정 무선과 알림 서비스는 미래시 방재과로 문의해 주세요.',
+        contactPhoneLabel: '전화',
+      },
       faq: {
         indexLead: '미래시의 자주 묻는 질문을 과·국별로 안내합니다.',
         departmentsHeading: '과·국별로 찾기',
@@ -2692,6 +3782,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       terms: '이용약관',
       privacy: '개인정보 보호정책',
       buildingGuide: '청사 안내',
+      disasterRadio: '방재 무선',
       feedback: '의견・요청',
       sitemap: '사이트맵',
       login: '로그인',
@@ -2706,6 +3797,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
     docs: {
       viewAsMarkdown: 'Markdown 버전 보기',
     },
+    links: {
+      opensInNewTab: '새 탭에서 열립니다',
+    },
     auth: {
       loginTitle: '관리 로그인',
       loginDescription: '데모 운영자를 위한 기사 작성, 전화번호 변경 등의 관리 기능에 접근합니다.',
@@ -2713,6 +3807,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       password: '비밀번호',
       currentPassword: '현재 비밀번호',
       newPassword: '새 비밀번호',
+      showPassword: '비밀번호 표시',
+      hidePassword: '비밀번호 숨기기',
       name: '이름',
       role: '권한',
       roleUser: '일반 사용자',
@@ -2731,6 +3827,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
       temporaryPassword: '임시 비밀번호',
       temporaryPasswordDescription:
         '임시 비밀번호는 한 번만 표시됩니다. 안전한 방법으로 대상 사용자에게 공유하세요.',
+      copyTemporaryPassword: '임시 비밀번호 복사',
+      temporaryPasswordCopied: '임시 비밀번호를 복사했습니다.',
+      temporaryPasswordCopyFailed:
+        '복사하지 못했습니다. 임시 비밀번호를 선택하여 직접 복사해 주세요.',
       required: '필수',
       error: '처리에 실패했습니다.',
     },
@@ -2776,6 +3876,175 @@ export const dictionaries: Record<Locale, Dictionary> = {
       adminOnly: '관리자만 접근할 수 있습니다.',
       dashboardTitle: '관리 화면',
       dashboardDescription: '로그인되어 있습니다. 사용자 관리 기능에는 관리자 권한이 필요합니다.',
+      accessControl: {
+        rolesNav: '역할',
+        listTitle: '역할',
+        listDescription:
+          '각 역할로 관리 페이지 접근을 제어합니다. 명시적 거부가 허용보다 우선합니다.',
+        roleCount: '개 역할',
+        addRole: '역할 추가',
+        createTitle: '역할 추가',
+        createDescription:
+          '역할 이름과 설명을 입력합니다. 모든 관리 페이지 권한은 선택되지 않은 상태로 생성됩니다.',
+        roleName: '역할 이름',
+        roleNameRequired: '역할 이름을 입력하세요.',
+        roleNameTooLong: '역할 이름은 64자 이내로 입력하세요.',
+        roleDescription: '설명',
+        descriptionOptional: '설명(선택)',
+        memberCount: '멤버 수',
+        actions: '작업',
+        edit: '편집',
+        editRoleTitle: '역할 편집',
+        editRoleDescription: '역할 이름과 설명을 편집합니다.',
+        systemRole: '시스템 역할',
+        systemRoleReadOnly: '시스템 역할은 변경할 수 없습니다.',
+        noRoles: '역할이 없습니다.',
+        cancel: '취소',
+        add: '추가',
+        saving: '저장 중…',
+        save: '저장',
+        saved: '역할 설정을 저장했습니다.',
+        reload: '최신 정보 다시 불러오기',
+        deleteRole: '역할 삭제',
+        backToRoles: '역할 목록으로',
+        backToUserDetails: '사용자 상세로 돌아가기',
+        settingsTab: '역할 설정',
+        membersTab: '역할 멤버',
+        adminPageAccessTitle: '관리 페이지 접근 권한',
+        adminPageAccessDescription: '보기를 해제하면 같은 페이지의 추가, 편집, 삭제도 허용되지 않습니다.',
+        adminPageColumn: '관리 페이지', allow: '허용', deny: '거부',
+        unset: '미설정', unsupported: '해당 없음', path: '경로', targetPaths: '대상 경로', assignedRoles: '할당된 역할',
+        noAssignedRoles: '할당된 역할이 없습니다.', effectiveAccess: '유효 접근 권한',
+        userAccessPageTitle: '사용자 접근 권한 | 미래시 관리 화면',
+        userAccessTitle: '사용자 유효 접근 권한', userAccessHeading: '{name}의 접근 권한',
+        userAccessDescription: '할당된 역할과 관리자 추가 조건을 반영한 최종 결과입니다.',
+        viewAccess: '접근 권한 확인', allowed: '허용', denied: '거부',
+        genericError: '역할을 처리할 수 없습니다.', conflictError: '다른 변경과 충돌했습니다. 새로고침 후 다시 시도하세요.',
+        duplicateError: '같은 이름의 역할이 이미 있습니다.',
+        listSearchPlaceholder: '역할 이름 또는 ID로 검색',
+        memberSearchPlaceholder: '이름, 이메일 또는 ID로 멤버 검색',
+        candidateSearchPlaceholder: '이름, 이메일 또는 ID로 추가할 사용자 검색',
+        assignUsers: '사용자 추가', assign: '할당', removeAssignment: '할당 해제',
+        noMembers: '이 역할에 할당된 사용자가 없습니다.', noCandidates: '추가할 수 있는 사용자가 없습니다.',
+        candidateDialogTitle: '역할 멤버 추가', candidateDialogDescription: '선택한 사용자의 현재 접근 역할을 변경합니다.',
+        deleteRoleTitle: '이 역할을 삭제할까요?', deleteRoleDescription: '역할과 권한 설정이 영구적으로 삭제되며 되돌릴 수 없습니다.',
+        roleInUse: '이 역할을 삭제하기 전에 모든 멤버 할당을 해제하세요.',
+        readOnlyRoleAction: '이 작업을 수행할 권한이 없습니다.',
+        adminAttributeHelp: '관리 사용자 작업의 추가 조건으로 사용합니다.',
+        assignedRolesHelp: '관리 페이지별 보기, 추가, 편집, 삭제 권한을 결정합니다. 사용자는 하나의 역할만 가집니다.',
+        accessRoleSummaryHelp: '관리 페이지별 보기, 추가, 편집, 삭제 권한을 결정합니다.',
+        replaceAccessRoleHelp: '저장하면 현재 접근 역할을 선택한 역할로 변경합니다.',
+        loading: '로딩 중…',
+        accountSuspended: '이 사용자가 정지되어 모든 접근이 거부됩니다.',
+        passwordChangeRequired: '초기 비밀번호 변경을 완료할 때까지 모든 접근이 거부됩니다.',
+        systemRoleNames: { FULL_ACCESS: '전체 접근', NO_ACCESS: '접근 없음' },
+        systemRoleDescriptions: {
+          FULL_ACCESS: '지원되는 모든 관리 작업을 허용합니다.',
+          NO_ACCESS: '권한을 부여하지 않으므로 모든 작업이 암시적으로 거부됩니다.',
+        },
+        resourceTitles: {
+          users: '관리 사용자', 'password-reset-requests': '비밀번호 재설정 신청', roles: '역할 관리',
+          'role-assignments': '역할 멤버', 'phone-settings': '전화 설정',
+          'chat-settings': 'AI 채팅 설정', 'language-settings': '언어 설정',
+          'maintenance-settings': '점검 설정',
+        },
+        resourceDescriptions: {
+          users: '관리 사용자 목록, 상세, 생성, 권한, 상태, 비밀번호 및 접근 요약을 관리합니다.',
+          'password-reset-requests': '신청 조회, 승인, 거절을 관리합니다.',
+          roles: '접근 역할, 설명, 권한을 관리합니다.',
+          'role-assignments': '사용자의 단일 접근 역할을 조회하고 변경합니다.',
+          'phone-settings': '대표 전화번호와 AI 전화번호를 관리합니다.',
+          'chat-settings': 'Web Chat 모드와 연결 설정을 관리합니다.',
+          'language-settings': '공개 사이트 언어와 표시 순서를 관리합니다.',
+          'maintenance-settings': '환경별 모드와 일정을 관리합니다.',
+        },
+        actionLabels: { VIEW: '보기', CREATE: '추가', UPDATE: '편집', DELETE: '삭제' },
+      },
+      userManagement: {
+        detailsPageTitle: '사용자 상세 | 미래시 관리 화면',
+        detailsTitle: '사용자 상세 정보',
+        detailsDescription:
+          '사용자 정보, 권한, 접근 역할 및 비밀번호를 관리합니다.',
+        detailsReadOnly:
+          '사용자 정보를 볼 수 있습니다. 변경하려면 사용자 편집 권한이 필요합니다.',
+        name: '이름',
+        accessRoles: '접근 역할',
+        backToUsers: '사용자 관리로 돌아가기',
+        settings: '설정',
+        actionsFor: '설정 대상',
+        edit: '편집',
+        suspend: '정지',
+        reactivate: '재활성화',
+        delete: '삭제',
+        active: '활성',
+        suspended: '정지됨',
+        save: '저장',
+        saving: '저장 중…',
+        cancel: '취소',
+        saved: '변경 사항을 저장했습니다.',
+        password: '비밀번호',
+        resetPassword: '재설정',
+        passwordConfigured: '설정됨',
+        passwordChangeRequired: '다음 로그인 후 변경 필요',
+        passwordVisibilityHelp: '다른 사용자의 비밀번호는 표시할 수 없습니다.',
+        selfPasswordResetProtected:
+          '자신의 비밀번호는 비밀번호 변경 화면에서 변경하세요.',
+        passwordMode: '비밀번호 유형',
+        temporaryPasswordMode: '임시 비밀번호',
+        temporaryPasswordModeDescription: '다음 로그인 후 사용자가 직접 변경해야 합니다.',
+        standardPasswordMode: '일반 비밀번호',
+        standardPasswordModeDescription: '관리자가 설정한 비밀번호를 그대로 사용할 수 있습니다.',
+        newPassword: '새 비밀번호',
+        confirmPassword: '새 비밀번호 확인',
+        passwordsMatch: '비밀번호가 일치합니다.',
+        passwordRequirements: '12자 이상 128자 이하로 입력하세요.',
+        generateTemporaryPassword: '임시 비밀번호 자동 생성',
+        revokeSessions: '변경 후 강제 로그아웃',
+        revokeSessionsDescription: '활성화하면 이 사용자의 모든 로그인 세션을 종료합니다.',
+        enabled: '사용',
+        disabled: '사용 안 함',
+        passwordDialogTitle: '비밀번호를 재설정하시겠습니까?',
+        passwordDialogDescription:
+          '설정을 확인한 후 비밀번호를 재설정하세요. 이전 비밀번호는 더 이상 사용할 수 없습니다.',
+        confirmPasswordReset: '비밀번호 재설정',
+        passwordResetSaved: '비밀번호를 재설정했습니다.',
+        selfProtected: '자신의 계정에는 이 작업을 수행할 수 없습니다.',
+        lastAdminProtected: '마지막 활성 관리자에게는 이 작업을 수행할 수 없습니다.',
+        emailDialogTitle: '이메일 주소를 변경하시겠습니까?',
+        emailDialogDescription: '변경 후에는 새 이메일 주소로 로그인합니다. 내용을 확인한 후 변경하세요.',
+        currentEmail: '현재 이메일 주소',
+        newEmail: '새 이메일 주소',
+        changeEmail: '이메일 주소 변경',
+        suspendDialogTitle: '사용자를 정지하시겠습니까?',
+        suspendDialogDescription: '사용자의 현재 세션이 종료되며 재활성화할 때까지 로그인할 수 없습니다.',
+        reactivateDialogTitle: '사용자를 재활성화하시겠습니까?',
+        reactivateDialogDescription: '정지를 해제하고 이 사용자가 다시 로그인할 수 있도록 합니다.',
+        deleteDialogTitle: '사용자를 삭제하시겠습니까?',
+        deleteDialogDescription: '사용자와 인증 정보가 영구적으로 삭제됩니다. 이 작업은 취소할 수 없습니다.',
+        targetUser: '대상 사용자',
+        errors: {
+          AUTHENTICATION_REQUIRED: '로그인이 필요합니다.',
+          ADMINISTRATOR_REQUIRED: '관리자 권한이 필요합니다.',
+          PASSWORD_CHANGE_REQUIRED: '먼저 비밀번호를 변경하세요.',
+          INVALID_REQUEST: '요청 내용이 올바르지 않습니다.',
+          INVALID_NAME: '이름을 입력하세요.',
+          INVALID_EMAIL: '유효한 이메일 주소를 입력하세요.',
+          EMAIL_ALREADY_EXISTS: '이 이메일 주소는 이미 사용 중입니다.',
+          INVALID_ROLE: '유효한 권한을 선택하세요.',
+          INVALID_PASSWORD: '비밀번호를 12자 이상 128자 이하로 입력하세요.',
+          PASSWORD_MISMATCH: '확인 비밀번호가 일치하지 않습니다.',
+          USER_NOT_FOUND: '대상 사용자를 찾을 수 없습니다.',
+          SELF_PROTECTED: '자신의 계정에는 이 작업을 수행할 수 없습니다.',
+          LAST_ACTIVE_ADMIN: '마지막 활성 관리자에게는 이 작업을 수행할 수 없습니다.',
+          UPDATE_FAILED: '사용자 정보를 업데이트할 수 없습니다.',
+          SUSPEND_FAILED: '사용자를 정지할 수 없습니다.',
+          REACTIVATE_FAILED: '사용자를 재활성화할 수 없습니다.',
+          DELETE_FAILED: '사용자를 삭제할 수 없습니다.',
+          RESET_PASSWORD_FAILED: '비밀번호를 재설정할 수 없습니다.',
+          SESSION_REVOCATION_FAILED:
+            '비밀번호는 변경되었지만 로그인 세션을 종료할 수 없습니다.',
+        },
+      },
       settings: {
         save: '설정 저장',
         saving: '저장 중…',

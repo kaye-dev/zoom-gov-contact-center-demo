@@ -1,5 +1,11 @@
 import type { MDXComponents } from "mdx/types";
 
+import { ExternalLink } from "@/app/components/ExternalLink";
+
+function isExternalHref(href: string | undefined): href is string {
+  return /^(?:https?:)?\/\//i.test(href ?? "");
+}
+
 // @next/mdx で MDX をレンダリングする際の HTML 要素マッピング。
 // App Router では本ファイルが必須。@tailwindcss/typography を追加せずに
 // 最小限の Tailwind ユーティリティで読みやすい体裁にする（ダークモード対応）。
@@ -35,14 +41,23 @@ const components: MDXComponents = {
     </ol>
   ),
   li: ({ children }) => <li className="leading-7">{children}</li>,
-  a: ({ children, href }) => (
-    <a
-      href={href}
-      className="text-blue-700 underline underline-offset-2 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-    >
-      {children}
-    </a>
-  ),
+  a: ({ children, href }) => {
+    const className =
+      "text-blue-700 underline underline-offset-2 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300";
+
+    return isExternalHref(href) ? (
+      <ExternalLink href={href} className={className}>
+        {children}
+      </ExternalLink>
+    ) : (
+      <a
+        href={href}
+        className={`cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${className}`}
+      >
+        {children}
+      </a>
+    );
+  },
   blockquote: ({ children }) => (
     <blockquote className="my-4 border-l-4 border-gray-300 pl-4 text-gray-600 italic dark:border-gray-600 dark:text-gray-400">
       {children}
