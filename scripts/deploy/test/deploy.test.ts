@@ -1564,7 +1564,7 @@ function deploymentSitemapXml(origin: URL): string {
   const paths = [
     ...representativePaths,
     ...Array.from(
-      { length: 275 - representativePaths.length },
+      { length: 276 - representativePaths.length },
       (_, index) => `/life/deployment-smoke-${index}`,
     ),
   ];
