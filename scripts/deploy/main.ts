@@ -1298,9 +1298,41 @@ function parseProductionEnvironmentPage(output: string): {
   next: number | null;
 } {
   const parsed = parseJsonObject(output, "Vercel Production environment API");
+  if (!Array.isArray(parsed.envs)) {
+    throw new Error(
+      "Vercel Production environment API returned invalid pagination.",
+    );
+  }
   const pagination = parsed.pagination;
+  const hiddenProductionEnvCount = parsed.hiddenProductionEnvCount;
+  const hasPagination = pagination !== undefined;
+  const hasHiddenProductionEnvCount = hiddenProductionEnvCount !== undefined;
+  if (hasPagination === hasHiddenProductionEnvCount) {
+    throw new Error(
+      "Vercel Production environment API returned invalid pagination.",
+    );
+  }
+  if (hasHiddenProductionEnvCount) {
+    if (
+      !Number.isSafeInteger(hiddenProductionEnvCount) ||
+      (hiddenProductionEnvCount as number) < 0
+    ) {
+      throw new Error(
+        "Vercel Production environment API returned invalid pagination.",
+      );
+    }
+    if ((hiddenProductionEnvCount as number) > 0) {
+      throw new Error(
+        "Vercel Production environment API hid one or more Production variables; the allowlist audit cannot continue.",
+      );
+    }
+    return {
+      audit: parseProductionEnvironmentAudit(output),
+      count: parsed.envs.length,
+      next: null,
+    };
+  }
   if (
-    !Array.isArray(parsed.envs) ||
     !isRecord(pagination) ||
     !Number.isSafeInteger(pagination.count) ||
     (pagination.count as number) < 0 ||

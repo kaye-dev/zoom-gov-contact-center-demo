@@ -684,6 +684,131 @@ test("Production environment audit follows pagination and rejects a forbidden se
   assert.equal(new URL(requests[1]!, "https://api.vercel.test").searchParams.get("until"), "200");
 });
 
+test("Production environment audit accepts the complete hidden-count response variant", () => {
+  const link = { orgId: "team_abc123", projectId: "prj_abc123" };
+  let requestCount = 0;
+  const runner: CommandRunner = {
+    run(command, arguments_) {
+      assert.equal(command, "vercel");
+      requestCount += 1;
+      const endpoint = arguments_[1];
+      assert.ok(endpoint);
+      if (endpoint.startsWith("/v10/projects/")) {
+        return {
+          status: 0,
+          stderr: "",
+          stdout: JSON.stringify({
+            envs: [
+              {
+                key: "DATABASE_URL",
+                type: "sensitive",
+                target: ["production"],
+              },
+              {
+                key: "BETTER_AUTH_SECRET",
+                type: "sensitive",
+                target: ["production"],
+              },
+              {
+                key: "BETTER_AUTH_URL",
+                type: "encrypted",
+                target: ["production"],
+              },
+              {
+                key: "BETTER_AUTH_TRUSTED_ORIGINS",
+                type: "encrypted",
+                target: ["production"],
+              },
+              {
+                key: "BETTER_AUTH_TRUST_PROXY_HEADERS",
+                type: "encrypted",
+                target: ["production"],
+              },
+              {
+                key: "APP_CANONICAL_ORIGIN",
+                type: "encrypted",
+                target: ["production"],
+              },
+            ],
+            hiddenProductionEnvCount: 0,
+          }),
+        };
+      }
+      assert.match(endpoint, /^\/v1\/env\?/u);
+      return {
+        status: 0,
+        stderr: "",
+        stdout: JSON.stringify({
+          data: [],
+          pagination: { count: 0, next: null, prev: null },
+        }),
+      };
+    },
+  };
+
+  assert.doesNotThrow(() =>
+    assertProductionEnvironmentReady(runner, link, { NODE_ENV: "test" }),
+  );
+  assert.equal(requestCount, 2);
+});
+
+test("Production environment audit fails closed when variables are hidden", () => {
+  const link = { orgId: "team_abc123", projectId: "prj_abc123" };
+  let requestCount = 0;
+  const runner: CommandRunner = {
+    run() {
+      requestCount += 1;
+      return {
+        status: 0,
+        stderr: "",
+        stdout: JSON.stringify({
+          envs: [],
+          hiddenProductionEnvCount: 1,
+        }),
+      };
+    },
+  };
+
+  assert.throws(
+    () => assertProductionEnvironmentReady(runner, link, { NODE_ENV: "test" }),
+    /hid one or more Production variables/u,
+  );
+  assert.equal(requestCount, 1);
+});
+
+test("Production environment audit rejects malformed response variants", () => {
+  const link = { orgId: "team_abc123", projectId: "prj_abc123" };
+  for (const response of [
+    { envs: [] },
+    {
+      envs: [],
+      pagination: { count: 0, next: null, prev: null },
+      hiddenProductionEnvCount: 0,
+    },
+    { envs: [], hiddenProductionEnvCount: -1 },
+    { envs: [], hiddenProductionEnvCount: 0.5 },
+    { envs: [], hiddenProductionEnvCount: "0" },
+  ]) {
+    let requestCount = 0;
+    const runner: CommandRunner = {
+      run() {
+        requestCount += 1;
+        return {
+          status: 0,
+          stderr: "",
+          stdout: JSON.stringify(response),
+        };
+      },
+    };
+
+    assert.throws(
+      () => assertProductionEnvironmentReady(runner, link, { NODE_ENV: "test" }),
+      /invalid pagination/u,
+    );
+    assert.equal(requestCount, 1);
+  }
+});
+
 test("Production environment audit rejects a pagination cycle", () => {
   const link = { orgId: "team_abc123", projectId: "prj_abc123" };
   let requestCount = 0;
