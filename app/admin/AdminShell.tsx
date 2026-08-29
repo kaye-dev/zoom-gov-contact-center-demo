@@ -121,7 +121,7 @@ export function AdminShell({ children, visibleItems }: AdminShellProps) {
 
   return (
     <div className="min-h-screen bg-surface text-fg">
-      <header className="border-b border-line bg-surface-raised">
+      <header className="sticky top-0 z-50 border-b border-line bg-surface-raised">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-4 md:px-6">
           <Link
             href="/"
