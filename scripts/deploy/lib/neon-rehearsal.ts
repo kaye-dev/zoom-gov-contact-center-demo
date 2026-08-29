@@ -615,6 +615,14 @@ function assertOperationIdentity(
   expectedOperationId?: string,
 ): string {
   const operationId = operation.id;
+  const projectScopedOperation =
+    operation.action === "epc_sync" &&
+    operation.branch_id === undefined &&
+    operation.endpoint_id === undefined;
+  const rehearsalScopedOperation =
+    operation.branch_id === identity.branchId &&
+    (operation.endpoint_id === undefined ||
+      operation.endpoint_id === identity.endpointId);
   if (
     typeof operationId !== "string" ||
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
@@ -622,9 +630,7 @@ function assertOperationIdentity(
     ) ||
     (expectedOperationId !== undefined && operationId !== expectedOperationId) ||
     operation.project_id !== config.projectId ||
-    operation.branch_id !== identity.branchId ||
-    (operation.endpoint_id !== undefined &&
-      operation.endpoint_id !== identity.endpointId)
+    (!projectScopedOperation && !rehearsalScopedOperation)
   ) {
     throw new Error("The Neon rehearsal operation identity is invalid.");
   }

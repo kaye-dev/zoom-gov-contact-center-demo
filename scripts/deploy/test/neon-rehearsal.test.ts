@@ -35,6 +35,7 @@ const expectedBranchName =
 const createBranchOperationId = "11111111-1111-4111-8111-111111111111";
 const startComputeOperationId = "22222222-2222-4222-8222-222222222222";
 const deleteBranchOperationId = "33333333-3333-4333-8333-333333333333";
+const projectSyncOperationId = "44444444-4444-4444-8444-444444444444";
 
 type RecordedRequest = {
   url: URL;
@@ -54,6 +55,7 @@ type HarnessOptions = {
   initiallyDeleted?: boolean;
   paginateBranches?: boolean;
   readbackPendingState?: unknown;
+  projectSyncBranchId?: string;
 };
 
 function branch(
@@ -100,6 +102,19 @@ function operation(
     branch_id: childBranchId,
     ...(endpointOperation ? { endpoint_id: endpointId } : {}),
     action: endpointOperation ? "start_compute" : "create_branch",
+    status,
+  };
+}
+
+function projectSyncOperation(
+  status: string,
+  branchId?: string,
+): Record<string, unknown> {
+  return {
+    id: projectSyncOperationId,
+    project_id: config.projectId,
+    ...(branchId === undefined ? {} : { branch_id: branchId }),
+    action: "epc_sync",
     status,
   };
 }
@@ -178,6 +193,7 @@ function createHarness(options: HarnessOptions = {}) {
           branch: createdBranch,
           endpoints: [createdEndpoint],
           operations: [
+            projectSyncOperation("running", options.projectSyncBranchId),
             operation(createBranchOperationId, "running", false),
             operation(startComputeOperationId, "scheduling", true),
           ],
@@ -191,7 +207,9 @@ function createHarness(options: HarnessOptions = {}) {
     ) {
       const operationId = url.pathname.slice(url.pathname.lastIndexOf("/") + 1);
       const defaults =
-        operationId === createBranchOperationId
+        operationId === projectSyncOperationId
+          ? ["finished"]
+          : operationId === createBranchOperationId
           ? ["finished"]
           : operationId === startComputeOperationId
             ? ["finished"]
@@ -206,11 +224,14 @@ function createHarness(options: HarnessOptions = {}) {
       const status = statuses[Math.min(count, statuses.length - 1)];
       assert.ok(status);
       return Response.json({
-        operation: operation(
-          operationId,
-          status,
-          operationId === startComputeOperationId,
-        ),
+        operation:
+          operationId === projectSyncOperationId
+            ? projectSyncOperation(status, options.projectSyncBranchId)
+            : operation(
+                operationId,
+                status,
+                operationId === startComputeOperationId,
+              ),
       });
     }
     if (
@@ -485,6 +506,21 @@ test("create response may omit parent_lsn and ready readback may use pending_sta
     harness.dependencies,
   );
   assert.equal(result.parentLsn, parentLsn);
+});
+
+test("project-scoped epc_sync may omit resource IDs but cannot claim another branch", async () => {
+  const accepted = createHarness();
+  await createNeonRehearsal(config, apiKey, accepted.dependencies);
+
+  const rejected = createHarness({ projectSyncBranchId: "br-wrong-parent" });
+  await assert.rejects(
+    createNeonRehearsal(config, apiKey, rejected.dependencies),
+    /operation identity is invalid/u,
+  );
+  assert.equal(
+    rejected.requests.some(({ url }) => url.pathname.endsWith("/connection_uri")),
+    false,
+  );
 });
 
 test("injected clock and wait bound non-terminal failed operation polling", async () => {
