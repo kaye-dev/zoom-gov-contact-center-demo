@@ -11,6 +11,7 @@ const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(scriptDirectory, "../../../..");
 const phases = new Set(["smoke", "pre-edit", "affected", "final"]);
 const fullMatrixPhases = new Set(["pre-edit", "final"]);
+const matrixScopes = new Set(["targeted", "full"]);
 const actionTypes = new Set([
   "click",
   "press",
@@ -273,22 +274,37 @@ function selectRows({
   contract,
   changedTargetIds = [],
   changedStates = [],
+  changedViewports = [],
   risks = ["normal"],
+  matrixScope = "targeted",
 }) {
   ensure(phases.has(phase), `phase must be one of: ${[...phases].join(", ")}`);
-  if (fullMatrixPhases.has(phase)) return [...contract.parityMatrix];
+  ensure(matrixScopes.has(matrixScope), `matrixScope must be one of: ${[...matrixScopes].join(", ")}`);
+  if (matrixScope === "full") {
+    ensure(fullMatrixPhases.has(phase), "full matrix scope is allowed only for pre-edit or final");
+    return [...contract.parityMatrix];
+  }
+  if (fullMatrixPhases.has(phase)) {
+    ensure(
+      changedTargetIds.length > 0 && changedStates.length > 0,
+      "targeted pre-edit and final require explicit changed target and state selections",
+    );
+  }
   const normalizedRisks = requireUniqueStrings(risks, "risks");
   for (const risk of normalizedRisks) ensure(riskTags.has(risk), `unknown risk tag: ${risk}`);
   const { targets, states } = selectedScope(contract, changedTargetIds, changedStates);
+  const declaredViewports = new Set(contract.comparisonConditions.viewports);
+  const viewports = new Set(requireUniqueStrings(changedViewports, "changedViewports", { allowEmpty: true }));
+  for (const viewport of viewports) ensure(declaredViewports.has(viewport), `unknown changed viewport: ${viewport}`);
   const scopedRows = contract.parityMatrix.filter(
     ({ targetId, state }) => targets.has(targetId) && states.has(state),
-  );
+  ).filter(({ viewport }) => viewports.size === 0 || viewports.has(viewport));
   ensure(scopedRows.length > 0, "no parity rows match the changed target/state scope");
   const includeAllThemes = normalizedRisks.some((risk) => themeRiskTags.has(risk));
   const includeAllBreakpoints = normalizedRisks.some((risk) => responsiveRiskTags.has(risk));
   const fallbackTheme = scopedRows.some(({ theme }) => theme === "light") ? "light" : scopedRows[0].theme;
   const selected = scopedRows.filter((row) => includeAllThemes || row.theme === fallbackTheme);
-  if (includeAllBreakpoints) return selected;
+  if (includeAllBreakpoints || viewports.size > 0) return selected;
 
   const grouped = new Map();
   for (const row of selected) {
@@ -556,8 +572,23 @@ class BrowserParityRunner {
     }
   }
 
-  async run({ definition, phase, tabs, baseUrls, changedTargetIds, changedStates, risks, run }) {
+  async run({
+    definition,
+    phase,
+    tabs,
+    baseUrls,
+    changedTargetIds = [],
+    changedStates = [],
+    changedViewports = [],
+    risks = ["normal"],
+    matrixScope = "targeted",
+    run,
+  }) {
     const { contract, spec } = definition;
+    ensure(
+      phase === "smoke" || phase === "final",
+      "new Browser runs support only final-boundary smoke or final phases",
+    );
     requireLoopbackBaseUrl(baseUrls.production, "production");
     requireLoopbackBaseUrl(baseUrls.prototype, "prototype");
     const rows = selectRows({
@@ -565,7 +596,9 @@ class BrowserParityRunner {
       contract,
       changedTargetIds,
       changedStates,
+      changedViewports,
       risks,
+      matrixScope,
     });
     const probeById = new Map(spec.probes.map((probe) => [probe.id, probe]));
     const probeIdsByRow = new Map(spec.rowProbeMap.map(({ rowId, probeIds }) => [rowId, probeIds]));
@@ -585,13 +618,20 @@ class BrowserParityRunner {
       requiresNetwork,
     });
     const evidence = {
-      schemaVersion: 1,
+      schemaVersion: 3,
       phase,
       runId: run.runId,
       generatedAt: startedAt,
       goalSha256: run.goalSha256,
       prototypeRevision: definition.prototypeRevision,
       validationProfileDigest: definition.validationProfileDigest,
+      matrixScope,
+      selection: {
+        changedTargetIds,
+        changedStates,
+        changedViewports,
+        risks,
+      },
       runtime: run.runtime,
       sources: run.sources,
       capabilities: canary,
@@ -611,6 +651,19 @@ class BrowserParityRunner {
           dpr: contract.comparisonConditions.dpr,
           expectedScroll: contract.comparisonConditions.scroll,
         });
+        const productionProbeResults = new Map();
+        for (const probeId of probeIdsByRow.get(row.id)) {
+          productionProbeResults.set(
+            probeId,
+            await this.runProbe({
+              tabId: tabs.production,
+              row,
+              surface: "production",
+              probe: probeById.get(probeId),
+              networkSource: canary.networkSource,
+            }),
+          );
+        }
         const prototypeConditions = await this.prepareSurface({
           tabId: tabs.prototype,
           row,
@@ -620,6 +673,19 @@ class BrowserParityRunner {
           dpr: contract.comparisonConditions.dpr,
           expectedScroll: contract.comparisonConditions.scroll,
         });
+        const prototypeProbeResults = new Map();
+        for (const probeId of probeIdsByRow.get(row.id)) {
+          prototypeProbeResults.set(
+            probeId,
+            await this.runProbe({
+              tabId: tabs.prototype,
+              row,
+              surface: "prototype",
+              probe: probeById.get(probeId),
+              networkSource: canary.networkSource,
+            }),
+          );
+        }
         const rowEvidence = {
           rowId: row.id,
           status: "pass",
@@ -642,20 +708,8 @@ class BrowserParityRunner {
         };
         for (const probeId of probeIdsByRow.get(row.id)) {
           const probe = probeById.get(probeId);
-          const production = await this.runProbe({
-            tabId: tabs.production,
-            row,
-            surface: "production",
-            probe,
-            networkSource: canary.networkSource,
-          });
-          const prototype = await this.runProbe({
-            tabId: tabs.prototype,
-            row,
-            surface: "prototype",
-            probe,
-            networkSource: canary.networkSource,
-          });
+          const production = productionProbeResults.get(probeId);
+          const prototype = prototypeProbeResults.get(probeId);
           const comparison = compareProbe(probe, production, prototype);
           const artifacts = [production?.artifactPath, prototype?.artifactPath].filter(Boolean);
           rowEvidence.artifactPaths.push(...artifacts);
@@ -670,7 +724,7 @@ class BrowserParityRunner {
             durationMs: Date.now() - startedMs,
             shellCommands: Number.isInteger(run.shellCommands) && run.shellCommands >= 0 ? run.shellCommands : 0,
             browserOperations: this.operations,
-            fullMatrixRuns: fullMatrixPhases.has(phase) ? 1 : 0,
+            fullMatrixRuns: matrixScope === "full" ? 1 : 0,
           };
           throw new ParityRunError(`parity row failed: ${row.id}`, evidence);
         }
@@ -690,7 +744,7 @@ class BrowserParityRunner {
           durationMs: Date.now() - startedMs,
           shellCommands: Number.isInteger(run.shellCommands) && run.shellCommands >= 0 ? run.shellCommands : 0,
           browserOperations: this.operations,
-          fullMatrixRuns: fullMatrixPhases.has(phase) ? 1 : 0,
+          fullMatrixRuns: matrixScope === "full" ? 1 : 0,
         };
         throw new ParityRunError(`parity row could not be executed: ${row.id}`, evidence);
       }
@@ -701,7 +755,7 @@ class BrowserParityRunner {
       durationMs: Date.now() - startedMs,
       shellCommands: Number.isInteger(run.shellCommands) && run.shellCommands >= 0 ? run.shellCommands : 0,
       browserOperations: this.operations,
-      fullMatrixRuns: fullMatrixPhases.has(phase) ? 1 : 0,
+      fullMatrixRuns: matrixScope === "full" ? 1 : 0,
     };
     return evidence;
   }
@@ -921,6 +975,12 @@ function validateRowEvidence(rowEvidence, manifestRow, contract, expectedProbes)
 
 function validateParityEvidence(evidence, contract, spec) {
   if (spec) validateParitySpec(spec, contract);
+  ensure(isPlainObject(evidence), "parity evidence must be an object");
+  ensure(
+    evidence.schemaVersion === 1 || evidence.schemaVersion === 2 || evidence.schemaVersion === 3,
+    "parity evidence schemaVersion must be 1, 2, or 3",
+  );
+  const legacyFullMatrixEvidence = evidence.schemaVersion === 1;
   requireExactKeys(
     evidence,
     [
@@ -931,6 +991,7 @@ function validateParityEvidence(evidence, contract, spec) {
       "goalSha256",
       "prototypeRevision",
       "validationProfileDigest",
+      ...(legacyFullMatrixEvidence ? [] : ["matrixScope", "selection"]),
       "runtime",
       "sources",
       "capabilities",
@@ -939,13 +1000,53 @@ function validateParityEvidence(evidence, contract, spec) {
     ],
     "parity evidence",
   );
-  ensure(evidence.schemaVersion === 1, "parity evidence schemaVersion must be 1");
   ensure(phases.has(evidence.phase), "parity evidence phase is invalid");
+  if (evidence.schemaVersion === 3) {
+    ensure(
+      evidence.phase === "smoke" || evidence.phase === "final",
+      "parity evidence schemaVersion 3 supports only final-boundary smoke or final runs",
+    );
+  }
   requireNonEmptyString(evidence.runId, "parity evidence runId");
   requireTimestamp(evidence.generatedAt, "parity evidence generatedAt");
   requireSha256(evidence.goalSha256, "parity evidence goalSha256");
   requireSha256(evidence.prototypeRevision, "parity evidence prototypeRevision");
   requireSha256(evidence.validationProfileDigest, "parity evidence validationProfileDigest");
+  let matrixScope = "full";
+  let changedTargetIds = [];
+  let changedStates = [];
+  let changedViewports = [];
+  let risks = ["normal"];
+  if (legacyFullMatrixEvidence) {
+    ensure(
+      fullMatrixPhases.has(evidence.phase),
+      "legacy parity evidence is supported only for pre-edit and final full-matrix runs",
+    );
+  } else {
+    ensure(matrixScopes.has(evidence.matrixScope), "parity evidence matrixScope is invalid");
+    matrixScope = evidence.matrixScope;
+    requireExactKeys(
+      evidence.selection,
+      ["changedTargetIds", "changedStates", "changedViewports", "risks"],
+      "parity evidence selection",
+    );
+    changedTargetIds = requireUniqueStrings(
+      evidence.selection.changedTargetIds,
+      "parity evidence selection.changedTargetIds",
+      { allowEmpty: true },
+    );
+    changedStates = requireUniqueStrings(
+      evidence.selection.changedStates,
+      "parity evidence selection.changedStates",
+      { allowEmpty: true },
+    );
+    changedViewports = requireUniqueStrings(
+      evidence.selection.changedViewports,
+      "parity evidence selection.changedViewports",
+      { allowEmpty: true },
+    );
+    risks = requireUniqueStrings(evidence.selection.risks, "parity evidence selection.risks");
+  }
   ensure(isPlainObject(evidence.runtime), "parity evidence runtime must be an object");
   ensure(Array.isArray(evidence.sources), "parity evidence sources must be an array");
   ensure(
@@ -985,8 +1086,8 @@ function validateParityEvidence(evidence, contract, spec) {
     );
   }
   ensure(
-    evidence.metrics.fullMatrixRuns === (fullMatrixPhases.has(evidence.phase) ? 1 : 0),
-    "metrics.fullMatrixRuns does not match the phase",
+    evidence.metrics.fullMatrixRuns === (matrixScope === "full" ? 1 : 0),
+    "metrics.fullMatrixRuns does not match matrixScope",
   );
   const rowIds = evidence.rows.map(({ rowId }) => rowId);
   ensure(new Set(rowIds).size === rowIds.length, "parity evidence row IDs must be unique");
@@ -996,13 +1097,19 @@ function validateParityEvidence(evidence, contract, spec) {
     evidence.rows.every(({ status }) => status === "pass" || status === "fail"),
     "executed parity evidence rows must be pass or fail",
   );
-  if (fullMatrixPhases.has(evidence.phase)) {
-    const expected = contract.parityMatrix.map(({ id }) => id).sort();
-    ensure(
-      JSON.stringify([...rowIds].sort()) === JSON.stringify(expected),
-      "pre-edit and final evidence must contain every manifest row exactly once",
-    );
-  }
+  const expected = selectRows({
+    phase: evidence.phase,
+    contract,
+    changedTargetIds,
+    changedStates,
+    changedViewports,
+    risks,
+    matrixScope,
+  }).map(({ id }) => id).sort();
+  ensure(
+    JSON.stringify([...rowIds].sort()) === JSON.stringify(expected),
+    "parity evidence rows do not match its declared selection",
+  );
   const probesByRow = spec
     ? new Map(
         spec.rowProbeMap.map(({ rowId, probeIds }) => [
@@ -1019,17 +1126,43 @@ function validateParityEvidence(evidence, contract, spec) {
 
 function validateEvidenceBundle({ approval, preEdit, implementation, contract, spec, current }) {
   validateApprovalEvidence(approval);
-  validateParityEvidence(preEdit, contract, spec);
   validateParityEvidence(implementation, contract, spec);
-  ensure(preEdit.phase === "pre-edit", "pre-edit evidence has the wrong phase");
   ensure(implementation.phase === "final", "implementation evidence has the wrong phase");
-  ensure(
-    preEdit.rows.every(({ status }) => status === "pass") &&
+  if (implementation.schemaVersion === 3) {
+    ensure(preEdit === undefined, "schemaVersion 3 completion evidence must not include pre-edit parity");
+    ensure(
       implementation.rows.every(({ status }) => status === "pass"),
-    "pre-edit and final evidence must contain only passing rows",
-  );
+      "final evidence must contain only passing rows",
+    );
+  } else {
+    ensure(preEdit !== undefined, "legacy evidence requires pre-edit parity");
+    validateParityEvidence(preEdit, contract, spec);
+    ensure(preEdit.phase === "pre-edit", "pre-edit evidence has the wrong phase");
+    ensure(preEdit.schemaVersion === implementation.schemaVersion, "pre-edit and final schemaVersion must match");
+    const preEditScope = preEdit.schemaVersion === 1 ? "full" : preEdit.matrixScope;
+    const implementationScope = implementation.schemaVersion === 1 ? "full" : implementation.matrixScope;
+    ensure(preEditScope === implementationScope, "pre-edit and final matrixScope must match");
+    const legacySelection = {
+      changedTargetIds: [],
+      changedStates: [],
+      changedViewports: [],
+      risks: ["normal"],
+    };
+    const preEditSelection = preEdit.schemaVersion === 1 ? legacySelection : preEdit.selection;
+    const implementationSelection = implementation.schemaVersion === 1 ? legacySelection : implementation.selection;
+    ensure(
+      JSON.stringify(stableNormalize(preEditSelection)) ===
+        JSON.stringify(stableNormalize(implementationSelection)),
+      "pre-edit and final selections must match",
+    );
+    ensure(
+      preEdit.rows.every(({ status }) => status === "pass") &&
+        implementation.rows.every(({ status }) => status === "pass"),
+      "pre-edit and final evidence must contain only passing rows",
+    );
+  }
   for (const field of ["runId", "goalSha256", "prototypeRevision", "validationProfileDigest"]) {
-    ensure(preEdit[field] === approval[field], `pre-edit ${field} does not match approval`);
+    if (preEdit) ensure(preEdit[field] === approval[field], `pre-edit ${field} does not match approval`);
     ensure(implementation[field] === approval[field], `final ${field} does not match approval`);
   }
   for (const field of ["goalSha256", "prototypeRevision", "validationProfileDigest"]) {
@@ -1045,7 +1178,7 @@ function validateEvidenceBundle({ approval, preEdit, implementation, contract, s
       JSON.stringify(stableNormalize(current.runtime)),
     "final evidence invalidated by current runtime conditions",
   );
-  return { approval, preEdit, implementation };
+  return preEdit ? { approval, preEdit, implementation } : { approval, implementation };
 }
 
 async function writeRunEvidence({ repositoryRootPath = repositoryRoot, slug, runId, name, evidence }) {
@@ -1084,7 +1217,14 @@ function parseCliArguments(argv) {
   ensure(argv.length >= 2, "usage: parity-runner.mjs <validate|select> plans/<slug>/prototype [options]");
   const [command, target, ...rest] = argv;
   ensure(command === "validate" || command === "select", "command must be validate or select");
-  const options = { phase: "smoke", changedTargetIds: [], changedStates: [], risks: ["normal"] };
+  const options = {
+    phase: "smoke",
+    changedTargetIds: [],
+    changedStates: [],
+    changedViewports: [],
+    risks: ["normal"],
+    matrixScope: "targeted",
+  };
   for (let index = 0; index < rest.length; index += 1) {
     const argument = rest[index];
     const value = rest[index + 1];
@@ -1092,6 +1232,8 @@ function parseCliArguments(argv) {
     if (argument === "--phase") options.phase = value;
     else if (argument === "--target") options.changedTargetIds.push(value);
     else if (argument === "--state") options.changedStates.push(value);
+    else if (argument === "--viewport") options.changedViewports.push(value);
+    else if (argument === "--matrix-scope") options.matrixScope = value;
     else if (argument === "--risk") {
       if (options.risks.length === 1 && options.risks[0] === "normal") options.risks = [];
       options.risks.push(value);

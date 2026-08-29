@@ -47,7 +47,7 @@ test("templateはgoal設計とinvocation approvalだけを持ちmutable parity�
   assert.doesNotMatch(template, /metadata|lifecycle status|task表|G0[1-6]|進捗|実行記録|draft|final/iu);
 });
 
-test("planとcriticはfeedback loopをsmokeで回しfull matrixとplan-time approvalを要求しない", async () => {
+test("planとcriticはauthoring後の返却直前にsmokeを1回だけ行う", async () => {
   const [plan, critic, quality, goalQuality, parityReference] = await Promise.all([
     read(".agents/skills/plan/SKILL.md"),
     read(".agents/skills/plan-critic/SKILL.md"),
@@ -67,6 +67,9 @@ test("planとcriticはfeedback loopをsmokeで回しfull matrixとplan-time appr
   }
   assert.match(plan, /user can give feedback|user.*feedback/iu);
   assert.match(plan, /Browser unavailability does not block a reviewable plan/);
+  assert.match(plan, /Do not open the Browser while authoring/);
+  assert.match(plan, /otherwise ready to return/);
+  assert.match(critic, /run one final smoke immediately before returning/);
   assert.match(critic, /fresh no-history subagent/);
   assert.match(critic, /There is no plan-time approval state to reset/);
   assert.match(quality, /Prepare iterative review/);
@@ -77,7 +80,7 @@ test("planとcriticはfeedback loopをsmokeで回しfull matrixとplan-time appr
   assert.match(parityReference, /responsive.*shell.*navigation.*layout/);
 });
 
-test("implementはinvocation approval、構造化証跡、pre-edit/final各1回を要求する", async () => {
+test("implementはinvocation approval後にBrowserを使わず実装し完了直前のfinalだけを要求する", async () => {
   const [implement, workflow, devServer, agents] = await Promise.all([
     read(".agents/skills/implement/SKILL.md"),
     read("docs/development/codex-development-workflow.md"),
@@ -87,21 +90,34 @@ test("implementはinvocation approval、構造化証跡、pre-edit/final各1回�
   for (const contract of [implement, workflow, devServer, agents]) {
     assert.match(contract, /\$implement/);
     assert.match(contract, /parity-spec\.json|validation profile/);
-    assert.match(contract, /pre-edit|production編集直前/);
     assert.match(contract, /final|最終/);
   }
   assert.match(implement, /explicit `\$implement` invocation is the approval basis/);
   assert.match(implement, /approval\.json/);
-  assert.match(implement, /pre-edit-parity\.json/);
   assert.match(implement, /implementation-parity\.json/);
-  assert.match(implement, /capability canary once/);
-  assert.match(implement, /stops before production editing/);
-  assert.match(implement, /phase `affected`/);
+  assert.match(implement, /one capability canary/);
+  assert.match(implement, /Start gate without Browser/);
+  assert.match(implement, /Browser availability is not a start gate/);
+  assert.match(implement, /Do not probe Browser capability/);
+  assert.match(implement, /Final Browser review/);
+  assert.match(implement, /schema version 3/);
+  assert.match(implement, /do not create `pre-edit-parity\.json`/);
+  assert.match(implement, /Do not run `affected` Browser rows/);
+  assert.match(implement, /Use `targeted` by default/);
+  assert.match(implement, /Use `full` only when/);
+  assert.match(implement, /one setup attempt plus one retry/);
+  assert.match(implement, /Do not create a substantial task-specific adapter or runtime shim/);
+  assert.match(implement, /Run the full test suite only when/);
+  assert.match(implement, /Run a production build only for/);
   assert.match(implement, /Any later related change invalidates it/);
   assert.match(implement, /Do not require a prior machine-parity field/);
   assert.match(implement, /do not request an extra approval message/);
-  assert.match(workflow, /pre-edit parityを1回/);
   assert.match(workflow, /final parityを1回/);
+  assert.match(workflow, /`targeted`を既定/);
+  assert.match(workflow, /大規模なadapterやruntime shimを新設・debugしない/);
+  assert.match(workflow, /不要な全test・buildを実行しない/);
+  assert.match(workflow, /pre-editとaffectedのBrowser実行が0回/);
+  assert.match(workflow, /完了直前のtargeted finalが1回/);
   assert.match(workflow, /巨大なpending一覧を作らない/);
 });
 
@@ -128,11 +144,13 @@ test("verified Compose webだけを確認なしで再起動しbuildとcleanupの
 test("reviewはstructured evidenceを先に検証して二つのpassを並行実行する", async () => {
   const review = await read(".agents/skills/review/SKILL.md");
   assert.match(review, /approval\.json/);
-  assert.match(review, /pre-edit-parity\.json/);
   assert.match(review, /implementation-parity\.json/);
+  assert.match(review, /schema-version-3/);
+  assert.match(review, /New runs do not require or create `pre-edit-parity\.json`/);
   assert.match(review, /structured scroll provenance/);
   assert.doesNotMatch(review, /natural-language scroll|自然言語.*scroll/iu);
   assert.match(review, /existing plan with only legacy goal\/Markdown evidence/);
+  assert.match(review, /schema version 1 and 2 as legacy read-only pre-edit\/final pairs/);
   assert.match(review, /Run both passes in parallel/);
   assert.match(review, /concurrently/);
   assert.match(review, /not the plan, conversation, evidence verdict, or prior review/);

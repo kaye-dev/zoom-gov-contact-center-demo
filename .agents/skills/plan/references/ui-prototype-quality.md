@@ -7,8 +7,8 @@ The production implementation must be able to replace simulated behavior with re
 ## Establish the baseline
 
 1. Identify the closest existing route and the shared shell that owns the planned screen.
-2. Before creating HTML, inspect that route in the Codex in-app Browser at desktop and 390×844. Confirm the runtime owner, URL, locale, and state so a stale process or different checkout is not treated as the baseline.
-3. Inspect the shell, page component, global styles and tokens, reusable controls, icon system, and affected responsive rules.
+2. Before creating HTML, inspect the shell, page component, global styles and tokens, reusable controls, icon system, and affected responsive rules from repository source. Do not open the Browser during authoring.
+3. Defer live-route inspection until the goal, prototype, CSS, contract/profile, revision, and static audit are otherwise complete. At that final boundary, confirm the runtime owner, URL, locale, and state so a stale process or different checkout is not treated as the baseline.
 4. Record the baseline route, source paths, viewport sizes, and preserved invariants in the goal's `UI契約`.
 
 Before comparing surfaces, record the values each surface actually reports:
@@ -93,13 +93,13 @@ For each state record rendered, removed, hidden, disabled, and inert elements; a
 
 ## Prepare iterative review
 
-Serve the artifact with `./dev-prototype.sh <slug>` and return its URL as soon as the goal, prototype, CSS build, contract/profile validation, revision, and representative smoke checks are ready. The user may review and give partial feedback repeatedly; do not delay that loop to perfect every matrix row.
+Serve the artifact with `./dev-prototype.sh <slug>` only after the goal, prototype, CSS build, contract/profile validation, revision, and static audit are ready. Run one representative Browser smoke immediately before returning its URL. The user may review and give partial feedback repeatedly; do not delay that loop to perfect every matrix row or use Browser checks while authoring.
 
 Keep the material UI contract in `plans/<slug>/prototype/ui-contract.json` and record exactly `approval contract: plans/<slug>/prototype/ui-contract.json — version 1` in the goal. Keep deterministic state setup and probes in `plans/<slug>/prototype/parity-spec.json` and record exactly `validation profile: plans/<slug>/prototype/parity-spec.json — version 1`. Read [parity-runner.md](parity-runner.md) for the schema and phase contract.
 
 The manifest records the complete baseline `sources`, runtime identity, actual comparison conditions, states, responsive boundaries, invariants, intentional deltas, targets, and immutable matrix rows. Populate `scroll.x` and `scroll.y` from actual `window.scrollX` and `window.scrollY`. The goal summarizes the same intent and coverage but references the manifest for the mechanical row list.
 
-After each CSS, contract, or profile change, recompute `prototype revision`, run `parity-runner.mjs validate`, and run only `smoke` for the changed target/state. Ordinary smoke covers representative desktop and 390×844 in light. Add both themes for theme/token/native-control changes, all affected boundaries for responsive/shell/navigation/layout changes, and interaction probes for dialog/menu/keyboard/focus changes. Browser unavailability is reported as unverified and does not trigger full-matrix work during planning.
+After each CSS, contract, or profile change, recompute `prototype revision` and run `parity-runner.mjs validate` without opening the Browser. When the candidate is otherwise ready to return, run one `smoke` selection for the changed target/state. Ordinary smoke covers representative desktop and 390×844 in light. Add both themes for theme/token/native-control changes, all affected boundaries for responsive/shell/navigation/layout changes, and interaction probes for dialog/menu/keyboard/focus changes. If that review causes a repair, invalidate it and run one replacement smoke only after the repair and static checks finish. Browser unavailability is reported as unverified and does not trigger full-matrix work during planning.
 
 For unchanged regions compare bounding rectangles and the computed properties that determine appearance: display, parent, grid or flex tracks, gap, padding, margin, size, font, border, radius, color, shadow, outline, opacity, disabled state, and visibility. Exact token and state mismatches fail. At most 1 CSS pixel is allowed only for raster or subpixel rounding.
 
@@ -109,4 +109,4 @@ Hard failures include mismatched comparison conditions, approximate handwritten 
 
 Create an immutable comparison-target inventory in `UI契約`. Give every target a stable unique ID, canonical prototype entry, canonical origin-relative production route, and surface or overlay; include `index.html`. Create the immutable parity matrix with complete coverage for every declared target, material state, breakpoint viewport, and theme combination. Give every row a stable unique ID and record only its target ID, matching entry/route/surface, state, exact viewport, theme, breakpoint ID, expected visual-invariant IDs, and intentional-difference IDs. Do not put results, dates, screenshots, pass/fail values, or evidence locations into the matrix or manifest.
 
-Mutable results never go in the goal, manifest, or profile. `$implement` invocation records approval and writes pre-edit/final JSON evidence under `plans/<slug>/evidence/<run-id>/`. Full parity is required once before the first production edit and once after the final related change; implementation iterations use only affected rows. Any unexplained difference, missing row, or condition drift fails the phase.
+Mutable results never go in the goal, manifest, or profile. `$implement` invocation records approval, defers Browser work until the completion candidate is otherwise ready, and writes one final JSON result under `plans/<slug>/evidence/<run-id>/implementation-parity.json`. `targeted` is the default for precisely bounded changes; `full` is reserved for prototype/contract, global style/token, shell layout/navigation structure, cross-breakpoint responsive, multiple unrelated targets, or explicit user/release requirements. New runs do not create pre-edit or affected Browser evidence. Any unexplained difference, missing selected row, or condition drift fails final review.

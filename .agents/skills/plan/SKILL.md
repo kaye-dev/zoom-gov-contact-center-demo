@@ -23,15 +23,15 @@ Write only the currently adopted design, evidence, interfaces, data flow, verifi
 
 For user-visible work:
 
-1. Inspect the closest live route, shared shell, components, tokens, themes, states, responsive behavior, DOM, and accessibility. Mock only data, persistence, authorization, and backend side effects.
+1. Inspect the closest repository source, shared shell, components, tokens, themes, states, responsive behavior, DOM, and accessibility. Mock only data, persistence, authorization, and backend side effects. Do not open the Browser while authoring.
 2. Create the full affected screen under `plans/<slug>/prototype/` using production Tailwind utilities and `app/globals.css`; build it with `build-prototype-css.mjs`.
 3. Create `ui-contract.json` version 1 and record exactly `approval contract: plans/<slug>/prototype/ui-contract.json — version 1`.
 4. Create `parity-spec.json` version 1 following [references/parity-runner.md](references/parity-runner.md), then record exactly `validation profile: plans/<slug>/prototype/parity-spec.json — version 1`.
 5. Compute and record the current `prototype revision` with `prototype-revision.mjs`. Keep exact mechanical rows in the manifest; summarize their intent and count in the goal.
-6. Run `parity-runner.mjs validate`, then use its `smoke` selection for the changed target/state. Ordinary smoke covers representative desktop and 390×844 in light. Add both themes for theme/token/native-control work, all affected boundaries for responsive/shell/navigation/layout work, and interaction probes for dialog/menu/keyboard/focus work.
-7. Serve the prototype and return its URL, current revision, smoke result, and unverified items so the user can give feedback. Browser unavailability does not block a reviewable plan; report it without claiming verification.
+6. Run `parity-runner.mjs validate` and complete the static final audit. Only after the goal and prototype are otherwise ready to return, open the closest live route and prototype in the Browser and run one `smoke` selection for the changed target/state. Ordinary smoke covers representative desktop and 390×844 in light. Add both themes for theme/token/native-control work, all affected boundaries for responsive/shell/navigation/layout work, and interaction probes for dialog/menu/keyboard/focus work.
+7. Serve the prototype and return its URL, current revision, final smoke result, and unverified items so the user can give feedback. Browser unavailability does not block a reviewable plan; report it without claiming verification.
 
-Do not run the complete matrix or request a separate UI approval during `$plan`. When feedback revises the same plan, update only the adopted goal/prototype, rebuild, recompute the revision, and rerun the affected smoke scope. A later explicit `$implement` invocation is the approval boundary.
+Do not use Browser checks as authoring steps. Do not run the complete matrix or request a separate UI approval during `$plan`. When feedback revises the same plan, update the adopted goal/prototype and finish all static work before one replacement final smoke. A later explicit `$implement` invocation is the approval boundary.
 
 For non-UI work, keep `UI変更: なし`, `prototype: なし`, `approval contract: なし`, `validation profile: なし`, `prototype revision: UI変更なし`, and `UI承認方式: UI変更なし`; do not create a prototype.
 

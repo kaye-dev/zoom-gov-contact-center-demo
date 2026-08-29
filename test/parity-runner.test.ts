@@ -184,8 +184,30 @@ test("phaseとrisk tagからsmoke・affected・全matrixを決定する", async 
   const responsive = selectRows({ phase: "affected", contract, risks: ["responsive"] });
   assert.equal(responsive.length, 4);
   assert.ok(responsive.every(({ theme: selectedTheme }: { theme: string }) => selectedTheme === "light"));
-  assert.equal(selectRows({ phase: "pre-edit", contract }).length, 8);
-  assert.equal(selectRows({ phase: "final", contract }).length, 8);
+  assert.throws(
+    () => selectRows({ phase: "pre-edit", contract }),
+    /require explicit changed target and state selections/u,
+  );
+  assert.equal(
+    selectRows({ phase: "pre-edit", contract, changedTargetIds: ["main"], changedStates: ["default"] }).length,
+    2,
+  );
+  assert.equal(
+    selectRows({ phase: "final", contract, changedTargetIds: ["main"], changedStates: ["default"] }).length,
+    2,
+  );
+  assert.equal(selectRows({ phase: "pre-edit", contract, matrixScope: "full" }).length, 8);
+  assert.equal(selectRows({ phase: "final", contract, matrixScope: "full" }).length, 8);
+
+  const mobileFocus = selectRows({
+    phase: "final",
+    contract,
+    changedTargetIds: ["main"],
+    changedStates: ["default"],
+    changedViewports: ["390x844"],
+    risks: ["focus"],
+  });
+  assert.deepEqual(mobileFocus.map(({ id }: { id: string }) => id), ["main-default-mobile-light"]);
 });
 
 test("DOM正規化はkey順を安定化しcomputed-hidden nodeを除外する", async () => {
@@ -281,6 +303,38 @@ test("network probeはPerformanceResourceTiming欠落時にBrowser logへfallbac
   );
 });
 
+test("runnerはrow内のprobeをsurface単位でbatchしてtab往復を増やさない", async () => {
+  const { BrowserParityRunner } = await parityModulePromise;
+  const switches: string[] = [];
+  let active = "";
+  const adapter = createAdapter({
+    async activateTab(tabId: string) {
+      if (active !== tabId) switches.push(tabId);
+      active = tabId;
+    },
+    async activeTabId() {
+      return active;
+    },
+  });
+  await new BrowserParityRunner(adapter).run({
+    definition: { contract, spec, prototypeRevision: revision, validationProfileDigest: digest },
+    phase: "final",
+    changedTargetIds: ["main"],
+    changedStates: ["default"],
+    changedViewports: ["390x844"],
+    risks: ["focus"],
+    tabs: { production: "production", prototype: "prototype" },
+    baseUrls: { production: "http://localhost:3000/", prototype: "http://127.0.0.1:4000/" },
+    run: {
+      runId: "run-batched",
+      goalSha256: digest,
+      runtime: { owner: "fixture", checkout: "/fixture" },
+      sources: [{ path: "src/ui.ts", sha256: digest }],
+    },
+  });
+  assert.deepEqual(switches, ["production", "prototype"]);
+});
+
 test("runnerは全rowを実行しscroll provenanceとmetricsを構造化する", async () => {
   const { BrowserParityRunner, validateParityEvidence } = await parityModulePromise;
   const evidence = await new BrowserParityRunner(createAdapter()).run({
@@ -290,7 +344,8 @@ test("runnerは全rowを実行しscroll provenanceとmetricsを構造化する",
       prototypeRevision: revision,
       validationProfileDigest: digest,
     },
-    phase: "pre-edit",
+    phase: "final",
+    matrixScope: "full",
     tabs: { production: "production", prototype: "prototype" },
     baseUrls: { production: "http://localhost:3000/", prototype: "http://127.0.0.1:4000/" },
     run: {
@@ -302,6 +357,7 @@ test("runnerは全rowを実行しscroll provenanceとmetricsを構造化する",
     },
   });
   assert.equal(evidence.rows.length, contract.parityMatrix.length);
+  assert.equal(evidence.schemaVersion, 3);
   assert.ok(evidence.rows.every(({ status }: { status: string }) => status === "pass"));
   assert.equal(
     evidence.rows[0].actualConditions.scroll.production.source,
@@ -311,6 +367,12 @@ test("runnerは全rowを実行しscroll provenanceとmetricsを構造化する",
   assert.equal(evidence.metrics.shellCommands, 3);
   assert.ok(evidence.metrics.durationMs >= 0);
   assert.equal(validateParityEvidence(evidence, contract, spec), evidence);
+
+  const legacyEvidence = clone(evidence);
+  legacyEvidence.schemaVersion = 1;
+  delete legacyEvidence.matrixScope;
+  delete legacyEvidence.selection;
+  assert.equal(validateParityEvidence(legacyEvidence, contract, spec), legacyEvidence);
 
   const wrongViewport = clone(evidence);
   wrongViewport.rows[0].actualConditions.viewport = "1024x768";
@@ -357,7 +419,7 @@ test("runnerは外部originを拒否してloopback surfaceだけを操作する"
   );
 });
 
-test("final evidence後のsource変更はbundleを失効させる", async () => {
+test("final-only evidenceはBrowser完了境界を検証し旧pre-edit pairもread-onlyで受け入れる", async () => {
   const {
     BrowserParityRunner,
     createApprovalEvidence,
@@ -367,15 +429,17 @@ test("final evidence後のsource変更はbundleを失効させる", async () => 
   const sources = [{ path: "src/ui.ts", sha256: digest }];
   const definition = { contract, spec, prototypeRevision: revision, validationProfileDigest: digest };
   const run = { runId: "run-bundle", goalSha256: digest, runtime, sources };
-  const runPhase = (phase: "pre-edit" | "final") =>
+  const runPhase = (phase: "final") =>
     new BrowserParityRunner(createAdapter()).run({
-      definition,
-      phase,
-      tabs: { production: "production", prototype: "prototype" },
+    definition,
+    phase,
+    changedTargetIds: ["main"],
+    changedStates: ["default"],
+    tabs: { production: "production", prototype: "prototype" },
       baseUrls: { production: "http://localhost:3000/", prototype: "http://127.0.0.1:4000/" },
       run,
     });
-  const [preEdit, implementation] = await Promise.all([runPhase("pre-edit"), runPhase("final")]);
+  const implementation = await runPhase("final");
   const approval = createApprovalEvidence({
     runId: run.runId,
     goalSha256: digest,
@@ -384,13 +448,29 @@ test("final evidence後のsource変更はbundleを失効させる", async () => 
   });
   const current = { goalSha256: digest, prototypeRevision: revision, validationProfileDigest: digest, runtime, sources };
   assert.equal(
-    validateEvidenceBundle({ approval, preEdit, implementation, contract, spec, current }).implementation,
+    validateEvidenceBundle({ approval, implementation, contract, spec, current }).implementation,
     implementation,
+  );
+
+  const legacyPreEdit = clone(implementation);
+  legacyPreEdit.schemaVersion = 2;
+  legacyPreEdit.phase = "pre-edit";
+  const legacyImplementation = clone(implementation);
+  legacyImplementation.schemaVersion = 2;
+  assert.equal(
+    validateEvidenceBundle({
+      approval,
+      preEdit: legacyPreEdit,
+      implementation: legacyImplementation,
+      contract,
+      spec,
+      current,
+    }).implementation,
+    legacyImplementation,
   );
   assert.throws(
     () => validateEvidenceBundle({
       approval,
-      preEdit,
       implementation,
       contract,
       spec,

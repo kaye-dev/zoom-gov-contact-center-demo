@@ -896,6 +896,13 @@ function ensureNoCompletionClaim(final) {
   );
 }
 
+function ensureNoCompletionStatus(final) {
+  ensure(
+    !/(?:タスク|作業|対応)\s*(?:は|が)?\s*(?:完了|終了)(?:しました|済み|です|[。\n]|$)|(?:all|task|work)\s+(?:is\s+)?(?:complete|done)|completed successfully/iu.test(final),
+    "implement claimed task completion without final Browser evidence",
+  );
+}
+
 function sha256Text(value) {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
@@ -1597,12 +1604,19 @@ async function writeReviewEvidence(repo, contract, revision) {
   const specText = await readFile(path.join(repo, `plans/${reviewUiSlug}/prototype/parity-spec.json`), "utf8");
   const spec = JSON.parse(specText);
   const shared = {
-    schemaVersion: 1,
+    schemaVersion: 3,
     runId,
     generatedAt: "2026-08-29T12:00:00+09:00",
     goalSha256: sha256Text(goalText),
     prototypeRevision: revision,
     validationProfileDigest: sha256Text(specText),
+    matrixScope: "full",
+    selection: {
+      changedTargetIds: [],
+      changedStates: [],
+      changedViewports: [],
+      risks: ["normal"],
+    },
     runtime: { owner: "eval fixture runtime", checkout: repo },
     sources: contract.productionBaseline.sources.map((source) => ({ path: source, sha256: sha256Text(source) })),
     capabilities: {
@@ -1636,20 +1650,15 @@ async function writeReviewEvidence(repo, contract, revision) {
   );
   await write(
     repo,
-    `plans/${reviewUiSlug}/evidence/${runId}/pre-edit-parity.json`,
-    `${JSON.stringify({
-      ...shared,
-      phase: "pre-edit",
-      rows: evidenceRows(contract, spec, { duplicateId: rowIds[0], extraId: "main-unauthorized-extra" }),
-    }, null, 2)}\n`,
-  );
-  await write(
-    repo,
     `plans/${reviewUiSlug}/evidence/${runId}/implementation-parity.json`,
     `${JSON.stringify({
       ...shared,
       phase: "final",
-      rows: evidenceRows(contract, spec, { omitId: rowIds.at(-1) }),
+      rows: evidenceRows(contract, spec, {
+        duplicateId: rowIds[0],
+        extraId: "main-unauthorized-extra",
+        omitId: rowIds.at(-1),
+      }),
     }, null, 2)}\n`,
   );
 }
@@ -1744,17 +1753,17 @@ async function reviewUiReportData(repo) {
             source: "conformance",
             severity: "major",
             title: "conformance-stale-revision",
-            body: `prototype-revision.mjsで再計算したcurrent revision ${currentRevision}に対し、approval.json、pre-edit-parity.json、implementation-parity.jsonはstale revision ${oldRevision}を指す。ui-contract.json manifestとのapproval bindingが失効している。`,
+            body: `prototype-revision.mjsで再計算したcurrent revision ${currentRevision}に対し、approval.jsonとimplementation-parity.jsonはstale revision ${oldRevision}を指す。ui-contract.json manifestとのapproval bindingが失効している。`,
             location: `plans/${reviewUiSlug}/goal.md@UI契約`,
-            recommendation: "新しい$implement invocationでapprovalを再取得し、全manifest rowをpre-edit/finalで再実行する。",
+            recommendation: "新しい$implement invocationでapprovalを再取得し、完了直前のfinal selectionを1回実行する。",
           },
           {
             source: "conformance",
             severity: "major",
             title: "conformance-current-run-row-set",
-            body: `plans/${reviewUiSlug}/evidence/review-run/pre-edit-parity.jsonはstale revision ${oldRevision}で、ui-contract.jsonの${firstRow}がduplicate、main-unauthorized-extraがextraであり、manifest全rowのexact setではない。scroll provenanceは構造化済みで自然言語説明を必要としない。`,
-            location: `plans/${reviewUiSlug}/evidence/review-run/pre-edit-parity.json:1`,
-            recommendation: "current-run pre-edit parityをcurrent revisionで全row一回ずつ再取得する。",
+            body: `plans/${reviewUiSlug}/evidence/review-run/implementation-parity.jsonはstale revision ${oldRevision}で、ui-contract.jsonの${firstRow}がduplicate、main-unauthorized-extraがextraであり、final selectionのexact setではない。scroll provenanceは構造化済みで自然言語説明を必要としない。`,
+            location: `plans/${reviewUiSlug}/evidence/review-run/implementation-parity.json:1`,
+            recommendation: "current revisionのfinal selectionを完了直前に1回だけ再取得する。",
           },
           {
             source: "conformance",
@@ -3362,25 +3371,26 @@ normalizeQueueLabelを追加する。
         uiGoal({ slug: "browser-gate", label: "after", revision, commit, checkout: repo }),
       );
     },
-    prompt: `$implement を .agents/skills/implement/SKILL.md から明示的に使用し、plans/browser-gate/goal.mdを実装してください。${browserUnavailable} Browser preflightが失敗する場合はproduction編集前に停止し、完了扱いにしないでください。`,
+    prompt: `$implement を .agents/skills/implement/SKILL.md から明示的に使用し、plans/browser-gate/goal.mdを実装してください。Browserは実装開始時や実装中に使わず、コード変更と静的検証が終わった完了直前だけ確認してください。${browserUnavailable} 最終Browser確認ができない場合は実装差分を保持し、未検証としてタスク完了扱いにしないでください。`,
     async grade(repo, final) {
-      ensure((await readFile(path.join(repo, "src/ui.txt"), "utf8")) === "before\n", "implement edited production without Browser preflight");
+      ensure((await readFile(path.join(repo, "src/ui.txt"), "utf8")) === "after\n", "implement did not edit production before the final Browser gate");
       ensure(/Browser|ブラウザ/u.test(final), "implement did not identify the Browser gate");
       ensure(/未検証|完了.{0,8}(?:でき|不可)|cannot.{0,8}complete|not complete|停止/iu.test(final), "implement claimed or implied completion without Browser");
-      ensureNoCompletionClaim(final);
+      ensureNoCompletionStatus(final);
       const approvalPath = await assertSingleApprovalEvidence(repo, "browser-gate");
-      await assertOnlyPaths(repo, [approvalPath]);
+      await assertOnlyPaths(repo, ["src/ui.txt", approvalPath]);
     },
     async simulate(repo) {
       await writeApprovalFixture(repo, "browser-gate");
-    },
-    async break(repo) {
       await writeFile(path.join(repo, "src/ui.txt"), "after\n");
     },
-    simulatedFinal: "明示的な$implement invocationからapproval.jsonを作成しました。Codexアプリ内Browserを利用できないためpre-edit parity前に停止し、productionは編集していません。",
+    async break(repo) {
+      await writeFile(path.join(repo, "src/ui.txt"), "before\n");
+    },
+    simulatedFinal: "明示的な$implement invocationからapproval.jsonを作成し、productionを完了候補まで編集しました。Codexアプリ内Browserを利用できないためfinal parityは未検証で、タスク完了にはしていません。",
     negativeFinals: [
-      "Codexアプリ内Browserを利用できないためproduction編集前に停止しましたが、production work is done。",
-      "Codexアプリ内Browserを利用できないため停止し、実装していません。ただし本番反映済みです。",
+      "Codexアプリ内Browserを利用できませんが、タスクは完了しました。",
+      "Final Browser確認は未検証ですが、all work is done。",
     ],
   },
   "review-ui-gate": {
@@ -3416,7 +3426,7 @@ normalizeQueueLabelを追加する。
         'document.documentElement.dataset.ready = "changed-after-approval";\n',
       );
     },
-    prompt: `$review を .agents/skills/review/SKILL.md から明示的に使用し、plans/${reviewUiSlug}/goal.mdに対する現在のHEAD対working tree差分をreviewしてください。${reviewUiSourcePath}のdiffはgoalの「UI変更: なし」を信用せず、rendered DOM・copy・accessibilityへの影響から独立分類してください。最初にprototype revisionとvalidation profile digestを再計算し、plans/${reviewUiSlug}/evidence/review-run/approval.json、pre-edit-parity.json、implementation-parity.jsonのschema、digest、全row set、status、構造化scroll provenanceを機械検証してください。自然言語によるscroll出所説明は要求しないでください。blind passには同じexact diffと必要なrepository contextだけを渡し、goal、会話、期待する指摘、conformance結果を渡さないでください。別のfresh conformance passにはgoal、同じdiff、prototype、ui-contract.json、parity-spec.jsonと上記構造化証跡を渡してください。二つのfresh no-history passは同じdiff snapshotから並行実行し、findingをsource=blind/conformanceのままplans/${reviewUiSlug}/review/のcanonical reportへ保存してください。missing、duplicate、extra、staleの各row/revision defectとUI誤分類はmajor findingとし、exact row IDとcurrent/recorded full revisionを記載してください。${browserUnavailable} HTML reportは生成し、Browser検証はunverifiedとして記録してください。Browser成功を推測せず、production、goal、prototype、evidence、Gitを変更しないでください。`,
+    prompt: `$review を .agents/skills/review/SKILL.md から明示的に使用し、plans/${reviewUiSlug}/goal.mdに対する現在のHEAD対working tree差分をreviewしてください。${reviewUiSourcePath}のdiffはgoalの「UI変更: なし」を信用せず、rendered DOM・copy・accessibilityへの影響から独立分類してください。最初にprototype revisionとvalidation profile digestを再計算し、plans/${reviewUiSlug}/evidence/review-run/approval.jsonとschema-version-3 implementation-parity.jsonのdigest、final row set、status、構造化scroll provenanceを機械検証してください。新規runにpre-edit parityを要求せず、自然言語によるscroll出所説明も要求しないでください。blind passには同じexact diffと必要なrepository contextだけを渡し、goal、会話、期待する指摘、conformance結果を渡さないでください。別のfresh conformance passにはgoal、同じdiff、prototype、ui-contract.json、parity-spec.jsonと上記構造化証跡を渡してください。二つのfresh no-history passは同じdiff snapshotから並行実行し、findingをsource=blind/conformanceのままplans/${reviewUiSlug}/review/のcanonical reportへ保存してください。missing、duplicate、extra、staleの各row/revision defectとUI誤分類はmajor findingとし、exact row IDとcurrent/recorded full revisionを記載してください。${browserUnavailable} HTML reportは生成し、Browser検証はunverifiedとして記録してください。Browser成功を推測せず、production、goal、prototype、evidence、Gitを変更しないでください。`,
     async grade(repo, final) {
       const reportRoot = path.join(repo, `plans/${reviewUiSlug}/review`);
       for (const asset of reviewReportAssets) {

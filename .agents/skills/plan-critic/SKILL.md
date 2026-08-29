@@ -18,13 +18,13 @@ Validate every finding against the authoritative bundle and repository evidence.
 
 ## Rewrite once
 
-Read `plans/template.md` and prepare a complete replacement. Write the goal once after any prototype repair, CSS build, contract/profile validation, revision calculation, and smoke checks finish. Preserve the six H1 headings, requirement closure, and only the adopted design. Do not add lifecycle state, progress, history, or separate draft/final files.
+Read `plans/template.md` and prepare a complete replacement. Finish prototype repair, CSS build, contract/profile validation, revision calculation, and the static audit before Browser work. Write the goal once as the adopted design, then run one final smoke immediately before returning the result. Preserve the six H1 headings and requirement closure. Do not add lifecycle state, progress, history, or separate draft/final files.
 
 For a repaired or newly reconstructed UI prototype:
 
 1. Synchronize `ui-contract.json` version 1 and `parity-spec.json` version 1 while preserving stable target, state, row, and probe IDs whose meaning did not change.
 2. Build CSS, validate both contracts, and recompute `prototype revision`.
-3. Run only risk-selected `smoke` rows for the changed target/state. Do not run the full matrix or create approval/pre-edit/final evidence.
+3. After every deterministic repair and static audit is complete, run one risk-selected `smoke` selection for the changed target/state. Do not use Browser checks while repairing. Do not run the full matrix or create approval/final evidence.
 4. If Browser verification is unavailable, report the smoke scope as unverified and still return the reviewable plan.
 
 Any prototype, manifest, or profile change creates a new revision. There is no plan-time approval state to reset; the next explicit `$implement` invocation approves the then-current goal and revision.

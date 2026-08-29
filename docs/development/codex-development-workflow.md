@@ -38,17 +38,17 @@ plan成果物のcleanupは、この流れとは別の明示操作として行う
 2. repository、runtime、code、testを確認し、UI変更時はclosest live UIも確認する。
 3. 自己完結した最終設計と`## 要件クロージャ`を`plans/<slug>/goal.md`へ書く。
 4. UI変更時は完成UI、`ui-contract.json`、`parity-spec.json`を作る。
-5. goalを監査し、UI変更時はCSS build、contract/profile validation、revision計算、影響scopeのsmokeを行う。
+5. goalを監査し、UI変更時はCSS build、contract/profile validation、revision計算を終えてから、返却直前に影響scopeのsmokeを1回行う。
 6. goal、prototype URL、revision、smoke結果、未確認事項を返す。
 
-フィードバックでは同じplanを最終設計として更新する。plan中は影響scopeのsmokeだけを再実行し、全matrixや承認状態は作らない。
+フィードバックでは同じplanを最終設計として更新する。Browserをauthoring中に使わず、静的作業が完了した返却直前に影響scopeのsmokeを1回だけ行う。全matrixや承認状態は作らない。
 
 ### `$plan-critic`
 
 1. 対象のgoal、prototype、contract、profileを特定する。
 2. freshな履歴なしsubagentで要件、設計、検証、UI parityを独立reviewする。
 3. 採用済み要件とlive evidenceから一意に直せる欠陥だけを修正する。
-4. goalを監査し、UI変更時はCSS build、contract/profile validation、revision再計算、影響scopeのsmokeを行う。
+4. goalを監査し、UI変更時はCSS build、contract/profile validation、revision再計算を終えてから、返却直前に影響scopeのsmokeを1回行う。
 5. 更新path、revision、smoke結果、修正内容、残るriskを返す。
 
 新しい製品判断または不足するlive evidenceが必要な場合だけユーザーへ確認する。全matrix、承認証跡、production変更は作らない。
@@ -56,14 +56,20 @@ plan成果物のcleanupは、この流れとは別の明示操作として行う
 ### `$implement`
 
 1. goal、prototype revision、validation profile digestを検証し、fresh runへ承認を記録する。
-2. UI変更時はruntime、process、container、checkout mount、source、比較条件のbaselineを記録する。
-3. production編集直前に全rowのpre-edit parityを1回実行する。
-4. goalとUI契約に従って実装し、変更中はaffected rowだけを確認する。
-5. 対象scopeのtest、lint、typecheck、build、diff checkを行う。
-6. 最後の関連変更後に全rowのfinal parityを1回実行し、最終証跡を書く。
-7. agent-ownedなbaseline差分だけをcleanupし、変更と検証結果を返す。
+2. UI変更時はBrowserを開かず、HEAD、checkout mount、source、contract、matrix scopeを静的に検証する。
+3. 影響target・state・viewportを特定し、`targeted`または`full`のmatrix scopeを固定する。
+4. goalとUI契約に従って実装し、Browserを使わず対象testで確認する。
+5. 変更riskに比例するtest、lint、typecheck、必要な場合だけbuild、diff checkを行う。
+6. 完了候補ができた最後にruntimeと比較条件を確認し、選択rowのfinal parityを1回実行する。
+7. schema version 3の最終証跡を書き、agent-ownedなbaseline差分だけをcleanupして結果を返す。
 
-明示的な`$implement`実行自体を現在のgoal、revision、profile digestへの承認とする。「承認します」という別回答やrevision転記は不要である。pre-editの失敗、drift、欠落rowはproduction差分0件のまま停止し、関連変更後の最終証跡は作り直す。
+明示的な`$implement`実行自体を現在のgoal、revision、profile digestへの承認とする。「承認します」という別回答やrevision転記は不要である。静的gateの失敗はproduction差分0件のまま停止する。Browser unavailable、final parity失敗、drift、欠落rowは完了扱いにせず、実装差分と未確認条件を報告する。
+
+`targeted`を既定とし、copy、局所的なcomponent挙動、accessibility、keyboard、focus、viewport固有の変更は影響rowだけを選ぶ。`full`はprototype・contract、global style・semantic token、共通shell layout・navigation構造、breakpointを横断するresponsive規則、複数の無関係target、または明示要求を変える場合だけ使う。共有componentであることやUI fileを編集したことだけを全matrixの理由にしない。
+
+pre-editとaffectedのBrowser phaseは新規runで実行しない。同じBrowser assertionをparity、追加sweep、個別manual checkで重複確認しない。既存adapterがなければ完了直前に選択rowをCodexアプリ内Browserで直接確認し、feature実装中に大規模なadapterやruntime shimを新設・debugしない。Browser plumbingは初回と1回のretryで止める。
+
+局所変更は対象testとlint、typecheck、diff checkを基本とする。全testは無関係suiteへ波及し得る場合または信頼できる対象testがない場合、production buildはroute、configuration、bundling、server boundaryを変える場合またはrepositoryの明示要件がある場合だけ行う。
 
 ### `$review`
 
@@ -129,26 +135,27 @@ plan中のsmokeは代表desktopと390×844を基本とし、theme/token/native c
 `$implement`はfreshな`plans/<slug>/evidence/<run-id>/`へ次を作る。
 
 - `approval.json`: goal digest、prototype revision、profile digest
-- `pre-edit-parity.json`: production編集直前の全row結果
-- `implementation-parity.json`: 最後の関連変更後の全row結果
+- `implementation-parity.json`: 完了候補の最後に選択rowで実行した結果
 
-executed rowは1回だけ記録し、statusは`pass`または`fail`とする。未実行はfile欠落で表し、巨大なpending一覧を作らない。scrollには`source: "window.scrollX/window.scrollY"`を残す。goal、prototype、contract/profile、source、fixture、authorization、query、route、Browser条件のdriftは承認または証跡を失効させる。
+新規parity fileはfinal-onlyのschema version 3とし、`matrixScope`とtarget・state・viewport・riskのselectionを記録する。`full`ならmanifest全row、`targeted`ならselectionから再計算したexact rowだけを含める。既存のschema version 1と2はlegacyなpre-edit/final pairとしてread-only検証し、暗黙に書き換えない。executed rowは1回だけ記録し、statusは`pass`または`fail`とする。未実行はfile欠落で表し、巨大なpending一覧を作らない。scrollには`source: "window.scrollX/window.scrollY"`を残す。goal、prototype、contract/profile、source、fixture、authorization、query、route、Browser条件のdriftは承認または証跡を失効させる。
 
 ### Runtime所有権
 
 1. port 3000と関連process、container、Compose、dependencyのbaselineとownerを記録する。
-2. 実アプリ`http://localhost:3000`とprototypeを正しいcheckout・条件でpreflightする。
-3. build前はidentityを再確認し、agent-owned runtimeだけを停止する。
-4. build後はruntime identityを再確認し、同じprototype processでfinal parityを行う。
+2. implementationと静的検証が終わるまでBrowserとprototype serverを起動しない。
+3. buildが必要な場合だけidentityを再確認し、agent-owned runtimeだけを停止する。
+4. 完了直前に実アプリとprototypeを正しいcheckout・条件で起動し、final parityを行う。
 5. 最終確認後はbaselineとの差分だけをcleanupする。
 
 記録にはPID、command、cwd、checkout mount、container ID、URL、fixture、authorizationを含める。新規routeやstale cacheでは、project・mount・`web` identityを再確認して`./dev-compose.sh restart web`だけを実行できる。他serviceやproject全体を停止しない。ユーザー所有dev serverはbuildのために停止せず、安全な隔離buildができなければblockedとする。広域な`docker compose down`や既存resourceの削除は行わない。
 
 ## Workflowの検証
 
-通常のcontract testは`npm test`、認証済みCodex CLIでのforward evalは`npm run eval:plan-skills`を使う。forward evalはplanの反復、invocation承認、pre-edit停止、drift、Browser unavailableなどのnegative caseも検証する。
+通常のcontract testは`npm test`、認証済みCodex CLIでのforward evalは`npm run eval:plan-skills`を使う。forward evalはplan返却直前のsmoke、invocation承認、targeted/full selection、静的gate停止、final Browser unavailable、driftなどのnegative caseも検証する。
 
 CLI evalはCodexアプリ内Browserを代替しない。runtime所有権、build、verified Compose `web` restart、live parity、cleanupの契約を変えた場合は、shipping前にCodex desktopで成功経路と停止経路をmanual確認する。
+
+局所的な2ファイル変更の評価では、task固有adapter/shimを作らないこと、pre-editとaffectedのBrowser実行が0回、完了直前のtargeted finalが1回、追加sweepが0回、不要な全test・buildを実行しないことを確認する。phase別経過時間、shell command数、Browser操作数、full matrix回数も記録し、検証量が変更riskへ比例していることを評価する。
 
 ## 権限とcleanup
 
