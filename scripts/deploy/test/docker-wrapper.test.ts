@@ -71,6 +71,46 @@ test("setup wrapper builds a non-empty argument array under Bash nounset", () =>
   );
 });
 
+test("interactive profile selection is passed to the setup container without --profile", () => {
+  const result = spawnSync(
+    "/bin/bash",
+    [
+      "-uc",
+      [
+        `source ${shellQuote(setupDeployAwsScript)}`,
+        "SETUP_RECONFIGURE=0",
+        'SETUP_ROTATE=""',
+        "select_aws_profile_by_index 4 default splai-dev splai-prd demo-keien-01",
+        "build_setup_container_arguments",
+        `printf '<%s>\\n' "\${SETUP_CONTAINER_ARGUMENTS[@]}"`,
+      ].join("\n"),
+    ],
+    { cwd: projectRoot, encoding: "utf8" },
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(
+    result.stdout,
+    [
+      "<node>",
+      "<--import>",
+      "<tsx>",
+      "<scripts/deploy/setup-aws.ts>",
+      "<--profile>",
+      "<demo-keien-01>",
+      "",
+    ].join("\n"),
+  );
+});
+
+test("setup wrapper verifies the selected AWS session before building the runner image", () => {
+  const source = readFileSync(setupDeployAwsScript, "utf8");
+  assert.match(
+    source,
+    /resolve_aws_profile "\$\{SETUP_REQUESTED_PROFILE\}"\s+read_aws_account_id\s+build_deploy_runner_image/,
+  );
+});
+
 test("AWS configuration stays read-only while CLI role cache uses tmpfs", () => {
   const deploySource = readFileSync(deployScript, "utf8");
   const setupSource = readFileSync(setupDeployAwsScript, "utf8");
@@ -208,6 +248,27 @@ test("missing selected profile fails without falling back", () => {
     );
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /does not exist\. No fallback profile was used/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("AWS authentication failure identifies the selected profile without exposing AWS stderr", () => {
+  const root = initializeWrapperFixture();
+  const syntheticAwsError = "synthetic-aws-auth-error-secret";
+  try {
+    const result = runFixture(
+      root,
+      [
+        "DEPLOY_AWS_PROFILE=demo-keien-01",
+        `run_aws_helper() { printf '%s\\n' ${shellQuote(syntheticAwsError)} >&2; return 255; }`,
+        "read_aws_account_id",
+      ].join("\n"),
+    );
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /profile 'demo-keien-01'/);
+    assert.match(result.stderr, /aws sso login --profile demo-keien-01/);
+    assert.ok(!result.stderr.includes(syntheticAwsError));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

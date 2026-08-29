@@ -161,6 +161,16 @@ list_aws_profiles() {
     configure list-profiles
 }
 
+select_aws_profile_by_index() {
+  local selection="$1"
+  shift
+  local profiles=("$@")
+  if [[ ! "${selection}" =~ ^[0-9]+$ || ${selection} -lt 1 || ${selection} -gt ${#profiles[@]} ]]; then
+    die "AWS profile selection is invalid."
+  fi
+  DEPLOY_AWS_PROFILE="${profiles[$((selection - 1))]}"
+}
+
 resolve_aws_profile() {
   local requested_profile="$1"
   local profiles_output
@@ -201,16 +211,14 @@ resolve_aws_profile() {
   local selection
   printf '> ' >&2
   IFS= read -r selection
-  if [[ ! "${selection}" =~ ^[0-9]+$ || ${selection} -lt 1 || ${selection} -gt ${#profiles[@]} ]]; then
-    die "AWS profile selection is invalid."
-  fi
-  DEPLOY_AWS_PROFILE="${profiles[$((selection - 1))]}"
+  select_aws_profile_by_index "${selection}" "${profiles[@]}"
 }
 
 read_aws_account_id() {
   local account_id
-  account_id="$(run_aws_helper sts get-caller-identity --query Account --output text --no-cli-pager)" || \
-    die "AWS authentication failed for profile '${DEPLOY_AWS_PROFILE}'. Refresh its SSO session and retry."
+  if ! account_id="$(run_aws_helper sts get-caller-identity --query Account --output text --no-cli-pager 2>/dev/null)"; then
+    die "AWS authentication failed for profile '${DEPLOY_AWS_PROFILE}'. If this profile uses IAM Identity Center (SSO), run 'aws sso login --profile ${DEPLOY_AWS_PROFILE}' and retry the original command."
+  fi
   [[ "${account_id}" =~ ^[0-9]{12}$ ]] || die "AWS STS returned an invalid account ID."
   if [[ -n "${DEPLOY_EXPECTED_AWS_ACCOUNT_ID}" && "${account_id}" != "${DEPLOY_EXPECTED_AWS_ACCOUNT_ID}" ]]; then
     die "The selected AWS account changed between deployment phases."

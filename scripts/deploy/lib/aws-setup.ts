@@ -602,13 +602,20 @@ function readCallerIdentity(
   runner: CommandRunner,
   profile: string,
 ): { accountId: string; arn: string } {
-  const response = runAwsJson(
-    runner,
-    profile,
-    ["sts", "get-caller-identity"],
-    "AWS caller identity check",
-  );
+  const result = runAws(runner, profile, ["sts", "get-caller-identity"]);
+  if (result.status !== 0) {
+    throw new Error(
+      `AWS authentication failed for profile '${profile}'. If this profile uses IAM Identity Center (SSO), run 'aws sso login --profile ${profile}' and retry the original command.`,
+    );
+  }
+  let response: unknown;
+  try {
+    response = JSON.parse(result.stdout) as unknown;
+  } catch {
+    throw new Error("AWS caller identity check returned invalid JSON.");
+  }
   if (
+    !isRecord(response) ||
     typeof response.Account !== "string" ||
     !/^\d{12}$/.test(response.Account) ||
     typeof response.Arn !== "string" ||

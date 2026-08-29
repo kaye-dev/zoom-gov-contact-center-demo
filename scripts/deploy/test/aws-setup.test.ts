@@ -128,6 +128,7 @@ class AwsSetupRunner implements CommandRunner {
   aliasPresent: boolean;
   rotationEnabled: boolean;
   rotationPeriodInDays?: number;
+  readonly callerIdentityFailure: CommandResult | undefined;
 
   constructor(
     options: {
@@ -137,6 +138,7 @@ class AwsSetupRunner implements CommandRunner {
       rotationEnabled?: boolean;
       rotationPeriodInDays?: number;
       redactWith?: SecretRegistry;
+      callerIdentityFailure?: CommandResult;
     } = {},
   ) {
     for (const [name, parameter] of options.parameters ?? []) {
@@ -148,6 +150,7 @@ class AwsSetupRunner implements CommandRunner {
     this.rotationPeriodInDays =
       options.rotationPeriodInDays ?? (this.rotationEnabled ? 365 : undefined);
     this.redactWith = options.redactWith;
+    this.callerIdentityFailure = options.callerIdentityFailure;
   }
 
   private readonly redactWith: SecretRegistry | undefined;
@@ -162,6 +165,9 @@ class AwsSetupRunner implements CommandRunner {
     const service = arguments_[0];
     const operation = arguments_[1];
     if (service === "sts" && operation === "get-caller-identity") {
+      if (this.callerIdentityFailure !== undefined) {
+        return this.callerIdentityFailure;
+      }
       return jsonSuccess({
         Account: accountId,
         Arn: `arn:aws:sts::${accountId}:assumed-role/setup/test`,
@@ -507,6 +513,35 @@ function strictProviderFetch(
     return providerFetch(input, init);
   };
 }
+
+test("caller identity failure identifies the selected profile without exposing AWS stderr", async () => {
+  const syntheticAwsError = "synthetic-container-aws-auth-error-secret";
+  const runner = new AwsSetupRunner({
+    callerIdentityFailure: {
+      status: 255,
+      stdout: "",
+      stderr: `UnauthorizedSSOTokenError: ${syntheticAwsError}`,
+    },
+  });
+
+  await assert.rejects(
+    runAwsSetup(
+      runner,
+      new SetupPrompter(),
+      new SecretRegistry(),
+      { profile: "demo-keien-01", reconfigure: false },
+      providerFetch,
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /profile 'demo-keien-01'/);
+      assert.match(error.message, /aws sso login --profile demo-keien-01/);
+      assert.ok(!error.message.includes(syntheticAwsError));
+      return true;
+    },
+  );
+  assert.equal(runner.calls.length, 1);
+});
 
 test("orphan SecureString stops before KMS or SSM writes", async () => {
   const parameters = new Map<string, StoredParameter>([

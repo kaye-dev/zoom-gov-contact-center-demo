@@ -61,6 +61,7 @@ main_setup() {
   require_host_tools
   require_clean_worktree
   resolve_aws_profile "${SETUP_REQUESTED_PROFILE}"
+  read_aws_account_id
   build_deploy_runner_image
   aws_directory="$(prepare_aws_host_directory)"
   build_setup_container_arguments

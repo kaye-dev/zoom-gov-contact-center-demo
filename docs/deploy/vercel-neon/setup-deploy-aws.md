@@ -41,7 +41,13 @@ Neonのpooled / direct connection stringは保存しません。deployの各phas
 
 Node.js、npm、Vercel CLI、Neon CLIをhostへインストールする必要はありません。deploy runner image内の固定versionを使います。
 
-AWS IAM Identity Center sessionが失効している場合は、ブラウザまたはdevice authorizationで再loginします。SSO session cacheは`~/.aws/sso/cache`にあり、tokenや一時credentialをリポジトリへコピーしません。[AWS CLIのIAM Identity Center認証](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sso.html)も参照してください。
+AWS IAM Identity Center sessionが失効している場合は、使用するprofileを明示してブラウザまたはdevice authorizationで再loginします。
+
+```bash
+aws sso login --profile <AWS_PROFILE_NAME>
+```
+
+SSO session cacheは`~/.aws/sso/cache`にあり、tokenや一時credentialをリポジトリへコピーしません。[AWS CLIのIAM Identity Center認証](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sso.html)も参照してください。
 
 local wrapperは`~/.aws`をread-onlyでcontainerへmountします。AWS CLIがrole session用に必要とする`~/.aws/cli/cache`だけは、hostへcredentialを書き戻さない揮発性tmpfsで覆い、container終了時に破棄します。mountpointがない場合は、秘密値を含まない空ディレクトリをmode `0700`でhostに作成します。
 
@@ -85,13 +91,15 @@ connection stringを事前にコピーする必要はありません。setupとd
 
 ## 3. 初回setupを実行する
 
-リポジトリルートで、利用するAWS profileを明示して実行します。
+リポジトリルートで実行します。profileが`.env`に保存されていない対話terminalでは、一覧から選択します。
 
 ```bash
-./setup-deploy-aws.sh --profile <AWS_PROFILE_NAME>
+./setup-deploy-aws.sh
 ```
 
-profileを省略した場合は、`.env`の`DEPLOY_AWS_PROFILE`を使用します。それもない対話terminalでは利用可能なprofileから選択します。非対話実行でprofileを決定できない場合は停止します。
+profileを省略した場合は、`.env`の`DEPLOY_AWS_PROFILE`を使用します。それもない対話terminalでは利用可能なprofileから選択します。特定profileをその回だけ固定する場合は`--profile <AWS_PROFILE_NAME>`を使います。非対話実行でprofileを決定できない場合は停止します。
+
+setupはprofile解決直後にSTS認証を確認し、失敗した場合はdeploy runner imageをbuildしません。SSO profileの場合はerrorに表示された`aws sso login --profile <AWS_PROFILE_NAME>`を実行し、元のcommandを再実行します。対話選択を使う場合、再実行時も`--profile`は必要ありません。
 
 setupは4件のparameterを確認し、次の3状態のいずれかとして開始します。
 
