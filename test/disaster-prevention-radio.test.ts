@@ -217,12 +217,57 @@ test('DR-09 mobile menu focus lifecycle', () => {
     mobileMenuSource,
     /const closeButtonRef = useRef<HTMLButtonElement>\(null\)/,
   );
+  assert.match(
+    mobileMenuSource,
+    /const dialogRef = useRef<HTMLDivElement>\(null\)/,
+  );
   assert.match(mobileMenuSource, /ref=\{closeButtonRef\}/);
+  assert.match(mobileMenuSource, /ref=\{dialogRef\}/);
   assert.match(
     mobileMenuSource,
     /closeButton\?\.isConnected\) closeButton\.focus\(\)/,
   );
-  assert.match(mobileMenuSource, /if \(e\.key === 'Escape'\) onClose\(\)/);
+  assert.match(mobileMenuSource, /if \(e\.key === 'Escape'\) \{/);
+  assert.match(mobileMenuSource, /if \(e\.key !== 'Tab'\) return/);
+  assert.match(mobileMenuSource, /'a\[href\]'/);
+  assert.match(mobileMenuSource, /'button:not\(\[disabled\]\)'/);
+  assert.match(mobileMenuSource, /'input:not\(\[disabled\]\)'/);
+  assert.match(mobileMenuSource, /'select:not\(\[disabled\]\)'/);
+  assert.match(mobileMenuSource, /'textarea:not\(\[disabled\]\)'/);
+  assert.match(
+    mobileMenuSource,
+    /'\[tabindex\]:not\(\[tabindex="-1"\]\)'/,
+  );
+  assert.match(
+    mobileMenuSource,
+    /dialog\.querySelectorAll<HTMLElement>\(FOCUSABLE_SELECTOR\)/,
+  );
+  assert.match(mobileMenuSource, /element\.getClientRects\(\)\.length > 0/);
+  assert.match(
+    mobileMenuSource,
+    /element\.getAttribute\('aria-hidden'\) !== 'true'/,
+  );
+  assert.match(mobileMenuSource, /if \(tabbableElements\.length === 0\)/);
+  assert.match(mobileMenuSource, /const firstElement = tabbableElements\[0\]/);
+  assert.match(
+    mobileMenuSource,
+    /const lastElement = tabbableElements\[tabbableElements\.length - 1\]/,
+  );
+  assert.match(
+    mobileMenuSource,
+    /const focusIsOutsideDialog = !dialog\.contains\(activeElement\)/,
+  );
+  assert.match(
+    mobileMenuSource,
+    /e\.shiftKey && \(activeElement === firstElement \|\| focusIsOutsideDialog\)/,
+  );
+  assert.match(
+    mobileMenuSource,
+    /activeElement === lastElement \|\| focusIsOutsideDialog/,
+  );
+  assert.match(mobileMenuSource, /lastElement\.focus\(\)/);
+  assert.match(mobileMenuSource, /firstElement\.focus\(\)/);
+  assert.match(mobileMenuSource, /e\.preventDefault\(\)/);
   assert.match(mobileMenuSource, /onClick=\{onClose\}/);
   assert.match(mobileMenuSource, /document\.body\.style\.overflow = prevOverflow/);
 });
