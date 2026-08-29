@@ -25,7 +25,7 @@ node --version
 
 fresh cloneなどで`.vercel/project.json`がない場合は`vercel link`を実行し、新規作成せず既存projectへlinkします。
 
-`Settings > Environment Variables`のProduction対象は`DATABASE_URL`、`BETTER_AUTH_SECRET`、`BETTER_AUTH_URL`、`BETTER_AUTH_TRUSTED_ORIGINS`、`BETTER_AUTH_TRUST_PROXY_HEADERS`、`APP_CANONICAL_ORIGIN`の6項目だけにします。これ以外のProduction変数が残っている場合、`deploy.sh`は値を読まずに停止するため、用途を確認して不要な項目を手動で削除してから再実行します。同画面の`Shared` tab／Shared Environment Variables sectionにも、このprojectへlinkされたProduction対象の共有変数がないことを確認してください。存在する場合はprojectからunlinkします。`deploy.sh`もVercel APIのproject ID filterで環境変数更新の前後とcandidate作成直前に監査し、Production対象が1件でもある場合、API権限が不足する場合、またはレスポンスを完全に検証できない場合はkeyや値を表示せず停止します。
+`Settings > Environment Variables`のProduction対象は`DATABASE_URL`、`BETTER_AUTH_SECRET`、`BETTER_AUTH_URL`、`BETTER_AUTH_TRUSTED_ORIGINS`、`BETTER_AUTH_TRUST_PROXY_HEADERS`、`DEVELOPER_API_SETTINGS_ENCRYPTION_KEY`、`APP_CANONICAL_ORIGIN`の7項目だけにします。これ以外のProduction変数が残っている場合、`deploy.sh`は値を読まずに停止するため、用途を確認して不要な項目を手動で削除してから再実行します。同画面の`Shared` tab／Shared Environment Variables sectionにも、このprojectへlinkされたProduction対象の共有変数がないことを確認してください。存在する場合はprojectからunlinkします。`deploy.sh`もVercel APIのproject ID filterで環境変数更新の前後とcandidate作成直前に監査し、Production対象が1件でもある場合、API権限が不足する場合、またはレスポンスを完全に検証できない場合はkeyや値を表示せず停止します。Developer API設定用の鍵は置換せず、鍵喪失時は同一鍵を復旧するかClient SecretとSecret Tokenを再入力します。rollback時も`site_developer_api_settings` tableをdropせずciphertextを保持してください。
 
 旧Edge Config版から初めて切り替える場合、本手順は旧版が本番運用されておらず、引き継ぐメンテナンス設定がないという承認済み前提に限ります。旧storeや資格情報は保持・移行せず、5番目のmigrationが3環境を`DISABLED`で初期化します。実運用中の設定値が存在する環境では本手順を使わず、別のデータ移行とrollback計画をレビューしてください。
 
@@ -56,13 +56,15 @@ Connect画面の表示形式は`Connection string`を選び、`postgresql://`か
 1. `hobby`、Production URL、Neon project ID／nameを入力する。
 2. Neon planをAPIで確認できない場合だけ、ConsoleでFreeであることを確認して`free`と入力する。
 3. 非表示プロンプトへpooled URL、direct URLの順に貼り付ける。
-4. 対象project、domain、DB hostとProduction限定の6環境変数を確認し、環境変数更新へ`y`と入力する。既存の`BETTER_AUTH_SECRET`は維持され、`BETTER_AUTH_URL`と`APP_CANONICAL_ORIGIN`は同じcanonical HTTPS originになる。
+4. 対象project、domain、DB hostとProduction限定の7環境変数を確認し、環境変数更新へ`y`と入力する。既存の`BETTER_AUTH_SECRET`と`DEVELOPER_API_SETTINGS_ENCRYPTION_KEY`は維持され、`BETTER_AUTH_URL`と`APP_CANONICAL_ORIGIN`は同じcanonical HTTPS originになる。
 5. migrationがup-to-dateならそのまま進む。pendingが表示された場合だけ、計画を確認して`y`、実行直前に`migrate`と入力する。migration後はPostgreSQLの3環境行、version 1、revision、5制約が検証される。
 6. 通常は管理者作成・更新でEnterを押し、既存管理者のemailに`admin@keien.dev`、続けて保存したpasswordを入力する。管理者を更新する場合だけ`y`を選び、表示された変更内容を再確認する。
 7. staged candidateのsmoke test後、5分間の無通信と、Neon管理APIのidle／active反映待ち（各最大約5分、合計最大約15分）の間はcandidate、Production URL、Neon SQL Editorへアクセスせずに待つ。candidateは`PREVIEW`、promotion後のcanonicalは`PRODUCTION`のDB設定に応じて、公開HTMLが200または503であることを検証する。さらにHTMLの`noindex, nofollow` robots meta、全レスポンスの`X-Robots-Tag: noindex`、`/robots.txt`と`/sitemap.xml`のcanonical内容も検証する。確認が完了したらpromotionへ`y`と入力する。
 `Canonical smoke passed`に続いて`Deployment completed: <Production URL> (<commit SHA>)`が表示されれば、Productionの再デプロイは完了です。
 
-現行`deploy.sh`が扱えるmigrationは、リポジトリにある既存5件だけです。6件目以降を追加した場合は、デプロイスクリプトとテストを先に更新し、この手順では実行しません。
+現行`deploy.sh`が扱えるmigrationは、リポジトリにある既存10件です。次に追加するmigrationは11件目として、デプロイスクリプトとテストを先に更新し、この手順では実行しません。
+
+Production暗号鍵が未設定の場合、ciphertext検査の開始からcandidate promotion完了までDeveloper API設定を変更しないでください。既存ciphertextが検出された場合は新鍵を作らず停止するため、元の`DEVELOPER_API_SETTINGS_ENCRYPTION_KEY`を復旧してから再実行します。
 
 認証だけが故障した場合のtransaction SQLと、DB停止時に503を維持する復旧順は[メンテナンスモード緊急解除](maintenance-recovery.md)を参照してください。
 

@@ -211,6 +211,17 @@ model SiteMaintenanceSetting {
   @@map("site_maintenance_settings")
 }
 
+model SiteDeveloperApiSetting {
+  id                    Int      @id @default(1)
+  accountId             String
+  clientId              String
+  clientSecretEncrypted String?
+  secretTokenEncrypted  String?
+  updatedAt             DateTime @default(now()) @updatedAt
+
+  @@map("site_developer_api_settings")
+}
+
 model AdminAccessRole {
   id          String                 @id @default(cuid())
   name        String

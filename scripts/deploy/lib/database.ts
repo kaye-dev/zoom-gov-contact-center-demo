@@ -17,6 +17,80 @@ export type DatabaseInspection = {
   adminAccessRoleCardinalityViolations: number | null;
 };
 
+export type DeveloperApiCiphertextState =
+  | "table-absent"
+  | "unconfigured"
+  | "configured";
+
+export async function inspectDeveloperApiCiphertextState(
+  directUrl: string,
+): Promise<DeveloperApiCiphertextState> {
+  const client = new Client({
+    connectionString: directUrl,
+    application_name: "zoom-gov-demo-developer-api-key-audit",
+    connectionTimeoutMillis: 45_000,
+  });
+
+  try {
+    await client.connect();
+    await client.query(
+      "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
+    );
+    const state = await inspectDeveloperApiCiphertextStateWithClient(client);
+    await client.query("ROLLBACK");
+    return state;
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    await client.end().catch(() => undefined);
+  }
+}
+
+export async function inspectDeveloperApiCiphertextStateWithClient(
+  client: Pick<Client, "query">,
+): Promise<DeveloperApiCiphertextState> {
+  const tableResult = await client.query<{ exists: boolean }>(
+    `SELECT to_regclass('public.site_developer_api_settings') IS NOT NULL AS exists`,
+  );
+  if (tableResult.rows.length !== 1) {
+    throw new Error("Developer API ciphertext table inspection was inconclusive.");
+  }
+  if (tableResult.rows[0]?.exists !== true) return "table-absent";
+
+  const columnsResult = await client.query<{ column_name: string }>(`
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'site_developer_api_settings'
+      AND column_name IN ('clientSecretEncrypted', 'secretTokenEncrypted')
+    ORDER BY column_name
+  `);
+  const columns = columnsResult.rows.map((row) => row.column_name);
+  if (
+    columns.length !== 2 ||
+    columns[0] !== "clientSecretEncrypted" ||
+    columns[1] !== "secretTokenEncrypted"
+  ) {
+    throw new Error("Developer API ciphertext table schema is incomplete.");
+  }
+
+  const configuredResult = await client.query<{ configured: boolean }>(`
+    SELECT EXISTS (
+      SELECT 1
+      FROM public.site_developer_api_settings
+      WHERE "clientSecretEncrypted" IS NOT NULL
+         OR "secretTokenEncrypted" IS NOT NULL
+    ) AS configured
+  `);
+  if (configuredResult.rows.length !== 1) {
+    throw new Error("Developer API ciphertext state inspection was inconclusive.");
+  }
+  return configuredResult.rows[0]?.configured === true
+    ? "configured"
+    : "unconfigured";
+}
+
 export async function inspectDatabase(
   directUrl: string,
 ): Promise<DatabaseInspection> {

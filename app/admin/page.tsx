@@ -14,6 +14,7 @@ export default async function AdminPage() {
     ["chat-settings", "/admin/chat-settings"],
     ["language-settings", "/admin/languages"],
     ["maintenance-settings", "/admin/maintenance-settings"],
+    ["developer-api", "/admin/developer-api"],
     ["roles", "/admin/roles"],
   ] as const;
   const first = destinations.find(([resourceKey]) =>

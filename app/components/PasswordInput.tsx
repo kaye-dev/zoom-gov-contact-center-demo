@@ -18,6 +18,10 @@ export type PasswordInputProps = Omit<
 > & {
   label: ReactNode;
   containerClassName?: string;
+  visibilityButtonId?: string;
+  visible?: boolean;
+  onVisibleChange?: (visible: boolean) => void;
+  visibilityBusy?: boolean;
 };
 
 export function PasswordInput({
@@ -25,13 +29,24 @@ export function PasswordInput({
   id,
   className,
   containerClassName,
+  visibilityButtonId,
+  visible,
+  onVisibleChange,
+  visibilityBusy = false,
   disabled,
   ...inputProps
 }: PasswordInputProps) {
   const { t } = useI18n();
   const generatedId = useId();
   const inputId = id ?? generatedId;
-  const [isVisible, setIsVisible] = useState(false);
+  const [internalVisible, setInternalVisible] = useState(false);
+  const isVisible = visible ?? internalVisible;
+
+  const toggleVisibility = () => {
+    const nextVisible = !isVisible;
+    if (visible === undefined) setInternalVisible(nextVisible);
+    onVisibleChange?.(nextVisible);
+  };
 
   return (
     <div className={["space-y-2", containerClassName].filter(Boolean).join(" ")}>
@@ -52,12 +67,14 @@ export function PasswordInput({
             .join(" ")}
         />
         <button
+          id={visibilityButtonId}
           type="button"
           aria-label={isVisible ? t.auth.hidePassword : t.auth.showPassword}
           aria-pressed={isVisible}
           aria-controls={inputId}
-          onClick={() => setIsVisible((visible) => !visible)}
-          disabled={disabled}
+          aria-busy={visibilityBusy || undefined}
+          onClick={toggleVisibility}
+          disabled={disabled || visibilityBusy}
           className="absolute inset-y-0 right-0 z-10 flex cursor-pointer items-center rounded-r-md px-3 text-fg-muted transition-colors hover:text-accent focus-visible:outline-none focus-visible:text-accent disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isVisible ? (
