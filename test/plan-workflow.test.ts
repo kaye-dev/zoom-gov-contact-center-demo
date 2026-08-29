@@ -15,7 +15,8 @@ const headings = [
   "# 前提・対象外・リスク",
 ];
 
-const workflowSkillNames = ["plan", "plan-critic", "implement", "review"];
+const workflowSkillNames = ["plan", "plan-critic", "implement", "review", "workflow-retrospective"];
+const allSkillNames = [...workflowSkillNames, "git-commit-push-pr"];
 
 test("templateはgoal設計とinvocation approvalだけを持ちmutable parityを重複しない", async () => {
   const template = await read("plans/template.md");
@@ -189,7 +190,7 @@ test("parity runnerとprototype helperはcanonical artifactsを検証する", as
 });
 
 test("skill metadataは明示呼び出しを維持しUI説明の長さとpromptを満たす", async () => {
-  for (const name of [...workflowSkillNames, "git-commit-push-pr"]) {
+  for (const name of allSkillNames) {
     const yaml = await read(`.agents/skills/${name}/agents/openai.yaml`);
     assert.match(yaml, /allow_implicit_invocation: false/);
     assert.match(yaml, new RegExp(`default_prompt: "[^\\n]*\\$${name.replaceAll("-", "\\-")}`));
@@ -199,7 +200,7 @@ test("skill metadataは明示呼び出しを維持しUI説明の長さとprompt�
   }
 });
 
-test("明示的な5 skill構成を保ちlifecycle・固定model・旧agentを復活させない", async () => {
+test("明示的な6 skill構成を保ちlifecycle・固定model・旧agentを復活させない", async () => {
   const removed = [
     ".agents/skills/implementation-planner/SKILL.md",
     ".agents/skills/implementation-executor/SKILL.md",
@@ -216,7 +217,7 @@ test("明示的な5 skill構成を保ちlifecycle・固定model・旧agentを復
   const [config, workflow, ...skills] = await Promise.all([
     read(".codex/config.toml"),
     read("docs/development/codex-development-workflow.md"),
-    ...workflowSkillNames.map((name) => read(`.agents/skills/${name}/SKILL.md`)),
+    ...allSkillNames.map((name) => read(`.agents/skills/${name}/SKILL.md`)),
   ]);
   assert.match(workflow, /独自runtime、専用agent、固定model routing、lifecycle state machineは作らない/);
   assert.doesNotMatch(config, /^\[agents\./m);
