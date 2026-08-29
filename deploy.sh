@@ -13,6 +13,7 @@ DEPLOY_VERCEL_TOKEN_PARAMETER="/zoom-gov-contact-center-demo/production/deploy/v
 DEPLOY_NEON_API_KEY_PARAMETER="/zoom-gov-contact-center-demo/production/deploy/neon-api-key"
 DEPLOY_ADMIN_PASSWORD_PARAMETER="/zoom-gov-contact-center-demo/production/deploy/admin-password"
 DEPLOY_CONTEXT_COMPLETION_MARKER="ZOOM_DEPLOY_SSM_CONTEXT_COMPLETE_V1"
+DEPLOY_PRIVATE_OUTPUT_ENTRYPOINT='chmod 700 /deploy-output && exec "$@"'
 
 DEPLOY_BUILD_CONTEXT=""
 DEPLOY_OUTPUT_DIRECTORY=""
@@ -383,7 +384,11 @@ run_deploy_phase() {
     container_arguments+=(--env "DEPLOY_EXPECTED_PREVIOUS_DEPLOYMENT_ID=${expected_previous_deployment_id}")
   read_aws_account_id
   set +e
-  stream_ssm_context | docker run "${container_arguments[@]}" "${DEPLOY_RUNNER_IMAGE}"
+  stream_ssm_context | docker run \
+    "${container_arguments[@]}" \
+    "${DEPLOY_RUNNER_IMAGE}" \
+    sh -ceu "${DEPLOY_PRIVATE_OUTPUT_ENTRYPOINT}" sh \
+    node --import tsx scripts/deploy/main.ts
   local status=$?
   set -e
   if [[ -f "${output_directory}/result" && ! -L "${output_directory}/result" ]]; then

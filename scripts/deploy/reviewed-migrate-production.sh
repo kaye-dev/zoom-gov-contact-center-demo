@@ -46,6 +46,7 @@ run_reviewed_migration_phase() {
   stream_ssm_context | docker run \
     "${container_arguments[@]}" \
     "${DEPLOY_RUNNER_IMAGE}" \
+    sh -ceu "${DEPLOY_PRIVATE_OUTPUT_ENTRYPOINT}" sh \
     node --import tsx scripts/deploy/reviewed-migration.ts
   local status=$?
   set -e

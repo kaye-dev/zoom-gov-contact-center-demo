@@ -42,6 +42,18 @@ test("deployment phases use an init process to reap descendants", () => {
   );
 });
 
+test("deployment phases make Colima bind-mounted output private before execution", () => {
+  const source = readFileSync(deployScript, "utf8");
+  assert.match(
+    source,
+    /DEPLOY_PRIVATE_OUTPUT_ENTRYPOINT='chmod 700 \/deploy-output && exec "\$@"'/u,
+  );
+  assert.match(
+    source,
+    /"\$\{DEPLOY_RUNNER_IMAGE\}" \\\n+    sh -ceu "\$\{DEPLOY_PRIVATE_OUTPUT_ENTRYPOINT\}" sh \\\n+    node --import tsx scripts\/deploy\/main\.ts/u,
+  );
+});
+
 test("Docker build context archives the exact resolved Git SHA", () => {
   const source = readFileSync(deployScript, "utf8");
   assert.match(
