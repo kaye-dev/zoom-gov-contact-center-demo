@@ -12,7 +12,7 @@
 }
 
 :root.theme-loading.dark {
-  background: #0f1115;
+  background: #0d1117;
 }
 
 :root.theme-loading body,
@@ -34,6 +34,8 @@
   --surface: #ffffff;        /* ページ/ボディ背景 */
   --surface-raised: #ffffff; /* ヘッダー/フッター/カード等の浮いた面 */
   --surface-hover: #e8f1fe;  /* ホバー背景（= primary-50） */
+  --surface-selected: #e8f1fe;
+  --surface-accent-subtle: #e8f1fe;
   --line: #d1d5db;           /* 標準ボーダー（= gray-300） */
   --line-subtle: #e5e7eb;    /* 仕切り線（= gray-200） */
   --fg: #1f2937;             /* 本文（= gray-800） */
@@ -48,17 +50,19 @@
 }
 
 :root.dark {
-  /* 純黒を避け、面の階層（elevation）と明るめアクセントで視認性を確保 */
-  --surface: #0f1115;
-  --surface-raised: #171b21;
-  --surface-hover: #1e242c;
-  --line: #2b313a;
-  --line-subtle: #232932;
-  --fg: #e6edf3;
-  --fg-muted: #9aa4b2;
-  --icon-muted: #dbe7f6;
-  --icon-strong: #9db7f9;
-  --accent: #7096f8;         /* = primary-400（ダークで視認可能な明るい青） */
+  /* GitHub Primerに倣い、ニュートラルな暗色面へsemantic roleで階層を付ける。 */
+  --surface: #0d1117;
+  --surface-raised: #161b22;
+  --surface-hover: #21262d;
+  --surface-selected: #21262d;
+  --surface-accent-subtle: rgb(56 139 253 / 10%);
+  --line: #30363d;
+  --line-subtle: #21262d;
+  --fg: #c9d1d9;
+  --fg-muted: #8b949e;
+  --icon-muted: #c9d1d9;
+  --icon-strong: #79c0ff;
+  --accent: #58a6ff;
 }
 
 @theme inline {
@@ -75,6 +79,8 @@
   --color-surface: var(--surface);
   --color-surface-raised: var(--surface-raised);
   --color-surface-hover: var(--surface-hover);
+  --color-surface-selected: var(--surface-selected);
+  --color-surface-accent-subtle: var(--surface-accent-subtle);
   --color-line: var(--line);
   --color-line-subtle: var(--line-subtle);
   --color-fg: var(--fg);
@@ -106,4 +112,13 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+}
+
+/* Link と素の a のどちらでも、クリック可能なリンクは明示的に pointer にする。 */
+a[href]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+a[href][aria-disabled="true"] {
+  cursor: not-allowed;
 }

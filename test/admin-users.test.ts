@@ -154,36 +154,72 @@ test("admin password resets validate mode, length, confirmation, and session pol
   }
 });
 
-test("admin user routes use Better Auth lifecycle operations", () => {
+test("admin user routes keep password lifecycle in Better Auth and protect account-state mutations", () => {
   const source = readFileSync(
     new URL("../app/api/[[...route]]/route.ts", import.meta.url),
     "utf8",
   );
+  const authoritySource = readFileSync(
+    new URL(
+      "../lib/server/admin-access/authority-service.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const userPageSources = [
+    readFileSync(new URL("../app/admin/users/page.tsx", import.meta.url), "utf8"),
+    readFileSync(
+      new URL("../app/admin/users/[id]/page.tsx", import.meta.url),
+      "utf8",
+    ),
+  ];
 
   assert.match(source, /app\.patch\("\/admin\/users\/:id"/);
-  assert.match(source, /auth\.api\.adminUpdateUser/);
-  assert.match(source, /auth\.api\.setRole/);
-  assert.match(source, /auth\.api\.banUser/);
-  assert.match(source, /auth\.api\.unbanUser/);
-  assert.match(source, /auth\.api\.removeUser/);
+  assert.match(source, /createAuth\(transaction\)\.api\.adminUpdateUser/);
+  assert.match(source, /updateProtectedAdminUserRole/);
+  assert.match(source, /suspendProtectedAdminUser/);
+  assert.match(source, /reactivateAdminUser/);
+  assert.match(source, /deleteProtectedAdminUser/);
   assert.match(source, /app\.post\("\/admin\/users\/:id\/reset-password"/);
-  assert.match(source, /auth\.api\.setUserPassword/);
-  assert.match(source, /auth\.api\.revokeUserSessions/);
+  assert.match(source, /createAuth\(transaction\)\.api\.setUserPassword/);
+  assert.match(source, /transactionAuth\.api\.revokeUserSessions/);
   assert.match(source, /status: "PENDING"/);
   assert.match(source, /status: "REJECTED"/);
   assert.match(source, /status: "APPROVED"/);
   assert.match(source, /status: "CONSUMED"/);
   assert.match(source, /export const PATCH = handler/);
   assert.match(source, /export const DELETE = handler/);
-  assert.match(source, /NOT: \{ banned: true \}/);
+  assert.match(authoritySource, /FOR UPDATE/);
+  assert.match(authoritySource, /assertRecoveryAdminExists/);
+  assert.match(
+    authoritySource,
+    /OR: \[\{ banned: false \}, \{ banned: null \}\]/,
+  );
+  assert.doesNotMatch(authoritySource, /NOT: \{ banned: true \}/);
+  for (const pageSource of userPageSources) {
+    assert.match(
+      pageSource,
+      /OR: \[\{ banned: false \}, \{ banned: null \}\]/,
+    );
+    assert.doesNotMatch(pageSource, /NOT: \{ banned: true \}/);
+  }
 });
 
 test("all locales include complete user-management copy and errors", () => {
   const expectedErrorCodes = Object.values(ADMIN_USER_ERROR_CODES).sort();
 
   for (const locale of locales) {
+    const authCopy = dictionaries[locale].auth;
     const copy = dictionaries[locale].admin.userManagement;
+    assert.ok(authCopy.copyTemporaryPassword.length > 0, locale);
+    assert.ok(authCopy.temporaryPasswordCopied.length > 0, locale);
+    assert.ok(authCopy.temporaryPasswordCopyFailed.length > 0, locale);
     assert.ok(copy.detailsTitle.length > 0, locale);
+    assert.ok(copy.detailsPageTitle.length > 0, locale);
+    assert.ok(copy.detailsDescription.length > 0, locale);
+    assert.ok(copy.detailsReadOnly.length > 0, locale);
+    assert.ok(copy.name.length > 0, locale);
+    assert.ok(copy.accessRoles.length > 0, locale);
     assert.ok(copy.edit.length > 0, locale);
     assert.ok(copy.suspend.length > 0, locale);
     assert.ok(copy.reactivate.length > 0, locale);
@@ -193,6 +229,7 @@ test("all locales include complete user-management copy and errors", () => {
     assert.ok(copy.generateTemporaryPassword.length > 0, locale);
     assert.ok(copy.revokeSessionsDescription.length > 0, locale);
     assert.ok(copy.passwordDialogDescription.length > 0, locale);
+    assert.ok(copy.passwordVisibilityHelp.length > 0, locale);
     assert.ok(copy.passwordsMatch.length > 0, locale);
     assert.deepEqual(Object.keys(copy.errors).sort(), expectedErrorCodes, locale);
     for (const message of Object.values(copy.errors)) {
@@ -232,6 +269,56 @@ test("user management UI keeps editing and destructive actions behind explicit c
   assert.match(detailsSource, /admin-confirm-password-\$\{passwordMode\}/);
   assert.match(detailsSource, /passwordsMatch/);
   assert.match(detailsSource, /role="status"/);
+  assert.match(
+    detailsSource,
+    /field === "name" \? \(\s*<StatusBadge banned=\{user\.banned\} \/>/,
+  );
+  assert.equal(
+    detailsSource.match(/<StatusBadge banned=\{user\.banned\} \/>/g)?.length,
+    1,
+  );
+});
+
+test("new-user temporary passwords can be copied with accessible feedback", () => {
+  const formSource = readFileSync(
+    new URL("../app/admin/users/new/NewUserForm.tsx", import.meta.url),
+    "utf8",
+  );
+  const copyIconSource = readFileSync(
+    new URL("../app/components/svg/ContentCopyIcon.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(formSource, /navigator\.clipboard\.writeText\(createdUser\.temporaryPassword\)/);
+  assert.match(formSource, /setCopyFeedback\(null\)/);
+  assert.match(formSource, /type="button"/);
+  assert.match(formSource, /aria-label=\{t\.auth\.copyTemporaryPassword\}/);
+  assert.match(formSource, /role=\{copyFeedback\.kind === "error" \? "alert" : "status"\}/);
+  assert.match(formSource, /min-h-11 min-w-11 shrink-0 cursor-pointer/);
+  assert.match(formSource, /text-fg-muted transition-colors hover:text-accent/);
+  assert.match(formSource, /focus-visible:outline-none focus-visible:text-accent/);
+  assert.doesNotMatch(formSource, /hover:bg-primary-100/);
+  assert.doesNotMatch(formSource, /execCommand/);
+  assert.match(formSource, /accessRoleName: string/);
+  assert.match(formSource, /getAdminRoleDisplayName\(selectedAccessRole/);
+  assert.match(formSource, /systemRoleNames\.NO_ACCESS/);
+  const resultEmailIndex = formSource.indexOf("<dd>{createdUser.email}</dd>");
+  const resultAccessRoleIndex = formSource.indexOf(
+    "<dd>{createdUser.accessRoleName}</dd>",
+  );
+  const resultPasswordIndex = formSource.indexOf(
+    "{createdUser.temporaryPassword}",
+  );
+  assert.ok(resultEmailIndex < resultAccessRoleIndex);
+  assert.ok(resultAccessRoleIndex < resultPasswordIndex);
+
+  assert.match(copyIconSource, /viewBox="0 -960 960 960"/);
+  assert.match(copyIconSource, /M360-240q-33 0-56\.5-23\.5T280-320/);
+  assert.match(copyIconSource, /height = 24/);
+  assert.match(copyIconSource, /width = 24/);
+  assert.match(copyIconSource, /fill="currentColor"/);
+  assert.match(copyIconSource, /aria-hidden="true"/);
+  assert.match(copyIconSource, /focusable="false"/);
 });
 
 test("password visibility controls use the requested Material Symbols SVG paths", () => {

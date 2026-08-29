@@ -14,6 +14,7 @@ export type DatabaseInspection = {
   userTables: string[];
   userObjects: string[];
   tablesWithData: string[];
+  adminAccessRoleCardinalityViolations: number | null;
 };
 
 export async function inspectDatabase(
@@ -122,6 +123,24 @@ export async function inspectDatabase(
       }
     }
 
+    const adminAccessRoleCardinalityViolations =
+      userTables.includes("user") &&
+      userTables.includes("admin_access_role_assignments")
+        ? (
+            await client.query<{ count: number }>(`
+              SELECT count(*)::integer AS count
+              FROM (
+                SELECT u.id
+                FROM public."user" AS u
+                LEFT JOIN public."admin_access_role_assignments" AS a
+                  ON a."userId" = u.id
+                GROUP BY u.id
+                HAVING count(a."roleId") <> 1
+              ) AS invalid_assignments
+            `)
+          ).rows[0]?.count ?? 0
+        : null;
+
     await client.query("ROLLBACK");
     return {
       migrationsTableExists,
@@ -129,6 +148,7 @@ export async function inspectDatabase(
       userTables,
       userObjects,
       tablesWithData,
+      adminAccessRoleCardinalityViolations,
     };
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);

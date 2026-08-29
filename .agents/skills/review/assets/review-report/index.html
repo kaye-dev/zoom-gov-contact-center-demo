@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>実装レビュー</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#review-content">レビュー本文へ移動</a>
+    <header class="hero">
+      <div class="hero__eyebrow">CODEX · IMPLEMENTATION REVIEW</div>
+      <div class="hero__heading">
+        <div>
+          <h1 id="report-title">実装レビュー</h1>
+          <p id="report-summary" class="hero__summary">レビュー情報を読み込んでいます。</p>
+        </div>
+        <div id="overall-status" class="overall-status" aria-live="polite">読込中</div>
+      </div>
+      <dl class="revision" aria-label="レビュー対象">
+        <div><dt>PLAN</dt><dd id="plan-path">—</dd></div>
+        <div><dt>BASE</dt><dd id="base-revision">—</dd></div>
+        <div><dt>HEAD</dt><dd id="head-revision">—</dd></div>
+        <div><dt>GENERATED</dt><dd id="generated-at">—</dd></div>
+      </dl>
+    </header>
+
+    <main id="review-content">
+      <section aria-labelledby="summary-heading" class="section-shell">
+        <div class="section-heading"><div><span class="section-number">01</span><h2 id="summary-heading">レビュー概要</h2></div></div>
+        <div id="metrics" class="metrics" aria-live="polite"></div>
+        <div class="verification-panel">
+          <h3>独立レビュー方式</h3>
+          <div class="review-pass-list">
+            <article class="review-pass"><div class="review-pass__heading"><span class="source-badge">BLIND DIFF</span><strong>差分だけのレビュー</strong></div><p>planや会話を渡さず、実装差分だけを確認します。</p></article>
+            <article class="review-pass"><div class="review-pass__heading"><span class="source-badge">PLAN適合</span><strong>plan適合レビュー</strong></div><p>blind結果を渡さず、planと同じ差分を照合します。</p></article>
+          </div>
+        </div>
+        <div class="verification-panel"><h3>レビュー対象外の差分</h3><div id="excluded-paths" class="excluded-path-list"></div></div>
+        <div class="verification-panel"><h3>検証結果</h3><div id="validations" class="validation-list"></div></div>
+      </section>
+
+      <section aria-labelledby="groups-heading" class="section-shell">
+        <div class="section-heading section-heading--responsive">
+          <div><span class="section-number">02</span><h2 id="groups-heading">変更意図と指摘</h2></div>
+          <div id="filters" class="filters" role="group" aria-label="リスクで絞り込み">
+            <button type="button" class="filter-button is-active" data-filter="all" aria-pressed="true">すべて</button>
+            <button type="button" class="filter-button" data-filter="high" aria-pressed="false">要対応</button>
+            <button type="button" class="filter-button" data-filter="medium" aria-pressed="false">注意</button>
+            <button type="button" class="filter-button" data-filter="clear" aria-pressed="false">指摘なし</button>
+          </div>
+        </div>
+        <div id="intent-groups" class="intent-groups"></div>
+        <p id="empty-state" class="empty-state" hidden>該当する変更グループはありません。</p>
+      </section>
+
+      <section aria-labelledby="feedback-heading" class="section-shell feedback-shell">
+        <div class="section-heading"><div><span class="section-number">03</span><h2 id="feedback-heading">フィードバック</h2></div></div>
+        <p>採用・未確定のLLM指摘と人間コメントを、実装taskへ返せるMarkdownにまとめます。</p>
+        <div id="decision-summary" class="decision-summary" aria-live="polite">
+          <span data-decision="adopted">採用 <strong data-decision-count="adopted">0</strong></span>
+          <span data-decision="rejected">却下 <strong data-decision-count="rejected">0</strong></span>
+          <span data-decision="unresolved">未確定 <strong data-decision-count="unresolved">0</strong></span>
+          <span data-decision="comments">コメント <strong data-decision-count="comments">0</strong></span>
+        </div>
+        <div class="feedback-actions">
+          <button id="generate-feedback" type="button" class="primary-button">フィードバックを生成</button>
+          <button id="copy-feedback" type="button" class="secondary-button">クリップボードにコピー</button>
+        </div>
+        <p id="copy-status" class="copy-status" role="status" aria-live="polite"></p>
+        <pre id="feedback-preview" class="feedback-preview" tabindex="0">生成したフィードバックをここに表示します。</pre>
+      </section>
+    </main>
+
+    <noscript>このレビュー画面の表示にはJavaScriptが必要です。</noscript>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

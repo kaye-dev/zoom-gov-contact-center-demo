@@ -16,7 +16,7 @@ An explicit `$git-commit-push-pr` invocation authorizes these actions for the cu
 - fetch and synchronize with the pull request base
 - push the topic branch and create or update its pull request
 
-It does not authorize force pushing, stashing or discarding changes, broad staging, resolving conflicts automatically, creating a fork, merging the pull request, or waiting for CI. Honor any narrower instruction in the invoking prompt.
+It does not authorize force pushing, stashing or discarding changes, deleting local plan or review artifacts, broad staging, resolving conflicts automatically, creating a fork, merging the pull request, or waiting for CI. Honor any narrower instruction in the invoking prompt. A plan or review artifact is context, not shipping authorization, and this skill never deletes it automatically.
 
 ## 1. Read rules and inspect state
 
@@ -72,7 +72,7 @@ Generate the commit message only from the staged diff. Follow repository convent
 
 Let commit hooks run. Never use `--no-verify`. If a hook fails, stop unless it changed only intended files in a clearly mechanical way; in that case inspect and restage those explicit paths and retry once. Stop if a hook touches unrelated files or the retry fails.
 
-After committing, verify that HEAD advanced, the index is empty, and the hash, subject, and paths are correct with `git show --stat --oneline --no-renames HEAD`. If a hook included an unexpected path, stop before push instead of amending or resetting automatically. If there are no uncommitted task changes but the topic branch already has commits relative to the base, skip the empty commit and continue. If neither a task commit nor a base-relative diff exists, stop without pushing or creating a pull request.
+After committing, verify that HEAD advanced, the index is empty, and the hash, subject, and paths are correct with `git show --stat --oneline --no-renames HEAD`. If a hook included an unexpected path, stop before push instead of amending or resetting automatically. An already-committed topic branch may skip an empty commit and continue. If neither a task commit nor a base-relative diff exists, stop without pushing or creating a pull request.
 
 ## 4. Synchronize with the latest base before push
 
@@ -147,4 +147,4 @@ Confirm that local HEAD, the pushed remote SHA, and the pull request head OID ma
 - mergeability and merge-state result
 - any unrelated working-tree changes preserved
 
-Never present commit, push, pull request creation/update, or mergeability as interchangeable completion states.
+Never present commit, push, pull request creation/update, or mergeability as interchangeable completion states. Preserve plan and review artifacts; cleanup is a separate user-authorized operation.

@@ -4,9 +4,21 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
+  assertAdminAccessSessionLockHeld,
+  withAdminAccessSessionLock,
+} from "../../lib/server/admin-access/mutation-lock";
+
+import {
+  assertLegacyRollbackAdminPlanSafe,
+  freezeLegacyRollbackAdminMutations,
   inspectAdmin,
+  inspectAdminAccessMutationFreeze,
+  inspectLegacyRollbackAdmins,
+  prepareLegacyRollbackAdmins,
   provisionAdmin,
   renderAdminChanges,
+  renderLegacyRollbackAdminPlan,
+  unfreezeLegacyRollbackAdminMutations,
   validateAdminInput,
 } from "./lib/admin";
 import { inspectDatabase } from "./lib/database";
@@ -127,12 +139,139 @@ export class PromotionGuard {
   }
 }
 
+type LegacyRollbackPreparationDependencies = {
+  inspect: typeof inspectLegacyRollbackAdmins;
+  prepare: typeof prepareLegacyRollbackAdmins;
+  freeze: typeof freezeLegacyRollbackAdminMutations;
+  inspectFreeze: typeof inspectAdminAccessMutationFreeze;
+  unfreeze: typeof unfreezeLegacyRollbackAdminMutations;
+  withLock: typeof withAdminAccessSessionLock;
+  assertLock: typeof assertAdminAccessSessionLockHeld;
+  write: (message: string) => void;
+};
+
+const legacyRollbackPreparationDependencies: LegacyRollbackPreparationDependencies = {
+  inspect: inspectLegacyRollbackAdmins,
+  prepare: prepareLegacyRollbackAdmins,
+  freeze: freezeLegacyRollbackAdminMutations,
+  inspectFreeze: inspectAdminAccessMutationFreeze,
+  unfreeze: unfreezeLegacyRollbackAdminMutations,
+  withLock: withAdminAccessSessionLock,
+  assertLock: assertAdminAccessSessionLockHeld,
+  write: (message) => console.error(message),
+};
+
+export async function prepareLegacyRollbackForDeployment<T>(
+  pooledUrl: string,
+  directUrl: string,
+  previousProductionId: string,
+  prompter: Prompter,
+  operation: () => Promise<T>,
+  dependencies: LegacyRollbackPreparationDependencies =
+    legacyRollbackPreparationDependencies,
+): Promise<T> {
+  const plan = await dependencies.inspect(pooledUrl);
+  dependencies.write(renderLegacyRollbackAdminPlan(plan));
+  const approval = `prepare legacy rollback ${previousProductionId}`;
+  await requireExact(
+    prompter,
+    `旧リリースではロール割り当てとDENYが強制されません。上記の「custom DENYを持たないFULL_ACCESS」以外の管理者を一般ユーザーへ変更し、セッションを失効した後にrollbackする場合は '${approval}' と入力してください。`,
+    approval,
+    "Legacy rollback administrator preparation was refused; no users were changed and no rollback command ran.",
+  );
+  return dependencies.withLock(directUrl, async (lock) => {
+    await dependencies.assertLock(lock);
+    let freezeId: string;
+    try {
+      freezeId = await dependencies.freeze(
+        pooledUrl,
+        lock,
+        `legacy rollback ${previousProductionId}`,
+      );
+    } catch (error) {
+      // The transaction may have committed even when its response was lost.
+      // Re-read the durable fence so the exact freeze remains recoverable.
+      const state = await dependencies.inspectFreeze(pooledUrl);
+      if (state.frozen && state.freezeId) {
+        throw new AdminAccessFreezeRecoveryRequiredError(state.freezeId, error);
+      }
+      throw error;
+    }
+    try {
+      const result = await dependencies.prepare(pooledUrl, plan, lock, freezeId);
+      dependencies.write(
+        `Legacy rollback administrator preparation completed: demoted=${result.demotedCount}, sessions revoked=${result.revokedSessionCount}.`,
+      );
+      await dependencies.assertLock(lock);
+      const value = await operation();
+      // The current binary honors the durable freeze. The legacy binary does
+      // not, so this audit is the explicit hand-off boundary.
+      const postSwitch = await dependencies.inspect(pooledUrl);
+      assertLegacyRollbackAdminPlanSafe(postSwitch);
+      await dependencies.unfreeze(pooledUrl, lock, freezeId);
+      dependencies.write("Legacy rollback administrator post-switch audit passed.");
+      return value;
+    } catch (error) {
+      throw new AdminAccessFreezeRecoveryRequiredError(freezeId, error);
+    }
+  });
+}
+
+export class AdminAccessFreezeRecoveryRequiredError extends Error {
+  constructor(readonly freezeId: string, cause: unknown) {
+    super(
+      `Administrative authority mutations remain frozen with freezeId '${freezeId}'.`,
+      { cause },
+    );
+    this.name = "AdminAccessFreezeRecoveryRequiredError";
+  }
+}
+
+type FreezeRecoveryDependencies = Pick<
+  LegacyRollbackPreparationDependencies,
+  "inspectFreeze" | "unfreeze" | "withLock" | "write"
+>;
+
+export async function recoverAdminAccessMutationFreezeForDeployment(
+  pooledUrl: string,
+  directUrl: string,
+  readCanonicalDeploymentId: () => string | undefined,
+  prompter: Prompter,
+  dependencies: FreezeRecoveryDependencies = legacyRollbackPreparationDependencies,
+): Promise<boolean> {
+  const state = await dependencies.inspectFreeze(pooledUrl);
+  if (!state.frozen || !state.freezeId) return false;
+  const canonicalId = readCanonicalDeploymentId();
+  if (!canonicalId) throw new Error("Canonical Production identity is unavailable; freeze recovery was blocked.");
+  const approval = `recover admin access freeze ${state.freezeId} ${canonicalId}`;
+  await requireExact(
+    prompter,
+    `Administrative authority mutations remain frozen. After reviewing canonical Production '${canonicalId}', type '${approval}' to recover.`,
+    approval,
+    "Administrative authority mutation freeze recovery was refused.",
+  );
+  return dependencies.withLock(directUrl, async (lock) => {
+    const rechecked = await dependencies.inspectFreeze(pooledUrl);
+    if (!rechecked.frozen || rechecked.freezeId !== state.freezeId) {
+      throw new Error("The administrative mutation freeze changed after review.");
+    }
+    if (readCanonicalDeploymentId() !== canonicalId) {
+      throw new Error("Canonical Production identity changed; freeze recovery was blocked.");
+    }
+    await dependencies.unfreeze(pooledUrl, lock, state.freezeId!);
+    dependencies.write(`Administrative authority mutation freeze '${state.freezeId}' was recovered.`);
+    return true;
+  });
+}
+
 type WorkflowState = {
   candidateUrl?: URL;
   candidateId?: string;
   canonicalUrl?: URL;
   vercelLink?: VercelLink;
   previousProductionId?: string;
+  databasePooledUrl?: string;
+  databaseDirectUrl?: string;
   smokeCredentials?: SmokeCredentials;
   rollbackPublicExpectation?: ReturnType<
     typeof createMaintenancePublicExpectation
@@ -221,6 +360,8 @@ export async function runDeploymentWorkflow(
     );
     secrets.add(directRaw);
     const database = validateDatabaseUrls(pooledRaw, directRaw);
+    state.databasePooledUrl = database.pooledUrl;
+    state.databaseDirectUrl = database.directUrl;
     const pooledPassword = new URL(database.pooledUrl).password;
     const directPassword = new URL(database.directUrl).password;
     secrets.add(
@@ -497,6 +638,13 @@ export async function runDeploymentWorkflow(
     );
     promotionGuard.markMigrationVerified();
 
+    await recoverAdminAccessMutationFreezeForDeployment(
+      database.pooledUrl,
+      database.directUrl,
+      () => readCanonicalDeployment(runner, link, canonicalUrl)?.id,
+      prompter,
+    );
+
     console.log("[6/7] Administrator and staged smoke tests");
     const credentials = await prepareAdminCredentials(
       prompter,
@@ -639,6 +787,8 @@ export async function runDeploymentWorkflow(
         state.candidateId &&
         state.vercelLink &&
         state.canonicalUrl &&
+        state.databasePooledUrl &&
+        state.databaseDirectUrl &&
         state.rollbackPublicExpectation
       ) {
         const expected = `rollback ${state.previousProductionId}`;
@@ -667,45 +817,61 @@ export async function runDeploymentWorkflow(
                 "The previous Production deployment identity changed; rollback was blocked.",
               );
             }
-            const rollback = runner.run(
-              "vercel",
-              [
-                "rollback",
-                state.previousProductionId,
-                "--yes",
-                "--scope",
-                state.vercelLink.orgId,
-              ],
-              { env: { ...process.env, NO_COLOR: "1" } },
-            );
-            assertCommandSucceeded(rollback, "Explicit Vercel rollback");
-            await waitForCanonicalDeployment(
-              runner,
-              state.vercelLink,
-              state.canonicalUrl,
+            await prepareLegacyRollbackForDeployment(
+              state.databasePooledUrl,
+              state.databaseDirectUrl,
               state.previousProductionId,
-              true,
+              prompter,
+              async () => {
+                recheckRollbackDeploymentIdentities(
+                  runner,
+                  state.vercelLink!,
+                  state.canonicalUrl!,
+                  state.candidateId!,
+                  state.previousProductionId!,
+                );
+                const rollback = runner.run(
+                  "vercel",
+                  [
+                    "rollback",
+                    state.previousProductionId!,
+                    "--yes",
+                    "--scope",
+                    state.vercelLink!.orgId,
+                  ],
+                  { env: { ...process.env, NO_COLOR: "1" } },
+                );
+                assertCommandSucceeded(rollback, "Explicit Vercel rollback");
+                await waitForCanonicalDeployment(
+                  runner,
+                  state.vercelLink!,
+                  state.canonicalUrl!,
+                  state.previousProductionId!,
+                  true,
+                );
+                if (state.smokeCredentials) {
+                  const rollbackSmoke = await runSmokeChecks(
+                    state.canonicalUrl!,
+                    state.smokeCredentials,
+                    globalThis.fetch,
+                    {
+                      canonicalOrigin: state.canonicalUrl!,
+                      publicSiteExpectation: resolvePublicSiteBaselineAt(
+                        state.rollbackPublicExpectation!,
+                      ),
+                      adminAccessExpectation: "legacy-compatible",
+                      searchIndexingExpectation: "legacy-compatible",
+                    },
+                  );
+                  console.error(
+                    `Rolled-back canonical smoke passed: ${rollbackSmoke.checks.join(", ")}`,
+                  );
+                  console.error(
+                    "Rollback search-index checks used legacy-compatible mode; the restored release may predate noindex, robots.txt, and sitemap.xml support.",
+                  );
+                }
+              },
             );
-            if (state.smokeCredentials) {
-              const rollbackSmoke = await runSmokeChecks(
-                state.canonicalUrl,
-                state.smokeCredentials,
-                globalThis.fetch,
-                {
-                  canonicalOrigin: state.canonicalUrl,
-                  publicSiteExpectation: resolvePublicSiteBaselineAt(
-                    state.rollbackPublicExpectation,
-                  ),
-                  searchIndexingExpectation: "legacy-compatible",
-                },
-              );
-              console.error(
-                `Rolled-back canonical smoke passed: ${rollbackSmoke.checks.join(", ")}`,
-              );
-              console.error(
-                "Rollback search-index checks used legacy-compatible mode; the restored release may predate noindex, robots.txt, and sitemap.xml support.",
-              );
-            }
             console.error(
               `Vercel traffic rollback to '${state.previousProductionId}' was verified. Database migrations remain applied.`,
             );
@@ -718,6 +884,27 @@ export async function runDeploymentWorkflow(
               `Explicit rollback failed or could not be verified: ${rollbackError instanceof Error ? rollbackError.message : "unknown error"}`,
             ),
           );
+          if (rollbackError instanceof AdminAccessFreezeRecoveryRequiredError) {
+            try {
+              await recoverAdminAccessMutationFreezeForDeployment(
+                state.databasePooledUrl,
+                state.databaseDirectUrl,
+                () =>
+                  readCanonicalDeployment(
+                    runner,
+                    state.vercelLink!,
+                    state.canonicalUrl!,
+                  )?.id,
+                prompter,
+              );
+            } catch (recoveryError) {
+              console.error(
+                secrets.redact(
+                  `Administrative authority mutations remain frozen: ${recoveryError instanceof Error ? recoveryError.message : "unknown recovery error"}`,
+                ),
+              );
+            }
+          }
         }
       }
     } else if (state.promotionAttempted) {
@@ -1566,6 +1753,31 @@ function readReadyProductionDeployment(
     );
   }
   return { id: deploymentId, url: value.url };
+}
+
+export function recheckRollbackDeploymentIdentities(
+  runner: CommandRunner,
+  link: VercelLink,
+  canonicalUrl: URL,
+  candidateId: string,
+  previousProductionId: string,
+): void {
+  const canonical = readCanonicalDeployment(runner, link, canonicalUrl);
+  if (canonical?.id !== candidateId) {
+    throw new Error(
+      "Canonical Production changed after rollback preparation; rollback was blocked and administrative mutations remain frozen.",
+    );
+  }
+  const target = readReadyProductionDeployment(
+    runner,
+    link,
+    previousProductionId,
+  );
+  if (target.id !== previousProductionId) {
+    throw new Error(
+      "The previous Production deployment changed after rollback preparation; rollback was blocked and administrative mutations remain frozen.",
+    );
+  }
 }
 
 async function prepareAdminCredentials(

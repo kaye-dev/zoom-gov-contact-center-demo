@@ -114,7 +114,7 @@ type ContentsItem = {
   label: string;
 };
 
-function ContentsNavigation({ items }: { items: readonly ContentsItem[] }) {
+export function ContentsNavigation({ items }: { items: readonly ContentsItem[] }) {
   const { t } = useI18n();
 
   return (

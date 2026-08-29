@@ -28,6 +28,10 @@ export function FooterClient({
   ];
 
   const serviceLinks = [
+    {
+      label: t.footer.disasterRadio,
+      href: '/life/emergency-safety-disaster/disaster-prevention-radio',
+    },
     { label: t.footer.feedback, href: '/docs/feedback' },
     { label: t.footer.sitemap, href: '#' },
     {

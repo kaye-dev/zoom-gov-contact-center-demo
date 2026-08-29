@@ -176,11 +176,12 @@ test("robots allows crawling so crawlers can read noindex and names the canonica
   }
 });
 
-test("sitemap contains the complete stable set of 275 canonical public HTML URLs", async () => {
+test("sitemap contains the complete stable set of 276 canonical public HTML URLs", async () => {
   const paths = await listPublicSitemapPaths();
   const expectedPaths = [
     "/",
     "/life",
+    "/life/emergency-safety-disaster/disaster-prevention-radio",
     "/life/frequently-asked-questions",
     "/news",
     ...lifeCategories
@@ -205,7 +206,7 @@ test("sitemap contains the complete stable set of 275 canonical public HTML URLs
     "/docs/terms-of-service",
   ].sort((left, right) => left.localeCompare(right, "en"));
 
-  assert.equal(paths.length, 275);
+  assert.equal(paths.length, 276);
   assert.equal(new Set(paths).size, paths.length);
   assert.deepEqual(paths, expectedPaths);
   assert.deepEqual(paths, [...paths].sort((left, right) => left.localeCompare(right, "en")));
@@ -222,7 +223,7 @@ test("sitemap contains the complete stable set of 275 canonical public HTML URLs
   const entries = await buildPublicSitemap({
     APP_CANONICAL_ORIGIN: "https://city.example.jp",
   });
-  assert.equal(entries.length, 275);
+  assert.equal(entries.length, 276);
   assert.deepEqual(
     entries.map(({ url }) => url),
     paths.map((path) => new URL(path, "https://city.example.jp").href),
@@ -238,7 +239,7 @@ test("the sitemap metadata route uses APP_CANONICAL_ORIGIN", async () => {
   delete process.env.VERCEL;
   try {
     const entries = await sitemap();
-    assert.equal(entries.length, 275);
+    assert.equal(entries.length, 276);
     assert.ok(
       entries.every(({ url }) =>
         url.startsWith("https://city.example.jp/"),
