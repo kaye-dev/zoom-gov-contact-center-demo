@@ -15,101 +15,225 @@ const headings = [
   "# 前提・対象外・リスク",
 ];
 
-test("plans/template.mdは6見出しだけの最小構成を正しい順で持つ", async () => {
+const workflowSkillNames = ["plan", "plan-critic", "implement", "review", "workflow-retrospective"];
+const allSkillNames = [...workflowSkillNames, "git-commit-push-pr"];
+
+test("templateはgoal設計とinvocation approvalだけを持ちmutable parityを重複しない", async () => {
   const template = await read("plans/template.md");
   assert.deepEqual(template.match(/^# .+$/gm), headings);
-  assert.match(template, /変更なし。/);
-  assert.match(template, /なし。/);
-  assert.doesNotMatch(template, /metadata|status|task表|G0[1-6]|進捗|実行記録|prototype|plans\/tmp|draft|final/iu);
-});
-
-test("plannerはrepo調査後にtemplateから自己完結planを直接生成する", async () => {
-  const planner = await read(".agents/skills/plan/SKILL.md");
-  assert.match(planner, /Inspect the relevant code, tests, configuration, Git state, and runtime behavior/);
-  assert.match(planner, /plans\/<slug>\.md/);
-  assert.match(planner, /If that path already exists, stop before writing/);
-  assert.match(planner, /Preserve its six headings and their order exactly/);
-  assert.match(planner, /self-contained plan/);
-  assert.match(planner, /Describe only the adopted design/);
-  assert.match(planner, /Do not invent decisions to close a high-impact unknown/);
-  assert.match(planner, /Do not add metadata, status, task tables, lifecycle gates, progress logs, prototype contracts, hashes, or draft\/final files/);
-  assert.doesNotMatch(planner, /plans\/tmp|validate-plan-file|plan_author|gpt-5\./);
-});
-
-test("criticはfresh reviewを基に同一planを原子的な自己完結版へ更新する", async () => {
-  const critic = await read(".agents/skills/plan-critic/SKILL.md");
-  assert.match(critic, /fresh no-history subagent/);
-  assert.match(critic, /Do not pass the parent conversation/);
-  assert.match(critic, /exactly one candidate exists; stop when there are zero or multiple candidates/);
-  assert.match(critic, /stop and ask the user before changing the plan/);
-  assert.match(critic, /prepare the complete replacement, and write the target once/);
-  assert.match(critic, /as if the adopted design had been known from the start/);
-  assert.match(critic, /Do not create `critique\.md`/);
-  assert.doesNotMatch(critic, /plans\/tmp|plan_critic|plan_rewriter|gpt-5\./);
-});
-
-test("executorとreviewは単一plan自動選択・複数停止・明示pathを共有する", async () => {
-  const [executor, review] = await Promise.all([
-    read(".agents/skills/implement/SKILL.md"),
-    read(".agents/skills/review/SKILL.md"),
-  ]);
-  for (const skill of [executor, review]) {
-    assert.match(skill, /Use the explicit `plans\/<slug>\.md` path/);
-    assert.match(skill, /plans\/\*\.md/);
-    assert.match(skill, /plans\/template\.md/);
-    assert.match(skill, /stop[^.]*zero or multiple/i);
+  assert.match(template, /^## 要件クロージャ$/m);
+  assert.match(template, /^## UI契約$/m);
+  for (const field of [
+    "UI変更",
+    "prototype",
+    "approval contract",
+    "validation profile",
+    "prototype revision",
+    "UI承認方式",
+    "production baseline",
+    "comparison conditions",
+    "baseline state inventory",
+    "theme contract",
+    "responsive contract",
+    "styling pipeline",
+    "視覚的不変条件",
+    "意図した差分",
+    "stateとinteraction",
+    "comparison targets",
+    "parity matrix",
+  ]) {
+    assert.match(template, new RegExp(`^- ${field}:`, "m"));
   }
-  assert.match(executor, /current agent owns investigation, implementation, verification, and live behavior checks/);
-  assert.doesNotMatch(executor, /validate-plan-file|review.*automatically|gpt-5\.|G0[1-6]|plans\/tmp/);
-  assert.match(review, /staged, unstaged, deleted, and relevant non-ignored untracked files/);
-  assert.match(review, /require the user to state the Git base revision/);
-  assert.match(review, /fresh no-history subagent for the blind diff review/);
-  assert.match(review, /not the plan, conversation, task rationale, or any prior review/);
-  assert.match(review, /not the blind result or conversation/);
-  assert.match(review, /plans\/reviews\/<slug>/);
-  assert.match(review, /Group changes by intent rather than file order/);
-  assert.match(review, /sort groups by risk/);
-  assert.match(review, /Mark any change whose intent cannot be explained as `要改善`/);
-  assert.doesNotMatch(review, /validate-review-data|remote-base|diffHash|planHash|assetHashes|release gate|gpt-5\.|plans\/tmp/i);
+  assert.doesNotMatch(template, /^- (?:parity evidence|machine parity|UI承認記録):/m);
+  assert.doesNotMatch(template, /metadata|lifecycle status|task表|G0[1-6]|進捗|実行記録|draft|final/iu);
 });
 
-test("全skill metadataは明示呼び出し専用でdefault promptにskill名を含む", async () => {
-  for (const name of ["plan", "plan-critic", "implement", "review", "git-commit-push-pr"]) {
+test("planとcriticはauthoring後の返却直前にsmokeを1回だけ行う", async () => {
+  const [plan, critic, quality, goalQuality, parityReference] = await Promise.all([
+    read(".agents/skills/plan/SKILL.md"),
+    read(".agents/skills/plan-critic/SKILL.md"),
+    read(".agents/skills/plan/references/ui-prototype-quality.md"),
+    read(".agents/skills/plan/references/goal-quality.md"),
+    read(".agents/skills/plan/references/parity-runner.md"),
+  ]);
+
+  for (const contract of [plan, critic]) {
+    assert.match(contract, /authoritative requirements bundle/);
+    assert.match(contract, /plans\/<slug>\/goal\.md/);
+    assert.match(contract, /parity-spec\.json/);
+    assert.match(contract, /prototype revision/);
+    assert.match(contract, /smoke/);
+    assert.match(contract, /Do not run the (?:complete|full) matrix|Do not run the full matrix/);
+    assert.doesNotMatch(contract, /machineParityResults|UI承認記録|<row-id>=pending/);
+  }
+  assert.match(plan, /user can give feedback|user.*feedback/iu);
+  assert.match(plan, /Browser unavailability does not block a reviewable plan/);
+  assert.match(plan, /Do not open the Browser while authoring/);
+  assert.match(plan, /otherwise ready to return/);
+  assert.match(critic, /run one final smoke immediately before returning/);
+  assert.match(critic, /fresh no-history subagent/);
+  assert.match(critic, /There is no plan-time approval state to reset/);
+  assert.match(quality, /Prepare iterative review/);
+  assert.match(goalQuality, /explicit `\$implement` invocation is the approval/);
+  assert.match(goalQuality, /missing file means that phase was not run/);
+  assert.match(parityReference, /representative desktop and 390×844/);
+  assert.match(parityReference, /theme.*semantic-token.*native-control/);
+  assert.match(parityReference, /responsive.*shell.*navigation.*layout/);
+});
+
+test("implementはinvocation approval後にBrowserを使わず実装し完了直前のfinalだけを要求する", async () => {
+  const [implement, workflow, devServer, agents] = await Promise.all([
+    read(".agents/skills/implement/SKILL.md"),
+    read("docs/development/codex-development-workflow.md"),
+    read(".claude/rules/dev-server.md"),
+    read("AGENTS.md"),
+  ]);
+  for (const contract of [implement, workflow, devServer, agents]) {
+    assert.match(contract, /\$implement/);
+    assert.match(contract, /parity-spec\.json|validation profile/);
+    assert.match(contract, /final|最終/);
+  }
+  assert.match(implement, /explicit `\$implement` invocation is the approval basis/);
+  assert.match(implement, /approval\.json/);
+  assert.match(implement, /implementation-parity\.json/);
+  assert.match(implement, /one capability canary/);
+  assert.match(implement, /Start gate without Browser/);
+  assert.match(implement, /Browser availability is not a start gate/);
+  assert.match(implement, /Do not probe Browser capability/);
+  assert.match(implement, /Final Browser review/);
+  assert.match(implement, /schema version 3/);
+  assert.match(implement, /do not create `pre-edit-parity\.json`/);
+  assert.match(implement, /Do not run `affected` Browser rows/);
+  assert.match(implement, /Use `targeted` by default/);
+  assert.match(implement, /Use `full` only when/);
+  assert.match(implement, /one setup attempt plus one retry/);
+  assert.match(implement, /Do not create a substantial task-specific adapter or runtime shim/);
+  assert.match(implement, /Run the full test suite only when/);
+  assert.match(implement, /Run a production build only for/);
+  assert.match(implement, /Any later related change invalidates it/);
+  assert.match(implement, /Do not require a prior machine-parity field/);
+  assert.match(implement, /do not request an extra approval message/);
+  assert.match(workflow, /final parityを1回/);
+  assert.match(workflow, /`targeted`を既定/);
+  assert.match(workflow, /大規模なadapterやruntime shimを新設・debugしない/);
+  assert.match(workflow, /不要な全test・buildを実行しない/);
+  assert.match(workflow, /pre-editとaffectedのBrowser実行が0回/);
+  assert.match(workflow, /完了直前のtargeted finalが1回/);
+  assert.match(workflow, /巨大なpending一覧を作らない/);
+});
+
+test("verified Compose webだけを確認なしで再起動しbuildとcleanupの境界を維持する", async () => {
+  const [implement, workflow, devServer] = await Promise.all([
+    read(".agents/skills/implement/SKILL.md"),
+    read("docs/development/codex-development-workflow.md"),
+    read(".claude/rules/dev-server.md"),
+  ]);
+  for (const contract of [implement, workflow, devServer]) {
+    assert.match(contract, /\.\/dev-compose\.sh restart web/);
+    assert.match(contract, /checkout mount/);
+    assert.match(contract, /container ID/);
+    assert.match(contract, /fixture/);
+    assert.match(contract, /authorization/);
+  }
+  assert.match(implement, /without asking/);
+  assert.match(implement, /Never stop a user-owned server for a build/);
+  assert.match(implement, /Never run broad `docker compose down`/);
+  assert.match(devServer, /他service、project全体、volumeは停止・削除しない/);
+  assert.match(workflow, /baselineとの差分だけをcleanup/);
+});
+
+test("reviewはstructured evidenceを先に検証して二つのpassを並行実行する", async () => {
+  const review = await read(".agents/skills/review/SKILL.md");
+  assert.match(review, /approval\.json/);
+  assert.match(review, /implementation-parity\.json/);
+  assert.match(review, /schema-version-3/);
+  assert.match(review, /New runs do not require or create `pre-edit-parity\.json`/);
+  assert.match(review, /structured scroll provenance/);
+  assert.doesNotMatch(review, /natural-language scroll|自然言語.*scroll/iu);
+  assert.match(review, /existing plan with only legacy goal\/Markdown evidence/);
+  assert.match(review, /schema version 1 and 2 as legacy read-only pre-edit\/final pairs/);
+  assert.match(review, /Run both passes in parallel/);
+  assert.match(review, /concurrently/);
+  assert.match(review, /not the plan, conversation, evidence verdict, or prior review/);
+  assert.match(review, /not the blind result or conversation/);
+  assert.match(review, /source[\s\S]*severity[\s\S]*title[\s\S]*body[\s\S]*location[\s\S]*recommendation/);
+  assert.match(review, /plans\/<slug>\/review\//);
+});
+
+test("parity runnerとprototype helperはcanonical artifactsを検証する", async () => {
+  const runnerPath = ".agents/skills/plan/scripts/parity-runner.mjs";
+  const revisionPath = ".agents/skills/plan/scripts/prototype-revision.mjs";
+  await Promise.all([
+    access(path.join(root, runnerPath)),
+    access(path.join(root, revisionPath)),
+    access(path.join(root, ".agents/skills/plan/references/parity-runner.md")),
+    access(path.join(root, "dev-prototype.sh")),
+  ]);
+  const [runner, revision] = await Promise.all([read(runnerPath), read(revisionPath)]);
+  for (const token of [
+    "stateSetups",
+    "rowProbeMap",
+    "waitForVisible",
+    "waitForHidden",
+    "BrowserParityRunner",
+    "performance-resource-timing",
+    "browser-network-log",
+    "window.scrollX/window.scrollY",
+    "explicit-$implement-invocation",
+    "validateEvidenceBundle",
+  ]) {
+    assert.ok(runner.includes(token), `parity runner omitted ${token}`);
+  }
+  assert.match(revision, /createHash\("sha256"\)/);
+  assert.match(revision, /ui-contract\.json/);
+  assert.match(revision, /productionBaseline\.sources/);
+});
+
+test("skill metadataは明示呼び出しを維持しUI説明の長さとpromptを満たす", async () => {
+  for (const name of allSkillNames) {
     const yaml = await read(`.agents/skills/${name}/agents/openai.yaml`);
     assert.match(yaml, /allow_implicit_invocation: false/);
     assert.match(yaml, new RegExp(`default_prompt: "[^\\n]*\\$${name.replaceAll("-", "\\-")}`));
+    const description = /^\s*short_description:\s*"([^"]+)"$/mu.exec(yaml)?.[1];
+    assert.ok(description, `${name} is missing short_description`);
+    assert.ok(description.length >= 25 && description.length <= 64, `${name} short_description length is invalid`);
   }
 });
 
-test("旧workflow・prototype・validator・専用agentは撤去されている", async () => {
+test("明示的な6 skill構成を保ちlifecycle・固定model・旧agentを復活させない", async () => {
   const removed = [
+    ".agents/skills/implementation-planner/SKILL.md",
+    ".agents/skills/implementation-executor/SKILL.md",
+    ".agents/skills/implementation-review/SKILL.md",
     ".agents/skills/final-plan-rewriter/SKILL.md",
-    "docs/development/codex-development-workflow.md",
     "scripts/validate-plan-file.mjs",
     "scripts/validate-review-data.mjs",
-    "dev-prototype.sh",
-    "test/review-gate-e2e.test.ts",
-    "test/dev-prototype.test.ts",
-    ".codex/agents/plan_author.toml",
-    ".codex/agents/plan_critic.toml",
-    ".codex/agents/plan_rewriter.toml",
-    ".codex/agents/blind_diff_reviewer.toml",
-    ".codex/agents/plan_conformance_reviewer.toml",
     ".codex/agents/implementer.toml",
-    ".codex/agents/mechanical_worker.toml",
-    ".codex/agents/git_shipper.toml",
+    ".codex/agents/plan_author.toml",
   ];
-  for (const relative of removed) await assert.rejects(access(path.join(root, relative)), { code: "ENOENT" });
-  const [agents, config, readme, design] = await Promise.all([read("AGENTS.md"), read(".codex/config.toml"), read("README.md"), read("DESIGN.md")]);
-  for (const text of [agents, config, readme, design]) assert.doesNotMatch(text, /codex-development-workflow|dev-prototype|plans\/tmp|UIプロトタイプ|静的 HTML プロトタイプ/u);
+  for (const relative of removed) {
+    await assert.rejects(access(path.join(root, relative)), { code: "ENOENT" });
+  }
+  const [config, workflow, ...skills] = await Promise.all([
+    read(".codex/config.toml"),
+    read("docs/development/codex-development-workflow.md"),
+    ...allSkillNames.map((name) => read(`.agents/skills/${name}/SKILL.md`)),
+  ]);
+  assert.match(workflow, /独自runtime、専用agent、固定model routing、lifecycle state machineは作らない/);
   assert.doesNotMatch(config, /^\[agents\./m);
+  for (const skill of skills) {
+    assert.doesNotMatch(skill, /implementation-(?:planner|executor|review)|final-plan-rewriter|G0[1-6]|gpt-5\./);
+  }
 });
 
-test("shippingはstaged diffを正本としplan lifecycleへ結合しない", async () => {
-  const shipping = await read(".agents/skills/git-commit-push-pr/SKILL.md");
+test("plan生成物はignoredでshipping skillと自動結合しない", async () => {
+  const [gitignore, shipping] = await Promise.all([
+    read(".gitignore"),
+    read(".agents/skills/git-commit-push-pr/SKILL.md"),
+  ]);
+  assert.match(gitignore, /^\/plans\/\*\.md$/m);
+  assert.match(gitignore, /^!\/plans\/template\.md$/m);
+  assert.match(gitignore, /^\/plans\/\*\/$/m);
   assert.match(shipping, /Generate the commit message only from the staged diff/);
-  assert.match(shipping, /validations actually executed/);
-  assert.match(shipping, /never deletes it automatically/);
   assert.match(shipping, /cleanup is a separate user-authorized operation/);
-  assert.doesNotMatch(shipping, /final\.md|plans\/tmp|G0[1-6]|validate-plan-file|validate-review-data|Plan-driven|plan-driven/);
 });

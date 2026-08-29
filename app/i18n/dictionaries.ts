@@ -84,6 +84,28 @@ export type LifeTopicDictionary = {
   housingSupport: string;
 };
 
+export type DisasterRadioDictionary = {
+  title: string;
+  breadcrumb: string;
+  lead: string;
+  emailHeading: string;
+  emailDescription: string;
+  registrationHeading: string;
+  registrationSteps: readonly [string, string, string];
+  registrationLink: string;
+  registrationAddressLabel: string;
+  senderAddressLabel: string;
+  emailNote: string;
+  phoneHeading: string;
+  phoneDescription: string;
+  phoneNumberLabel: string;
+  demoSuffix: string;
+  phoneNote: string;
+  contactHeading: string;
+  contactNote: string;
+  contactPhoneLabel: string;
+};
+
 export type Dictionary = {
   cityName: string;
   cityNameRoman: string;
@@ -172,6 +194,7 @@ export type Dictionary = {
     backToCategory: string;
     publishedLabel: string;
     readMore: string;
+    disasterRadio: DisasterRadioDictionary;
     faq: {
       indexLead: string;
       departmentsHeading: string;
@@ -191,6 +214,7 @@ export type Dictionary = {
     terms: string;
     privacy: string;
     buildingGuide: string;
+    disasterRadio: string;
     feedback: string;
     sitemap: string;
     login: string;
@@ -654,6 +678,37 @@ export const dictionaries: Record<Locale, Dictionary> = {
       backToCategory: 'このカテゴリに戻る',
       publishedLabel: '公開日',
       readMore: '詳しく見る',
+      disasterRadio: {
+        title: '防災行政無線の放送内容を確認する',
+        breadcrumb: '防災行政無線',
+        lead:
+          '未来市では、防災・行政情報などを防災行政無線でお知らせしています。メール配信サービスや電話応答サービスを利用すると、放送内容を確認できます。',
+        emailHeading: 'メール配信サービス',
+        emailDescription:
+          'メールアドレスを登録すると、防災行政無線の放送内容を携帯電話やパソコンで受信できます。',
+        registrationHeading: '登録方法',
+        registrationSteps: [
+          '「登録用メールを開く」を選択します。',
+          '件名に「ALL」と入力されていることを確認し、そのまま送信します。',
+          '登録完了メールが届いたら登録完了です。',
+        ],
+        registrationLink: '登録用メールを開く',
+        registrationAddressLabel: '登録先メールアドレス',
+        senderAddressLabel: '受信許可するアドレス',
+        emailNote:
+          '受信拒否を設定している場合は、登録前に上記の送信元アドレスを受信できるようにしてください。掲載しているアドレスはデモ用で、実際の登録は行われません。',
+        phoneHeading: '電話応答サービス',
+        phoneDescription:
+          '専用番号に電話をかけると、防災行政無線で放送した内容を音声で確認できます。',
+        phoneNumberLabel: '電話番号',
+        demoSuffix: '（デモ用）',
+        phoneNote:
+          'この番号は画面確認用のプレースホルダーで、実際の通話には接続しません。',
+        contactHeading: 'お問い合わせ',
+        contactNote:
+          '防災行政無線と配信サービスについては、未来市 防災課へお問い合わせください。',
+        contactPhoneLabel: '電話',
+      },
       faq: {
         indexLead: '未来市のよくある質問を課・局別にご案内します。',
         departmentsHeading: '課・局から探す',
@@ -804,6 +859,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       terms: '利用規約',
       privacy: 'プライバシーポリシー',
       buildingGuide: '庁舎案内',
+      disasterRadio: '防災無線',
       feedback: 'ご意見・ご要望',
       sitemap: 'サイトマップ',
       login: 'ログイン',
@@ -1384,6 +1440,37 @@ export const dictionaries: Record<Locale, Dictionary> = {
       backToCategory: 'Back to this category',
       publishedLabel: 'Published',
       readMore: 'Read more',
+      disasterRadio: {
+        title: 'Check Disaster Prevention Radio Broadcasts',
+        breadcrumb: 'Disaster Prevention Radio',
+        lead:
+          'Mirai City uses its disaster prevention radio system to share emergency and municipal information. You can check broadcasts by email or through the automated phone service.',
+        emailHeading: 'Email Notification Service',
+        emailDescription:
+          'Register an email address to receive disaster prevention radio broadcasts on a mobile phone or computer.',
+        registrationHeading: 'How to Register',
+        registrationSteps: [
+          'Select “Open registration email.”',
+          'Confirm that the subject is “ALL,” then send the message.',
+          'Registration is complete when you receive the confirmation email.',
+        ],
+        registrationLink: 'Open registration email',
+        registrationAddressLabel: 'Registration email address',
+        senderAddressLabel: 'Sender address to allow',
+        emailNote:
+          'If you block incoming mail, allow the sender address above before registering. These addresses are non-working demo placeholders and no registration will occur.',
+        phoneHeading: 'Automated Phone Service',
+        phoneDescription:
+          'Call the dedicated number to listen to disaster prevention radio broadcasts.',
+        phoneNumberLabel: 'Phone number',
+        demoSuffix: ' (demo)',
+        phoneNote:
+          'This number is a screen-demo placeholder and does not connect to a real call.',
+        contactHeading: 'Contact Us',
+        contactNote:
+          'For questions about disaster prevention radio and notification services, contact the Mirai City Disaster Prevention Division.',
+        contactPhoneLabel: 'Phone',
+      },
       faq: {
         indexLead:
           'Browse frequently asked questions from Mirai City by department or bureau.',
@@ -1535,6 +1622,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       terms: 'Terms of Service',
       privacy: 'Privacy Policy',
       buildingGuide: 'Building Guide',
+      disasterRadio: 'Disaster Radio',
       feedback: 'Feedback & Requests',
       sitemap: 'Site Map',
       login: 'Log in',
@@ -2108,6 +2196,36 @@ export const dictionaries: Record<Locale, Dictionary> = {
       backToCategory: '返回分类页面',
       publishedLabel: '发布日期',
       readMore: '查看详情',
+      disasterRadio: {
+        title: '查看防灾行政无线广播内容',
+        breadcrumb: '防灾行政无线',
+        lead:
+          '未来市通过防灾行政无线发布防灾和行政信息。您可以使用邮件推送或电话语音服务查看广播内容。',
+        emailHeading: '邮件推送服务',
+        emailDescription:
+          '登记电子邮件地址后，即可通过手机或电脑接收防灾行政无线的广播内容。',
+        registrationHeading: '登记方法',
+        registrationSteps: [
+          '选择“打开登记邮件”。',
+          '确认主题为“ALL”后直接发送。',
+          '收到登记完成邮件后即表示登记成功。',
+        ],
+        registrationLink: '打开登记邮件',
+        registrationAddressLabel: '登记邮箱地址',
+        senderAddressLabel: '需要允许接收的发件地址',
+        emailNote:
+          '如设置了拒收邮件，请先允许接收上述发件地址。所列地址仅为不可用的演示占位符，不会实际登记。',
+        phoneHeading: '电话语音服务',
+        phoneDescription:
+          '拨打专用号码即可通过语音确认防灾行政无线的广播内容。',
+        phoneNumberLabel: '电话号码',
+        demoSuffix: '（演示用）',
+        phoneNote: '该号码仅用于画面演示，不会接通实际电话。',
+        contactHeading: '咨询',
+        contactNote:
+          '如对防灾行政无线和推送服务有疑问，请联系未来市防灾科。',
+        contactPhoneLabel: '电话',
+      },
       faq: {
         indexLead: '按部门和局分类查看未来市的常见问题。',
         departmentsHeading: '按部门或局查找',
@@ -2256,6 +2374,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       terms: '使用条款',
       privacy: '隐私政策',
       buildingGuide: '办公楼指南',
+      disasterRadio: '防灾无线',
       feedback: '意见・要望',
       sitemap: '网站地图',
       login: '登录',
@@ -2780,6 +2899,36 @@ export const dictionaries: Record<Locale, Dictionary> = {
       backToCategory: '返回分類頁面',
       publishedLabel: '發布日期',
       readMore: '查看詳情',
+      disasterRadio: {
+        title: '查看防災行政無線廣播內容',
+        breadcrumb: '防災行政無線',
+        lead:
+          '未來市透過防災行政無線發布防災及行政資訊。您可以使用電子郵件推播或電話語音服務查看廣播內容。',
+        emailHeading: '電子郵件推播服務',
+        emailDescription:
+          '登記電子郵件地址後，即可透過手機或電腦接收防災行政無線的廣播內容。',
+        registrationHeading: '登記方法',
+        registrationSteps: [
+          '選擇「開啟登記郵件」。',
+          '確認主旨為「ALL」後直接寄出。',
+          '收到登記完成郵件後即表示登記成功。',
+        ],
+        registrationLink: '開啟登記郵件',
+        registrationAddressLabel: '登記電子郵件地址',
+        senderAddressLabel: '需允許接收的寄件地址',
+        emailNote:
+          '若設定拒收郵件，請先允許接收上述寄件地址。所列地址僅為不可用的示範預留值，不會實際登記。',
+        phoneHeading: '電話語音服務',
+        phoneDescription:
+          '撥打專用號碼，即可透過語音確認防災行政無線的廣播內容。',
+        phoneNumberLabel: '電話號碼',
+        demoSuffix: '（示範用）',
+        phoneNote: '此號碼僅供畫面示範，不會接通實際電話。',
+        contactHeading: '聯絡我們',
+        contactNote:
+          '如對防災行政無線和推播服務有疑問，請聯絡未來市防災課。',
+        contactPhoneLabel: '電話',
+      },
       faq: {
         indexLead: '按部門和局分類查看未來市的常見問題。',
         departmentsHeading: '依部門或局查詢',
@@ -2928,6 +3077,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       terms: '使用條款',
       privacy: '隱私權政策',
       buildingGuide: '辦公大樓導覽',
+      disasterRadio: '防災無線',
       feedback: '意見・需求',
       sitemap: '網站地圖',
       login: '登入',
@@ -3453,6 +3603,36 @@ export const dictionaries: Record<Locale, Dictionary> = {
       backToCategory: '이 카테고리로 돌아가기',
       publishedLabel: '게시일',
       readMore: '자세히 보기',
+      disasterRadio: {
+        title: '방재 행정 무선 방송 내용 확인',
+        breadcrumb: '방재 행정 무선',
+        lead:
+          '미래시는 방재 행정 무선으로 재난 및 행정 정보를 안내합니다. 이메일 알림 서비스나 전화 음성 서비스를 이용해 방송 내용을 확인할 수 있습니다.',
+        emailHeading: '이메일 알림 서비스',
+        emailDescription:
+          '이메일 주소를 등록하면 휴대전화나 컴퓨터로 방재 행정 무선 방송 내용을 받을 수 있습니다.',
+        registrationHeading: '등록 방법',
+        registrationSteps: [
+          '“등록 이메일 열기”를 선택합니다.',
+          '제목이 “ALL”인지 확인한 후 그대로 전송합니다.',
+          '등록 완료 이메일을 받으면 등록이 완료됩니다.',
+        ],
+        registrationLink: '등록 이메일 열기',
+        registrationAddressLabel: '등록 이메일 주소',
+        senderAddressLabel: '수신 허용 발신 주소',
+        emailNote:
+          '수신 거부를 설정한 경우 등록 전에 위 발신 주소를 허용해 주세요. 표시된 주소는 작동하지 않는 데모용 값이며 실제 등록은 이루어지지 않습니다.',
+        phoneHeading: '전화 음성 서비스',
+        phoneDescription:
+          '전용 번호로 전화하면 방재 행정 무선 방송 내용을 음성으로 확인할 수 있습니다.',
+        phoneNumberLabel: '전화번호',
+        demoSuffix: '（데모용）',
+        phoneNote: '이 번호는 화면 확인용이며 실제 통화에는 연결되지 않습니다.',
+        contactHeading: '문의',
+        contactNote:
+          '방재 행정 무선과 알림 서비스는 미래시 방재과로 문의해 주세요.',
+        contactPhoneLabel: '전화',
+      },
       faq: {
         indexLead: '미래시의 자주 묻는 질문을 과·국별로 안내합니다.',
         departmentsHeading: '과·국별로 찾기',
@@ -3602,6 +3782,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       terms: '이용약관',
       privacy: '개인정보 보호정책',
       buildingGuide: '청사 안내',
+      disasterRadio: '방재 무선',
       feedback: '의견・요청',
       sitemap: '사이트맵',
       login: '로그인',

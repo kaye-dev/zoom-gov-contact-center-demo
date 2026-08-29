@@ -95,6 +95,7 @@ export function resolveCanonicalOrigin(
 const FIXED_PUBLIC_PATHS = [
   "/",
   "/life",
+  "/life/emergency-safety-disaster/disaster-prevention-radio",
   "/life/frequently-asked-questions",
   "/news",
 ] as const;

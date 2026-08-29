@@ -1,36 +1,32 @@
 ---
 name: plan-critic
-description: "Independently review and rewrite one repository plan into an evidence-backed self-contained implementation plan. Use only when explicitly invoked as $plan-critic."
+description: "Independently review and rewrite one repository goal and optional UI prototype into a self-contained, review-ready specification. Use only when explicitly invoked as $plan-critic."
 ---
 
 # Plan Critic
 
-Review one plan with a fresh independent subagent, then replace that same file with a coherent final version. Do not create a critique artifact or change log.
+Independently review one plan, repair deterministic defects, and leave the same goal as a coherent final design. Do not create a critique artifact or production change.
 
-## Resolve the plan
+## Resolve and review
 
-- Use the explicit `plans/<slug>.md` path when supplied.
-- Otherwise list `plans/*.md`, excluding `plans/template.md`. Continue only when exactly one candidate exists; stop when there are zero or multiple candidates.
-- Reject paths outside `plans/`, nested paths, `plans/template.md`, and slugs that do not match `^[a-z0-9][a-z0-9-]*$`.
+- Use the explicit `plans/<slug>/goal.md`, or the only `plans/*/goal.md`; stop for zero or multiple candidates. Reject invalid or reserved slugs.
+- Read [../plan/references/goal-quality.md](../plan/references/goal-quality.md), repository rules, target artifacts, and minimum relevant code/runtime evidence. For UI work also read [../plan/references/ui-prototype-quality.md](../plan/references/ui-prototype-quality.md) and [../plan/references/parity-runner.md](../plan/references/parity-runner.md).
+- The write allowlist is the selected goal and its optional canonical prototype. Never edit production, tests, documentation, configuration, Git state, or `review/`.
+- Start a fresh no-history subagent with only the authoritative requirements bundle, exact goal/prototype, applicable rules, and necessary repository/runtime evidence. Ask it for atomic requirement closure, factual, interface, safety, verification, and UI-parity findings, including exactly five Markdown columns in every closure row; it must not edit files.
 
-## Run an independent critique
+Validate every finding against the authoritative bundle and repository evidence. Stop for a user decision only when correction would choose new product behavior or required live evidence is unavailable. Repair deterministic omissions and prototype defects that follow uniquely from accepted requirements and the closest production UI.
 
-Read the applicable repository rules, target plan, relevant code, tests, configuration, and runtime evidence. Start a fresh no-history subagent and pass only:
+## Rewrite once
 
-- the exact plan;
-- applicable repository rules;
-- the minimum repository and runtime evidence needed to verify it.
+Read `plans/template.md` and prepare a complete replacement. Finish prototype repair, CSS build, contract/profile validation, revision calculation, and the static audit before Browser work. Write the goal once as the adopted design, then run one final smoke immediately before returning the result. Preserve the six H1 headings and requirement closure. Do not add lifecycle state, progress, history, or separate draft/final files.
 
-Do not pass the parent conversation, desired verdict, or prior critique. Ask the reviewer to find factual errors, missing requirements, unsafe assumptions, contradictions, incomplete interfaces or data flow, weak completion criteria, and inadequate tests. The reviewer returns findings only and must not edit files.
+For a repaired or newly reconstructed UI prototype:
 
-## Decide before writing
+1. Synchronize `ui-contract.json` version 1 and `parity-spec.json` version 1 while preserving stable target, state, row, and probe IDs whose meaning did not change.
+2. Build CSS, validate both contracts, and recompute `prototype revision`.
+3. After every deterministic repair and static audit is complete, run one risk-selected `smoke` selection for the changed target/state. Do not use Browser checks while repairing. Do not run the full matrix or create approval/final evidence.
+4. If Browser verification is unavailable, report the smoke scope as unverified and still return the reviewable plan.
 
-Check every finding against the request and repository evidence. If resolving a high-impact unknown or requirement conflict requires a user decision, stop and ask the user before changing the plan. Do not guess, select a product direction, or silently narrow scope.
+Any prototype, manifest, or profile change creates a new revision. There is no plan-time approval state to reset; the next explicit `$implement` invocation approves the then-current goal and revision.
 
-## Rewrite the same plan
-
-Read `plans/template.md`, prepare the complete replacement, and write the target once so readers never observe a partially rewritten plan. Preserve the template's six headings and their order.
-
-Rewrite the document as if the adopted design had been known from the start. Keep only current decisions and supporting evidence; remove rejected alternatives, discussion history, draft wording, contradictions, and obsolete instructions. Use `変更なし` or `なし` for inapplicable content. Do not add metadata, status, task tables, gates, progress logs, prototype contracts, hashes, or separate draft/final files.
-
-Report the updated path, incorporated corrections, and any remaining explicit risks. Do not create `critique.md`, edit production code, stage changes, commit, push, or create a pull request.
+Run the shared final audit and report the updated goal, prototype paths, revision, smoke result, corrections, and remaining risks. Do not create `critique.md`, `evidence/`, or `review/`, and do not stage, commit, push, or create a pull request.

@@ -29,7 +29,7 @@
 /lib/generated/prisma/
 /plans/*.md
 !/plans/template.md
-/plans/reviews/
+/plans/*/
 
 # debug
 npm-debug.log*

@@ -332,7 +332,15 @@ Zoom AI、Zoom Virtual Agent、Zoom Contact Center、Zoom Phone への導線は�
 2. 既存アプリを実際に操作し、最も近い画面、コンポーネント、トークンを特定する。
 3. 通常、ホバー、フォーカス、押下、無効、処理中、成功、エラー、空状態を洗い出す。
 4. デスクトップ、モバイル、多言語、ダークモードで変わる点を整理する。
-5. 大きな UI 変更では、対象画面、主要状態、responsive behavior、完了条件を実装計画へ具体的に記載する。
+5. ユーザーに見える UI 変更では、`docs/development/codex-development-workflow.md` に従ってcanonicalな静的 HTML prototypeを作り、`plans/<slug>/prototype/ui-contract.json` version 1をapproval contractとする。page・shell・共通component・global style・tokenのbaseline source inventory、`window.scrollX`/`window.scrollY`実測値による`scroll: {x, y}`、revisionへ紐付いた全rowの`<row-id>=pass|fail` machine parityとユーザーの明示承認を得る。production編集直前にも全sourceのworking treeと現在のfixture・権限・Browser条件を照合して全rowを再実行する。
+
+prototypeは見た目だけでなく、次を確認できる状態にする。
+
+- 実際に表示する文言とデータ量
+- desktop、390×844、関連するbreakpoint境界
+- light・darkと操作前後、disabled、saving、error等の主要状態
+- keyboard、focus、どこがクリック可能か
+- 既存画面との接続関係と意図した差分
 
 ### 11.2 実装中
 
@@ -340,7 +348,7 @@ Zoom AI、Zoom Virtual Agent、Zoom Contact Center、Zoom Phone への導線は�
 - 新しい色、余白、角丸、影を導入する場合は、既存トークンで表現できない理由を説明できるようにする。
 - UI ライブラリやアニメーション依存を、単一画面の都合だけで追加しない。
 - 機能実装と視覚調整を分離せず、すべての状態を同じ変更内で完成させる。
-- 実装計画との差異が必要になった場合は、独断で変更せず理由と代案を提示する。
+- 承認済みprototypeまたは実装計画との差異が必要になった場合は、独断で変更せず理由と代案を提示する。
 
 ### 11.3 実装後
 

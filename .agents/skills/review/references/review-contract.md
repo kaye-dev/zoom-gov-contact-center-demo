@@ -1,6 +1,6 @@
 # HTML review contract
 
-Copy every file from `assets/review-report/` to `plans/reviews/<slug>/`, then replace `review-data.json` completely. Do not persist raw reviewer responses, hashes, release gates, model routing, or additional review JSON files.
+Copy every file from `assets/review-report/` to `plans/<slug>/review/`, then replace `review-data.json` completely. Do not persist raw reviewer responses, hashes, release gates, model routing, or additional review JSON files.
 
 ## Data shape
 
@@ -8,7 +8,7 @@ Copy every file from `assets/review-report/` to `plans/reviews/<slug>/`, then re
 {
   "title": "変更の実装レビュー",
   "generatedAt": "2026-08-27T12:00:00+09:00",
-  "planPath": "plans/example-change.md",
+  "planPath": "plans/example-change/goal.md",
   "base": "HEAD",
   "head": "working tree",
   "summary": "レビュー対象の要約",
@@ -47,7 +47,7 @@ Copy every file from `assets/review-report/` to `plans/reviews/<slug>/`, then re
 
 ## Rules
 
-- `planPath` is the selected `plans/<slug>.md`.
+- `planPath` is the selected `plans/<slug>/goal.md`.
 - `base` and `head` describe the reviewed range. Use `HEAD` and `working tree` for the default uncommitted review; use explicit revisions for committed changes.
 - `reviewedPaths` and `excludedPaths` are sorted, disjoint, and together explain all relevant staged, unstaged, deleted, and non-ignored untracked paths.
 - Findings remain individually source-labelled as `blind` or `conformance`; never merge away one pass's result.

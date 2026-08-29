@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ThemeToggle } from './ThemeToggle';
 import { LanguageMenu } from './LanguageMenu';
 import { MobileMenu } from './MobileMenu';
@@ -13,6 +13,15 @@ import { useI18n } from '../i18n/LanguageProvider';
 export function Header() {
   const { t } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+
+  const closeMobileMenu = useCallback(() => {
+    setMenuOpen(false);
+    requestAnimationFrame(() => {
+      const menuButton = menuButtonRef.current;
+      if (menuButton?.isConnected) menuButton.focus();
+    });
+  }, []);
 
   // ロゴ（通常・コンパクト両状態で共通）
   const logo = (
@@ -58,6 +67,7 @@ export function Header() {
 
         {/* モバイル/タブレット（lg 未満）のハンバーガーボタン */}
         <button
+          ref={menuButtonRef}
           type="button"
           onClick={() => setMenuOpen(true)}
           aria-label={t.nav.openMenu}
@@ -69,7 +79,7 @@ export function Header() {
       </div>
 
       {/* ドロワーメニュー（lg 未満） */}
-      <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+      <MobileMenu open={menuOpen} onClose={closeMobileMenu} />
     </header>
   );
 }
