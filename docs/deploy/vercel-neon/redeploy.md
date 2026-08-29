@@ -28,7 +28,7 @@ git status --short
 
 ## 実行中の動作
 
-`deploy.sh`は固定versionのdeploy runner imageを使い、Parameter Storeの4件を値を表示せずに取得します。保存済みのVercel / Neon対象をAPIで再確認し、Neonからpooled / direct connection stringを取得して次の順に処理します。
+`deploy.sh`は固定versionのdeploy runner imageを使い、Parameter Storeの4件を値を表示せずに取得します。`config`が初回setupまたはcredential更新の途中状態なら、同じprofileで`./setup-deploy-aws.sh`を再実行するよう案内し、Production関連処理を始めず停止します。完了済みの場合は保存されたVercel / Neon対象をAPIで再確認し、Neonからpooled / direct connection stringを取得して次の順に処理します。
 
 1. Gitのbranch / commit / clean worktree、AWS account、provider plan、project、domain、region、DB endpointを検証する。
 2. test、lint、typecheck、runtime audit、Production buildを実行する。
@@ -62,31 +62,34 @@ Deployment completed: <deployment ID> (<commit SHA>)
 
 ## 設定変更とcredential rotation
 
-通常の再デプロイではParameter Storeを編集しません。canonical origin、project、branch、database、role、管理者emailなどを変更する場合は次を実行し、対象を再検証してから保存します。
+通常の再デプロイではParameter Storeを編集しません。設定を変更する場合は`setup-deploy-aws.sh`を引数なしで実行します。非秘密項目は現在値、秘密項目は値を伏せたSSM versionとともに一覧表示されるため、更新対象を1件選択します。空入力または`0`は変更せず検証だけを行います。
+
+```bash
+./setup-deploy-aws.sh
+```
+
+メニューの`1`から`10`ではcanonical origin、project、branch、database、role、管理者emailなどの非秘密設定を1件、`11`から`13`ではVercel token、Neon API key、管理者passwordを1件更新できます。選択した項目だけを再入力し、完成形の対象をAPIで検証してから保存します。入力形式や秘密値の確認不一致では同じ項目だけを再入力します。別の項目も変更する場合は、完了後にもう一度実行します。
+
+更新対象をcommandで明示する従来の運用では、非秘密設定をまとめて再入力する`--reconfigure`と、秘密値を指定する`--rotate`を利用できます。
 
 ```bash
 ./setup-deploy-aws.sh --reconfigure
-```
-
-Vercel token、Neon API key、管理者passwordのうち1件だけを変更する場合は、対応するrotateコマンドを使います。
-
-```bash
 ./setup-deploy-aws.sh --rotate vercel-token
 ./setup-deploy-aws.sh --rotate neon-api-key
 ./setup-deploy-aws.sh --rotate admin-password
 ```
 
-profileをその回だけ指定する場合は各コマンドへ`--profile <AWS_PROFILE_NAME>`を追加します。`admin-password`は既存管理者でsmokeログインする保存値だけを更新し、管理者user自体は作成・更新しません。先にレビュー済みの管理画面操作で同じ管理者のpasswordを変更してからrotateします。rotationは対象SecureStringだけを新しいversionへ更新し、`config.secretVersions`との対応を保ちます。実行後は値を表示せず、次の通常デプロイでprovider認証と対象一致を検証します。
+profileをその回だけ指定する場合は各コマンドへ`--profile <AWS_PROFILE_NAME>`を追加します。`admin-password`は既存管理者でsmokeログインする保存値だけを更新し、管理者user自体は作成・更新しません。先にレビュー済みの管理画面操作で同じ管理者のpasswordを変更してから更新します。秘密値の更新は対象`SecureString`だけを新しいversionへ更新し、`config.secretVersions`との対応を保ちます。途中でAWS / provider APIエラーや中断が発生した場合は自動再試行せず、次のsetup実行で保存済みversionを照合して再開します。実行後は値を表示せず、次の通常デプロイでprovider認証と対象一致を検証します。
 
 ## 停止・失敗した場合
 
 errorの直前に表示されたphaseを確認し、状態不明のまま再実行しません。
 
-| 停止箇所 | 外部状態 | 対応 |
-| --- | --- | --- |
-| target / quality / migration plan | 外部変更なし | 設定またはコードを修正して再実行する |
-| migration apply / verify | DBが一部または全部変更済みの可能性あり | Neon migration状態とschemaを確認し、自動rollbackしない |
-| Vercel env sync / Production deploy | 環境変数またはProductionが変更済みの可能性あり | Vercel deployment IDと最後に成功した工程を確認する |
-| canonical smoke | Productionはすでに公開済み | deployを重ねず、canonicalの実状態を確認して復旧する |
+| 停止箇所                            | 外部状態                                       | 対応                                                   |
+| ----------------------------------- | ---------------------------------------------- | ------------------------------------------------------ |
+| target / quality / migration plan   | 外部変更なし                                   | 設定またはコードを修正して再実行する                   |
+| migration apply / verify            | DBが一部または全部変更済みの可能性あり         | Neon migration状態とschemaを確認し、自動rollbackしない |
+| Vercel env sync / Production deploy | 環境変数またはProductionが変更済みの可能性あり | Vercel deployment IDと最後に成功した工程を確認する     |
+| canonical smoke                     | Productionはすでに公開済み                     | deployを重ねず、canonicalの実状態を確認して復旧する    |
 
 DB migrationはVercelのrollbackでは戻りません。認証だけが故障した場合やDB停止時は[メンテナンスモード緊急解除](maintenance-recovery.md)を参照してください。

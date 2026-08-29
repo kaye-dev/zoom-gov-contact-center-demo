@@ -61,6 +61,54 @@ export type StoredDeploymentConfig = {
   };
 };
 
+export type DeploymentSetupField =
+  | "vercel.orgId"
+  | "vercel.projectId"
+  | "vercel.projectName"
+  | "vercel.canonicalOrigin"
+  | "neon.projectId"
+  | "neon.projectName"
+  | "neon.branchId"
+  | "neon.databaseName"
+  | "neon.roleName"
+  | "admin.email";
+
+export type StoredDeploymentSetupDraft = {
+  schemaVersion: 2;
+  policyVersion: "demo-v1";
+  setupState: "incomplete";
+  aws: {
+    accountId: string;
+    region: typeof DEPLOY_REGION;
+  };
+  kmsKeyArn: string;
+  values: Partial<Record<DeploymentSetupField, string>>;
+  secretVersions: Partial<StoredDeploymentConfig["secretVersions"]>;
+};
+
+export type StoredDeploymentSetupState =
+  | { state: "complete"; config: StoredDeploymentConfig }
+  | { state: "incomplete"; draft: StoredDeploymentSetupDraft };
+
+export const DEPLOYMENT_SETUP_FIELDS = [
+  "vercel.orgId",
+  "vercel.projectId",
+  "vercel.projectName",
+  "vercel.canonicalOrigin",
+  "neon.projectId",
+  "neon.projectName",
+  "neon.branchId",
+  "neon.databaseName",
+  "neon.roleName",
+  "admin.email",
+] as const satisfies readonly DeploymentSetupField[];
+
+const DEPLOYMENT_SECRET_VERSION_FIELDS = [
+  "vercelToken",
+  "neonApiKey",
+  "adminPassword",
+] as const satisfies readonly (keyof StoredDeploymentConfig["secretVersions"])[];
+
 export type DeploymentSecrets = {
   vercelToken: string;
   neonApiKey: string;
@@ -139,11 +187,7 @@ export function loadDeploymentContext(
     profile === undefined ? undefined : validateAwsProfileName(profile);
   const accountId = getCallerAccountId(runner, selectedProfile);
   const parameters = getExactDeploymentParameters(runner, selectedProfile);
-  return buildLoadedDeploymentContext(
-    accountId,
-    parameters,
-    selectedProfile,
-  );
+  return buildLoadedDeploymentContext(accountId, parameters, selectedProfile);
 }
 
 export function loadDeploymentContextFromStdin(
@@ -198,7 +242,18 @@ function buildLoadedDeploymentContext(
     );
   }
 
-  const config = parseStoredDeploymentConfig(configParameter.Value);
+  const setupState = parseStoredDeploymentSetupState(configParameter.Value);
+  if (setupState.state === "incomplete") {
+    if (setupState.draft.aws.accountId !== accountId) {
+      throw new InvalidDeploymentConfigurationError(
+        "The selected AWS account does not match the deployment setup draft.",
+      );
+    }
+    throw new MissingDeploymentParametersError(profile, [
+      DEPLOY_CONFIG_PARAMETER,
+    ]);
+  }
+  const { config } = setupState;
   if (config.aws.accountId !== accountId) {
     throw new InvalidDeploymentConfigurationError(
       "The selected AWS account does not match the deployment config.",
@@ -233,6 +288,65 @@ function buildLoadedDeploymentContext(
   };
 }
 
+export function parseDeploymentSetupField(
+  field: DeploymentSetupField,
+  raw: unknown,
+): string {
+  switch (field) {
+    case "vercel.orgId":
+      return expectString(raw, "Vercel team ID", /^team_[A-Za-z0-9]+$/);
+    case "vercel.projectId":
+      return expectString(raw, "Vercel project ID", /^prj_[A-Za-z0-9]+$/);
+    case "vercel.projectName":
+      return expectIdentifier(raw, "Vercel project name");
+    case "vercel.canonicalOrigin":
+      return expectSetupHttpsOrigin(raw);
+    case "neon.projectId":
+      return expectString(
+        raw,
+        "Neon project ID",
+        /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/,
+      );
+    case "neon.projectName":
+      return expectIdentifier(raw, "Neon project name");
+    case "neon.branchId":
+      return expectString(raw, "Neon branch ID", /^br-[A-Za-z0-9-]+$/);
+    case "neon.databaseName":
+      return expectPostgresIdentifier(raw, "Neon database name");
+    case "neon.roleName":
+      return expectPostgresIdentifier(raw, "Neon role name");
+    case "admin.email":
+      return expectString(
+        raw,
+        "administrator email",
+        /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+      );
+  }
+}
+
+export function parseStoredDeploymentSetupState(
+  raw: string,
+): StoredDeploymentSetupState {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw) as unknown;
+  } catch {
+    throw new InvalidDeploymentConfigurationError(
+      `${DEPLOY_CONFIG_PARAMETER} contains invalid JSON.`,
+    );
+  }
+  const root = expectRecord(parsed, "deployment config");
+  if (root.schemaVersion === 1) {
+    return { state: "complete", config: parseStoredDeploymentConfig(raw) };
+  }
+  if (root.schemaVersion !== 2) {
+    throw new InvalidDeploymentConfigurationError(
+      "The deployment config schema or policy version is unsupported.",
+    );
+  }
+  return { state: "incomplete", draft: parseStoredDeploymentSetupDraft(root) };
+}
+
 export function parseStoredDeploymentConfig(
   raw: string,
 ): StoredDeploymentConfig {
@@ -245,16 +359,20 @@ export function parseStoredDeploymentConfig(
     );
   }
   const root = expectRecord(parsed, "deployment config");
-  assertExactKeys(root, [
-    "schemaVersion",
-    "policyVersion",
-    "aws",
-    "vercel",
-    "neon",
-    "admin",
-    "kmsKeyArn",
-    "secretVersions",
-  ], "deployment config");
+  assertExactKeys(
+    root,
+    [
+      "schemaVersion",
+      "policyVersion",
+      "aws",
+      "vercel",
+      "neon",
+      "admin",
+      "kmsKeyArn",
+      "secretVersions",
+    ],
+    "deployment config",
+  );
   if (root.schemaVersion !== 1 || root.policyVersion !== "demo-v1") {
     throw new InvalidDeploymentConfigurationError(
       "The deployment config schema or policy version is unsupported.",
@@ -273,30 +391,27 @@ export function parseStoredDeploymentConfig(
   const vercel = expectRecord(root.vercel, "deployment config vercel");
   assertExactKeys(
     vercel,
-    [
-      "orgId",
-      "projectId",
-      "projectName",
-      "canonicalOrigin",
-      "expectedPlan",
-    ],
+    ["orgId", "projectId", "projectName", "canonicalOrigin", "expectedPlan"],
     "deployment config vercel",
   );
-  const orgId = expectString(
-    vercel.orgId,
-    "Vercel team ID",
-    /^team_[A-Za-z0-9]+$/,
-  );
-  const vercelProjectId = expectString(
+  const orgId = parseDeploymentSetupField("vercel.orgId", vercel.orgId);
+  const vercelProjectId = parseDeploymentSetupField(
+    "vercel.projectId",
     vercel.projectId,
-    "Vercel project ID",
-    /^prj_[A-Za-z0-9]+$/,
   );
-  const vercelProjectName = expectIdentifier(
+  const vercelProjectName = parseDeploymentSetupField(
+    "vercel.projectName",
     vercel.projectName,
-    "Vercel project name",
   );
-  const canonicalOrigin = expectHttpsOrigin(vercel.canonicalOrigin);
+  const canonicalOrigin = parseDeploymentSetupField(
+    "vercel.canonicalOrigin",
+    vercel.canonicalOrigin,
+  );
+  if (canonicalOrigin !== vercel.canonicalOrigin) {
+    throw new InvalidDeploymentConfigurationError(
+      "Vercel canonical origin must be an exact HTTPS origin.",
+    );
+  }
   if (vercel.expectedPlan !== "hobby") {
     throw new InvalidDeploymentConfigurationError(
       "The Vercel expected plan must be hobby.",
@@ -317,25 +432,20 @@ export function parseStoredDeploymentConfig(
     ],
     "deployment config neon",
   );
-  const neonProjectId = expectString(
+  const neonProjectId = parseDeploymentSetupField(
+    "neon.projectId",
     neon.projectId,
-    "Neon project ID",
-    /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/,
   );
-  const neonProjectName = expectIdentifier(
+  const neonProjectName = parseDeploymentSetupField(
+    "neon.projectName",
     neon.projectName,
-    "Neon project name",
   );
-  const branchId = expectString(
-    neon.branchId,
-    "Neon branch ID",
-    /^br-[A-Za-z0-9-]+$/,
-  );
-  const databaseName = expectPostgresIdentifier(
+  const branchId = parseDeploymentSetupField("neon.branchId", neon.branchId);
+  const databaseName = parseDeploymentSetupField(
+    "neon.databaseName",
     neon.databaseName,
-    "Neon database name",
   );
-  const roleName = expectPostgresIdentifier(neon.roleName, "Neon role name");
+  const roleName = parseDeploymentSetupField("neon.roleName", neon.roleName);
   if (neon.regionId !== "aws-ap-southeast-1") {
     throw new InvalidDeploymentConfigurationError(
       "The Neon region must be aws-ap-southeast-1.",
@@ -349,19 +459,9 @@ export function parseStoredDeploymentConfig(
 
   const admin = expectRecord(root.admin, "deployment config admin");
   assertExactKeys(admin, ["email"], "deployment config admin");
-  const email = expectString(
-    admin.email,
-    "administrator email",
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-  );
+  const email = parseDeploymentSetupField("admin.email", admin.email);
 
-  const kmsKeyArn = expectString(
-    root.kmsKeyArn,
-    "KMS key ARN",
-    new RegExp(
-      `^arn:aws:kms:${DEPLOY_REGION}:${accountId}:key/[0-9a-fA-F-]{36}$`,
-    ),
-  );
+  const kmsKeyArn = expectKmsKeyArn(root.kmsKeyArn, accountId);
 
   const secretVersions = expectRecord(
     root.secretVersions,
@@ -409,6 +509,85 @@ export function parseStoredDeploymentConfig(
         "administrator password version",
       ),
     },
+  };
+}
+
+function parseStoredDeploymentSetupDraft(
+  root: Record<string, unknown>,
+): StoredDeploymentSetupDraft {
+  assertExactKeys(
+    root,
+    [
+      "schemaVersion",
+      "policyVersion",
+      "setupState",
+      "aws",
+      "kmsKeyArn",
+      "values",
+      "secretVersions",
+    ],
+    "deployment setup draft",
+  );
+  if (
+    root.schemaVersion !== 2 ||
+    root.policyVersion !== "demo-v1" ||
+    root.setupState !== "incomplete"
+  ) {
+    throw new InvalidDeploymentConfigurationError(
+      "The deployment setup draft schema, policy, or state is unsupported.",
+    );
+  }
+
+  const aws = expectRecord(root.aws, "deployment setup draft aws");
+  assertExactKeys(aws, ["accountId", "region"], "deployment setup draft aws");
+  const accountId = expectString(aws.accountId, "AWS account ID", /^\d{12}$/);
+  if (aws.region !== DEPLOY_REGION) {
+    throw new InvalidDeploymentConfigurationError(
+      `The deployment setup draft AWS region must be ${DEPLOY_REGION}.`,
+    );
+  }
+  const kmsKeyArn = expectKmsKeyArn(root.kmsKeyArn, accountId);
+
+  const rawValues = expectRecord(root.values, "deployment setup draft values");
+  assertAllowedKeys(
+    rawValues,
+    DEPLOYMENT_SETUP_FIELDS,
+    "deployment setup draft values",
+  );
+  const values: Partial<Record<DeploymentSetupField, string>> = {};
+  for (const field of DEPLOYMENT_SETUP_FIELDS) {
+    if (Object.hasOwn(rawValues, field)) {
+      values[field] = parseDeploymentSetupField(field, rawValues[field]);
+    }
+  }
+
+  const rawSecretVersions = expectRecord(
+    root.secretVersions,
+    "deployment setup draft secretVersions",
+  );
+  assertAllowedKeys(
+    rawSecretVersions,
+    DEPLOYMENT_SECRET_VERSION_FIELDS,
+    "deployment setup draft secretVersions",
+  );
+  const secretVersions: Partial<StoredDeploymentConfig["secretVersions"]> = {};
+  for (const field of DEPLOYMENT_SECRET_VERSION_FIELDS) {
+    if (Object.hasOwn(rawSecretVersions, field)) {
+      secretVersions[field] = expectVersion(
+        rawSecretVersions[field],
+        `deployment setup draft ${field} version`,
+      );
+    }
+  }
+
+  return {
+    schemaVersion: 2,
+    policyVersion: "demo-v1",
+    setupState: "incomplete",
+    aws: { accountId, region: DEPLOY_REGION },
+    kmsKeyArn,
+    values,
+    secretVersions,
   };
 }
 
@@ -490,10 +669,7 @@ function getCallerAccountId(
       profile,
     ),
   );
-  assertAwsCommandSucceeded(
-    result.status,
-    "AWS caller identity check",
-  );
+  assertAwsCommandSucceeded(result.status, "AWS caller identity check");
   const response = parseJsonRecord(result.stdout, "AWS caller identity");
   return expectString(response.Account, "AWS caller account ID", /^\d{12}$/);
 }
@@ -537,10 +713,7 @@ function addAwsTargetArguments(
   ];
 }
 
-function assertAwsCommandSucceeded(
-  status: number,
-  description: string,
-): void {
+function assertAwsCommandSucceeded(status: number, description: string): void {
   if (status === 0) {
     return;
   }
@@ -580,7 +753,9 @@ function parseJsonRecord(raw: string, label: string): Record<string, unknown> {
 
 function expectRecord(value: unknown, label: string): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new InvalidDeploymentConfigurationError(`${label} must be an object.`);
+    throw new InvalidDeploymentConfigurationError(
+      `${label} must be an object.`,
+    );
   }
   return value as Record<string, unknown>;
 }
@@ -602,11 +777,20 @@ function assertExactKeys(
   }
 }
 
-function expectString(
-  value: unknown,
+function assertAllowedKeys(
+  value: Record<string, unknown>,
+  allowed: readonly string[],
   label: string,
-  pattern?: RegExp,
-): string {
+): void {
+  const allowedKeys = new Set(allowed);
+  if (Object.keys(value).some((key) => !allowedKeys.has(key))) {
+    throw new InvalidDeploymentConfigurationError(
+      `${label} contains unsupported fields.`,
+    );
+  }
+}
+
+function expectString(value: unknown, label: string, pattern?: RegExp): string {
   if (
     typeof value !== "string" ||
     value.length === 0 ||
@@ -634,7 +818,17 @@ function expectVersion(value: unknown, label: string): number {
   return value as number;
 }
 
-function expectHttpsOrigin(value: unknown): string {
+function expectKmsKeyArn(value: unknown, accountId: string): string {
+  return expectString(
+    value,
+    "KMS key ARN",
+    new RegExp(
+      `^arn:aws:kms:${DEPLOY_REGION}:${accountId}:key/[0-9a-fA-F-]{36}$`,
+    ),
+  );
+}
+
+function expectSetupHttpsOrigin(value: unknown): string {
   const raw = expectString(value, "Vercel canonical origin");
   let url: URL;
   try {
@@ -652,7 +846,7 @@ function expectHttpsOrigin(value: unknown): string {
     url.pathname !== "/" ||
     url.search ||
     url.hash ||
-    url.origin !== raw
+    (raw !== url.origin && raw !== `${url.origin}/`)
   ) {
     throw new InvalidDeploymentConfigurationError(
       "Vercel canonical origin must be an exact HTTPS origin.",

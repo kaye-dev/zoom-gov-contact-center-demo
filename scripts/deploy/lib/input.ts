@@ -4,6 +4,8 @@ import { createInterface } from "node:readline/promises";
 export interface Prompter {
   ask(message: string): Promise<string>;
   hidden(message: string): Promise<string>;
+  notice(message: string): void;
+  invalid(message: string): void;
 }
 
 const SECRET_INPUT_SIGNALS = [
@@ -15,6 +17,14 @@ const SECRET_INPUT_SIGNALS = [
 ] as const satisfies readonly NodeJS.Signals[];
 
 export class TtyPrompter implements Prompter {
+  notice(message: string): void {
+    console.log(message);
+  }
+
+  invalid(message: string): void {
+    console.error(message);
+  }
+
   async ask(message: string): Promise<string> {
     const readline = createInterface({
       input: process.stdin,
@@ -40,7 +50,9 @@ export class TtyPrompter implements Prompter {
       !savedMode ||
       /[\s\0]/.test(savedMode)
     ) {
-      throw new Error("Could not capture the terminal mode before secret input.");
+      throw new Error(
+        "Could not capture the terminal mode before secret input.",
+      );
     }
 
     let restored = false;

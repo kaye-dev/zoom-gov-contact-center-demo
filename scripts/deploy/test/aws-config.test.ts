@@ -15,8 +15,12 @@ import {
   loadDeploymentContext,
   loadDeploymentContextFromStdin,
   MissingDeploymentParametersError,
+  parseDeploymentSetupField,
   parseStoredDeploymentConfig,
+  parseStoredDeploymentSetupState,
+  type DeploymentSetupField,
   type StoredDeploymentConfig,
+  type StoredDeploymentSetupDraft,
 } from "../lib/aws-config";
 import { parseAwsSetupArguments } from "../lib/aws-setup";
 import type {
@@ -26,8 +30,7 @@ import type {
 } from "../lib/process";
 
 const accountId = "123456789012";
-const kmsKeyArn =
-  `arn:aws:kms:${DEPLOY_REGION}:${accountId}:key/12345678-1234-1234-1234-123456789012`;
+const kmsKeyArn = `arn:aws:kms:${DEPLOY_REGION}:${accountId}:key/12345678-1234-1234-1234-123456789012`;
 
 const validConfig: StoredDeploymentConfig = {
   schemaVersion: 1,
@@ -58,6 +61,21 @@ const validConfig: StoredDeploymentConfig = {
   },
 };
 
+const validDraft: StoredDeploymentSetupDraft = {
+  schemaVersion: 2,
+  policyVersion: "demo-v1",
+  setupState: "incomplete",
+  aws: { accountId, region: DEPLOY_REGION },
+  kmsKeyArn,
+  values: {
+    "vercel.orgId": "team_abc123",
+    "vercel.projectId": "prj_abc123",
+    "vercel.canonicalOrigin": "https://example.com",
+    "neon.projectId": "quiet-rain-12345678",
+  },
+  secretVersions: { vercelToken: 4 },
+};
+
 const parameterResponse = (invalid: readonly string[] = []) => ({
   Parameters: [
     {
@@ -84,9 +102,7 @@ const parameterResponse = (invalid: readonly string[] = []) => ({
       Value: "admin-secret-value",
       Version: 6,
     },
-  ].filter(
-    (parameter) => !invalid.includes(parameter.Name),
-  ),
+  ].filter((parameter) => !invalid.includes(parameter.Name)),
   InvalidParameters: [...invalid],
 });
 
@@ -124,7 +140,10 @@ const success = (value: unknown): CommandResult => ({
 function createSuccessfulRunner(): RecordingRunner {
   return new RecordingRunner((_command, arguments_) => {
     if (arguments_[0] === "sts") {
-      return success({ Account: accountId, Arn: "arn:aws:iam::123456789012:user/test" });
+      return success({
+        Account: accountId,
+        Arn: "arn:aws:iam::123456789012:user/test",
+      });
     }
     if (arguments_[0] === "ssm" && arguments_[1] === "get-parameters") {
       return success(parameterResponse());
@@ -156,7 +175,10 @@ test("loadDeploymentContext performs STS then one exact GetParameters call", () 
   const getParameters = runner.calls[1].arguments_;
   const namesIndex = getParameters.indexOf("--names");
   assert.deepEqual(
-    getParameters.slice(namesIndex + 1, namesIndex + 1 + DEPLOY_PARAMETER_NAMES.length),
+    getParameters.slice(
+      namesIndex + 1,
+      namesIndex + 1 + DEPLOY_PARAMETER_NAMES.length,
+    ),
     DEPLOY_PARAMETER_NAMES,
   );
   assert.ok(getParameters.includes("--with-decryption"));
@@ -315,6 +337,200 @@ test("stored config parser rejects extra fields and non-origin URLs", () => {
   );
 });
 
+test("setup field parser validates all fields and normalizes one trailing origin slash", () => {
+  const cases: readonly (readonly [DeploymentSetupField, string, string])[] = [
+    ["vercel.orgId", "team_abc123", "team_abc123"],
+    ["vercel.projectId", "prj_abc123", "prj_abc123"],
+    [
+      "vercel.projectName",
+      "zoom-gov-contact-center-demo",
+      "zoom-gov-contact-center-demo",
+    ],
+    ["vercel.canonicalOrigin", "https://example.com/", "https://example.com"],
+    ["neon.projectId", "quiet-rain-12345678", "quiet-rain-12345678"],
+    [
+      "neon.projectName",
+      "zoom-gov-contact-center-demo",
+      "zoom-gov-contact-center-demo",
+    ],
+    ["neon.branchId", "br-muddy-rain-12345678", "br-muddy-rain-12345678"],
+    ["neon.databaseName", "neondb", "neondb"],
+    ["neon.roleName", "neondb_owner", "neondb_owner"],
+    ["admin.email", "admin@example.com", "admin@example.com"],
+  ];
+  for (const [field, raw, expected] of cases) {
+    assert.equal(parseDeploymentSetupField(field, raw), expected);
+  }
+
+  assert.throws(
+    () =>
+      parseDeploymentSetupField("vercel.canonicalOrigin", "http://example.com"),
+    /exact HTTPS origin/,
+  );
+  assert.throws(
+    () => parseDeploymentSetupField("neon.branchId", "main"),
+    /Neon branch ID is invalid/,
+  );
+  assert.throws(
+    () => parseDeploymentSetupField("admin.email", "not-an-email"),
+    /administrator email is invalid/,
+  );
+});
+
+test("stored final config keeps requiring a canonical origin without a slash", () => {
+  assert.throws(
+    () =>
+      parseStoredDeploymentConfig(
+        JSON.stringify({
+          ...validConfig,
+          vercel: {
+            ...validConfig.vercel,
+            canonicalOrigin: "https://example.com/",
+          },
+        }),
+      ),
+    /exact HTTPS origin/,
+  );
+});
+
+test("stored setup state strictly parses complete and sparse incomplete documents", () => {
+  assert.deepEqual(
+    parseStoredDeploymentSetupState(JSON.stringify(validConfig)),
+    {
+      state: "complete",
+      config: validConfig,
+    },
+  );
+  assert.deepEqual(
+    parseStoredDeploymentSetupState(JSON.stringify(validDraft)),
+    {
+      state: "incomplete",
+      draft: validDraft,
+    },
+  );
+
+  const normalizedDraft = {
+    ...validDraft,
+    values: {
+      ...validDraft.values,
+      "vercel.canonicalOrigin": "https://example.com/",
+    },
+  };
+  const parsed = parseStoredDeploymentSetupState(
+    JSON.stringify(normalizedDraft),
+  );
+  assert.equal(parsed.state, "incomplete");
+  if (parsed.state === "incomplete") {
+    assert.equal(
+      parsed.draft.values["vercel.canonicalOrigin"],
+      "https://example.com",
+    );
+  }
+});
+
+test("stored setup draft rejects unknown fields, secret values, and invalid versions", () => {
+  assert.throws(
+    () =>
+      parseStoredDeploymentSetupState(
+        JSON.stringify({ ...validDraft, unexpected: true }),
+      ),
+    /missing or unsupported fields/,
+  );
+  assert.throws(
+    () =>
+      parseStoredDeploymentSetupState(
+        JSON.stringify({
+          ...validDraft,
+          values: { ...validDraft.values, vercelToken: "must-not-be-stored" },
+        }),
+      ),
+    /values contains unsupported fields/,
+  );
+  assert.throws(
+    () =>
+      parseStoredDeploymentSetupState(
+        JSON.stringify({
+          ...validDraft,
+          secretVersions: { ...validDraft.secretVersions, unknown: 1 },
+        }),
+      ),
+    /secretVersions contains unsupported fields/,
+  );
+  assert.throws(
+    () =>
+      parseStoredDeploymentSetupState(
+        JSON.stringify({
+          ...validDraft,
+          secretVersions: { vercelToken: 0 },
+        }),
+      ),
+    /vercelToken version is invalid/,
+  );
+  assert.throws(
+    () =>
+      parseStoredDeploymentSetupState(
+        JSON.stringify({
+          ...validDraft,
+          values: { "vercel.orgId": "user_abc123" },
+        }),
+      ),
+    /Vercel team ID is invalid/,
+  );
+});
+
+test("deployment context treats a valid setup draft as incomplete", () => {
+  const response = parameterResponse();
+  const configParameter = response.Parameters.find(
+    ({ Name }) => Name === DEPLOY_CONFIG_PARAMETER,
+  );
+  assert.ok(configParameter);
+  configParameter.Value = JSON.stringify(validDraft);
+  const runner = new RecordingRunner((_command, arguments_) =>
+    arguments_[0] === "sts"
+      ? success({ Account: accountId })
+      : success(response),
+  );
+
+  assert.throws(
+    () => loadDeploymentContext(runner, "splai-prd"),
+    (error: unknown) => {
+      assert.ok(error instanceof MissingDeploymentParametersError);
+      assert.equal(error.exitCode, 78);
+      assert.deepEqual(error.missingParameterNames, [DEPLOY_CONFIG_PARAMETER]);
+      return true;
+    },
+  );
+});
+
+test("deployment context does not classify a cross-account setup draft as missing", () => {
+  const otherAccountId = "210987654321";
+  const response = parameterResponse();
+  const configParameter = response.Parameters.find(
+    ({ Name }) => Name === DEPLOY_CONFIG_PARAMETER,
+  );
+  assert.ok(configParameter);
+  configParameter.Value = JSON.stringify({
+    ...validDraft,
+    aws: { accountId: otherAccountId, region: DEPLOY_REGION },
+    kmsKeyArn: `arn:aws:kms:${DEPLOY_REGION}:${otherAccountId}:key/12345678-1234-1234-1234-123456789012`,
+  });
+  const runner = new RecordingRunner((_command, arguments_) =>
+    arguments_[0] === "sts"
+      ? success({ Account: accountId })
+      : success(response),
+  );
+
+  let thrown: unknown;
+  try {
+    loadDeploymentContext(runner, "splai-prd");
+  } catch (error) {
+    thrown = error;
+  }
+  assert.ok(thrown instanceof InvalidDeploymentConfigurationError);
+  assert.ok(!(thrown instanceof MissingDeploymentParametersError));
+  assert.match(thrown.message, /does not match the deployment setup draft/);
+});
+
 test("DEPLOY_AWS_PROFILE is the only profile environment input", () => {
   assert.equal(
     getProfileFromEnvironment({
@@ -323,7 +539,10 @@ test("DEPLOY_AWS_PROFILE is the only profile environment input", () => {
     }),
     "splai-prd",
   );
-  assert.equal(getProfileFromEnvironment({ AWS_PROFILE: "ignored" }), undefined);
+  assert.equal(
+    getProfileFromEnvironment({ AWS_PROFILE: "ignored" }),
+    undefined,
+  );
   assert.throws(
     () => getProfileFromEnvironment({ DEPLOY_AWS_PROFILE: "$(id)" }),
     InvalidDeploymentConfigurationError,

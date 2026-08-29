@@ -10,6 +10,7 @@ import {
   DEPLOY_REGION,
   DEPLOY_VERCEL_TOKEN_PARAMETER,
   type StoredDeploymentConfig,
+  type StoredDeploymentSetupDraft,
 } from "../lib/aws-config";
 import {
   runAwsSetup as runAwsSetupImplementation,
@@ -33,6 +34,32 @@ const kmsKeyArn = `arn:aws:kms:${DEPLOY_REGION}:${accountId}:key/${kmsKeyId}`;
 const vercelToken = "vercel-token-value-123456";
 const neonApiKey = "neon-api-key-value-123456";
 const adminPassword = "admin-password-value";
+
+const initialVisibleAnswers = [
+  "team_abc123",
+  "prj_abc123",
+  "zoom-gov-contact-center-demo",
+  "https://example.com",
+  "quiet-rain-12345678",
+  "zoom-gov-contact-center-demo",
+  "br-muddy-rain-12345678",
+  "neondb",
+  "neondb_owner",
+  "admin@example.com",
+] as const;
+
+const completeDraftValues: StoredDeploymentSetupDraft["values"] = {
+  "vercel.orgId": "team_abc123",
+  "vercel.projectId": "prj_abc123",
+  "vercel.projectName": "zoom-gov-contact-center-demo",
+  "vercel.canonicalOrigin": "https://example.com",
+  "neon.projectId": "quiet-rain-12345678",
+  "neon.projectName": "zoom-gov-contact-center-demo",
+  "neon.branchId": "br-muddy-rain-12345678",
+  "neon.databaseName": "neondb",
+  "neon.roleName": "neondb_owner",
+  "admin.email": "admin@example.com",
+};
 
 function createConfig(
   versions: StoredDeploymentConfig["secretVersions"] = {
@@ -67,6 +94,21 @@ function createConfig(
   };
 }
 
+function createDraft(
+  secretVersions: StoredDeploymentSetupDraft["secretVersions"] = {},
+  values: StoredDeploymentSetupDraft["values"] = completeDraftValues,
+): StoredDeploymentSetupDraft {
+  return {
+    schemaVersion: 2,
+    policyVersion: "demo-v1",
+    setupState: "incomplete",
+    aws: { accountId, region: DEPLOY_REGION },
+    kmsKeyArn,
+    values: { ...values },
+    secretVersions: { ...secretVersions },
+  };
+}
+
 type StoredParameter = {
   Type: "String" | "SecureString";
   Value: string;
@@ -87,14 +129,16 @@ class AwsSetupRunner implements CommandRunner {
   rotationEnabled: boolean;
   rotationPeriodInDays?: number;
 
-  constructor(options: {
-    parameters?: ReadonlyMap<string, StoredParameter>;
-    hasKms?: boolean;
-    aliasPresent?: boolean;
-    rotationEnabled?: boolean;
-    rotationPeriodInDays?: number;
-    redactWith?: SecretRegistry;
-  } = {}) {
+  constructor(
+    options: {
+      parameters?: ReadonlyMap<string, StoredParameter>;
+      hasKms?: boolean;
+      aliasPresent?: boolean;
+      rotationEnabled?: boolean;
+      rotationPeriodInDays?: number;
+      redactWith?: SecretRegistry;
+    } = {},
+  ) {
     for (const [name, parameter] of options.parameters ?? []) {
       this.parameters.set(name, { ...parameter });
     }
@@ -174,10 +218,7 @@ class AwsSetupRunner implements CommandRunner {
     if (service === "kms" && operation === "describe-key") {
       const keyIndex = arguments_.indexOf("--key-id");
       const key = arguments_[keyIndex + 1];
-      if (
-        !this.hasKms ||
-        (key === DEPLOY_KMS_ALIAS && !this.aliasPresent)
-      ) {
+      if (!this.hasKms || (key === DEPLOY_KMS_ALIAS && !this.aliasPresent)) {
         return {
           status: 255,
           stdout: "",
@@ -235,6 +276,8 @@ class AwsSetupRunner implements CommandRunner {
 
 class SetupPrompter implements Prompter {
   readonly messages: string[] = [];
+  readonly notices: string[] = [];
+  readonly invalidMessages: string[] = [];
 
   constructor(
     private readonly visibleAnswers: string[] = [],
@@ -261,6 +304,14 @@ class SetupPrompter implements Prompter {
     }
     return answer;
   }
+
+  notice(message: string): void {
+    this.notices.push(message);
+  }
+
+  invalid(message: string): void {
+    this.invalidMessages.push(message);
+  }
 }
 
 function runAwsSetup(
@@ -285,11 +336,9 @@ function createTestParameterWriter(
 ): DeploymentParameterWriter {
   return {
     async put(input: DeploymentParameterInput): Promise<number> {
-      const result = runner.run(
-        "aws",
-        ["ssm", "put-parameter"],
-        { input: JSON.stringify(input) },
-      );
+      const result = runner.run("aws", ["ssm", "put-parameter"], {
+        input: JSON.stringify(input),
+      });
       assert.equal(result.status, 0);
       const response = JSON.parse(result.stdout) as { Version?: unknown };
       assert.ok(Number.isSafeInteger(response.Version));
@@ -329,17 +378,43 @@ function completeParameters(
     ],
     [
       DEPLOY_VERCEL_TOKEN_PARAMETER,
-      { Type: "SecureString", Value: vercelToken, Version: config.secretVersions.vercelToken },
+      {
+        Type: "SecureString",
+        Value: vercelToken,
+        Version: config.secretVersions.vercelToken,
+      },
     ],
     [
       DEPLOY_NEON_API_KEY_PARAMETER,
-      { Type: "SecureString", Value: neonApiKey, Version: config.secretVersions.neonApiKey },
+      {
+        Type: "SecureString",
+        Value: neonApiKey,
+        Version: config.secretVersions.neonApiKey,
+      },
     ],
     [
       DEPLOY_ADMIN_PASSWORD_PARAMETER,
-      { Type: "SecureString", Value: adminPassword, Version: config.secretVersions.adminPassword },
+      {
+        Type: "SecureString",
+        Value: adminPassword,
+        Version: config.secretVersions.adminPassword,
+      },
     ],
   ]);
+}
+
+function parameterPutInputs(
+  runner: AwsSetupRunner,
+): DeploymentParameterInput[] {
+  return runner.calls
+    .filter(
+      ({ arguments_ }) =>
+        arguments_[0] === "ssm" && arguments_[1] === "put-parameter",
+    )
+    .map(({ options }) => {
+      assert.ok(options?.input);
+      return JSON.parse(options.input) as DeploymentParameterInput;
+    });
 }
 
 const providerFetch: typeof globalThis.fetch = async (input) => {
@@ -354,9 +429,7 @@ const providerFetch: typeof globalThis.fetch = async (input) => {
       };
     } else if (url.pathname === "/v2/teams/team_abc123") {
       value = { id: "team_abc123", billing: { plan: "hobby" } };
-    } else if (
-      url.pathname === "/v9/projects/prj_abc123/domains/example.com"
-    ) {
+    } else if (url.pathname === "/v9/projects/prj_abc123/domains/example.com") {
       value = {
         name: "example.com",
         projectId: "prj_abc123",
@@ -451,7 +524,7 @@ test("orphan SecureString stops before KMS or SSM writes", async () => {
       { profile: "splai-prd", reconfigure: false },
       providerFetch,
     ),
-    /exist without a managed KMS alias or config/,
+    /exist without a setup draft or final config/,
   );
   assert.ok(
     !runner.calls.some(
@@ -461,22 +534,11 @@ test("orphan SecureString stops before KMS or SSM writes", async () => {
   );
 });
 
-test("initial setup writes three secrets through stdin before config", async () => {
+test("initial setup checkpoints every field and prepares each secret version", async () => {
   const registry = new SecretRegistry();
   const runner = new AwsSetupRunner({ redactWith: registry });
   const prompter = new SetupPrompter(
-    [
-      "team_abc123",
-      "prj_abc123",
-      "zoom-gov-contact-center-demo",
-      "https://example.com",
-      "quiet-rain-12345678",
-      "zoom-gov-contact-center-demo",
-      "br-muddy-rain-12345678",
-      "neondb",
-      "neondb_owner",
-      "admin@example.com",
-    ],
+    [...initialVisibleAnswers],
     [
       vercelToken,
       vercelToken,
@@ -493,46 +555,401 @@ test("initial setup writes three secrets through stdin before config", async () 
     { profile: "splai-prd", reconfigure: false },
     strictProviderFetch(vercelToken, neonApiKey),
   );
-  assert.equal(prompter.messages[0], "Vercel team ID: ");
+  assert.deepEqual(prompter.notices, [
+    "デプロイ設定がありません。初期設定を開始します。",
+  ]);
+  assert.match(prompter.messages[0] ?? "", /setup 123456789012/);
+  assert.equal(prompter.messages[1], "Vercel team ID: ");
+  assert.ok(
+    prompter.messages.includes(
+      "Canonical Production origin (ex. https://demo.example.com): ",
+    ),
+  );
   assert.ok(!prompter.messages.some((message) => message.includes("org ID")));
   assert.ok(prompter.messages.includes("Vercel access token (again): "));
   assert.ok(prompter.messages.includes("Neon API key (again): "));
 
-  const puts = runner.calls.filter(
-    ({ arguments_ }) => arguments_[0] === "ssm" && arguments_[1] === "put-parameter",
-  );
+  const puts = parameterPutInputs(runner);
   assert.deepEqual(
-    puts.map(({ options }) =>
-      (JSON.parse(options?.input ?? "{}") as { Name?: string }).Name
-    ),
+    puts.map(({ Name }) => Name),
     [
+      ...Array.from({ length: 12 }, () => DEPLOY_CONFIG_PARAMETER),
       DEPLOY_VERCEL_TOKEN_PARAMETER,
+      DEPLOY_CONFIG_PARAMETER,
       DEPLOY_NEON_API_KEY_PARAMETER,
+      DEPLOY_CONFIG_PARAMETER,
       DEPLOY_ADMIN_PASSWORD_PARAMETER,
       DEPLOY_CONFIG_PARAMETER,
     ],
   );
-  for (const call of puts.slice(0, 3)) {
+
+  const fieldCheckpoints = puts.slice(0, 11).map(({ Value }) => {
+    const draft = JSON.parse(Value) as StoredDeploymentSetupDraft;
+    assert.equal(draft.schemaVersion, 2);
+    assert.equal(draft.setupState, "incomplete");
+    return Object.keys(draft.values).length;
+  });
+  assert.deepEqual(
+    fieldCheckpoints,
+    Array.from({ length: 11 }, (_value, index) => index),
+  );
+
+  const vercelPrepared = JSON.parse(
+    puts[11]?.Value ?? "{}",
+  ) as StoredDeploymentSetupDraft;
+  assert.deepEqual(vercelPrepared.secretVersions, { vercelToken: 1 });
+  const neonPrepared = JSON.parse(
+    puts[13]?.Value ?? "{}",
+  ) as StoredDeploymentSetupDraft;
+  assert.deepEqual(neonPrepared.secretVersions, {
+    vercelToken: 1,
+    neonApiKey: 1,
+  });
+  const adminPrepared = JSON.parse(
+    puts[15]?.Value ?? "{}",
+  ) as StoredDeploymentSetupDraft;
+  assert.deepEqual(adminPrepared.secretVersions, {
+    vercelToken: 1,
+    neonApiKey: 1,
+    adminPassword: 1,
+  });
+  assert.equal(JSON.parse(puts[17]?.Value ?? "{}").schemaVersion, 1);
+
+  for (const input of puts) {
+    if (input.Name === DEPLOY_CONFIG_PARAMETER) {
+      assert.ok(!input.Value.includes(vercelToken));
+      assert.ok(!input.Value.includes(neonApiKey));
+      assert.ok(!input.Value.includes(adminPassword));
+      continue;
+    }
+    const call = runner.calls.find(
+      ({ options }) => options?.input === JSON.stringify(input),
+    );
+    assert.ok(call);
     const serializedArguments = JSON.stringify(call.arguments_);
-    assert.ok(!serializedArguments.includes(vercelToken));
-    assert.ok(!serializedArguments.includes(neonApiKey));
-    assert.ok(!serializedArguments.includes(adminPassword));
-    assert.ok(call.options?.input?.includes('"Value"'));
+    assert.ok(!serializedArguments.includes(input.Value));
   }
 });
 
-test("complete setup with no flags validates without writes", async () => {
+test("visible input retries in place and canonical origin is normalized", async () => {
+  const runner = new AwsSetupRunner();
+  const prompter = new SetupPrompter(
+    [
+      "",
+      "org_abc123",
+      "team_abc123",
+      "prj_abc123",
+      "zoom-gov-contact-center-demo",
+      "http://example.com",
+      "https://example.com/",
+      "quiet-rain-12345678",
+      "zoom-gov-contact-center-demo",
+      "br-muddy-rain-12345678",
+      "neondb",
+      "neondb_owner",
+      "admin@example.com",
+    ],
+    [
+      vercelToken,
+      vercelToken,
+      neonApiKey,
+      neonApiKey,
+      adminPassword,
+      adminPassword,
+    ],
+  );
+
+  await runAwsSetup(
+    runner,
+    prompter,
+    new SecretRegistry(),
+    { profile: "splai-prd", reconfigure: false },
+    strictProviderFetch(vercelToken, neonApiKey),
+  );
+
+  assert.equal(
+    prompter.messages.filter((message) => message === "Vercel team ID: ")
+      .length,
+    3,
+  );
+  assert.equal(
+    prompter.messages.filter((message) => message === "Vercel project ID: ")
+      .length,
+    1,
+  );
+  assert.equal(
+    prompter.messages.filter(
+      (message) =>
+        message ===
+        "Canonical Production origin (ex. https://demo.example.com): ",
+    ).length,
+    2,
+  );
+  assert.deepEqual(prompter.invalidMessages, [
+    "Vercel team ID is required. もう一度入力してください。",
+    "Vercel team ID is invalid. もう一度入力してください。",
+    "Vercel canonical origin must be an exact HTTPS origin. もう一度入力してください。",
+  ]);
+  const storedConfig = JSON.parse(
+    runner.parameters.get(DEPLOY_CONFIG_PARAMETER)?.Value ?? "{}",
+  ) as StoredDeploymentConfig;
+  assert.equal(storedConfig.vercel.canonicalOrigin, "https://example.com");
+});
+
+test("in-progress setup displays all saved, missing, and retry-required items without secret values", async () => {
+  const partialValues: StoredDeploymentSetupDraft["values"] = {
+    "vercel.orgId": completeDraftValues["vercel.orgId"],
+    "vercel.projectId": completeDraftValues["vercel.projectId"],
+  };
+  const draft = createDraft({ vercelToken: 1, neonApiKey: 1 }, partialValues);
+  const parameters = new Map<string, StoredParameter>([
+    [
+      DEPLOY_CONFIG_PARAMETER,
+      { Type: "String", Value: JSON.stringify(draft), Version: 4 },
+    ],
+    [
+      DEPLOY_VERCEL_TOKEN_PARAMETER,
+      { Type: "SecureString", Value: vercelToken, Version: 1 },
+    ],
+  ]);
+  const runner = new AwsSetupRunner({ parameters, hasKms: true });
+  const prompter = new SetupPrompter(
+    [...initialVisibleAnswers.slice(2)],
+    [neonApiKey, neonApiKey, adminPassword, adminPassword],
+  );
+
+  await runAwsSetup(
+    runner,
+    prompter,
+    new SecretRegistry(),
+    { profile: "splai-prd", reconfigure: false },
+    strictProviderFetch(vercelToken, neonApiKey),
+  );
+
+  assert.equal(prompter.notices.length, 1);
+  const status = prompter.notices[0] ?? "";
+  assert.match(status, /^現在の設定状況:/);
+  assert.equal(
+    status
+      .split("\n")
+      .filter((line) => /^  \[(?:保存済み|未設定|再入力が必要)\]/.test(line))
+      .length,
+    13,
+    status,
+  );
+  assert.match(status, /\[保存済み\] Vercel team ID: team_abc123/);
+  assert.match(status, /\[未設定\] Vercel project name/);
+  assert.match(
+    status,
+    /\[保存済み\] Vercel access token: 値は非表示 \(SSM version 1\)/,
+  );
+  assert.match(
+    status,
+    /\[再入力が必要\] Neon API key: 値は非表示 \(予定 SSM version 1\)/,
+  );
+  assert.match(status, /\[未設定\] Administrator password/);
+  assert.match(status, /未完了の項目から設定を再開します。$/);
+  assert.ok(!status.includes(vercelToken));
+  assert.ok(!status.includes(neonApiKey));
+  assert.ok(!status.includes(adminPassword));
+});
+
+test("in-progress setup resumes without re-prompting saved fields and secret", async () => {
+  const draft = createDraft({ vercelToken: 1 });
+  const parameters = new Map<string, StoredParameter>([
+    [
+      DEPLOY_CONFIG_PARAMETER,
+      { Type: "String", Value: JSON.stringify(draft), Version: 12 },
+    ],
+    [
+      DEPLOY_VERCEL_TOKEN_PARAMETER,
+      { Type: "SecureString", Value: vercelToken, Version: 1 },
+    ],
+  ]);
+  const runner = new AwsSetupRunner({ parameters, hasKms: true });
+  const prompter = new SetupPrompter(
+    [],
+    [neonApiKey, neonApiKey, adminPassword, adminPassword],
+  );
+
+  await runAwsSetup(
+    runner,
+    prompter,
+    new SecretRegistry(),
+    { profile: "splai-prd", reconfigure: false },
+    strictProviderFetch(vercelToken, neonApiKey),
+  );
+
+  assert.match(prompter.messages[0] ?? "", /setup 123456789012/);
+  assert.ok(
+    !prompter.messages.some((message) =>
+      message.startsWith("Vercel access token"),
+    ),
+  );
+  assert.ok(
+    !prompter.messages.some((message) =>
+      initialVisibleAnswers.some((_answer, index) =>
+        message.startsWith(
+          [
+            "Vercel team ID",
+            "Vercel project ID",
+            "Vercel project name",
+            "Canonical Production origin",
+            "Neon project ID",
+            "Neon project name",
+            "Neon branch ID",
+            "Neon database name",
+            "Neon role name",
+            "Administrator email",
+          ][index] ?? "",
+        ),
+      ),
+    ),
+  );
+  assert.deepEqual(
+    parameterPutInputs(runner).map(({ Name }) => Name),
+    [
+      DEPLOY_CONFIG_PARAMETER,
+      DEPLOY_NEON_API_KEY_PARAMETER,
+      DEPLOY_CONFIG_PARAMETER,
+      DEPLOY_ADMIN_PASSWORD_PARAMETER,
+      DEPLOY_CONFIG_PARAMETER,
+    ],
+  );
+});
+
+test("prepared secret version resumes after a crash before SecureString write", async () => {
+  const draft = createDraft({ vercelToken: 1 });
+  const parameters = new Map<string, StoredParameter>([
+    [
+      DEPLOY_CONFIG_PARAMETER,
+      { Type: "String", Value: JSON.stringify(draft), Version: 12 },
+    ],
+  ]);
+  const runner = new AwsSetupRunner({ parameters, hasKms: true });
+  const prompter = new SetupPrompter(
+    [],
+    [
+      vercelToken,
+      vercelToken,
+      neonApiKey,
+      neonApiKey,
+      adminPassword,
+      adminPassword,
+    ],
+  );
+
+  await runAwsSetup(
+    runner,
+    prompter,
+    new SecretRegistry(),
+    { profile: "splai-prd", reconfigure: false },
+    strictProviderFetch(vercelToken, neonApiKey),
+  );
+
+  assert.deepEqual(
+    parameterPutInputs(runner).map(({ Name }) => Name),
+    [
+      DEPLOY_VERCEL_TOKEN_PARAMETER,
+      DEPLOY_CONFIG_PARAMETER,
+      DEPLOY_NEON_API_KEY_PARAMETER,
+      DEPLOY_CONFIG_PARAMETER,
+      DEPLOY_ADMIN_PASSWORD_PARAMETER,
+      DEPLOY_CONFIG_PARAMETER,
+    ],
+  );
+});
+
+test("in-progress setup rejects orphan and mismatched secret versions", async () => {
+  const orphanParameters = new Map<string, StoredParameter>([
+    [
+      DEPLOY_CONFIG_PARAMETER,
+      { Type: "String", Value: JSON.stringify(createDraft()), Version: 12 },
+    ],
+    [
+      DEPLOY_VERCEL_TOKEN_PARAMETER,
+      { Type: "SecureString", Value: vercelToken, Version: 1 },
+    ],
+  ]);
+  const orphanRunner = new AwsSetupRunner({
+    parameters: orphanParameters,
+    hasKms: true,
+  });
+  await assert.rejects(
+    runAwsSetup(
+      orphanRunner,
+      new SetupPrompter(),
+      new SecretRegistry(),
+      { profile: "splai-prd", reconfigure: false },
+      providerFetch,
+    ),
+    /exists without a prepared setup draft version/,
+  );
+  assert.equal(parameterPutInputs(orphanRunner).length, 0);
+
+  const mismatchedParameters = new Map<string, StoredParameter>([
+    [
+      DEPLOY_CONFIG_PARAMETER,
+      {
+        Type: "String",
+        Value: JSON.stringify(createDraft({ vercelToken: 3 })),
+        Version: 12,
+      },
+    ],
+    [
+      DEPLOY_VERCEL_TOKEN_PARAMETER,
+      { Type: "SecureString", Value: vercelToken, Version: 1 },
+    ],
+  ]);
+  const mismatchedRunner = new AwsSetupRunner({
+    parameters: mismatchedParameters,
+    hasKms: true,
+  });
+  await assert.rejects(
+    runAwsSetup(
+      mismatchedRunner,
+      new SetupPrompter(),
+      new SecretRegistry(),
+      { profile: "splai-prd", reconfigure: false },
+      providerFetch,
+    ),
+    /version does not match the prepared setup draft/,
+  );
+  assert.equal(parameterPutInputs(mismatchedRunner).length, 0);
+});
+
+test("complete setup displays current values and validates without writes", async () => {
   const runner = new AwsSetupRunner({
     parameters: completeParameters(),
     hasKms: true,
   });
+  const prompter = new SetupPrompter([""]);
   await runAwsSetup(
     runner,
-    new SetupPrompter(),
+    prompter,
     new SecretRegistry(),
     { profile: "splai-prd", reconfigure: false },
     providerFetch,
   );
+  assert.equal(prompter.messages.length, 1);
+  const menu = prompter.messages[0] ?? "";
+  assert.match(menu, /^設定完了項目:/);
+  assert.match(menu, /  1\. Vercel team ID: team_abc123/);
+  assert.match(
+    menu,
+    /  4\. Canonical Production origin: https:\/\/example\.com/,
+  );
+  assert.match(menu, /  10\. Administrator email: admin@example\.com/);
+  assert.match(menu, /  11\. Vercel access token: 設定済み \(SSM version 1\)/);
+  assert.match(menu, /  12\. Neon API key: 設定済み \(SSM version 1\)/);
+  assert.match(
+    menu,
+    /  13\. Administrator password: 設定済み \(SSM version 1\)/,
+  );
+  assert.match(menu, /更新する設定番号を選択してください。/);
+  assert.ok(!menu.includes(vercelToken));
+  assert.ok(!menu.includes(neonApiKey));
+  assert.ok(!menu.includes(adminPassword));
   assert.ok(
     !runner.calls.some(
       ({ arguments_ }) =>
@@ -540,6 +957,95 @@ test("complete setup with no flags validates without writes", async () => {
         arguments_[1] === "create-key" ||
         arguments_[1] === "create-alias",
     ),
+  );
+});
+
+test("completed setup menu updates only one visible field", async () => {
+  const runner = new AwsSetupRunner({
+    parameters: completeParameters(),
+    hasKms: true,
+  });
+  const prompter = new SetupPrompter(["99", "10", "updated-admin@example.com"]);
+
+  await runAwsSetup(
+    runner,
+    prompter,
+    new SecretRegistry(),
+    { profile: "splai-prd", reconfigure: false },
+    strictProviderFetch(vercelToken, neonApiKey),
+  );
+
+  assert.deepEqual(prompter.invalidMessages, [
+    "選択値が不正です。0から13の番号を入力してください。",
+  ]);
+  assert.equal(
+    prompter.messages.filter((message) =>
+      message.includes("更新する設定番号を選択してください。"),
+    ).length,
+    2,
+  );
+  assert.match(
+    prompter.messages[0] ?? "",
+    /  10\. Administrator email: admin@example\.com/,
+  );
+  assert.ok(
+    prompter.messages.includes("Administrator email [admin@example.com]: "),
+  );
+  assert.deepEqual(
+    parameterPutInputs(runner).map(({ Name }) => Name),
+    [DEPLOY_CONFIG_PARAMETER],
+  );
+  const storedConfig = JSON.parse(
+    runner.parameters.get(DEPLOY_CONFIG_PARAMETER)?.Value ?? "{}",
+  ) as StoredDeploymentConfig;
+  assert.equal(storedConfig.admin.email, "updated-admin@example.com");
+  assert.deepEqual(storedConfig.secretVersions, {
+    vercelToken: 1,
+    neonApiKey: 1,
+    adminPassword: 1,
+  });
+});
+
+test("completed setup menu rotates only one selected secret", async () => {
+  const runner = new AwsSetupRunner({
+    parameters: completeParameters(),
+    hasKms: true,
+  });
+  const rotatedNeonKey = "menu-rotated-neon-key-123456";
+
+  await runAwsSetup(
+    runner,
+    new SetupPrompter(["12"], [rotatedNeonKey, rotatedNeonKey]),
+    new SecretRegistry(),
+    { profile: "splai-prd", reconfigure: false },
+    strictProviderFetch(vercelToken, rotatedNeonKey),
+  );
+
+  const puts = parameterPutInputs(runner);
+  assert.deepEqual(
+    puts.map(({ Name }) => Name),
+    [
+      DEPLOY_CONFIG_PARAMETER,
+      DEPLOY_NEON_API_KEY_PARAMETER,
+      DEPLOY_CONFIG_PARAMETER,
+    ],
+  );
+  const prepared = JSON.parse(
+    puts[0]?.Value ?? "{}",
+  ) as StoredDeploymentSetupDraft;
+  assert.equal(prepared.schemaVersion, 2);
+  assert.equal(prepared.secretVersions.neonApiKey, 2);
+  assert.equal(
+    runner.parameters.get(DEPLOY_VERCEL_TOKEN_PARAMETER)?.Value,
+    vercelToken,
+  );
+  assert.equal(
+    runner.parameters.get(DEPLOY_NEON_API_KEY_PARAMETER)?.Value,
+    rotatedNeonKey,
+  );
+  assert.equal(
+    runner.parameters.get(DEPLOY_ADMIN_PASSWORD_PARAMETER)?.Value,
+    adminPassword,
   );
 });
 
@@ -608,7 +1114,7 @@ test("setup does not re-read decrypted values through the redacting runner", asy
   });
   await runAwsSetup(
     runner,
-    new SetupPrompter(),
+    new SetupPrompter([""]),
     registry,
     { profile: "splai-prd", reconfigure: false },
     strictProviderFetch(vercelToken, neonApiKey),
@@ -642,9 +1148,7 @@ test("complete setup rejects a secret version that differs from config", async (
     /version does not match the deployment config/,
   );
   assert.ok(
-    !runner.calls.some(
-      ({ arguments_ }) => arguments_[1] === "put-parameter",
-    ),
+    !runner.calls.some(({ arguments_ }) => arguments_[1] === "put-parameter"),
   );
 });
 
@@ -688,8 +1192,7 @@ test("reconfigure corrects and revalidates the KMS rotation period", async () =>
   assert.equal(runner.rotationPeriodInDays, 365);
   const rotationCalls = runner.calls.filter(
     ({ arguments_ }) =>
-      arguments_[0] === "kms" &&
-      arguments_[1] === "get-key-rotation-status",
+      arguments_[0] === "kms" && arguments_[1] === "get-key-rotation-status",
   );
   assert.equal(rotationCalls.length, 2);
   const enableCall = runner.calls.find(
@@ -713,21 +1216,24 @@ test("rotating one secret updates only its version and config", async () => {
       reconfigure: false,
       rotate: "neon-api-key",
     },
-    providerFetch,
+    strictProviderFetch(vercelToken, rotatedNeonKey),
   );
-  const putNames = runner.calls
-    .filter(
-      ({ arguments_ }) =>
-        arguments_[0] === "ssm" && arguments_[1] === "put-parameter",
-    )
-    .map(
-      ({ options }) =>
-        (JSON.parse(options?.input ?? "{}") as { Name?: string }).Name,
-    );
+  const puts = parameterPutInputs(runner);
+  const putNames = puts.map(({ Name }) => Name);
   assert.deepEqual(putNames, [
+    DEPLOY_CONFIG_PARAMETER,
     DEPLOY_NEON_API_KEY_PARAMETER,
     DEPLOY_CONFIG_PARAMETER,
   ]);
+  const prepared = JSON.parse(
+    puts[0]?.Value ?? "{}",
+  ) as StoredDeploymentSetupDraft;
+  assert.equal(prepared.schemaVersion, 2);
+  assert.deepEqual(prepared.secretVersions, {
+    vercelToken: 1,
+    neonApiKey: 2,
+    adminPassword: 1,
+  });
   const storedConfig = JSON.parse(
     runner.parameters.get(DEPLOY_CONFIG_PARAMETER)?.Value ?? "{}",
   ) as StoredDeploymentConfig;
@@ -742,49 +1248,55 @@ test("rotating one secret updates only its version and config", async () => {
   );
 });
 
-test("provider secret confirmation mismatch stops before AWS writes", async () => {
+test("invalid and mismatched secrets retry only the current item", async () => {
   const runner = new AwsSetupRunner();
-  let providerCalls = 0;
-  const unexpectedProviderFetch: typeof globalThis.fetch = async () => {
-    providerCalls += 1;
-    throw new Error("Provider API must not run before secret confirmation.");
-  };
   const prompter = new SetupPrompter(
+    [...initialVisibleAnswers],
     [
-      "team_abc123",
-      "prj_abc123",
-      "zoom-gov-contact-center-demo",
-      "https://example.com",
-      "quiet-rain-12345678",
-      "zoom-gov-contact-center-demo",
-      "br-muddy-rain-12345678",
-      "neondb",
-      "neondb_owner",
-      "admin@example.com",
+      vercelToken,
+      `${vercelToken}-mismatch`,
+      "short",
+      vercelToken,
+      vercelToken,
+      neonApiKey,
+      neonApiKey,
+      adminPassword,
+      adminPassword,
     ],
-    [vercelToken, `${vercelToken}-mismatch`],
   );
-  await assert.rejects(
-    runAwsSetup(
-      runner,
-      prompter,
-      new SecretRegistry(),
-      { profile: "splai-prd", reconfigure: false },
-      unexpectedProviderFetch,
+  await runAwsSetup(
+    runner,
+    prompter,
+    new SecretRegistry(),
+    { profile: "splai-prd", reconfigure: false },
+    strictProviderFetch(vercelToken, neonApiKey),
+  );
+  assert.deepEqual(
+    prompter.messages.filter((message) =>
+      message.startsWith("Vercel access token"),
     ),
-    /Vercel access token confirmation did not match/,
+    [
+      "Vercel access token: ",
+      "Vercel access token (again): ",
+      "Vercel access token: ",
+      "Vercel access token: ",
+      "Vercel access token (again): ",
+    ],
   );
-  assert.equal(providerCalls, 0);
-  const awsWriteOperations = new Set([
-    "create-key",
-    "enable-key-rotation",
-    "create-alias",
-    "put-parameter",
+  assert.equal(
+    prompter.messages.filter((message) => message === "Vercel team ID: ")
+      .length,
+    1,
+  );
+  assert.deepEqual(prompter.invalidMessages, [
+    "Vercel access token confirmation did not match. もう一度入力してください。",
+    "Vercel access token is invalid. もう一度入力してください。",
   ]);
-  assert.ok(
-    !runner.calls.some(({ arguments_ }) =>
-      awsWriteOperations.has(arguments_[1] ?? ""),
-    ),
+  assert.equal(
+    parameterPutInputs(runner).filter(
+      ({ Name }) => Name === DEPLOY_VERCEL_TOKEN_PARAMETER,
+    ).length,
+    1,
   );
 });
 

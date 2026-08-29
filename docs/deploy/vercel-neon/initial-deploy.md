@@ -63,9 +63,13 @@ git status --short
 ./setup-deploy-aws.sh --profile <AWS_PROFILE_NAME>
 ```
 
-setupはAWS accountを確認し、Vercel / Neon APIで既存project、plan、domain、branch、database、roleを入力・検証します。その後、秘密でないversion付きconfigを`String`、Vercel token、Neon API key、既存admin passwordを専用KMS keyの`SecureString`として保存します。
+parameterがない場合、setupは初期設定を開始することを表示します。AWS accountへの書き込みを完全一致で承認した後、Vercel / Neonの既存project、plan、domain、branch、database、roleを項目ごとに入力・検証します。検証済みの非秘密項目は同じ`config`へ途中保存し、Vercel token、Neon API key、既存admin passwordは確認できたものから専用KMS keyの`SecureString`へ保存します。秘密値は`config`へ保存しません。
+
+入力形式や秘密値の確認不一致では、その項目だけを再入力します。provider API、AWS、terminal中断などで停止した場合は自動再試行しません。原因を解消して同じcommandを再実行すると、非秘密値は保存済みの値、秘密値は値を伏せた状態とSSM versionを一覧表示し、未完了項目から再開します。Parameter Storeは途中状態を含めて4 parameterだけを使用します。
 
 Vercel / Neon resource、domain、`BETTER_AUTH_SECRET`、admin userは作成しません。対象が一致しない、provider policyを確認できない、既存parameterと衝突する場合は変更せず停止します。入力とrotationの詳細は[AWS Parameter Storeの初回設定](setup-deploy-aws.md)を参照してください。
+
+`config`が途中状態の間は`./deploy.sh`を実行できません。deployはsetupの再実行を案内し、Vercel環境変数更新、DB migration、Production deployを開始せず停止します。setupの完了メッセージを確認してから初回切替へ進みます。
 
 setup成功後、`.env`がまだない場合だけ、このprofileをローカル既定値として保存するか確認されます。保存を選ぶと`.env.example`から作成した`.env`の`DEPLOY_AWS_PROFILE`だけが置換され、permissionは`0600`になります。拒否してもsetupは成功したまま終了し、以後`--profile`を指定できます。
 
