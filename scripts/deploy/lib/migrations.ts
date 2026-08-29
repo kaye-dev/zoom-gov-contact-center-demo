@@ -72,6 +72,20 @@ export type MigrationSnapshotOptions = {
 export async function createMigrationPlan(
   options: MigrationSnapshotOptions,
 ): Promise<MigrationPlan> {
+  const plan = await createMigrationSnapshot(options);
+  assertAutomaticMigrationEligibility(plan);
+  return plan;
+}
+
+/**
+ * Inspects migration history, Prisma status, and schema drift without granting
+ * permission to apply the result. Production deploy callers must use
+ * createMigrationPlan; the one-time reviewed path separately binds this
+ * snapshot to an exact migration batch before it can execute anything.
+ */
+export async function createMigrationSnapshot(
+  options: MigrationSnapshotOptions,
+): Promise<MigrationPlan> {
   const migrations = readReviewedMigrationChain(options.projectRoot);
 
   let database: DatabaseInspection;
@@ -168,35 +182,6 @@ export async function createMigrationPlan(
     }
   }
 
-  const incompatible = pending.filter(
-    (migration) => migration.classification !== "expand-compatible",
-  );
-  if (incompatible.length > 0) {
-    throw new Error(
-      [
-        "Only reviewed expand-compatible migrations may be applied to an existing database.",
-        `Blocked migrations: ${incompatible.map((migration) => `${migration.name} (${migration.classification})`).join(", ")}`,
-        "Prepare a separate reviewed forward migration; deploy.sh will not apply this automatically.",
-      ].join("\n"),
-    );
-  }
-  const destructive = pending.flatMap((migration) =>
-    isReviewedSchemaInvisibleMigration(migration)
-      ? []
-      : migration.destructiveStatements.map(
-          (statement) => `${migration.name}: ${statement}`,
-        ),
-  );
-  if (destructive.length > 0) {
-    throw new Error(
-      [
-        "Destructive DDL is not eligible for automatic Production deployment.",
-        `Tables with data: ${database.tablesWithData.join(", ")}`,
-        "Prepare a separate reviewed migration plan; deploy.sh will not apply this automatically.",
-      ].join("\n"),
-    );
-  }
-
   const predictedDiffHash = sha256(predictedDiff);
   const planHash = sha256(
     JSON.stringify({
@@ -235,6 +220,37 @@ export async function createMigrationPlan(
     statusSummary: statusOutput,
     totalMigrationCount: migrations.length,
   };
+}
+
+function assertAutomaticMigrationEligibility(plan: MigrationPlan): void {
+  const incompatible = plan.pending.filter(
+    (migration) => migration.classification !== "expand-compatible",
+  );
+  if (incompatible.length > 0) {
+    throw new Error(
+      [
+        "Only reviewed expand-compatible migrations may be applied to an existing database.",
+        `Blocked migrations: ${incompatible.map((migration) => `${migration.name} (${migration.classification})`).join(", ")}`,
+        "Prepare a separate reviewed forward migration; deploy.sh will not apply this automatically.",
+      ].join("\n"),
+    );
+  }
+  const destructive = plan.pending.flatMap((migration) =>
+    isReviewedSchemaInvisibleMigration(migration)
+      ? []
+      : migration.destructiveStatements.map(
+          (statement) => `${migration.name}: ${statement}`,
+        ),
+  );
+  if (destructive.length > 0) {
+    throw new Error(
+      [
+        "Destructive DDL is not eligible for automatic Production deployment.",
+        `Tables with data: ${plan.tablesWithData.join(", ")}`,
+        "Prepare a separate reviewed migration plan; deploy.sh will not apply this automatically.",
+      ].join("\n"),
+    );
+  }
 }
 
 function isReviewedSchemaInvisibleMigration(

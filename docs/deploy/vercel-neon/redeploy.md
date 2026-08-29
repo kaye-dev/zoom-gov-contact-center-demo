@@ -40,6 +40,8 @@ git status --short
 
 migrationがup-to-dateなら、provider情報、project ID、connection string、管理者credential、plan確認文字列、deploy承認の入力はありません。pending migrationへの承認を拒否した場合は、DB、Vercel環境変数、Productionを変更せず停止します。
 
+通常の`deploy.sh`がexact `admin-access-v1` batchを検出して停止した場合だけ、[review済みadmin access migrationのProduction適用](reviewed-admin-access-migration.md)に従います。このsingle-purpose手順でDBをup-to-dateにした後は、通常の`./deploy.sh`とGitHub Actionsへ戻ります。
+
 AWS IAM Identity Center sessionが失効している場合だけ、AWSへの再loginが必要です。これは保存値の再入力ではなく短期credentialの更新です。login後に同じ`./deploy.sh`を再実行します。
 
 ## 完了判定

@@ -227,6 +227,21 @@ read_aws_account_id() {
   DEPLOY_EXPECTED_AWS_ACCOUNT_ID="${account_id}"
 }
 
+assert_internal_deployment_snapshot() {
+  if [[ -n "${DEPLOY_INTERNAL_EXPECTED_GIT_SHA:-}" ]]; then
+    [[ "${DEPLOY_INTERNAL_EXPECTED_GIT_SHA}" =~ ^[0-9a-f]{40}$ ]] || \
+      die "The internally expected Git SHA is invalid."
+    [[ "${DEPLOY_GIT_SHA}" == "${DEPLOY_INTERNAL_EXPECTED_GIT_SHA}" ]] || \
+      die "Git HEAD changed after the reviewed Production migration approval. Production deployment was not started."
+  fi
+  if [[ -n "${DEPLOY_INTERNAL_EXPECTED_GIT_BRANCH:-}" ]]; then
+    [[ "${DEPLOY_INTERNAL_EXPECTED_GIT_BRANCH}" != *$'\n'* ]] || \
+      die "The internally expected Git branch is invalid."
+    [[ "${DEPLOY_GIT_BRANCH}" == "${DEPLOY_INTERNAL_EXPECTED_GIT_BRANCH}" ]] || \
+      die "Git branch changed after the reviewed Production migration approval. Production deployment was not started."
+  fi
+}
+
 build_deploy_runner_image() {
   DEPLOY_GIT_SHA="$(git -C "${SCRIPT_DIRECTORY}" rev-parse HEAD)"
   DEPLOY_GIT_BRANCH="$(git -C "${SCRIPT_DIRECTORY}" symbolic-ref --quiet --short HEAD)" || \
@@ -234,6 +249,7 @@ build_deploy_runner_image() {
   if [[ ! "${DEPLOY_GIT_SHA}" =~ ^[0-9a-f]{40}$ || -z "${DEPLOY_GIT_BRANCH}" || "${DEPLOY_GIT_BRANCH}" == *$'\n'* ]]; then
     die "Could not resolve a safe immutable Git deployment identity."
   fi
+  assert_internal_deployment_snapshot
   DEPLOY_BUILD_CONTEXT="$(mktemp -d "${TMPDIR:-/tmp}/zoom-deploy-build.XXXXXX")"
   [[ -n "${DEPLOY_BUILD_CONTEXT}" && -d "${DEPLOY_BUILD_CONTEXT}" && ! -L "${DEPLOY_BUILD_CONTEXT}" ]] || \
     die "Could not create a safe Docker build context."
@@ -281,6 +297,9 @@ run_aws_preflight() {
 maybe_create_env_file() {
   local env_path="${SCRIPT_DIRECTORY}/.env"
   local answer
+  if [[ "${DEPLOY_INTERNAL_SKIP_ENV_PROMPT:-0}" == "1" ]]; then
+    return 0
+  fi
   [[ ${DEPLOY_ENV_WAS_ABSENT} -eq 1 ]] || return 0
   [[ ! -e "${env_path}" && ! -L "${env_path}" ]] || \
     die ".env appeared during deployment preflight; it was not overwritten."
@@ -488,7 +507,10 @@ main() {
   chmod 700 "${DEPLOY_OUTPUT_DIRECTORY}"
   validate_directory="$(prepare_phase_output_directory validate)"
   set +e
-  run_deploy_phase validate "${validate_directory}" ""
+  run_deploy_phase \
+    validate \
+    "${validate_directory}" \
+    "${DEPLOY_INTERNAL_EXPECTED_TARGET_FINGERPRINT:-}"
   validate_status=$?
   set -e
   if [[ ${validate_status} -ne 0 && ${validate_status} -ne 75 ]]; then

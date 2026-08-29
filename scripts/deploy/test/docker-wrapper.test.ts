@@ -51,6 +51,40 @@ test("Docker build context archives the exact resolved Git SHA", () => {
   assert.ok(!source.includes("archive --format=tar HEAD"));
 });
 
+test("reviewed handoff rejects a changed Git snapshot before rebuilding", () => {
+  const root = initializeWrapperFixture();
+  const approvedSha = "a".repeat(40);
+  const changedSha = "b".repeat(40);
+  try {
+    const accepted = runFixture(
+      root,
+      [
+        `DEPLOY_GIT_SHA=${approvedSha}`,
+        "DEPLOY_GIT_BRANCH=codex/reviewed",
+        `DEPLOY_INTERNAL_EXPECTED_GIT_SHA=${approvedSha}`,
+        "DEPLOY_INTERNAL_EXPECTED_GIT_BRANCH=codex/reviewed",
+        "assert_internal_deployment_snapshot",
+      ].join("\n"),
+    );
+    assert.equal(accepted.status, 0, accepted.stderr);
+
+    const rejected = runFixture(
+      root,
+      [
+        `DEPLOY_GIT_SHA=${changedSha}`,
+        "DEPLOY_GIT_BRANCH=codex/reviewed",
+        `DEPLOY_INTERNAL_EXPECTED_GIT_SHA=${approvedSha}`,
+        "DEPLOY_INTERNAL_EXPECTED_GIT_BRANCH=codex/reviewed",
+        "assert_internal_deployment_snapshot",
+      ].join("\n"),
+    );
+    assert.notEqual(rejected.status, 0);
+    assert.match(rejected.stderr, /Git HEAD changed after the reviewed/u);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
@@ -377,6 +411,28 @@ test("an existing .env is neither prompted for nor modified", () => {
     assert.equal(result.stdout, "continued");
     assert.equal(result.stderr, "");
     assert.equal(readFileSync(join(root, ".env"), "utf8"), existing);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("reviewed handoff suppresses only the duplicate optional .env prompt", () => {
+  const root = initializeWrapperFixture();
+  try {
+    const result = runFixture(
+      root,
+      [
+        "DEPLOY_AWS_PROFILE=splai-prd",
+        "DEPLOY_ENV_WAS_ABSENT=1",
+        "DEPLOY_INTERNAL_SKIP_ENV_PROMPT=1",
+        "maybe_create_env_file",
+        "printf continued",
+      ].join("\n"),
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, "continued");
+    assert.equal(result.stderr, "");
+    assert.equal(spawnSync("test", ["-e", join(root, ".env")]).status, 1);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -12,6 +12,7 @@ import { validateAdminInput } from "./lib/admin";
 import {
   loadDeploymentContextFromStdin,
   MissingDeploymentParametersError,
+  type DeploymentSecrets,
   type StoredDeploymentConfig,
 } from "./lib/aws-config";
 import { inspectDatabase } from "./lib/database";
@@ -112,7 +113,7 @@ type DeploymentGitSnapshot = {
   githubRunId?: string;
 };
 
-type VerifiedDeploymentTarget = {
+export type VerifiedDeploymentTarget = {
   link: VercelLink;
   canonicalUrl: URL;
   projectName: string;
@@ -156,7 +157,8 @@ export async function runDeploymentWorkflow(
 
   try {
     const expectedTargetFingerprint =
-      phase === "validate"
+      phase === "validate" &&
+      process.env.DEPLOY_EXPECTED_TARGET_FINGERPRINT === undefined
         ? undefined
         : readExpectedTargetFingerprint(
             process.env.DEPLOY_EXPECTED_TARGET_FINGERPRINT,
@@ -424,7 +426,26 @@ async function loadVerifiedDeploymentTarget(
   } finally {
     clearAwsCredentialEnvironment(process.env);
   }
-  const { config } = loaded;
+  return verifyStoredDeploymentTarget(
+    runner,
+    secrets,
+    loaded.config,
+    loaded.secrets,
+    expectedTargetFingerprint,
+  );
+}
+
+/**
+ * Revalidates every stored provider target without reading credentials from
+ * ambient environment variables and without mutating Neon, Vercel, or the DB.
+ */
+export async function verifyStoredDeploymentTarget(
+  runner: CommandRunner,
+  secrets: SecretRegistry,
+  config: StoredDeploymentConfig,
+  deploymentSecrets: DeploymentSecrets,
+  expectedTargetFingerprint?: string,
+): Promise<VerifiedDeploymentTarget> {
   const targetFingerprint = createDeploymentTargetFingerprint(config);
   if (
     expectedTargetFingerprint !== undefined &&
@@ -435,9 +456,9 @@ async function loadVerifiedDeploymentTarget(
     );
   }
   secrets.add(
-    loaded.secrets.vercelToken,
-    loaded.secrets.neonApiKey,
-    loaded.secrets.adminPassword,
+    deploymentSecrets.vercelToken,
+    deploymentSecrets.neonApiKey,
+    deploymentSecrets.adminPassword,
   );
   if (
     config.vercel.expectedPlan !== "hobby" ||
@@ -454,7 +475,7 @@ async function loadVerifiedDeploymentTarget(
   const vercelEnvironment = createVercelCommandEnvironment(
     process.env,
     link,
-    loaded.secrets.vercelToken,
+    deploymentSecrets.vercelToken,
   );
   ensureDirectProductionCli(runner, vercelEnvironment);
   runChecked(
@@ -472,7 +493,7 @@ async function loadVerifiedDeploymentTarget(
 
   const neon = await loadNeonConnectionContext(
     config.neon,
-    loaded.secrets.neonApiKey,
+    deploymentSecrets.neonApiKey,
   );
   const pooledPassword = new URL(neon.database.pooledUrl).password;
   const directPassword = new URL(neon.database.directUrl).password;
@@ -496,7 +517,7 @@ async function loadVerifiedDeploymentTarget(
   const validatedAdmin = validateAdminInput({
     email: config.admin.email,
     name: "existing",
-    password: loaded.secrets.adminPassword,
+    password: deploymentSecrets.adminPassword,
   });
 
   return {
@@ -1716,7 +1737,7 @@ export function createBuildEnvironment(
   return environment;
 }
 
-function readCanonicalDeployment(
+export function readCanonicalDeployment(
   runner: CommandRunner,
   link: VercelLink,
   canonicalUrl: URL,
