@@ -38,21 +38,48 @@ plan成果物のcleanupは、この流れとは別の明示操作として行う
 
 ### `$plan`
 
-最新の明示要求、確定済み判断、採用済み資料からauthoritative requirements bundleを作る。repository、runtime、既存UIを確認し、`plans/<slug>/goal.md`へ自己完結した最終設計を書く。
+`$plan`は次の順で進める。
+
+1. `要求整理`: 最新要求、確定済み判断、採用済み資料を整理する。
+2. `現状確認`: repository、runtime、関連するcodeとtestを確認し、UI変更時はclosest live UIも確認する。
+3. `goal`: 自己完結した最終設計と要件クロージャを`plans/<slug>/goal.md`へ書く。
+4. `UI prototype`（UI変更時）: 完成UI、`ui-contract.json`、`parity-spec.json`を作る。
+5. `検証`: goalを最終監査し、UI変更時はCSS build、contract/profile validation、revision計算、影響scopeのsmokeも行う。
+6. `フィードバック`: goal、prototype URL、revision、smoke結果、未確認事項を返す。
+
+最新の明示要求、確定済み判断、採用済み資料からauthoritative requirements bundleを作る。repositoryとruntimeを確認し、UI変更では既存UIも確認して、`plans/<slug>/goal.md`へ自己完結した最終設計を書く。
 
 全要件は`## 要件クロージャ`で、設計、prototype、テスト、完了条件へ対応付ける。UI変更では同じdirectoryにproduction-parity prototypeを作り、静的検証と変更target/stateのsmokeまででユーザーへURLを返す。フィードバック後は同じplanを最終設計として更新し、全matrixは実行しない。
 
 ### `$plan-critic`
 
+`$plan-critic`は次の順で進める。
+
+1. `対象解決`: 対象のgoalと必要なprototype、contract、profileを特定する。
+2. `独立review`: freshな履歴なしsubagentで要件、設計、検証、UI parityを確認する。
+3. `修正`: 採用済み要件とlive evidenceから一意に直せる欠陥だけを修正する。
+4. `再検証`: goalを最終監査し、UI変更時はCSS build、contract/profile validation、revision再計算、影響scopeのsmokeも行う。
+5. `結果報告`: 更新path、revision、smoke結果、修正内容、残るriskを返す。
+
 goalとprototypeを独立reviewする。authoritative requirements bundleとclosest live production UIから一意に直せる欠陥は修正し、不足するprototypeまたはmanifestも決定論的に作成する。
 
-修正後はCSS build、contract/profile validation、revision再計算、変更範囲のsmokeを行う。新しい製品判断または不足するlive UI証拠が必要な場合だけ、ユーザーへ確認する。plan中に全matrixや承認状態を作り直さない。
+UI変更の修正後はCSS build、contract/profile validation、revision再計算、変更範囲のsmokeを行う。新しい製品判断または不足するlive UI証拠が必要な場合だけ、ユーザーへ確認する。plan中に全matrixや承認状態を作り直さない。
 
 ### `$implement`
 
+`$implement`は次の順で進める。
+
+1. `承認取得`: goal、prototype revision、validation profile digestを検証してfresh runへ記録する。
+2. `baseline`（UI変更時）: runtime、process、container、checkout mount、source、比較条件を記録する。
+3. `pre-edit`（UI変更時）: production編集直前に全matrixを1回実行する。
+4. `実装`: goalとUI契約に従ってproductionを変更し、affected rowを確認する。
+5. `自動検証`: 対象scopeのtest、lint、typecheck、build、diff checkを行う。
+6. `final`（UI変更時）: 最後の関連変更後に全matrixを1回実行して最終証跡を書く。
+7. `cleanup・報告`: agent-ownedなbaseline差分だけを片付け、変更と検証結果を返す。
+
 明示的な`$implement`実行を、解決したgoal、現在のprototype revision、validation profile digestへの承認とする。現在のagentがproduction実装と検証を行い、別の承認応答やgoal内の承認記録を要求しない。
 
-production編集の前にruntimeと契約のdriftを確認し、全rowのpre-edit parityを1回実行する。実装中はaffected rowだけを確認し、最後の関連変更後に全rowのfinal parityを1回実行する。
+UI変更ではproduction編集の前にruntimeと契約のdriftを確認し、全rowのpre-edit parityを1回実行する。実装中はaffected rowだけを確認し、最後の関連変更後に全rowのfinal parityを1回実行する。
 
 具体的な停止条件、Browser条件、証跡形式は「Runtime phaseと所有権」と「UI prototype」に従う。
 
@@ -64,9 +91,59 @@ UI変更では、diffとaffected codeからUI影響を独立分類する。revis
 
 goalの`prototype revision`と、選択runの`approval.json`、`pre-edit-parity.json`、`implementation-parity.json`を再検証する。legacy planだけは従来のgoal/Markdown証拠をread-onlyで検証する。不一致は必須major findingとする。
 
+#### レビュー後のフィードバック対応フロー
+
+HTML report生成後は次の順で進める。
+
+1. `HTML report`: 各指摘を`採用 / 却下 / 未確定`に分類し、必要なcommentを入力する。
+2. `Markdown`: 対応する指摘をすべて確定し、フィードバックを生成・copyする。
+3. `$plan`（契約変更時）: 採用した指摘を同じgoalとprototypeへ反映する。
+4. `$plan-critic`（任意）: 更新したgoalとprototypeを独立reviewする。
+5. `$implement`（採用指摘がある場合）: 現在のgoalとprototypeを承認し、修正・検証する。
+6. `$review`（必要な場合）: 修正後のdiffとgoalへの適合性を再reviewする。
+7. `$git-commit-push-pr`（明示依頼時）: commit、push、PRを行う。
+
+HTML reportは指摘への判断を整理する成果物であり、画面上の選択だけではgoal、prototype、production実装を変更しない。次の依頼には対象の`plans/<slug>/goal.md`とcopyしたMarkdownを一緒に渡し、採用する指摘をユーザーの明示要求として伝える。採用指摘がなければ3から6を省略できる。
+
+採用した指摘がgoal、完成UI、interaction、`ui-contract.json`、`parity-spec.json`のいずれかを変える場合は3から進める。たとえばfocus trap、Tab循環、背景の`inert`化はUI契約変更として扱う。`$plan`は採用内容をgoalとprototypeへ反映し、CSS build、revision再計算、影響scopeのsmokeまでを行う。`$plan-critic`を実行してprototypeまたは契約が変わった場合も、そこで再計算された最新revisionを5の対象とする。
+
+採用した指摘が現行goalに既に定義された要件への実装逸脱、test不足、または証跡不備だけで、goalとUI契約を変えない場合は3と4を省略して5へ進む。`$implement` invocation自体が現在のgoal、prototype revision、validation profile digestへの承認なので、「承認します」という別回答やrevisionの転記は不要である。production変更と最終証跡はfresh runで作り直す。
+
+UI契約変更を伴う依頼は、`$plan`の完了後に`$implement`を別のメッセージで実行する。
+
+```text
+$plan plans/<slug>/goal.md
+レビューHTMLで採用した以下の指摘を、同じplanのgoal、prototype、ui-contract.json、parity-spec.jsonへ反映してください。
+<生成したMarkdown>
+```
+
+必要な場合だけ、その完了後に次を実行する。
+
+```text
+$plan-critic plans/<slug>/goal.md
+```
+
+最後に、最新のgoalとrevisionへ次を実行する。
+
+```text
+$implement plans/<slug>/goal.md
+```
+
 ### `$git-commit-push-pr`
 
+`$git-commit-push-pr`は次の順で進める。
+
+1. `preflight`: Git規約、状態、remote、GitHub認証、repository対応を確認してfetchする。
+2. `branch`: baseとtopic branchを解決し、protected branch上ならtopic branchを作る。
+3. `commit`（未commit変更がある場合）: current taskのpathだけをstageし、差分検証後に1件のcommitを作る。
+4. `同期`: 最新baseをfetchし、公開状態に応じてrebaseまたはmergeする。
+5. `push`: historyを書き換えずにpushし、localとremoteのSHA一致を確認する。
+6. `PR`: 同じheadのPRを作成するか、必要な箇所だけを更新する。
+7. `readback`: PRのbase/head OID、draft、mergeability、merge stateを確認して報告する。
+
 現在のユーザーが明示した場合だけ、commit、push、PRを行う。実装やreviewから自動では実行しない。
+
+force push、stash、変更破棄、広域stage、自動競合解決、PR merge、CI待機は行わない。競合、remote divergence、複数PR、GitHub認証またはrepository対応の不一致は停止条件とする。planとreviewの生成物は文脈であり、明示されたshipping scopeへ含まれない限りstageも削除もしない。
 
 ## Runtime phaseと所有権
 
