@@ -21,7 +21,11 @@ import {
   unfreezeLegacyRollbackAdminMutations,
   validateAdminInput,
 } from "./lib/admin";
-import { inspectDatabase } from "./lib/database";
+import {
+  inspectDatabase,
+  inspectDeveloperApiCiphertextState,
+  type DeveloperApiCiphertextState,
+} from "./lib/database";
 import {
   isAffirmative,
   requireAffirmative,
@@ -86,6 +90,7 @@ const PRODUCTION_ENV_ALLOWLIST = new Set([
   "BETTER_AUTH_URL",
   "BETTER_AUTH_TRUSTED_ORIGINS",
   "BETTER_AUTH_TRUST_PROXY_HEADERS",
+  "DEVELOPER_API_SETTINGS_ENCRYPTION_KEY",
   "APP_CANONICAL_ORIGIN",
 ]);
 
@@ -407,7 +412,13 @@ export async function runDeploymentWorkflow(
     const generatedAuthSecret = shouldCreateAuthSecret(currentEnvironment)
       ? randomBytes(48).toString("base64url")
       : undefined;
+    const generatedDeveloperApiEncryptionKey =
+      await resolveDeveloperApiEncryptionKey(
+        currentEnvironment,
+        database.directUrl,
+      );
     secrets.add(generatedAuthSecret);
+    secrets.add(generatedDeveloperApiEncryptionKey);
     setVercelEnvironment(
       runner,
       link,
@@ -427,6 +438,19 @@ export async function runDeploymentWorkflow(
       console.log("Created BETTER_AUTH_SECRET for the first deployment.");
     } else {
       console.log("Preserved the existing BETTER_AUTH_SECRET.");
+    }
+    if (generatedDeveloperApiEncryptionKey) {
+      setVercelEnvironment(
+        runner,
+        link,
+        "DEVELOPER_API_SETTINGS_ENCRYPTION_KEY",
+        generatedDeveloperApiEncryptionKey,
+        true,
+        false,
+      );
+      console.log("Created the Developer API settings encryption key.");
+    } else {
+      console.log("Preserved the existing Developer API settings encryption key.");
     }
     setVercelEnvironment(
       runner,
@@ -463,12 +487,16 @@ export async function runDeploymentWorkflow(
     console.log("[3/7] Quality gates");
     const buildAuthSecret =
       generatedAuthSecret ?? randomBytes(48).toString("base64url");
+    const buildDeveloperApiEncryptionKey =
+      generatedDeveloperApiEncryptionKey ?? randomBytes(32).toString("base64");
     secrets.add(buildAuthSecret);
+    secrets.add(buildDeveloperApiEncryptionKey);
     const buildEnvironment = createBuildEnvironment(
       process.env,
       database.pooledUrl,
       buildAuthSecret,
       canonicalUrl.origin,
+      buildDeveloperApiEncryptionKey,
     );
     runQualityGates(runner, projectRoot, buildEnvironment);
     assertGitClean(runner, projectRoot, "after quality gates");
@@ -1450,6 +1478,7 @@ export function assertAllowedProductionEnvironment(
   for (const name of [
     "DATABASE_URL",
     "BETTER_AUTH_SECRET",
+    "DEVELOPER_API_SETTINGS_ENCRYPTION_KEY",
   ]) {
     if (audit.names.has(name) && audit.types.get(name) !== "sensitive") {
       throw new Error(`${name} must be a Vercel Sensitive value.`);
@@ -1472,6 +1501,29 @@ export function shouldCreateAuthSecret(
 ): boolean {
   assertAllowedProductionEnvironment(audit);
   return !audit.names.has("BETTER_AUTH_SECRET");
+}
+
+export function shouldCreateDeveloperApiEncryptionKey(
+  audit: ProductionEnvironmentAudit,
+): boolean {
+  assertAllowedProductionEnvironment(audit);
+  return !audit.names.has("DEVELOPER_API_SETTINGS_ENCRYPTION_KEY");
+}
+
+export async function resolveDeveloperApiEncryptionKey(
+  audit: ProductionEnvironmentAudit,
+  directUrl: string,
+  inspect: (directUrl: string) => Promise<DeveloperApiCiphertextState> =
+    inspectDeveloperApiCiphertextState,
+): Promise<string | undefined> {
+  if (!shouldCreateDeveloperApiEncryptionKey(audit)) return undefined;
+  const state = await inspect(directUrl);
+  if (state === "configured") {
+    throw new Error(
+      "Developer API ciphertext exists but the Production encryption key is missing; restore the original key before deployment.",
+    );
+  }
+  return randomBytes(32).toString("base64");
 }
 
 export function assertExactProductionEnvironment(
@@ -1674,6 +1726,7 @@ export function createBuildEnvironment(
   pooledUrl: string,
   authSecret: string,
   canonicalOrigin: string,
+  developerApiEncryptionKey: string,
 ): NodeJS.ProcessEnv {
   const normalizedCanonicalOrigin = validateCanonicalUrl(canonicalOrigin).origin;
   const environment: NodeJS.ProcessEnv = {
@@ -1684,6 +1737,7 @@ export function createBuildEnvironment(
     BETTER_AUTH_URL: normalizedCanonicalOrigin,
     BETTER_AUTH_TRUSTED_ORIGINS: normalizedCanonicalOrigin,
     BETTER_AUTH_TRUST_PROXY_HEADERS: "true",
+    DEVELOPER_API_SETTINGS_ENCRYPTION_KEY: developerApiEncryptionKey,
     APP_CANONICAL_ORIGIN: normalizedCanonicalOrigin,
   };
   delete environment.DATABASE_URL_UNPOOLED;

@@ -61,6 +61,18 @@ import { saveMaintenanceSettings } from "@/lib/server/maintenance-settings-write
 import { createBoundedPasswordResetRequest } from "@/lib/server/password-reset-requests";
 import { parseChatSettings } from "@/lib/chat-settings";
 import { parsePhoneSettings } from "@/lib/phone-settings";
+import {
+  DEVELOPER_API_ERROR_CODES,
+  parseDeveloperApiSecretReveal,
+  parseDeveloperApiSettings,
+} from "@/lib/developer-api-settings";
+import {
+  DeveloperApiEncryptionUnavailableError,
+} from "@/lib/server/developer-api-crypto";
+import {
+  revealDeveloperApiSecret,
+  saveDeveloperApiSettings,
+} from "@/lib/server/developer-api-settings";
 import { MAINTENANCE_SETTINGS_CONFLICT_CODE } from "@/lib/maintenance-config";
 import {
   SETTINGS_ERROR_CODES,
@@ -828,6 +840,99 @@ app.put("/admin/phone-settings", async (c) => {
   } catch {
     console.error("Failed to save phone settings.");
     return c.json({ error: SETTINGS_ERROR_CODES.saveFailed }, 500);
+  }
+});
+
+app.put("/admin/developer-api", async (c) => {
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "developer-api",
+    "UPDATE",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
+  }
+
+  const parsed = parseDeveloperApiSettings(await readJsonBody(c.req.raw));
+  if (!parsed.ok) {
+    return c.json({ error: parsed.code }, 400);
+  }
+
+  try {
+    const settings = await saveDeveloperApiSettings(prisma, parsed.value);
+    if (!settings) {
+      return c.json(
+        {
+          error:
+            parsed.value.section === "server-to-server-oauth"
+              ? DEVELOPER_API_ERROR_CODES.oauthSecretRequired
+              : DEVELOPER_API_ERROR_CODES.webhookSecretRequired,
+        },
+        400,
+      );
+    }
+    return c.json({ settings });
+  } catch (error) {
+    if (error instanceof DeveloperApiEncryptionUnavailableError) {
+      return c.json(
+        { error: DEVELOPER_API_ERROR_CODES.encryptionUnavailable },
+        503,
+      );
+    }
+    // Credentials, encryption keys, ciphertext, and original errors must never be logged.
+    console.error("Failed to save Developer API settings.");
+    return c.json({ error: DEVELOPER_API_ERROR_CODES.saveFailed }, 500);
+  }
+});
+
+app.post("/admin/developer-api/reveal", async (c) => {
+  c.header("Cache-Control", "private, no-store, max-age=0");
+  c.header("Pragma", "no-cache");
+  c.header("Expires", "0");
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "developer-api",
+    "UPDATE",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
+  }
+
+  const parsed = parseDeveloperApiSecretReveal(await readJsonBody(c.req.raw));
+  if (!parsed.ok) {
+    return c.json({ error: parsed.code }, 400);
+  }
+
+  try {
+    const value = await revealDeveloperApiSecret(prisma, parsed.value.field);
+    if (value === null) {
+      return c.json(
+        { error: DEVELOPER_API_ERROR_CODES.secretNotConfigured },
+        404,
+      );
+    }
+    return c.json({ field: parsed.value.field, value });
+  } catch (error) {
+    if (error instanceof DeveloperApiEncryptionUnavailableError) {
+      return c.json(
+        { error: DEVELOPER_API_ERROR_CODES.encryptionUnavailable },
+        503,
+      );
+    }
+    // Credentials, encryption keys, ciphertext, and original errors must never be logged.
+    console.error("Failed to reveal a Developer API secret.");
+    return c.json(
+      { error: DEVELOPER_API_ERROR_CODES.secretRevealFailed },
+      500,
+    );
   }
 });
 

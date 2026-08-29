@@ -9,7 +9,7 @@ import {
   type CommandRunner,
 } from "./process";
 
-const REVIEWED_MIGRATION_COUNT = 9;
+const REVIEWED_MIGRATION_COUNT = 10;
 const REVIEWED_SCHEMA_INVISIBLE_MIGRATION_HASHES = new Map([
   [
     "20260828120000_separate_admin_access_cas_revisions",

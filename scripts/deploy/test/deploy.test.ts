@@ -17,6 +17,8 @@ import { test } from "node:test";
 
 import type { Client } from "pg";
 
+import { inspectDeveloperApiCiphertextStateWithClient } from "../lib/database";
+
 import {
   captureAwsCleanupPlan,
   executeAwsCleanup,
@@ -72,9 +74,11 @@ import {
   prepareLegacyRollbackForDeployment,
   recoverAdminAccessMutationFreezeForDeployment,
   recheckRollbackDeploymentIdentities,
+  resolveDeveloperApiEncryptionKey,
   PromotionGuard,
   setVercelEnvironment,
   shouldCreateAuthSecret,
+  shouldCreateDeveloperApiEncryptionKey,
   validateCandidateDeploymentEvidence,
   waitForNeonEndpointState,
 } from "../main";
@@ -828,11 +832,16 @@ test("Vercel environment API audits every target and never stores direct URL", (
         type: "encrypted",
         target: ["production"],
       },
+      {
+        key: "DEVELOPER_API_SETTINGS_ENCRYPTION_KEY",
+        type: "sensitive",
+        target: ["production"],
+      },
       { key: "PREVIEW_ONLY", type: "encrypted", target: ["preview"] },
     ],
   };
   const validAudit = parseProductionEnvironmentAudit(JSON.stringify(valid));
-  assert.equal(validAudit.names.size, 6);
+  assert.equal(validAudit.names.size, 7);
   assert.equal(shouldCreateAuthSecret(validAudit), false);
   const withoutSecret = parseProductionEnvironmentAudit(
     JSON.stringify({
@@ -914,6 +923,132 @@ test("Vercel environment API audits every target and never stores direct URL", (
       ),
     /APP_CANONICAL_ORIGIN must be an encrypted non-Sensitive value/,
   );
+});
+
+test("Developer API ciphertext inspection distinguishes safe and configured databases", async () => {
+  const inspect = async ({
+    tableExists = true,
+    columns = ["clientSecretEncrypted", "secretTokenEncrypted"],
+    configured = false,
+    fail = false,
+  }: {
+    tableExists?: boolean;
+    columns?: string[];
+    configured?: boolean;
+    fail?: boolean;
+  }) => {
+    const queries: string[] = [];
+    const client = {
+      async query(sql: string) {
+        queries.push(sql);
+        if (fail) throw new Error("synthetic inspection failure");
+        if (sql.includes("to_regclass")) return { rows: [{ exists: tableExists }] };
+        if (sql.includes("information_schema.columns")) {
+          return { rows: columns.map((column_name) => ({ column_name })) };
+        }
+        return { rows: [{ configured }] };
+      },
+    } as unknown as Pick<Client, "query">;
+    const state = await inspectDeveloperApiCiphertextStateWithClient(client);
+    return { state, queries };
+  };
+
+  assert.equal((await inspect({ tableExists: false })).state, "table-absent");
+  assert.equal((await inspect({ configured: false })).state, "unconfigured");
+  const configured = await inspect({ configured: true });
+  assert.equal(configured.state, "configured");
+  assert.equal(
+    configured.queries.some((query) => /SELECT\s+"clientSecretEncrypted"/u.test(query)),
+    false,
+  );
+  await assert.rejects(
+    inspect({ columns: ["clientSecretEncrypted"] }),
+    /schema is incomplete/,
+  );
+  await assert.rejects(inspect({ fail: true }), /synthetic inspection failure/);
+});
+
+test("Developer API encryption key provisioning fails closed before Vercel mutation", async () => {
+  const missingKeyAudit = parseProductionEnvironmentAudit(
+    JSON.stringify({
+      envs: [
+        { key: "DATABASE_URL", type: "sensitive", target: ["production"] },
+      ],
+    }),
+  );
+  assert.equal(shouldCreateDeveloperApiEncryptionKey(missingKeyAudit), true);
+  for (const state of ["table-absent", "unconfigured"] as const) {
+    const key = await resolveDeveloperApiEncryptionKey(
+      missingKeyAudit,
+      "postgresql://redacted.invalid/database",
+      async () => state,
+    );
+    assert.equal(Buffer.from(key!, "base64").length, 32);
+  }
+  await assert.rejects(
+    resolveDeveloperApiEncryptionKey(
+      missingKeyAudit,
+      "postgresql://redacted.invalid/database",
+      async () => "configured",
+    ),
+    /restore the original key/,
+  );
+  await assert.rejects(
+    resolveDeveloperApiEncryptionKey(
+      missingKeyAudit,
+      "postgresql://redacted.invalid/database",
+      async () => {
+        throw new Error("synthetic database failure");
+      },
+    ),
+    /synthetic database failure/,
+  );
+
+  const existingKeyAudit = parseProductionEnvironmentAudit(
+    JSON.stringify({
+      envs: [
+        {
+          key: "DEVELOPER_API_SETTINGS_ENCRYPTION_KEY",
+          type: "sensitive",
+          target: ["production"],
+        },
+      ],
+    }),
+  );
+  let inspections = 0;
+  assert.equal(
+    await resolveDeveloperApiEncryptionKey(
+      existingKeyAudit,
+      "postgresql://redacted.invalid/database",
+      async () => {
+        inspections += 1;
+        return "configured";
+      },
+    ),
+    undefined,
+  );
+  assert.equal(inspections, 0);
+
+  const deploymentSource = readFileSync(
+    new URL("../main.ts", import.meta.url),
+    "utf8",
+  );
+  assert.ok(
+    deploymentSource.indexOf("await resolveDeveloperApiEncryptionKey(") <
+      deploymentSource.indexOf("setVercelEnvironment("),
+  );
+});
+
+test("deployment documentation records ten migrations and the next migration as eleven", () => {
+  for (const path of [
+    "../../../docs/deploy/vercel-neon/initial-deploy.md",
+    "../../../docs/deploy/vercel-neon/redeploy.md",
+  ]) {
+    const document = readFileSync(new URL(path, import.meta.url), "utf8");
+    assert.match(document, /既存10件/u);
+    assert.match(document, /11件目/u);
+    assert.match(document, /ciphertext検査の開始からcandidate promotion完了まで/u);
+  }
 });
 
 test("shared environment audit accepts only complete non-Production project results", () => {
@@ -1063,6 +1198,11 @@ test("candidate environment preflight repeats exact project and shared audits", 
             {
               key: "APP_CANONICAL_ORIGIN",
               type: "encrypted",
+              target: ["production"],
+            },
+            {
+              key: "DEVELOPER_API_SETTINGS_ENCRYPTION_KEY",
+              type: "sensitive",
               target: ["production"],
             },
           ],
@@ -1273,11 +1413,13 @@ test("production build env removes every ambient unpooled database URL", () => {
     "postgresql://pooled.invalid/runtime",
     "auth-secret",
     "https://example.test",
+    Buffer.alloc(32, 7).toString("base64"),
   );
   assert.equal(environment.DATABASE_URL, "postgresql://pooled.invalid/runtime");
   assert.equal(environment.DATABASE_URL_UNPOOLED, undefined);
   assert.equal(environment.BETTER_AUTH_URL, "https://example.test");
   assert.equal(environment.APP_CANONICAL_ORIGIN, "https://example.test");
+  assert.equal(environment.DEVELOPER_API_SETTINGS_ENCRYPTION_KEY, Buffer.alloc(32, 7).toString("base64"));
   assert.throws(
     () =>
       createBuildEnvironment(
@@ -1285,6 +1427,7 @@ test("production build env removes every ambient unpooled database URL", () => {
         "postgresql://pooled.invalid/runtime",
         "auth-secret",
         "http://example.test",
+        Buffer.alloc(32, 7).toString("base64"),
       ),
     /HTTPS origin/,
   );
@@ -1303,7 +1446,7 @@ function migrationPlan(planHash: string): MigrationPlan {
     databaseObjects: [],
     tablesWithData: [],
     statusSummary: "1 pending migration",
-    totalMigrationCount: 9,
+    totalMigrationCount: 10,
   };
 }
 
@@ -1602,7 +1745,10 @@ test("reviewed CAS cleanup remains safe with the additive authority migrations",
   const local = readLocalMigrations(
     new URL("../../../prisma/migrations/", import.meta.url).pathname,
   );
-  const applied = local.slice(0, -3).map((migration) => ({
+  const firstPending = local.findIndex(
+    ({ name }) => name === "20260828120000_separate_admin_access_cas_revisions",
+  );
+  const applied = local.slice(0, firstPending).map((migration) => ({
     name: migration.name,
     checksum: migration.hash,
     finished: true,
@@ -1646,6 +1792,7 @@ test("reviewed CAS cleanup remains safe with the additive authority migrations",
       "20260828120000_separate_admin_access_cas_revisions",
       "20260828180000_add_admin_access_mutation_freeze",
       "20260828210000_enforce_single_admin_access_role",
+      "20260829231500_add_developer_api_settings",
     ],
   );
   assert.equal(plan.pending[0]?.destructiveStatements.length, 2);
