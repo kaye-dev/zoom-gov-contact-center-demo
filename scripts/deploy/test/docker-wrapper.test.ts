@@ -24,8 +24,23 @@ import {
 } from "../lib/aws-config";
 
 const projectRoot = resolve(import.meta.dirname, "../../..");
+const deployDockerfile = join(projectRoot, "Dockerfile.deploy");
 const deployScript = join(projectRoot, "deploy.sh");
 const setupDeployAwsScript = join(projectRoot, "setup-deploy-aws.sh");
+
+test("deployment runner includes the Linux quality-gate tools", () => {
+  const source = readFileSync(deployDockerfile, "utf8");
+  assert.match(source, /procps=2:4\.0\.2-3/);
+  assert.match(source, /zsh=5\.9-4\+b15/);
+});
+
+test("deployment phases use an init process to reap descendants", () => {
+  const source = readFileSync(deployScript, "utf8");
+  assert.match(
+    source,
+    /local container_arguments=\(\s+--rm --init --interactive --user 0/,
+  );
+});
 
 test("Docker build context archives the exact resolved Git SHA", () => {
   const source = readFileSync(deployScript, "utf8");

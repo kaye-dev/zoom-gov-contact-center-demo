@@ -345,7 +345,7 @@ run_deploy_phase() {
   local expected_deployment_id="${5:-}"
   local expected_previous_deployment_id="${6:-}"
   local container_arguments=(
-    --rm --interactive --user 0
+    --rm --init --interactive --user 0
     --env "DEPLOY_CONTEXT_SOURCE=stdin"
     --env "DEPLOY_PHASE=${phase}"
     --env "DEPLOY_AWS_ACCOUNT_ID=${DEPLOY_AWS_ACCOUNT_ID}"
