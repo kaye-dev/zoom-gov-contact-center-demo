@@ -125,8 +125,7 @@ main_reviewed_migration() {
   run_aws_preflight
   maybe_create_env_file
 
-  DEPLOY_OUTPUT_DIRECTORY="$(mktemp -d "${TMPDIR:-/tmp}/zoom-deploy-output.XXXXXX")"
-  chmod 700 "${DEPLOY_OUTPUT_DIRECTORY}"
+  prepare_deploy_output_directory
   validate_directory="$(prepare_phase_output_directory reviewed-validate)"
   run_reviewed_migration_phase validate "${validate_directory}"
   parse_reviewed_validate_output "${validate_directory}/result"

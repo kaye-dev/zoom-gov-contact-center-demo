@@ -53,6 +53,7 @@ test("one-time wrapper preserves the normal deploy CLI and immutable stdin runne
     contents,
     /"\$\{DEPLOY_RUNNER_IMAGE\}" \\\n+    sh -ceu "\$\{DEPLOY_PRIVATE_OUTPUT_ENTRYPOINT\}" sh \\\n+    node --import tsx scripts\/deploy\/reviewed-migration\.ts/u,
   );
+  assert.match(contents, /prepare_deploy_output_directory/u);
   assert.doesNotMatch(contents, /hard_delete=true|DATABASE_URL=/u);
   assert.match(
     contents,

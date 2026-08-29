@@ -54,6 +54,19 @@ test("deployment phases make Colima bind-mounted output private before execution
   );
 });
 
+test("deployment output uses the Git metadata directory shared by Colima", () => {
+  const source = readFileSync(deployScript, "utf8");
+  assert.match(source, /rev-parse --absolute-git-dir/u);
+  assert.match(
+    source,
+    /mktemp -d "\$\{DEPLOY_GIT_DIRECTORY\}\/zoom-deploy-output\.XXXXXX"/u,
+  );
+  assert.doesNotMatch(
+    source,
+    /\$\{TMPDIR:-\/tmp\}\/zoom-deploy-output/u,
+  );
+});
+
 test("Docker build context archives the exact resolved Git SHA", () => {
   const source = readFileSync(deployScript, "utf8");
   assert.match(

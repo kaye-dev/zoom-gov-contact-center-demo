@@ -16,6 +16,7 @@ DEPLOY_CONTEXT_COMPLETION_MARKER="ZOOM_DEPLOY_SSM_CONTEXT_COMPLETE_V1"
 DEPLOY_PRIVATE_OUTPUT_ENTRYPOINT='chmod 700 /deploy-output && exec "$@"'
 
 DEPLOY_BUILD_CONTEXT=""
+DEPLOY_GIT_DIRECTORY=""
 DEPLOY_OUTPUT_DIRECTORY=""
 DEPLOY_ENV_TEMP_FILE=""
 DEPLOY_RUNNER_IMAGE=""
@@ -48,7 +49,11 @@ cleanup_deploy_wrapper() {
     rm -f -- "${DEPLOY_ENV_TEMP_FILE}"
   fi
   safe_remove_temporary_directory "${DEPLOY_BUILD_CONTEXT}" "${TMPDIR:-/tmp}/zoom-deploy-build."
-  safe_remove_temporary_directory "${DEPLOY_OUTPUT_DIRECTORY}" "${TMPDIR:-/tmp}/zoom-deploy-output."
+  if [[ -n "${DEPLOY_GIT_DIRECTORY}" ]]; then
+    safe_remove_temporary_directory \
+      "${DEPLOY_OUTPUT_DIRECTORY}" \
+      "${DEPLOY_GIT_DIRECTORY}/zoom-deploy-output."
+  fi
 }
 
 trap cleanup_deploy_wrapper EXIT
@@ -71,6 +76,22 @@ require_clean_worktree() {
   [[ -f "${SCRIPT_DIRECTORY}/package-lock.json" ]] || die "package-lock.json is required."
   [[ ! -f "${SCRIPT_DIRECTORY}/pnpm-lock.yaml" ]] || \
     die "pnpm-lock.yaml must be removed; npm is the package-manager source of truth."
+}
+
+prepare_deploy_output_directory() {
+  local git_directory
+  [[ -z "${DEPLOY_OUTPUT_DIRECTORY}" ]] || die "Deployment output directory is already initialized."
+  git_directory="$(git -C "${SCRIPT_DIRECTORY}" rev-parse --absolute-git-dir)" || \
+    die "Unable to resolve the Git metadata directory for deployment output."
+  [[ "${git_directory}" == /* && -d "${git_directory}" && ! -L "${git_directory}" ]] || \
+    die "The Git metadata directory is unavailable or unsafe for deployment output."
+
+  DEPLOY_GIT_DIRECTORY="${git_directory}"
+  DEPLOY_OUTPUT_DIRECTORY="$(mktemp -d "${DEPLOY_GIT_DIRECTORY}/zoom-deploy-output.XXXXXX")" || \
+    die "Unable to create the deployment output directory."
+  [[ -d "${DEPLOY_OUTPUT_DIRECTORY}" && ! -L "${DEPLOY_OUTPUT_DIRECTORY}" ]] || \
+    die "The deployment output directory is unavailable or unsafe."
+  chmod 700 "${DEPLOY_OUTPUT_DIRECTORY}"
 }
 
 validate_profile_name() {
@@ -508,8 +529,7 @@ main() {
   run_aws_preflight
   maybe_create_env_file
 
-  DEPLOY_OUTPUT_DIRECTORY="$(mktemp -d "${TMPDIR:-/tmp}/zoom-deploy-output.XXXXXX")"
-  chmod 700 "${DEPLOY_OUTPUT_DIRECTORY}"
+  prepare_deploy_output_directory
   validate_directory="$(prepare_phase_output_directory validate)"
   set +e
   run_deploy_phase \
