@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useI18n } from '../i18n/LanguageProvider';
 import { StarEmblem } from './svg/StarEmblemIcon';
 import { PinIcon } from './svg/PinIcon';
@@ -19,10 +19,16 @@ type MobileMenuProps = {
  */
 export function MobileMenu({ open, onClose }: MobileMenuProps) {
   const { t } = useI18n();
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   // Esc で閉じる + 開いている間は本文スクロールをロック
   useEffect(() => {
     if (!open) return;
+
+    const focusFrame = requestAnimationFrame(() => {
+      const closeButton = closeButtonRef.current;
+      if (closeButton?.isConnected) closeButton.focus();
+    });
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -33,6 +39,7 @@ export function MobileMenu({ open, onClose }: MobileMenuProps) {
     document.body.style.overflow = 'hidden';
 
     return () => {
+      cancelAnimationFrame(focusFrame);
       document.removeEventListener('keydown', onKeyDown);
       document.body.style.overflow = prevOverflow;
     };
@@ -67,6 +74,7 @@ export function MobileMenu({ open, onClose }: MobileMenuProps) {
             </div>
           </div>
           <button
+            ref={closeButtonRef}
             type="button"
             onClick={onClose}
             aria-label={t.nav.closeMenu}
