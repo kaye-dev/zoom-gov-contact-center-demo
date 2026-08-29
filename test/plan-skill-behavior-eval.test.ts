@@ -515,7 +515,7 @@ fs.writeFileSync(process.argv[index + 1], "fake final output\\n");
     await assert.rejects(
       evaluatorModule.gradePreparedScenario(
         trustedHelperFixture,
-        "prototypeを決定論的に修正し、Browser未利用のためmachine parityは未確認、UI承認は未承認です。",
+        "prototypeを決定論的に修正し、Browser未利用のため影響rowのsmokeは未確認です。",
       ),
       /unexpected fixture changes: plans\/prototype-repair\/unexpected-note\.md/u,
     );
@@ -530,7 +530,7 @@ fs.writeFileSync(process.argv[index + 1], "fake final output\\n");
     await assert.rejects(
       evaluatorModule.gradePreparedScenario(
         trustedHelperFixture,
-        "prototypeを決定論的に修正し、Browser未利用のためmachine parityは未確認、UI承認は未承認です。",
+        "prototypeを決定論的に修正し、Browser未利用のため影響rowのsmokeは未確認です。",
       ),
       /unexpected fixture changes/u,
     );

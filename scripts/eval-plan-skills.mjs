@@ -793,7 +793,6 @@ function assertNonUiUiContract(goal) {
     "意図した差分",
     "stateとinteraction",
     "comparison targets",
-    "parity evidence",
     "parity matrix",
   ]) {
     ensure(
@@ -805,9 +804,9 @@ function assertNonUiUiContract(goal) {
     ["UI変更", "なし"],
     ["prototype", "なし"],
     ["approval contract", "なし"],
+    ["validation profile", "なし"],
+    ["UI承認方式", "UI変更なし"],
     ["prototype revision", "UI変更なし"],
-    ["machine parity", "UI変更なし"],
-    ["UI承認記録", "UI変更なし"],
   ]) {
     ensure(
       new RegExp(`^- ${field}:\\s*${value}`, "mu").test(goal),
@@ -897,8 +896,57 @@ function ensureNoCompletionClaim(final) {
   );
 }
 
+function sha256Text(value) {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
+async function writeApprovalFixture(repo, slug, runId = "eval-invocation") {
+  const goal = await readFile(path.join(repo, `plans/${slug}/goal.md`), "utf8");
+  const spec = await readFile(path.join(repo, `plans/${slug}/prototype/parity-spec.json`), "utf8");
+  const evidence = {
+    schemaVersion: 1,
+    basis: "explicit-$implement-invocation",
+    runId,
+    invokedAt: "2026-08-29T12:00:00+09:00",
+    goalSha256: sha256Text(goal),
+    prototypeRevision: await calculateRevision(repo, slug),
+    validationProfileDigest: sha256Text(spec),
+  };
+  await write(
+    repo,
+    `plans/${slug}/evidence/${runId}/approval.json`,
+    `${JSON.stringify(evidence, null, 2)}\n`,
+  );
+  return `plans/${slug}/evidence/${runId}/approval.json`;
+}
+
+async function assertSingleApprovalEvidence(repo, slug) {
+  const evidenceRoot = path.join(repo, `plans/${slug}/evidence`);
+  const runEntries = await readdir(evidenceRoot, { withFileTypes: true });
+  ensure(runEntries.length === 1 && runEntries[0].isDirectory(), "implement must create exactly one evidence run");
+  const runId = runEntries[0].name;
+  const runFiles = await readdir(path.join(evidenceRoot, runId));
+  ensure(isDeepStrictEqual(runFiles.sort(), ["approval.json"]), "Browser/source gate must leave only approval.json");
+  const approval = JSON.parse(
+    await readBoundedRegularFile(
+      path.join(evidenceRoot, runId, "approval.json"),
+      256 * 1024,
+      "approval.json",
+    ),
+  );
+  const goal = await readFile(path.join(repo, `plans/${slug}/goal.md`), "utf8");
+  const spec = await readFile(path.join(repo, `plans/${slug}/prototype/parity-spec.json`), "utf8");
+  ensure(approval.schemaVersion === 1, "approval schema version is invalid");
+  ensure(approval.basis === "explicit-$implement-invocation", "approval basis is not the invocation");
+  ensure(approval.runId === runId, "approval run ID does not match its directory");
+  ensure(!Number.isNaN(Date.parse(approval.invokedAt)), "approval invocation time is invalid");
+  ensure(approval.goalSha256 === sha256Text(goal), "approval goal digest is stale");
+  ensure(approval.prototypeRevision === await calculateRevision(repo, slug), "approval prototype revision is stale");
+  ensure(approval.validationProfileDigest === sha256Text(spec), "approval validation profile digest is stale");
+  return `plans/${slug}/evidence/${runId}/approval.json`;
+}
+
 const nonUiPrototypePatterns = [/(?:対象外|非UI|UI変更なし|prototype[^|]*(?:なし|不要))/iu];
-const oneToFivePattern = /(?:1\s*(?:〜|～|-|–|—|から)\s*5|1\s*以上[^|\n]{0,20}5\s*以下)/u;
 const integerPattern = /(?:整数|integer)/iu;
 const invalidPattern = /(?:不正|無効|範囲外|非整数|invalid)/iu;
 const defaultOnePattern = /(?:(?:既定|デフォルト|default)[^|\n]{0,30}`?1`?|`?1`?[^|\n]{0,30}(?:既定|デフォルト|default|を返|になる|とな(?:る|り)))/iu;
@@ -1078,6 +1126,72 @@ function planUiContract(
   return contract;
 }
 
+function paritySpec(contract) {
+  const probeIds = ["dom-main", "accessibility-main", "geometry-button", "console-clean", "network-clean"];
+  return {
+    version: 1,
+    stateSetups: [...new Set(contract.parityMatrix.map(({ targetId, state }) => `${targetId}\u0000${state}`))]
+      .map((value) => {
+        const [targetId, state] = value.split("\u0000");
+        const actions = state === "focus" ? [{ type: "focus", selector: "button" }] : [];
+        return {
+          targetId,
+          state,
+          production: { query: {}, actions },
+          prototype: { query: {}, actions },
+        };
+      }),
+    probes: [
+      {
+        id: "dom-main",
+        kind: "dom",
+        mode: "equal",
+        productionSelector: "body",
+        prototypeSelector: "body",
+        required: true,
+        options: {},
+      },
+      {
+        id: "accessibility-main",
+        kind: "accessibility",
+        mode: "equal",
+        productionSelector: "button",
+        prototypeSelector: "button",
+        required: true,
+        options: {},
+      },
+      {
+        id: "geometry-button",
+        kind: "geometry",
+        mode: "equal",
+        productionSelector: "button",
+        prototypeSelector: "button",
+        required: true,
+        options: { tolerancePx: 1 },
+      },
+      {
+        id: "console-clean",
+        kind: "console",
+        mode: "equal",
+        productionSelector: "body",
+        prototypeSelector: "body",
+        required: true,
+        options: {},
+      },
+      {
+        id: "network-clean",
+        kind: "network",
+        mode: "equal",
+        productionSelector: "body",
+        prototypeSelector: "body",
+        required: true,
+        options: {},
+      },
+    ],
+    rowProbeMap: contract.parityMatrix.map(({ id }) => ({ rowId: id, probeIds })),
+  };
+}
+
 function prototypeHtml(label) {
   return `<!doctype html><html lang="ja"><head><link rel="stylesheet" href="styles.css"></head><body><button>${label}</button><script src="app.js"></script></body></html>\n`;
 }
@@ -1099,18 +1213,20 @@ async function createPrototype(repo, slug, label, { sourcePath = "src/ui.txt" } 
     `plans/${slug}/prototype/tailwind.css`,
     '@import "../../../app/globals.css";\n@source ".";\n',
   );
+  const contract = uiContract(label, {
+    commit,
+    checkout: repo,
+    sources: [sourcePath, "app/globals.css"],
+  });
   await write(
     repo,
     `plans/${slug}/prototype/ui-contract.json`,
-    `${JSON.stringify(
-      uiContract(label, {
-        commit,
-        checkout: repo,
-        sources: [sourcePath, "app/globals.css"],
-      }),
-      null,
-      2,
-    )}\n`,
+    `${JSON.stringify(contract, null, 2)}\n`,
+  );
+  await write(
+    repo,
+    `plans/${slug}/prototype/parity-spec.json`,
+    `${JSON.stringify(paritySpec(contract), null, 2)}\n`,
   );
   await run(
     "node",
@@ -1124,8 +1240,6 @@ function uiGoal({
   slug,
   label,
   revision,
-  machine = "合格",
-  approval = "承認済み",
   includeHover = false,
   commit = "1111111111111111111111111111111111111111",
   checkout = "eval fixture checkout",
@@ -1142,27 +1256,6 @@ function uiGoal({
     .join("/");
   const rowIds = contract.parityMatrix.map(({ id }) => id);
   const rowCount = rowIds.length;
-  const evidenceStatus = machine === "合格" ? "pass" : "pending";
-  const rowResults = rowIds.map((id) => `${id}=${evidenceStatus}`).join("、");
-  const parityDetails = contract.parityMatrix
-    .map((row, index) =>
-      machine === "合格"
-        ? `${row.id}=pass(target=${row.targetId},entry=${row.entry},route=${row.route},surface=${row.surface},state=${row.state},viewport=${row.viewport},theme=${row.theme},breakpoint=${row.breakpoint},DPR=1,scrollX=0,scrollY=0,locale=ja,fixture=fixture A,authorization=admin fixture,query=none,screenshot=evidence/row-${index + 1}.png,DOM/a11y=pass,computed style=pass,keyboard/focus=pass,console/network=pass)`
-        : `${row.id}=pending`,
-    )
-    .join("、");
-  const machineValue =
-    machine === "合格"
-      ? `合格 — ${today} — revision ${revision} — ${rowResults}`
-      : `未確認 — ${today} — revision ${revision} — ${rowResults}`;
-  const approvalValue =
-    approval === "承認済み"
-      ? `${today} — revision ${revision} — ユーザーがrendered prototypeの${label}を明示承認`
-      : `未承認 — revision ${revision}`;
-  const parityEvidenceValue =
-    machine === "合格"
-      ? `${today} — revision ${revision} — ${parityDetails}`
-      : `未確認 — ${today} — revision ${revision} — ${parityDetails}`;
   const closureAuditValue =
     closureAudit ??
     `| button copyを「${label}」にする | 実装方針のUI契約 | \`plans/${slug}/prototype/index.html\` | 同じparity matrix | productionとprototypeのcopyが一致する |`;
@@ -1195,6 +1288,8 @@ ${closureAuditValue}
 - UI変更: あり
 - prototype: \`plans/${slug}/prototype/\`
 - approval contract: plans/${slug}/prototype/ui-contract.json — version 1
+- validation profile: plans/${slug}/prototype/parity-spec.json — version 1
+- UI承認方式: 明示的な \`$implement\` invocation
 - production baseline: URL=\`http://localhost:3000/fixture\`、sources=[${sourceText}]、runtime owner=eval fixture runtime、checkout=\`${checkout}\`、commit=${commit}、route=/fixture
 - comparison conditions: 1280×800、390×844、767×844、768×844、DPR 1、scrollX 0、scrollY 0、ja、light/dark、fixture A、authorization=admin fixture、query=none
 - baseline state inventory: ${states.join("、")}
@@ -1205,11 +1300,8 @@ ${closureAuditValue}
 - 意図した差分: delta-copy=button copyを「${label}」へ変更
 - stateとinteraction: keyboard、focus、disabled
 - comparison targets: main(entry=index.html、route=/fixture、surface=page)
-- parity evidence: ${parityEvidenceValue}
-- parity matrix: comparison target main(entry=index.html、route=/fixture、surface=page)について、targetId=main、state=${stateText} × breakpoint=${responsiveText} × theme=light/darkの全${rowCount}行。row ID=main-<state>-<breakpoint>-<theme>、expectedInvariantIds=inv-shell/inv-typography/inv-button-geometry、intentionalDifferenceIds=delta-copy
+- parity matrix: \`ui-contract.json\`のimmutable全${rowCount}行。targetId=main、state=${stateText} × breakpoint=${responsiveText} × theme=light/dark
 - prototype revision: ${revision}
-- machine parity: ${machineValue}
-- UI承認記録: ${approvalValue}
 
 # インターフェースとデータフロー
 
@@ -1264,46 +1356,6 @@ function uiContractField(goal, field) {
   return values[0];
 }
 
-function assertRevisionBoundRowEvidence(goal, field, contract, revision, expectedStatus) {
-  const value = uiContractField(goal, field);
-  const revisions = value.match(/sha256:[a-f0-9]{64}/gu) ?? [];
-  ensure(
-    revisions.length === 1 && revisions[0] === revision,
-    `${field} must name the current prototype revision exactly once`,
-  );
-
-  const expectedIds = contract.parityMatrix.map(({ id }) => id);
-  for (const id of expectedIds) {
-    const occurrences = value.match(
-      new RegExp(`(?:^|[^a-z0-9-])${escapeRegularExpression(id)}(?![a-z0-9-])`, "giu"),
-    ) ?? [];
-    ensure(occurrences.length === 1, `${field} must name every matrix row ID exactly once: ${id}`);
-  }
-  const prefixes = [...new Set(expectedIds.map((id) => id.split("-")[0]))]
-    .map(escapeRegularExpression)
-    .join("|");
-  const rowLikeIds = prefixes === ""
-    ? []
-    : [...value.matchAll(new RegExp(`(?:^|[^a-z0-9-])((?:${prefixes})-[a-z0-9-]+)(?![a-z0-9-])`, "giu"))]
-      .map((match) => match[1]);
-  ensure(
-    rowLikeIds.length === expectedIds.length &&
-      isDeepStrictEqual([...rowLikeIds].sort(), [...expectedIds].sort()),
-    `${field} row IDs do not exactly match ui-contract.json`,
-  );
-  const records = [...value.matchAll(/(?:^|[^a-z0-9-])([a-z0-9][a-z0-9-]*)\s*=\s*(pass|fail|pending)(?![a-z0-9-])/giu)]
-    .map((match) => ({ id: match[1], status: match[2].toLowerCase() }));
-  ensure(
-    records.length === expectedIds.length &&
-      isDeepStrictEqual(
-        records.map(({ id }) => id).sort(),
-        [...expectedIds].sort(),
-      ) &&
-      records.every(({ status }) => status === expectedStatus),
-    `${field} must record every row as ${expectedStatus}`,
-  );
-}
-
 function assertSingleRevisionField(goal, field, revision) {
   const value = uiContractField(goal, field);
   const revisions = value.match(/sha256:[a-f0-9]{64}/gu) ?? [];
@@ -1340,10 +1392,16 @@ async function writePlanUiArtifacts(repo) {
     `${prototypeRoot}/tailwind.css`,
     '@import "../../../app/globals.css";\n@source ".";\n',
   );
+  const contract = planUiContract(planUiLabel, { commit, checkout: repo });
   await write(
     repo,
     `${prototypeRoot}/ui-contract.json`,
-    `${JSON.stringify(planUiContract(planUiLabel, { commit, checkout: repo }), null, 2)}\n`,
+    `${JSON.stringify(contract, null, 2)}\n`,
+  );
+  await write(
+    repo,
+    `${prototypeRoot}/parity-spec.json`,
+    `${JSON.stringify(paritySpec(contract), null, 2)}\n`,
   );
   await run(
     "node",
@@ -1358,11 +1416,9 @@ async function writePlanUiArtifacts(repo) {
       slug: planUiSlug,
       label: planUiLabel,
       revision,
-      machine: "未確認",
-      approval: "未承認",
       commit,
       checkout: repo,
-      contractOverride: planUiContract(planUiLabel, { commit, checkout: repo }),
+      contractOverride: contract,
       ...planUiClosure(planUiSlug, planUiLabel),
     }),
   );
@@ -1374,6 +1430,7 @@ function planUiAllowedPaths() {
     `plans/${planUiSlug}/goal.md`,
     `plans/${planUiSlug}/prototype/app.js`,
     `plans/${planUiSlug}/prototype/index.html`,
+    `plans/${planUiSlug}/prototype/parity-spec.json`,
     `plans/${planUiSlug}/prototype/styles.css`,
     `plans/${planUiSlug}/prototype/tailwind.css`,
     `plans/${planUiSlug}/prototype/ui-contract.json`,
@@ -1413,6 +1470,7 @@ function missingArtifactAllowedPaths() {
     `plans/${missingArtifactSlug}/goal.md`,
     `plans/${missingArtifactSlug}/prototype/app.js`,
     `plans/${missingArtifactSlug}/prototype/index.html`,
+    `plans/${missingArtifactSlug}/prototype/parity-spec.json`,
     `plans/${missingArtifactSlug}/prototype/styles.css`,
     `plans/${missingArtifactSlug}/prototype/tailwind.css`,
     `plans/${missingArtifactSlug}/prototype/ui-contract.json`,
@@ -1438,18 +1496,20 @@ async function writeMissingArtifactRepair(repo) {
     `${prototypeRoot}/tailwind.css`,
     '@import "../../../app/globals.css";\n@source ".";\n',
   );
+  const contract = uiContract(missingArtifactLabel, {
+    commit,
+    checkout: repo,
+    sources: [missingArtifactSourcePath, "app/globals.css"],
+  });
   await write(
     repo,
     `${prototypeRoot}/ui-contract.json`,
-    `${JSON.stringify(
-      uiContract(missingArtifactLabel, {
-        commit,
-        checkout: repo,
-        sources: [missingArtifactSourcePath, "app/globals.css"],
-      }),
-      null,
-      2,
-    )}\n`,
+    `${JSON.stringify(contract, null, 2)}\n`,
+  );
+  await write(
+    repo,
+    `${prototypeRoot}/parity-spec.json`,
+    `${JSON.stringify(paritySpec(contract), null, 2)}\n`,
   );
   await run(
     "node",
@@ -1463,8 +1523,6 @@ async function writeMissingArtifactRepair(repo) {
       slug: missingArtifactSlug,
       label: missingArtifactLabel,
       revision,
-      machine: "未確認",
-      approval: "未承認",
       commit,
       checkout: repo,
       sources: [missingArtifactSourcePath, "app/globals.css"],
@@ -1486,32 +1544,113 @@ const reviewReportAssets = [
   "styles.css",
 ];
 
-function evidenceRows(contract, { omitId, duplicateId, extraId } = {}) {
+function evidenceRows(contract, spec, { omitId, duplicateId, extraId } = {}) {
+  const probeById = new Map(spec.probes.map((probe) => [probe.id, probe]));
+  const probeIdsByRow = new Map(spec.rowProbeMap.map(({ rowId, probeIds }) => [rowId, probeIds]));
   const rows = contract.parityMatrix
-    .map(({ id }) => id)
-    .filter((id) => id !== omitId)
-    .map((id) => `${id}=pass`);
-  if (duplicateId) rows.push(`${duplicateId}=pass`);
-  if (extraId) rows.push(`${extraId}=pass`);
-  return rows.join("\n");
+    .filter(({ id }) => id !== omitId)
+    .map((row) => {
+      const evidenceProbes = probeIdsByRow.get(row.id).map((probeId) => {
+        const probe = probeById.get(probeId);
+        const artifactPaths = probe.kind === "screenshot"
+          ? [`evidence/${row.id}-production.png`, `evidence/${row.id}-prototype.png`]
+          : [];
+        return {
+          probeId,
+          kind: probe.kind,
+          status: "pass",
+          production: {},
+          prototype: {},
+          artifactPaths,
+        };
+      });
+      return {
+        rowId: row.id,
+        status: "pass",
+        actualConditions: {
+          state: row.state,
+          theme: row.theme,
+          viewport: row.viewport,
+          dpr: contract.comparisonConditions.dpr,
+          urls: {
+            production: `http://localhost:3000${row.route}`,
+            prototype: `http://127.0.0.1:4173/${row.entry}`,
+          },
+          scroll: {
+            production: { x: 0, y: 0, source: "window.scrollX/window.scrollY" },
+            prototype: { x: 0, y: 0, source: "window.scrollX/window.scrollY" },
+          },
+        },
+        probes: evidenceProbes,
+        artifactPaths: evidenceProbes.flatMap(({ artifactPaths }) => artifactPaths),
+      };
+    });
+  if (duplicateId) rows.push(structuredClone(rows.find(({ rowId }) => rowId === duplicateId)));
+  if (extraId) rows.push({ ...structuredClone(rows[0]), rowId: extraId });
+  return rows;
 }
 
 async function writeReviewEvidence(repo, contract, revision) {
   const rowIds = contract.parityMatrix.map(({ id }) => id);
+  const runId = "review-run";
+  const goalText = await readFile(path.join(repo, `plans/${reviewUiSlug}/goal.md`), "utf8");
+  const specText = await readFile(path.join(repo, `plans/${reviewUiSlug}/prototype/parity-spec.json`), "utf8");
+  const spec = JSON.parse(specText);
+  const shared = {
+    schemaVersion: 1,
+    runId,
+    generatedAt: "2026-08-29T12:00:00+09:00",
+    goalSha256: sha256Text(goalText),
+    prototypeRevision: revision,
+    validationProfileDigest: sha256Text(specText),
+    runtime: { owner: "eval fixture runtime", checkout: repo },
+    sources: contract.productionBaseline.sources.map((source) => ({ path: source, sha256: sha256Text(source) })),
+    capabilities: {
+      status: "pass",
+      tabId: "production",
+      viewport: { width: 1280, height: 800, dpr: 1 },
+      networkSource: "browser-network-log",
+      sessionId: "fixture-session",
+    },
+    metrics: {
+      startedAt: "2026-08-29T12:00:00+09:00",
+      finishedAt: "2026-08-29T12:00:00.100+09:00",
+      durationMs: 100,
+      shellCommands: 0,
+      browserOperations: 8,
+      fullMatrixRuns: 1,
+    },
+  };
   await write(
     repo,
-    `plans/${reviewUiSlug}/evidence/current-run-pre-edit.md`,
-    `# current-run pre-edit parity\n\nrevision ${revision}\n\n${evidenceRows(contract, {
-      duplicateId: rowIds[0],
-      extraId: "main-unauthorized-extra",
-    })}\n`,
+    `plans/${reviewUiSlug}/evidence/${runId}/approval.json`,
+    `${JSON.stringify({
+      schemaVersion: 1,
+      basis: "explicit-$implement-invocation",
+      runId,
+      invokedAt: "2026-08-29T11:59:00+09:00",
+      goalSha256: shared.goalSha256,
+      prototypeRevision: revision,
+      validationProfileDigest: shared.validationProfileDigest,
+    }, null, 2)}\n`,
   );
   await write(
     repo,
-    `plans/${reviewUiSlug}/evidence/implementation-parity.md`,
-    `# post implementation parity\n\nrevision ${revision}\n\n${evidenceRows(contract, {
-      omitId: rowIds.at(-1),
-    })}\n`,
+    `plans/${reviewUiSlug}/evidence/${runId}/pre-edit-parity.json`,
+    `${JSON.stringify({
+      ...shared,
+      phase: "pre-edit",
+      rows: evidenceRows(contract, spec, { duplicateId: rowIds[0], extraId: "main-unauthorized-extra" }),
+    }, null, 2)}\n`,
+  );
+  await write(
+    repo,
+    `plans/${reviewUiSlug}/evidence/${runId}/implementation-parity.json`,
+    `${JSON.stringify({
+      ...shared,
+      phase: "final",
+      rows: evidenceRows(contract, spec, { omitId: rowIds.at(-1) }),
+    }, null, 2)}\n`,
   );
 }
 
@@ -1605,24 +1744,24 @@ async function reviewUiReportData(repo) {
             source: "conformance",
             severity: "major",
             title: "conformance-stale-revision",
-            body: `prototype-revision.mjsで再計算したcurrent revision ${currentRevision}に対し、goalのprototype revision、parity evidence、machine parity、UI承認記録はstale revision ${oldRevision}を指す。ui-contract.json manifestとのapproval bindingが失効している。`,
+            body: `prototype-revision.mjsで再計算したcurrent revision ${currentRevision}に対し、approval.json、pre-edit-parity.json、implementation-parity.jsonはstale revision ${oldRevision}を指す。ui-contract.json manifestとのapproval bindingが失効している。`,
             location: `plans/${reviewUiSlug}/goal.md@UI契約`,
-            recommendation: "current artifactで全manifest rowを再実行し、4記録を同じrevisionへ更新する。",
+            recommendation: "新しい$implement invocationでapprovalを再取得し、全manifest rowをpre-edit/finalで再実行する。",
           },
           {
             source: "conformance",
             severity: "major",
             title: "conformance-current-run-row-set",
-            body: `plans/${reviewUiSlug}/evidence/current-run-pre-edit.mdはstale revision ${oldRevision}で、ui-contract.jsonの${firstRow}がduplicate、main-unauthorized-extraがextraであり、manifest全rowのexact setではない。`,
-            location: `plans/${reviewUiSlug}/evidence/current-run-pre-edit.md:1`,
+            body: `plans/${reviewUiSlug}/evidence/review-run/pre-edit-parity.jsonはstale revision ${oldRevision}で、ui-contract.jsonの${firstRow}がduplicate、main-unauthorized-extraがextraであり、manifest全rowのexact setではない。scroll provenanceは構造化済みで自然言語説明を必要としない。`,
+            location: `plans/${reviewUiSlug}/evidence/review-run/pre-edit-parity.json:1`,
             recommendation: "current-run pre-edit parityをcurrent revisionで全row一回ずつ再取得する。",
           },
           {
             source: "conformance",
             severity: "major",
             title: "conformance-implementation-row-set",
-            body: `plans/${reviewUiSlug}/evidence/implementation-parity.mdはstale revision ${oldRevision}で、post implementation parityからmanifest row ${missingRow}がmissingしている。`,
-            location: `plans/${reviewUiSlug}/evidence/implementation-parity.md:1`,
+            body: `plans/${reviewUiSlug}/evidence/review-run/implementation-parity.jsonはstale revision ${oldRevision}で、final parityからmanifest row ${missingRow}がmissingしている。`,
+            location: `plans/${reviewUiSlug}/evidence/review-run/implementation-parity.json:1`,
             recommendation: "post implementation parityをcurrent revisionで欠落なく再実行する。",
           },
         ],
@@ -1681,28 +1820,25 @@ const scenarios = {
         ensure(pattern.test(testPlan), `plan test plan omitted ${name}`);
       }
       const rows = closureRows(goal);
-      requireExactClosureMappings(rows, [
-        {
-          name: "RETRY_LIMIT integer range",
-          mapping: {
-            requirement: [oneToFivePattern, integerPattern],
-            design: [/(?:parseRetryLimit|実装方針|解析)/u],
-            prototype: nonUiPrototypePatterns,
-            tests: [/test\/config\.test\.ts/u, /1/u, /5/u],
-            completion: [/(?:全(?:許可|有効)値|1[^|\n]{0,20}5)/u],
-          },
-        },
-        {
-          name: "RETRY_LIMIT invalid-value fallback",
-          mapping: {
-            requirement: [invalidPattern],
-            design: [/(?:parseRetryLimit|実装方針|fallback|既定|デフォルト)/iu],
-            prototype: nonUiPrototypePatterns,
-            tests: [/test\/config\.test\.ts/u, invalidPattern],
-            completion: [defaultOnePattern],
-          },
-        },
-      ]);
+      ensure(rows.length === 2, `closure audit must contain exactly two RETRY_LIMIT rows; found ${rows.length}`);
+      const rangeRows = rows.filter((row) =>
+        /1/u.test(row[0]) &&
+        /5/u.test(row[0]) &&
+        integerPattern.test(row.join(" ")) &&
+        /test\/config\.test\.ts/u.test(row[3]) &&
+        !/(?:fallback|既定|デフォルト|未設定)/iu.test(row[0]) &&
+        /1/u.test(row[3]) &&
+        /5/u.test(row[3]) &&
+        matchesAll(row[2], nonUiPrototypePatterns));
+      const fallbackRows = rows.filter((row) =>
+        invalidPattern.test(row.join(" ")) &&
+        /test\/config\.test\.ts/u.test(row[3]) &&
+        invalidPattern.test(row[3]) &&
+        defaultOnePattern.test(row.join(" ")) &&
+        matchesAll(row[2], nonUiPrototypePatterns));
+      ensure(rangeRows.length === 1, "closure audit omitted the RETRY_LIMIT integer range and boundary test row");
+      ensure(fallbackRows.length === 1, "closure audit omitted the invalid-value fallback and test row");
+      ensure(rangeRows[0] !== fallbackRows[0], "closure audit reused one row for both RETRY_LIMIT requirements");
       ensure(/UI変更:\s*なし/u.test(goal), "plan did not mark UI as absent");
       ensure(/prototype:\s*なし/u.test(goal), "plan did not mark prototype as absent");
       ensure(!(await exists(path.join(repo, "plans/config-parser/prototype"))), "non-UI plan created prototype");
@@ -1820,7 +1956,7 @@ const scenarios = {
         'import test from "node:test";\ntest("UI-01", () => {});\n',
       );
     },
-    prompt: `$plan を .agents/skills/plan/SKILL.md から明示的に使用してください。slugは ${planUiSlug} です。authoritative requirementはsrc/ui.txtが所有するbutton copyを「${planUiLabel}」へ変更し、default state、light/dark、desktop 1280x800、mobile 390x844、breakpoint直前767x844、境界768x844で既存shell・typography・button geometryを維持することです。production baselineは現在のHEADとcheckout、route=/fixture、URL=http://localhost:3000/fixture、runtime owner=eval fixture runtime、complete sources inventoryはexactにsrc/ui.txtとapp/globals.cssです。HEADはgit rev-parse HEAD、checkoutはpwd -Pで得た絶対pathをmanifestとgoalのproduction baseline双方へ同じ値で記録してください。fixture=fixture A、authorization=admin fixture、query=none、DPR=1、window.scrollX=0、window.scrollY=0、locale=jaとします。comparisonConditions.scrollはexact object {"x":0,"y":0}とし、goalにもscrollX 0、scrollY 0を記録してください。comparison targetはmain(entry=index.html、route=/fixture、surface=page)、invariant IDはinv-shell/inv-typography/inv-button-geometry、intentional difference IDはdelta-copyです。target × default state × 4 breakpoint × 2 themeの8 rowをstable ID main-default-<breakpoint>-<theme>で作ってください。canonical artifactはplans/${planUiSlug}/goal.mdとprototype配下のindex.html、app.js、tailwind.css、styles.css、ui-contract.jsonだけです。index.htmlはlocal styles.cssとapp.jsを参照しbuttonを表示し、app.jsはdocument.documentElement.dataset.readyをtrueにします。Tailwind inputはrepositoryのbuilder契約に従ってください。${browserUnavailable} したがってrevisionをhelperで再計算したうえで全manifest rowを<row-id>=pendingとしてparity evidenceとmachine parityに一行ずつ明示し、machine parityを未確認、UI承認を未承認として同じcurrent revisionへ結び付け、合格や承認を推測しないでください。要件クロージャはこのbutton UI要件の1行だけとし、test/ui-label.test.tsのUI-01へ対応付けてください。production code、test、review artifact、Gitは変更しないでください。`,
+    prompt: `$plan を .agents/skills/plan/SKILL.md から明示的に使用してください。slugは ${planUiSlug} です。authoritative requirementはsrc/ui.txtが所有するbutton copyを「${planUiLabel}」へ変更し、default state、light/dark、desktop 1280x800、mobile 390x844、breakpoint直前767x844、境界768x844で既存shell・typography・button geometryを維持することです。production baselineは現在のHEADとcheckout、route=/fixture、URL=http://localhost:3000/fixture、runtime owner=eval fixture runtime、complete sources inventoryはexactにsrc/ui.txtとapp/globals.cssです。HEADはgit rev-parse HEAD、checkoutはpwd -Pで得た絶対pathをmanifestとgoalのproduction baseline双方へ同じ値で記録してください。fixture=fixture A、authorization=admin fixture、query=none、DPR=1、window.scrollX=0、window.scrollY=0、locale=jaとします。comparisonConditions.scrollはexact object {"x":0,"y":0}とし、goalにもscrollX 0、scrollY 0を記録してください。comparison targetはmain(entry=index.html、route=/fixture、surface=page)、invariant IDはinv-shell/inv-typography/inv-button-geometry、intentional difference IDはdelta-copyです。target × default state × 4 breakpoint × 2 themeの8 rowをstable ID main-default-<breakpoint>-<theme>で作ってください。canonical artifactはplans/${planUiSlug}/goal.mdとprototype配下のindex.html、app.js、tailwind.css、styles.css、ui-contract.json、parity-spec.jsonだけです。parity-spec.jsonはversion 1、全target/state、allowlist操作、DOM・accessibility・geometry・console・network probe、全rowのrowProbeMapを持たせてください。index.htmlはlocal styles.cssとapp.jsを参照しbuttonを表示し、app.jsはdocument.documentElement.dataset.readyをtrueにします。Tailwind inputはrepositoryのbuilder契約に従ってください。${browserUnavailable} Browser smokeは未確認と明記してplan作成を完了し、全matrixやpending row一覧、手動UI承認記録は作らないでください。UI承認方式は明示的な$implement invocationです。revisionをhelperで再計算し、要件クロージャはこのbutton UI要件の1行だけとしてtest/ui-label.test.tsのUI-01へ対応付けてください。production code、test、review artifact、Gitは変更しないでください。`,
     async grade(repo) {
       const goalPath = path.join(repo, `plans/${planUiSlug}/goal.md`);
       const prototypeRoot = path.join(repo, `plans/${planUiSlug}/prototype`);
@@ -1828,13 +1964,16 @@ const scenarios = {
       const contract = JSON.parse(
         await readFile(path.join(prototypeRoot, "ui-contract.json"), "utf8"),
       );
+      const spec = JSON.parse(
+        await readFile(path.join(prototypeRoot, "parity-spec.json"), "utf8"),
+      );
       const revision = await calculateRevision(repo, planUiSlug);
       const { stdout } = await runFixtureGit(repo, ["rev-parse", "HEAD"]);
       const commit = stdout.trim();
 
       assertHeadings(goal);
       ensure(
-        /^あり(?:\s*(?:—|-|:).*)?$/u.test(uiContractField(goal, "UI変更")),
+        uiContractField(goal, "UI変更").startsWith("あり"),
         "UI plan did not classify the work as UI-affecting",
       );
       ensure(goal.includes(planUiLabel), "UI plan omitted the approved target copy");
@@ -1842,6 +1981,15 @@ const scenarios = {
         uiContractField(goal, "approval contract") ===
           `plans/${planUiSlug}/prototype/ui-contract.json — version 1`,
         "UI plan approval contract is not the canonical plain value",
+      );
+      ensure(
+        uiContractField(goal, "validation profile") ===
+          `plans/${planUiSlug}/prototype/parity-spec.json — version 1`,
+        "UI plan validation profile is not canonical",
+      );
+      ensure(
+        /\$implement.*invocation/iu.test(uiContractField(goal, "UI承認方式")),
+        "UI plan did not use implement invocation approval",
       );
       ensure(
         isDeepStrictEqual(contract.productionBaseline.sources, ["src/ui.txt", "app/globals.css"]),
@@ -1910,18 +2058,22 @@ const scenarios = {
       );
 
       assertSingleRevisionField(goal, "prototype revision", revision);
-      assertRevisionBoundRowEvidence(goal, "parity evidence", contract, revision, "pending");
-      assertRevisionBoundRowEvidence(goal, "machine parity", contract, revision, "pending");
       ensure(
-        /^未承認\s*—\s*revision\s+`?sha256:[a-f0-9]{64}`?$/u.test(
-          assertSingleRevisionField(goal, "UI承認記録", revision),
-        ),
-        "UI plan must leave the current revision explicitly unapproved",
+        !/^- (?:parity evidence|machine parity|UI承認記録):|[a-z0-9-]+=pending/mu.test(goal),
+        "UI plan retained mutable plan-time evidence",
       );
-      const baselineField = uiContractField(goal, "production baseline");
-      for (const value of ["src/ui.txt", "app/globals.css", commit, repo, "/fixture"]) {
-        ensure(baselineField.includes(value), `goal production baseline omitted ${value}`);
-      }
+      ensure(spec.version === 1, "UI plan parity spec version is incorrect");
+      ensure(
+        isDeepStrictEqual(spec.rowProbeMap.map(({ rowId }) => rowId).sort(), contract.parityMatrix.map(({ id }) => id).sort()),
+        "UI plan parity spec does not cover the immutable matrix exactly once",
+      );
+      ensure(
+        spec.stateSetups.every(({ production, prototype }) =>
+          [...production.actions, ...prototype.actions].every(({ type }) =>
+            ["click", "press", "focus", "fill", "waitForVisible", "waitForHidden"].includes(type))),
+        "UI plan parity spec contains a non-allowlisted action",
+      );
+      ensure(uiContractField(goal, "production baseline").trim().length > 0, "goal omitted its production baseline reference");
       ensure(
         uiContractField(goal, "comparison targets").includes("main") &&
           uiContractField(goal, "parity matrix").includes("8"),
@@ -1935,7 +2087,7 @@ const scenarios = {
             design: [/(?:UI契約|delta-copy|src\/ui\.txt)/u],
             prototype: [/plans\/plan-ui-revision\/prototype\/index\.html/u, /(?:default|button|copy)/iu],
             tests: [/test\/ui-label\.test\.ts/u, /UI-01/u],
-            completion: [/(?:machine parity|一致|差分がな(?:い|く)|維持)/iu, /(?:全?8|8行|すべて|合格)/u],
+            completion: [/(?:一致|差分がな(?:い|く)|維持)/iu, /(?:全?8|8行|すべて|合格)/u],
           },
         },
       ]);
@@ -2036,7 +2188,7 @@ const scenarios = {
       await write(
         repo,
         "plans/citizen-id/goal.md",
-        `# 目的と完了条件\n\n## 目的\n\n以前の議論では別形式も検討した。\n\n## 完了条件\n\nformatCitizenIdを追加する。\n\n# 現状と根拠\n\n却下案としてAPI変更があった。\n\n# 実装方針\n\n## UI契約\n\n- UI変更: なし\n- prototype: なし\n- production baseline: なし\n- comparison conditions: なし\n- baseline state inventory: なし\n- theme contract: なし\n- responsive contract: なし\n- styling pipeline: なし\n- 視覚的不変条件: なし\n- 意図した差分: なし\n- stateとinteraction: なし\n- comparison targets: なし\n- parity evidence: なし\n- parity matrix: なし\n- prototype revision: UI変更なし\n- machine parity: UI変更なし\n- UI承認記録: UI変更なし\n\n# インターフェースとデータフロー\n\n変更なし。\n\n# テスト計画\n\nなし。\n\n# 前提・対象外・リスク\n\n## 前提\n\nなし。\n\n## 対象外\n\nなし。\n\n## リスク\n\nなし。\n`,
+        `# 目的と完了条件\n\n## 目的\n\n以前の議論では別形式も検討した。\n\n## 完了条件\n\nformatCitizenIdを追加する。\n\n# 現状と根拠\n\n却下案としてAPI変更があった。\n\n# 実装方針\n\n## UI契約\n\n- UI変更: なし\n- prototype: なし\n- approval contract: なし\n- validation profile: なし\n- prototype revision: UI変更なし\n- UI承認方式: UI変更なし\n- production baseline: なし\n- comparison conditions: なし\n- baseline state inventory: なし\n- theme contract: なし\n- responsive contract: なし\n- styling pipeline: なし\n- 視覚的不変条件: なし\n- 意図した差分: なし\n- stateとinteraction: なし\n- comparison targets: なし\n- parity matrix: なし\n\n# インターフェースとデータフロー\n\n変更なし。\n\n# テスト計画\n\nなし。\n\n# 前提・対象外・リスク\n\n## 前提\n\nなし。\n\n## 対象外\n\nなし。\n\n## リスク\n\nなし。\n`,
       );
     },
     prompt: `$plan-critic を .agents/skills/plan-critic/SKILL.md から明示的に使用し、plans/citizen-id/goal.mdを全面的に書き直してください。authoritative requirements bundleは次だけで、追加の製品判断はありません。最新の明示要求: formatCitizenId(value: string): stringはASCII数字0-9をそのまま返し、全角数字０-９を対応するASCII数字へ1文字ずつ変換する。ASCII数字と全角数字の混在を許可する。空文字、空白、符号、記号、その他のUnicode数字を1文字でも含む入力はINVALID_IDを返す。確定済み判断: この既存API signatureを維持し、例外は送出しない。採用済み資料: src/citizen-id.ts。必須テスト: test/format-citizen-id.test.tsにASCII、全角、混在、空文字、空白、符号、記号、その他のUnicode数字を追加する。API signature行のテスト列とテスト計画にはexact path test/format-citizen-id.test.tsと、typecheck・compile-time・interface-contractのいずれかを使う具体的な静的契約checkを記載し、「型」の一語だけで閉じないでください。要件クロージャはAPI signature全体、ASCII、全角、混在、空文字、空白、符号、記号、その他のUnicode数字、例外非送出の10行とし、未承認の追加要件行は作らないでください。会話履歴や却下案を残さず、新規参加者向けの自己完結した最終設計にしてください。`,
@@ -2240,6 +2392,7 @@ const scenarios = {
 - UI変更: なし
 - prototype: なし
 - approval contract: なし
+- validation profile: なし
 - production baseline: なし
 - comparison conditions: なし
 - baseline state inventory: なし
@@ -2250,11 +2403,9 @@ const scenarios = {
 - 意図した差分: なし
 - stateとinteraction: なし
 - comparison targets: なし
-- parity evidence: なし
 - parity matrix: なし
 - prototype revision: UI変更なし
-- machine parity: UI変更なし
-- UI承認記録: UI変更なし
+- UI承認方式: UI変更なし
 
 # インターフェースとデータフロー
 
@@ -2360,7 +2511,10 @@ normalizeQueueLabelを追加する。
 
 - UI変更: なし
 - prototype: なし
+- approval contract: なし
+- validation profile: なし
 - prototype revision: UI変更なし
+- UI承認方式: UI変更なし
 - production baseline: なし
 - comparison conditions: なし
 - baseline state inventory: なし
@@ -2371,10 +2525,7 @@ normalizeQueueLabelを追加する。
 - 意図した差分: なし
 - stateとinteraction: なし
 - comparison targets: なし
-- parity evidence: なし
 - parity matrix: なし
-- machine parity: UI変更なし
-- UI承認記録: UI変更なし
 
 # インターフェースとデータフロー
 
@@ -2577,7 +2728,9 @@ normalizeQueueLabelを追加する。
 - UI変更: なし
 - prototype: なし
 - approval contract: なし
+- validation profile: なし
 - prototype revision: UI変更なし
+- UI承認方式: UI変更なし
 - production baseline: なし
 - comparison conditions: なし
 - baseline state inventory: なし
@@ -2588,10 +2741,7 @@ normalizeQueueLabelを追加する。
 - 意図した差分: なし
 - stateとinteraction: なし
 - comparison targets: なし
-- parity evidence: なし
 - parity matrix: なし
-- machine parity: UI変更なし
-- UI承認記録: UI変更なし
 
 # インターフェースとデータフロー
 
@@ -2694,13 +2844,16 @@ normalizeQueueLabelを追加する。
         "missing-artifact fixture unexpectedly created its canonical prototype",
       );
     },
-    prompt: `$plan-critic を .agents/skills/plan-critic/SKILL.md から明示的に使用し、plans/${missingArtifactSlug}/goal.mdを全面的に修正してください。canonical prototype directoryとui-contract.jsonはどちらも欠落していますが、次のauthoritative requirements bundleとclosest production sourceから新しい製品判断なしに一意に再構築できます。最新の明示要求はsrc/missing-artifact-ui.htmlの既存button copyだけを「${missingArtifactLabel}」へ変更すること。確定済み判断はclosest sourceのdoctype、lang、local styles.css、button、local app.jsというDOM構造、Tailwind pipeline、default/focus/disabled、keyboard/focus/disabled interaction、既存shell・typography・button geometryを維持することです。index.htmlはsrc/missing-artifact-ui.htmlの「${missingArtifactCurrentLabel}」を「${missingArtifactLabel}」へ置換したexact構造、app.jsはdocument.documentElement.dataset.ready = "true";、tailwind.cssはrepository builderのcanonical inputとします。goalに記録済みのproduction baseline commitとcheckoutを保持し、sourcesはexactにsrc/missing-artifact-ui.htmlとapp/globals.css、URL=http://localhost:3000/fixture、route=/fixture、runtime owner=eval fixture runtimeです。comparison conditionsは1280x800/390x844/767x844/768x844、DPR=1、scroll={"x":0,"y":0}、locale=ja、light/dark、fixture A、admin fixture、query=noneです。targetはmain(entry=index.html、route=/fixture、surface=page)、invariantはinv-shell/inv-typography/inv-button-geometry、intentional differenceはdelta-copyです。target × default/focus/disabled × 4 breakpoint × light/darkの全24 rowをmain-<state>-<breakpoint>-<theme>で作ってください。要件クロージャはcopy、DOM構造、Tailwind pipeline、3 stateを正確に4行へ分け、test/missing-artifact-ui.test.tsのMA-01〜MA-04へ一意に対応付けてください。prototype、manifest、CSSを作成・buildしてrevisionを再計算し、${browserUnavailable} 全rowを<row-id>=pendingとしてparity evidenceとmachine parityへ過不足なく記録し、machine parityは未確認、UI承認は未承認へresetしてください。goalとcanonical prototypeだけを変更し、production、test、review artifact、Gitは変更しないでください。`,
+    prompt: `$plan-critic を .agents/skills/plan-critic/SKILL.md から明示的に使用し、plans/${missingArtifactSlug}/goal.mdを全面的に修正してください。canonical prototype directory、ui-contract.json、parity-spec.jsonは欠落していますが、次のauthoritative requirements bundleとclosest production sourceから新しい製品判断なしに一意に再構築できます。最新の明示要求はsrc/missing-artifact-ui.htmlの既存button copyだけを「${missingArtifactLabel}」へ変更すること。確定済み判断はclosest sourceのdoctype、lang、local styles.css、button、local app.jsというDOM構造、Tailwind pipeline、default/focus/disabled、keyboard/focus/disabled interaction、既存shell・typography・button geometryを維持することです。index.htmlはsrc/missing-artifact-ui.htmlの「${missingArtifactCurrentLabel}」を「${missingArtifactLabel}」へ置換したexact構造、app.jsはdocument.documentElement.dataset.ready = "true";、tailwind.cssはrepository builderのcanonical inputとします。goalに記録済みのproduction baseline commitとcheckoutを保持し、sourcesはexactにsrc/missing-artifact-ui.htmlとapp/globals.css、URL=http://localhost:3000/fixture、route=/fixture、runtime owner=eval fixture runtimeです。comparison conditionsは1280x800/390x844/767x844/768x844、DPR=1、scroll={"x":0,"y":0}、locale=ja、light/dark、fixture A、admin fixture、query=noneです。targetはmain(entry=index.html、route=/fixture、surface=page)、invariantはinv-shell/inv-typography/inv-button-geometry、intentional differenceはdelta-copyです。target × default/focus/disabled × 4 breakpoint × light/darkの全24 rowをmain-<state>-<breakpoint>-<theme>で作ってください。parity-spec.json version 1は全target/stateと全matrix rowを一度ずつcoverしてください。要件クロージャはcopy、DOM構造、Tailwind pipeline、3 stateを正確に4行へ分け、test/missing-artifact-ui.test.tsのMA-01〜MA-04へ一意に対応付けてください。prototype、manifest、validation profile、CSSを作成・buildしてrevisionを再計算し、${browserUnavailable} 影響rowのsmokeを未確認と報告して修正を完了してください。全matrix実行、pending一覧、手動承認resetは行わず、UI承認方式は明示的な$implement invocationとします。goalとcanonical prototypeだけを変更し、production、test、review artifact、Gitは変更しないでください。`,
     async grade(repo, final) {
       const goalPath = path.join(repo, `plans/${missingArtifactSlug}/goal.md`);
       const prototypeRoot = path.join(repo, `plans/${missingArtifactSlug}/prototype`);
       const goal = await readFile(goalPath, "utf8");
       const contract = JSON.parse(
         await readFile(path.join(prototypeRoot, "ui-contract.json"), "utf8"),
+      );
+      const spec = JSON.parse(
+        await readFile(path.join(prototypeRoot, "parity-spec.json"), "utf8"),
       );
       const revision = await calculateRevision(repo, missingArtifactSlug);
       const { stdout } = await runFixtureGit(repo, ["rev-parse", "HEAD"]);
@@ -2713,7 +2866,7 @@ normalizeQueueLabelを追加する。
 
       assertHeadings(goal);
       ensure(
-        /^あり(?:\s*(?:—|-|:).*)?$/u.test(uiContractField(goal, "UI変更")),
+        uiContractField(goal, "UI変更").startsWith("あり"),
         "critic did not preserve the missing-artifact repair as UI-affecting",
       );
       ensure(goal.includes(missingArtifactLabel), "critic omitted the repaired target copy");
@@ -2722,6 +2875,12 @@ normalizeQueueLabelを追加する。
           `plans/${missingArtifactSlug}/prototype/ui-contract.json — version 1`,
         "critic did not create the canonical version 1 approval contract",
       );
+      ensure(
+        uiContractField(goal, "validation profile") ===
+          `plans/${missingArtifactSlug}/prototype/parity-spec.json — version 1`,
+        "critic did not create the canonical validation profile",
+      );
+      ensure(/\$implement.*invocation/iu.test(uiContractField(goal, "UI承認方式")), "critic did not preserve invocation approval");
       ensure(
         isDeepStrictEqual(contract.productionBaseline, expectedContract.productionBaseline),
         "critic reconstructed the wrong production baseline",
@@ -2782,22 +2941,15 @@ normalizeQueueLabelを追加する。
       );
 
       assertSingleRevisionField(goal, "prototype revision", revision);
-      assertRevisionBoundRowEvidence(goal, "parity evidence", contract, revision, "pending");
-      assertRevisionBoundRowEvidence(goal, "machine parity", contract, revision, "pending");
       ensure(
-        /^未承認\s*—\s*revision\s+`?sha256:[a-f0-9]{64}`?$/u.test(
-          assertSingleRevisionField(goal, "UI承認記録", revision),
-        ),
-        "critic did not reset repaired UI approval to exactly one current unapproved record",
+        !/^- (?:parity evidence|machine parity|UI承認記録):|[a-z0-9-]+=pending/mu.test(goal),
+        "critic retained mutable plan-time evidence",
       );
       ensure(
-        /^未確認(?:\s|—|-|$)/u.test(uiContractField(goal, "machine parity")),
-        "critic claimed machine parity without Browser evidence",
+        isDeepStrictEqual(spec.rowProbeMap.map(({ rowId }) => rowId).sort(), contract.parityMatrix.map(({ id }) => id).sort()),
+        "critic validation profile does not cover every immutable row",
       );
-      const baselineField = uiContractField(goal, "production baseline");
-      for (const value of [missingArtifactSourcePath, "app/globals.css", commit, repo, "/fixture"]) {
-        ensure(baselineField.includes(value), `repaired goal production baseline omitted ${value}`);
-      }
+      ensure(uiContractField(goal, "production baseline").trim().length > 0, "repaired goal omitted its production baseline reference");
       ensure(
         ["default", "focus", "disabled"].every((state) =>
           uiContractField(goal, "baseline state inventory").includes(state)) &&
@@ -2815,58 +2967,23 @@ normalizeQueueLabelを追加する。
           `test plan must resolve ${caseId} to ${missingArtifactTestPath}`,
         );
       }
-      const preserved = /(?:維持|保持|変更しない|差分がない|preserv)/iu;
-      requireExactClosureMappings(closureRows(goal), [
-        {
-          name: "recovered button copy",
-          mapping: {
-            requirement: [/(?:button|ボタン)/iu, /Recovered label/u, /(?:copy|文言|ラベル)/iu],
-            design: [/(?:UI契約|意図した差分|delta-copy|変更内容|copy契約)/u],
-            prototype: [/plans\/missing-artifact-repair\/prototype\/index\.html/u, /Recovered label/u],
-            tests: [/(?:test\/missing-artifact-ui\.test\.ts|MA-01)/u, /(?:MA-01|copy|Recovered label)/iu],
-            completion: [/(?:production|本番|#\s*目的と完了条件)/iu, /(?:Recovered label|copy|表示)/iu],
-          },
-        },
-        {
-          name: "recovered button DOM structure",
-          mapping: {
-            requirement: [/(?:button|ボタン)/iu, /(?:DOM|構造)/u, preserved],
-            design: [/(?:実装境界|変更内容|index\.html|missing-artifact-ui\.html|button)/iu],
-            prototype: [/plans\/missing-artifact-repair\/prototype\/index\.html/u, /(?:button|link|script|構造)/iu],
-            tests: [/(?:test\/missing-artifact-ui\.test\.ts|MA-02)/u, /(?:MA-02|DOM|構造|structure)/iu],
-            completion: [/(?:button|ボタン)/iu, /(?:DOM|構造)/u, preserved],
-          },
-        },
-        {
-          name: "recovered Tailwind pipeline",
-          mapping: {
-            requirement: [/Tailwind/iu, /(?:pipeline|パイプライン)/iu, preserved],
-            design: [/(?:UI契約|tailwind\.css|app\/globals\.css|build-prototype-css)/iu],
-            prototype: [
-              /plans\/missing-artifact-repair\/prototype\/tailwind\.css/u,
-              /(?:plans\/missing-artifact-repair\/prototype\/)?styles\.css/u,
-            ],
-            tests: [/(?:test\/missing-artifact-ui\.test\.ts|MA-03)/u, /(?:MA-03|Tailwind|build)/iu],
-            completion: [/(?:Tailwind|styles\.css|prototype\s+CSS|styling pipeline)/iu, /(?:生成|build|維持|変更がない)/iu],
-          },
-        },
-        {
-          name: "recovered default focus disabled states",
-          mapping: {
-            requirement: [/(?:state|状態)/iu, preserved, /default/iu, /focus/iu, /disabled/iu],
-            design: [/(?:baseline state inventory|state inventory|parity matrix)/iu],
-            prototype: [
-              /plans\/missing-artifact-repair\/prototype\/(?:ui-contract\.json|index\.html)/u,
-              /(?:3\s*state|24\s*行|default[^|\n]*focus[^|\n]*disabled|state)/iu,
-            ],
-            tests: [/(?:test\/missing-artifact-ui\.test\.ts|MA-04)/u, /(?:MA-04|全state|coverage|default[^|\n]*focus[^|\n]*disabled)/iu],
-            completion: [
-              /(?:state|状態|default[^|\n]*focus[^|\n]*disabled)/iu,
-              /(?:一致|重複|欠落|3\s*state|24\s*行)/u,
-            ],
-          },
-        },
-      ]);
+      const repairedRows = closureRows(goal);
+      ensure(repairedRows.length === 4, `repaired closure must contain exactly four rows; found ${repairedRows.length}`);
+      const atomicRequirements = [
+        ["copy", /Recovered label/iu, /MA-01/u],
+        ["DOM structure", /DOM|構造/iu, /MA-02/u],
+        ["Tailwind pipeline", /Tailwind/iu, /MA-03/u],
+        ["state coverage", /default[\s\S]*focus[\s\S]*disabled/iu, /MA-04/u],
+      ];
+      const matchedRows = atomicRequirements.map(([name, requirement, testCase]) => {
+        const matches = repairedRows.filter((row) =>
+          requirement.test(row[0]) &&
+          /test\/missing-artifact-ui\.test\.ts/u.test(row[3]) &&
+          testCase.test(row[3]));
+        ensure(matches.length === 1, `repaired closure omitted atomic ${name} row`);
+        return matches[0];
+      });
+      ensure(new Set(matchedRows).size === 4, "repaired closure reused a row across atomic requirements");
 
       const index = await readFile(path.join(prototypeRoot, "index.html"), "utf8");
       ensure(
@@ -2908,8 +3025,8 @@ normalizeQueueLabelを追加する。
           /ui-contract\.json/u.test(final) &&
           /(?:再構築|作成|修正|repair|creat)/iu.test(final) &&
           /(?:pending|未確認)/iu.test(final) &&
-          /未承認/u.test(final),
-        "critic final output omitted the repaired artifacts or reset parity/approval state",
+          /(?:smoke|Browser|未確認|未検証)/iu.test(final),
+        "critic final output omitted the repaired artifacts or smoke status",
       );
       await assertOnlyPaths(repo, missingArtifactAllowedPaths());
     },
@@ -2926,7 +3043,7 @@ normalizeQueueLabelを追加する。
         (await readFile(target, "utf8")).replace('<script src="app.js"></script>', ""),
       );
     },
-    simulatedFinal: `plans/${missingArtifactSlug}/goal.mdとplans/${missingArtifactSlug}/prototype/を決定論的に再構築し、ui-contract.jsonとCSSを作成しました。全rowはpending、machine parityは未確認、UI承認は未承認です。`,
+    simulatedFinal: `plans/${missingArtifactSlug}/goal.mdとplans/${missingArtifactSlug}/prototype/を決定論的に再構築し、ui-contract.json、parity-spec.json、CSSを作成しました。Browserを利用できないため影響rowのsmokeは未確認です。`,
     negativeControls: [
       async (repo) => {
         await rm(
@@ -2949,36 +3066,30 @@ normalizeQueueLabelを追加する。
         uiGoal({ slug: "prototype-repair", label: "Old label", revision, commit, checkout: repo }),
       );
     },
-    prompt: `$plan-critic を .agents/skills/plan-critic/SKILL.md から明示的に使用し、plans/prototype-repair/goal.mdとprototypeを修正してください。authoritative requirements bundle: 最新の明示要求はボタンの完成copyを「New label」にすること。確定済み判断は既存button構造、Tailwind pipeline、default/hover/focus/disabledの全stateを維持すること。これは新しい製品判断を要しない決定論的なcopyとstate契約の修正です。要件クロージャはcopy、既存button構造、Tailwind pipeline、全4 stateを正確に4つの独立した行へ分け、各行のテストをtest/prototype-repair.test.tsの一意なcaseへ対応付け、未承認の追加要件行は作らないでください。prototypeを修正してCSSを再buildし、prototype revisionを再計算してください。このCLI環境にはCodexアプリ内Browserがないためmachine parityを推測で合格にせず、material変更後のUI承認を未承認へ戻してください。productionコードは編集しないでください。`,
+    prompt: `$plan-critic を .agents/skills/plan-critic/SKILL.md から明示的に使用し、plans/prototype-repair/goal.mdとprototypeを修正してください。authoritative requirements bundle: 最新の明示要求はボタンの完成copyを「New label」にすること。確定済み判断は既存button構造、Tailwind pipeline、default/hover/focus/disabledの全stateを維持すること。これは新しい製品判断を要しない決定論的なcopyとstate契約の修正です。要件クロージャはcopy、既存button構造、Tailwind pipeline、全4 stateを正確に4つの独立した行へ分け、各行のテストをtest/prototype-repair.test.tsの一意なcaseへ対応付け、追加要件行は作らないでください。prototype、ui-contract.json、parity-spec.jsonを修正してCSSを再buildし、prototype revisionを再計算してください。このCLI環境にはCodexアプリ内Browserがないため影響rowのsmokeは未確認と報告してください。全matrixの実行や手動承認resetは行わず、UI承認方式は明示的な$implement invocationのままにしてください。productionコードは編集しないでください。`,
     async grade(repo) {
       const index = await readFile(path.join(repo, "plans/prototype-repair/prototype/index.html"), "utf8");
       ensure(index === prototypeHtml("New label"), "critic changed prototype structure beyond the required copy repair");
       const goal = await readFile(path.join(repo, "plans/prototype-repair/goal.md"), "utf8");
       assertHeadings(goal);
-      ensure(/machine parity:\s*未確認/u.test(goal), "critic incorrectly preserved machine parity");
+      ensure(!/^- (?:parity evidence|machine parity|UI承認記録):|[a-z0-9-]+=pending/mu.test(goal), "critic retained mutable plan-time evidence");
       ensure(/^- parity matrix:.*default.*hover.*focus.*disabled/mu.test(goal), "critic did not synchronize the repaired state matrix into the goal");
       const revision = await calculateRevision(repo, "prototype-repair");
-      const escapedRevision = revision.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-      for (const field of ["prototype revision", "parity evidence", "machine parity"]) {
-        ensure(
-          new RegExp(`^- ${field}:.*${escapedRevision}`, "mu").test(goal),
-          `critic did not bind ${field} to the current prototype revision`,
-        );
-      }
-      ensure(
-        new RegExp(`^未承認 — revision ${escapedRevision}$`, "u").test(
-          uiContractField(goal, "UI承認記録"),
-        ),
-        "critic did not reset UI approval to exactly one current unapproved record",
-      );
+      assertSingleRevisionField(goal, "prototype revision", revision);
+      ensure(/\$implement.*invocation/iu.test(uiContractField(goal, "UI承認方式")), "critic changed the invocation approval contract");
       const styles = await readFile(path.join(repo, "plans/prototype-repair/prototype/styles.css"), "utf8");
       const expectedBuild = createHash("sha256").update(index).digest("hex");
       ensure(styles.includes(expectedBuild), "critic did not rebuild prototype CSS after repair");
       const contract = JSON.parse(
         await readFile(path.join(repo, "plans/prototype-repair/prototype/ui-contract.json"), "utf8"),
       );
-      assertRevisionBoundRowEvidence(goal, "parity evidence", contract, revision, "pending");
-      assertRevisionBoundRowEvidence(goal, "machine parity", contract, revision, "pending");
+      const spec = JSON.parse(
+        await readFile(path.join(repo, "plans/prototype-repair/prototype/parity-spec.json"), "utf8"),
+      );
+      ensure(
+        isDeepStrictEqual(spec.rowProbeMap.map(({ rowId }) => rowId).sort(), contract.parityMatrix.map(({ id }) => id).sort()),
+        "critic did not synchronize the validation profile",
+      );
       const rows = closureRows(goal);
       const testPlan = testPlanSection(goal);
       for (const caseId of ["PR-01", "PR-02", "PR-03", "PR-04"]) {
@@ -2990,53 +3101,22 @@ normalizeQueueLabelを追加する。
           `test plan must resolve ${caseId} to test/prototype-repair.test.ts`,
         );
       }
-      const preserved = /(?:維持|保持|変更しない|差分がない|preserv)/iu;
-      const allStates = [/default/iu, /hover/iu, /focus/iu, /disabled/iu];
-      requireExactClosureMappings(rows, [
-        {
-          name: "New label button copy",
-          mapping: {
-            requirement: [/(?:button|ボタン)/iu, /New label/u, /(?:copy|文言|ラベル)/iu],
-            design: [/(?:UI契約|意図した差分|delta-copy|変更内容|copy契約)/u],
-            prototype: [/plans\/prototype-repair\/prototype\/index\.html/u, /New label/u],
-            tests: [/(?:test\/prototype-repair\.test\.ts|PR-01)/u, /(?:PR-01|copy|New label)/iu],
-            completion: [/(?:production|本番|#\s*目的と完了条件)/iu, /(?:New label|copy|表示)/iu],
-          },
-        },
-        {
-          name: "preserved button DOM structure",
-          mapping: {
-            requirement: [/(?:button|ボタン)/iu, /(?:DOM|構造)/u, preserved],
-            design: [/(?:実装境界|変更内容|index\.html|button)/iu],
-            prototype: [/plans\/prototype-repair\/prototype\/index\.html/u, /(?:button|link|script|構造)/iu],
-            tests: [/(?:test\/prototype-repair\.test\.ts|PR-02)/u, /(?:PR-02|DOM|構造|structure)/iu],
-            completion: [/(?:button|ボタン)/iu, /(?:DOM|構造)/u, preserved],
-          },
-        },
-        {
-          name: "preserved Tailwind pipeline",
-          mapping: {
-            requirement: [/Tailwind/iu, /(?:pipeline|パイプライン)/iu, preserved],
-            design: [/(?:実装境界|UI契約|tailwind\.css|app\/globals\.css|build-prototype-css)/iu],
-            prototype: [
-              /plans\/prototype-repair\/prototype\/tailwind\.css/u,
-              /(?:plans\/prototype-repair\/prototype\/)?styles\.css/u,
-            ],
-            tests: [/(?:test\/prototype-repair\.test\.ts|PR-03)/u, /(?:PR-03|Tailwind|build)/iu],
-            completion: [/(?:Tailwind|styles\.css|prototype\s+CSS|styling pipeline)/iu, /(?:生成|build|維持|変更がない)/iu],
-          },
-        },
-        {
-          name: "preserved default hover focus disabled states",
-          mapping: {
-            requirement: [/(?:state|状態)/iu, preserved, ...allStates],
-            design: [/(?:baseline state inventory|state inventory|parity matrix)/iu],
-            prototype: [/plans\/prototype-repair\/prototype\/(?:ui-contract\.json|index\.html)/u, /(?:4\s*state|32\s*行|state)/iu],
-            tests: [/(?:test\/prototype-repair\.test\.ts|PR-04)/u, /(?:PR-04|全state|coverage|default[^|\n]*hover[^|\n]*focus[^|\n]*disabled)/iu],
-            completion: [/(?:state|状態)/iu, /(?:一致|重複|欠落|4\s*state|32\s*行)/u],
-          },
-        },
-      ]);
+      ensure(rows.length === 4, `critic closure must contain exactly four rows; found ${rows.length}`);
+      const atomicRequirements = [
+        ["copy", /New label/iu, /PR-01/u],
+        ["DOM structure", /DOM|構造/iu, /PR-02/u],
+        ["Tailwind pipeline", /Tailwind/iu, /PR-03/u],
+        ["state coverage", /default[\s\S]*hover[\s\S]*focus[\s\S]*disabled/iu, /PR-04/u],
+      ];
+      const matchedRows = atomicRequirements.map(([name, requirement, testCase]) => {
+        const matches = rows.filter((row) =>
+          requirement.test(row[0]) &&
+          /test\/prototype-repair\.test\.ts/u.test(row[3]) &&
+          testCase.test(row[3]));
+        ensure(matches.length === 1, `critic closure omitted atomic ${name} row`);
+        return matches[0];
+      });
+      ensure(new Set(matchedRows).size === 4, "critic closure reused a row across atomic requirements");
       ensure(
         isDeepStrictEqual(
           contract,
@@ -3051,6 +3131,7 @@ normalizeQueueLabelを追加する。
       await assertOnlyPaths(repo, [
         "plans/prototype-repair/goal.md",
         "plans/prototype-repair/prototype/index.html",
+        "plans/prototype-repair/prototype/parity-spec.json",
         "plans/prototype-repair/prototype/styles.css",
         "plans/prototype-repair/prototype/ui-contract.json",
       ]);
@@ -3064,9 +3145,14 @@ normalizeQueueLabelを追加する。
       const checkout = existingContract.productionBaseline.checkout;
       const indexPath = path.join(repo, "plans/prototype-repair/prototype/index.html");
       await writeFile(indexPath, (await readFile(indexPath, "utf8")).replaceAll("Old label", "New label"));
+      const contract = uiContract("New label", { includeHover: true, commit, checkout });
       await writeFile(
         path.join(repo, "plans/prototype-repair/prototype/ui-contract.json"),
-        `${JSON.stringify(uiContract("New label", { includeHover: true, commit, checkout }), null, 2)}\n`,
+        `${JSON.stringify(contract, null, 2)}\n`,
+      );
+      await writeFile(
+        path.join(repo, "plans/prototype-repair/prototype/parity-spec.json"),
+        `${JSON.stringify(paritySpec(contract), null, 2)}\n`,
       );
       await run(
         "node",
@@ -3081,8 +3167,6 @@ normalizeQueueLabelを追加する。
           slug: "prototype-repair",
           label: "New label",
           revision,
-          machine: "未確認",
-          approval: "未承認",
           includeHover: true,
           commit,
           checkout,
@@ -3099,21 +3183,15 @@ normalizeQueueLabelを追加する。
     },
     negativeControls: [
       async (repo) => {
-        const target = path.join(repo, "plans/prototype-repair/goal.md");
-        const lines = (await readFile(target, "utf8")).split("\n");
-        const index = lines.findIndex((line) => line.startsWith("- parity evidence:"));
-        ensure(index >= 0, "parity row negative control could not find parity evidence");
-        const changed = lines[index].replace("main-default-desktop-light=pending、", "");
-        ensure(changed !== lines[index], "parity row negative control could not find target row ID");
-        lines[index] = changed;
-        await writeFile(target, lines.join("\n"));
+        const target = path.join(repo, "plans/prototype-repair/prototype/parity-spec.json");
+        const spec = JSON.parse(await readFile(target, "utf8"));
+        spec.rowProbeMap.pop();
+        await writeFile(target, `${JSON.stringify(spec, null, 2)}\n`);
       },
       async (repo) => {
         const target = path.join(repo, "plans/prototype-repair/goal.md");
         const goal = await readFile(target, "utf8");
-        const changed = goal.replaceAll("=pending", " pending");
-        ensure(changed !== goal, "bare pending negative control could not find row statuses");
-        await writeFile(target, changed);
+        await writeFile(target, goal.replace("明示的な `$implement` invocation", "手動承認"));
       },
       async (repo) => {
         const target = path.join(repo, "plans/prototype-repair/goal.md");
@@ -3123,19 +3201,6 @@ normalizeQueueLabelを追加する。
         await writeFile(target, goal.replace(current, "| button copyを「Old label」にする |"));
       },
       async (repo) => addUnauthorizedClosureRow(repo, "plans/prototype-repair/goal.md"),
-      async (repo) => {
-        const target = path.join(repo, "plans/prototype-repair/goal.md");
-        const goal = await readFile(target, "utf8");
-        const revision = uiContractField(goal, "prototype revision").match(/sha256:[a-f0-9]{64}/u)?.[0];
-        ensure(revision, "duplicate-approval negative control could not find prototype revision");
-        await writeFile(
-          target,
-          goal.replace(
-            /(^- UI承認記録:.*$)/mu,
-            `$1\n- UI承認記録: ${today} — revision ${revision} — 以前の承認済み記録`,
-          ),
-        );
-      },
       async (repo) => {
         const contractPath = path.join(
           repo,
@@ -3159,17 +3224,6 @@ normalizeQueueLabelを追加する。
           goalPath,
           (await readFile(goalPath, "utf8")).replaceAll(currentRevision, replacementRevision),
         );
-      },
-      async (repo) => {
-        const target = path.join(repo, "plans/prototype-repair/goal.md");
-        const lines = (await readFile(target, "utf8")).split("\n");
-        const index = lines.findIndex((line) => line.startsWith("- parity evidence:"));
-        ensure(index >= 0, "parity revision negative control could not find parity evidence");
-        lines[index] = lines[index].replace(
-          /sha256:[a-f0-9]{64}/u,
-          `sha256:${"0".repeat(64)}`,
-        );
-        await writeFile(target, lines.join("\n"));
       },
     ],
   },
@@ -3284,9 +3338,12 @@ normalizeQueueLabelを追加する。
         "implement did not identify drift in the related shared source inventory",
       );
       ensureNoCompletionClaim(final);
-      await assertOnlyPaths(repo, []);
+      const approvalPath = await assertSingleApprovalEvidence(repo, "related-source-drift");
+      await assertOnlyPaths(repo, [approvalPath]);
     },
-    async simulate() {},
+    async simulate(repo) {
+      await writeApprovalFixture(repo, "related-source-drift");
+    },
     async break(repo) {
       await writeFile(path.join(repo, "src/ui.txt"), "after\n");
     },
@@ -3311,13 +3368,16 @@ normalizeQueueLabelを追加する。
       ensure(/Browser|ブラウザ/u.test(final), "implement did not identify the Browser gate");
       ensure(/未検証|完了.{0,8}(?:でき|不可)|cannot.{0,8}complete|not complete|停止/iu.test(final), "implement claimed or implied completion without Browser");
       ensureNoCompletionClaim(final);
-      await assertOnlyPaths(repo, []);
+      const approvalPath = await assertSingleApprovalEvidence(repo, "browser-gate");
+      await assertOnlyPaths(repo, [approvalPath]);
     },
-    async simulate() {},
+    async simulate(repo) {
+      await writeApprovalFixture(repo, "browser-gate");
+    },
     async break(repo) {
       await writeFile(path.join(repo, "src/ui.txt"), "after\n");
     },
-    simulatedFinal: "Codexアプリ内Browserを利用できないため未検証です。production編集前に停止し、完了扱いにしていません。",
+    simulatedFinal: "明示的な$implement invocationからapproval.jsonを作成しました。Codexアプリ内Browserを利用できないためpre-edit parity前に停止し、productionは編集していません。",
     negativeFinals: [
       "Codexアプリ内Browserを利用できないためproduction編集前に停止しましたが、production work is done。",
       "Codexアプリ内Browserを利用できないため停止し、実装していません。ただし本番反映済みです。",
@@ -3356,7 +3416,7 @@ normalizeQueueLabelを追加する。
         'document.documentElement.dataset.ready = "changed-after-approval";\n',
       );
     },
-    prompt: `$review を .agents/skills/review/SKILL.md から明示的に使用し、plans/${reviewUiSlug}/goal.mdに対する現在のHEAD対working tree差分をreviewしてください。${reviewUiSourcePath}のdiffはgoalの「UI変更: なし」を信用せず、rendered DOM・copy・accessibilityへの影響から独立分類してください。blind passには同じexact diffと必要なrepository contextだけを渡し、goal、会話、期待する指摘、conformance結果を渡さないでください。別のfresh conformance passにはgoal、同じdiff、prototype、ui-contract.json、plans/${reviewUiSlug}/evidence/current-run-pre-edit.md、plans/${reviewUiSlug}/evidence/implementation-parity.mdを渡してください。conformance passの前にtrusted prototype-revision helperでcurrent artifactを再計算し、goalのprototype revision、parity evidence、machine parity、UI承認記録のexact revision、manifest全row ID、current-run pre-edit parity、post implementation parityを照合してください。missing、duplicate、extra、staleの各row/revision defectとUI誤分類はmajor findingです。findingには該当するexact row IDとcurrent/recorded full revisionを省略せず記載してください。二つの独立passのfindingをsource=blind/conformanceのままplans/${reviewUiSlug}/review/のcanonical reportへ保存してください。${browserUnavailable} HTML reportは生成し、Browser検証はunverifiedとして記録してください。Browser成功を推測せず、production、goal、prototype、evidence、Gitを変更しないでください。`,
+    prompt: `$review を .agents/skills/review/SKILL.md から明示的に使用し、plans/${reviewUiSlug}/goal.mdに対する現在のHEAD対working tree差分をreviewしてください。${reviewUiSourcePath}のdiffはgoalの「UI変更: なし」を信用せず、rendered DOM・copy・accessibilityへの影響から独立分類してください。最初にprototype revisionとvalidation profile digestを再計算し、plans/${reviewUiSlug}/evidence/review-run/approval.json、pre-edit-parity.json、implementation-parity.jsonのschema、digest、全row set、status、構造化scroll provenanceを機械検証してください。自然言語によるscroll出所説明は要求しないでください。blind passには同じexact diffと必要なrepository contextだけを渡し、goal、会話、期待する指摘、conformance結果を渡さないでください。別のfresh conformance passにはgoal、同じdiff、prototype、ui-contract.json、parity-spec.jsonと上記構造化証跡を渡してください。二つのfresh no-history passは同じdiff snapshotから並行実行し、findingをsource=blind/conformanceのままplans/${reviewUiSlug}/review/のcanonical reportへ保存してください。missing、duplicate、extra、staleの各row/revision defectとUI誤分類はmajor findingとし、exact row IDとcurrent/recorded full revisionを記載してください。${browserUnavailable} HTML reportは生成し、Browser検証はunverifiedとして記録してください。Browser成功を推測せず、production、goal、prototype、evidence、Gitを変更しないでください。`,
     async grade(repo, final) {
       const reportRoot = path.join(repo, `plans/${reviewUiSlug}/review`);
       for (const asset of reviewReportAssets) {
@@ -3443,15 +3503,10 @@ normalizeQueueLabelを追加する。
         ],
         ["current prototype revision", new RegExp(escapeRegularExpression(currentRevision), "u")],
         ["recorded stale revision", new RegExp(escapeRegularExpression(oldRevision), "u")],
-        ["prototype revision field", /prototype revision/iu],
-        ["parity evidence field", /parity evidence/iu],
-        ["machine parity field", /machine parity/iu],
-        ["UI approval field", /UI承認(?:記録)?|UI approval/iu],
+        ["prototype revision field", /prototype[- ]revision/iu],
         ["manifest", /ui-contract\.json|manifest/iu],
-        ["current-run pre-edit evidence", /(?:plans\/review-ui-gate\/evidence\/)?current-run-pre-edit\.md/iu],
         ["duplicate manifest row", new RegExp(`${escapeRegularExpression(firstRow)}[^\n]{0,80}(?:duplicate|重複)|(?:duplicate|重複)[^\n]{0,80}${escapeRegularExpression(firstRow)}`, "iu")],
         ["extra manifest row", /main-unauthorized-extra[^\n]{0,80}(?:extra|余分|過剰)|(?:extra|余分|過剰)[^\n]{0,80}main-unauthorized-extra/iu],
-        ["post implementation evidence", /(?:plans\/review-ui-gate\/evidence\/)?implementation-parity\.md|post[- ]implementation parity/iu],
         ["missing implementation row", new RegExp(`${escapeRegularExpression(missingRow)}[^\n]{0,80}(?:missing|欠落)|(?:missing|欠落)[^\n]{0,80}${escapeRegularExpression(missingRow)}`, "iu")],
         ["stale evidence", /stale|失効|古い|不一致/iu],
       ]) {

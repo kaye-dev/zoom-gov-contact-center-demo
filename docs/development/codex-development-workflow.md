@@ -4,6 +4,8 @@
 
 大きな変更を、goal、必要なUI prototype、production実装、独立reviewの順に進める。各skillは成果物を次の工程へ渡すだけの薄い役割とし、独自runtime、専用agent、固定model routing、lifecycle state machineは作らない。
 
+skill本文は短い手順、referenceは詳細契約、scriptは反復する決定論的処理を担当する。この責務分離は[OpenAIのskill設計ガイド](https://learn.chatgpt.com/docs/build-skills)に従う。改善効果は成功率、完全性、token、latencyと、このworkflow固有のphase時間・操作回数で測り、[OpenAIの評価指針](https://developers.openai.com/api/docs/guides/latest-model)に沿ってforward evalとnegative controlを併用する。
+
 ## 成果物
 
 `plans/template.md`だけを追跡し、生成物はplan単位で同じdirectoryへ置く。
@@ -13,11 +15,12 @@ plans/
 ├── <slug>/
 │   ├── goal.md
 │   ├── prototype/
+│   ├── evidence/
 │   └── review/
 └── template.md
 ```
 
-`prototype/`はUI変更時、`review/`は`$review`実行時だけ作る。生成directoryはGitへ追加しない。
+`prototype/`はUI変更時、`evidence/`はUI変更を`$implement`する時、`review/`は`$review`実行時だけ作る。生成directoryはGitへ追加しない。
 
 `plans/tmp/<slug>/prototype/`は、閲覧とCSS buildだけに使える後方互換pathである。parity、承認、実装、reviewの前にcanonical directoryへ移行する。
 
@@ -27,7 +30,7 @@ plans/
 
 1. `$plan`: goalと必要なUI prototypeを作る。
 2. `$plan-critic`（任意）: goalとprototypeを独立reviewする。
-3. `$implement`: 承認済みgoalを実装し、検証する。
+3. `$implement`: 現在のgoalとprototypeを承認して実装・検証する。
 4. `$review`（必要な場合）: diffとgoalへの適合性をreviewする。
 5. `$git-commit-push-pr`（明示依頼時）: commit、push、PRを行う。
 
@@ -37,21 +40,19 @@ plan成果物のcleanupは、この流れとは別の明示操作として行う
 
 最新の明示要求、確定済み判断、採用済み資料からauthoritative requirements bundleを作る。repository、runtime、既存UIを確認し、`plans/<slug>/goal.md`へ自己完結した最終設計を書く。
 
-全要件は`## 要件クロージャ`で、設計、prototype、テスト、完了条件へ対応付ける。UI変更では同じdirectoryにproduction-parity prototypeを作り、詳細は「UI prototype」の契約に従う。
+全要件は`## 要件クロージャ`で、設計、prototype、テスト、完了条件へ対応付ける。UI変更では同じdirectoryにproduction-parity prototypeを作り、静的検証と変更target/stateのsmokeまででユーザーへURLを返す。フィードバック後は同じplanを最終設計として更新し、全matrixは実行しない。
 
 ### `$plan-critic`
 
 goalとprototypeを独立reviewする。authoritative requirements bundleとclosest live production UIから一意に直せる欠陥は修正し、不足するprototypeまたはmanifestも決定論的に作成する。
 
-修正後はCSS build、revision再計算、全rowのpending化、UI承認reset、machine parityをやり直す。新しい製品判断または不足するlive UI証拠が必要な場合だけ、ユーザーへ確認する。
-
-prototypeまたはmaterialなUI契約を変更すると、それ以前のrow ID別parity evidence、machine parity、UI承認は無効になる。
+修正後はCSS build、contract/profile validation、revision再計算、変更範囲のsmokeを行う。新しい製品判断または不足するlive UI証拠が必要な場合だけ、ユーザーへ確認する。plan中に全matrixや承認状態を作り直さない。
 
 ### `$implement`
 
-承認済みgoalに従い、現在のagentがproduction実装と検証を行う。UI変更では、承認済みprototypeとUI契約を実装対象とする。
+明示的な`$implement`実行を、解決したgoal、現在のprototype revision、validation profile digestへの承認とする。現在のagentがproduction実装と検証を行い、別の承認応答やgoal内の承認記録を要求しない。
 
-production編集の前にruntimeと契約のdriftを確認し、現在runのpre-edit parityを全rowで実行する。実装後は同じmatrixでlive parityを行い、最後の関連変更後に全rowを再実行する。
+production編集の前にruntimeと契約のdriftを確認し、全rowのpre-edit parityを1回実行する。実装中はaffected rowだけを確認し、最後の関連変更後に全rowのfinal parityを1回実行する。
 
 具体的な停止条件、Browser条件、証跡形式は「Runtime phaseと所有権」と「UI prototype」に従う。
 
@@ -61,7 +62,7 @@ production編集の前にruntimeと契約のdriftを確認し、現在runのpre-
 
 UI変更では、diffとaffected codeからUI影響を独立分類する。revision helperをread-onlyで実行し、schemaと現在revisionを再検証する。
 
-goalの`prototype revision`、`parity evidence`、`machine parity`、`UI承認記録`と、manifest全rowの承認時・編集直前・実装後の証拠を再検証する。不一致は必須major findingとする。
+goalの`prototype revision`と、選択runの`approval.json`、`pre-edit-parity.json`、`implementation-parity.json`を再検証する。legacy planだけは従来のgoal/Markdown証拠をread-onlyで検証する。不一致は必須major findingとする。
 
 ### `$git-commit-push-pr`
 
@@ -87,7 +88,9 @@ preflightより前に、port 3000のLISTEN addressと関連resourceを記録す�
 
 正しい既存runtimeだけを再利用する。存在しなければrepository標準導線で実アプリを起動し、実URLが正確に`http://localhost:3000`であることを確認する。
 
-prototypeは`./dev-prototype.sh <slug>`で1回だけ起動する。そのPIDと`127.0.0.1` URLをBrowser preflightから最終parityまで再利用する。承認済みartifactが不変のまま終了した場合だけ再起動し、新しいPIDとURLを記録する。
+新規routeまたはstale dev cacheで再起動が必要な場合は、Compose project、対象checkout mount、`web` service identityを再確認して`./dev-compose.sh restart web`を実行できる。ユーザー所有runtimeでも追加確認は不要である。再起動前後のcontainer ID、mount、port、URL、fixture、authorizationを記録し、他serviceやproject全体は停止しない。
+
+prototypeは`./dev-prototype.sh <slug>`で1回だけ起動する。そのPIDと`127.0.0.1` URLをBrowser preflightから最終parityまで再利用する。captured revisionが不変のまま終了した場合だけ再起動し、新しいPIDとURLを記録する。
 
 ### 3. build
 
@@ -122,6 +125,7 @@ stylingは`app/globals.css`と本番Tailwind utilityを使う。次のcommandで
 ```sh
 node .agents/skills/plan/scripts/build-prototype-css.mjs plans/<slug>/prototype
 node .agents/skills/plan/scripts/prototype-revision.mjs plans/<slug>/prototype
+node .agents/skills/plan/scripts/parity-runner.mjs validate plans/<slug>/prototype
 ```
 
 次のcommandでloopback配信する。
@@ -130,9 +134,9 @@ node .agents/skills/plan/scripts/prototype-revision.mjs plans/<slug>/prototype
 ./dev-prototype.sh <slug>
 ```
 
-revision helperは、対応する全artifact fileのrelative pathと内容から`sha256:<64hex>`を生成する。`approval contract: plans/<slug>/prototype/ui-contract.json — version 1`も必須入力に含める。
+revision helperは、対応する全artifact fileのrelative pathと内容から`sha256:<64hex>`を生成する。`ui-contract.json` version 1と`parity-spec.json` version 1もrevisionへ含める。
 
-CSS build後にartifactとmanifestを含むrevisionを計算し、実画面とのmachine parityを確認する。
+CSS build後にrevisionを計算し、parity runnerでmanifestとvalidation profileを検証する。
 
 ### UI契約
 
@@ -150,34 +154,39 @@ UIの状態と期待値には、state、responsive、視覚的不変条件、意
 
 各targetは、安定ID、entry、production route、surfaceを持つ。各rowは、安定ID、`targetId`、一致するentry、route、surface、state、viewport、theme、breakpoint、期待するinvariantまたはdifference IDを持つ。
 
-### Parityと承認
+### Validation profile
 
-UI変更では、次の証拠を別々に記録する。
+`plans/<slug>/prototype/parity-spec.json` version 1は次を持つ。
 
-- 承認時のmachine parity
-- ユーザーによる明示的なUI承認
-- 現在runのcurrent-run pre-edit parity
-- 実装後のlive parity
+- target/stateごとのproduction・prototype queryとallowlist action
+- screenshot、DOM、accessibility、visibility、text、attribute、computed style、geometry、focus、console、networkのprobe
+- manifest全rowとprobeの一対一mapping
 
-実行結果、screenshot、DOM・accessibility、computed style、console・network、日付、証拠pathはmanifestへ入れない。goalの`machineParityResults`、current-run pre-edit parity、実装報告の`implementationParityResults`へ記録する。
+actionは`click`、`press`、`focus`、`fill`、`waitForVisible`、`waitForHidden`だけを許可する。任意JavaScriptと外部URLをprofileへ入れない。詳細schemaとBrowser adapterは`.agents/skills/plan/references/parity-runner.md`を正本とする。
 
-結果はmanifestの全rowと一対一にする。未実行は`<row-id>=pending`、実行後は`<row-id>=pass|fail`とし、bare IDやaggregate summaryでは代用しない。
+### 反復確認と承認
 
-`prototype revision`、全rowの`machineParityResults`、machine parity、UI承認は同じ`sha256:<64hex>`へ結び付ける。rendered prototypeをユーザーが明示承認するまで、`UI承認記録`は未承認とする。
+plan中は、変更target/stateを代表desktopと390×844でsmoke確認する。theme・token・native controlはlight/dark、responsive・shell・navigation・layoutは影響breakpoint全件、dialog・menu・keyboard・focusは該当interaction probeを追加する。ユーザーのフィードバック後も影響scopeだけを再実行し、全matrixは実行しない。
+
+明示的な`$implement`実行を現在のgoal、prototype revision、validation profile digestへの承認とする。別の承認応答やgoal内承認状態は作らない。`$implement`後にこれらが変わった場合はproduction編集を止め、新しい`$implement`実行を必要とする。
+
+### 構造化証跡
+
+`$implement`はfreshな`plans/<slug>/evidence/<run-id>/`へ次を作る。
+
+- `approval.json`: goal digest、prototype revision、profile digest、実行時刻、`explicit-$implement-invocation`
+- `pre-edit-parity.json`: production編集直前のruntime/source条件と全row結果
+- `implementation-parity.json`: 最後の関連変更後のruntime条件と全row結果
+
+executed rowは各file内に1回だけ現れ、statusは`pass`または`fail`とする。未実行はfile欠落で表し、巨大なpending一覧を作らない。各surfaceのscrollは`{x, y, source: "window.scrollX/window.scrollY"}`で記録する。
 
 ### 実装前後の確認
 
-`$implement`は、prototype revisionと承認記録を照合する。`http://localhost:3000`と`./dev-prototype.sh <slug>`のURLをCodexアプリ内Browserでpreflightする。
+`$implement`は`http://localhost:3000`と`./dev-prototype.sh <slug>`のURLをCodexアプリ内Browserでpreflightする。Browser sessionごとにcapability canaryを1回実行し、tab、viewport、DPR、network sourceを確認する。
 
-最初のproduction編集の直前に、現在のruntime、HEAD、`productionBaseline.sources`全件のworking tree、fixture、authorization、query、Browser条件を契約と再照合する。Browser条件には`window.scrollX`と`window.scrollY`の実測値を含める。
+最初のproduction編集の直前にruntime、HEAD、全baseline source、fixture、authorization、query、Browser条件を再照合し、`pre-edit`でmanifest全rowを1回実行する。失敗、drift、未説明差分、欠落rowがあればproduction差分0件のまま停止する。
 
-現在条件でmanifestの全rowを実アプリとprototypeの両方で実行し、current-run pre-edit parity証跡を作る。承認時証跡の日付だけでは代用できない。
-
-drift、未説明差分、欠落rowがあればproduction編集前に停止する。goal、manifest、prototype、machine parity、明示承認を更新するまで実装しない。
-
-実装後は、承認済みprototypeとのlive parityを同じmatrixで確認する。最後の関連変更後に全rowを再実行し、`implementationParityResults`へ`<row-id>=pass|fail`を記録する。
-
-prototypeまたはmaterialなUI契約を変更した場合はrevisionを更新し、既存のrow evidence、machine parity、UI承認を失効させる。
+実装中は`affected` rowだけを確認する。最後の関連変更後に`final`で全rowを1回実行する。その後のproduction、goal、prototype、contract/profile、source、fixture、authorization、query、route、Browser条件への関連変更は最終証拠を失効させる。
 
 ## Skill behavioral eval
 
@@ -191,7 +200,7 @@ npm run eval:plan-skills
 
 evalは、Codex CLIの`workspace-write` sandbox内に一時repositoryを作る。環境allowlist、出力量上限、artifact allowlistを適用し、通常のskill discoveryと明示`$skill` invocationを使う。modelは固定しない。
 
-確認する主なcaseは、canonical plan生成、既存artifact衝突停止、要件漏れの復元、欠落prototype・manifestの決定論的再構築、prototype自己修正と承認reset、stale revision停止、全baseline sourceのdrift停止、Browser unavailable停止である。
+確認する主なcaseは、canonical plan生成、既存artifact衝突停止、要件漏れの復元、欠落prototype・manifest・profileの決定論的再構築、2回のfeedback中に全matrixを実行しないこと、`$implement` invocationによる承認証跡、pre-edit失敗時のproduction差分0件、stale revision/profile停止、全baseline sourceのdrift停止、Browser unavailable停止である。
 
 runnerはprocess identity、process group、run marker、一時fixtureをcwdとして保持するprocessを再照合する。inspectorが完全に利用できなければ、結果を受理しない。
 
@@ -203,11 +212,12 @@ CLIのforward evalにはCodexアプリ内Browserがない。そのため、`$imp
 
 これらの契約またはdev server導線を変更した場合は、shipping前にCodex desktopでmanual integration gateを行う。基本手順は次のとおり。
 
-1. baselineとagent-owned resourceを記録する。
-2. production編集前のparityとnegative caseを確認する。
-3. agent-owned runtimeでbuild、再起動、最終parityを確認する。
-4. user-owned runtimeを保護できることを確認する。
-5. agent-ownedな差分だけをcleanupする。
+1. `$plan`でprototype feedbackを2回行い、smokeだけが実行されることを確認する。
+2. baselineとagent-owned resourceを記録する。
+3. `$implement` invocationの承認証跡とproduction編集前の全parityを確認する。
+4. agent-owned runtimeでbuild、最終parityを確認する。
+5. verified user-owned Compose `web`の限定再起動と他resource保護を確認する。
+6. 二つのreview passが並行実行され、agent-ownedな差分だけをcleanupすることを確認する。
 
 実行記録には、日付、対象commit、baselineとfinalのprocess・container一覧、各command、Browserの実URL、matrix行ID別結果、cleanup後の差分を含める。
 
@@ -223,7 +233,7 @@ Codexアプリ内Browserで実アプリとprototypeを開く。現在のruntime�
 
 同一fixture、authorization、query、viewport、DPR、`window.scrollX`と`window.scrollY`の実測値によるexact `scroll: {x, y}`、locale、theme、route、state、keyboard・focus条件でmanifestの全rowを実行する。
 
-日付、revision、実URL、runtime identity、source inventory、条件、`<row-id>=pass|fail`の結果をcurrent-run pre-edit parity証跡として記録する。
+日付、revision/profile digest、実URL、runtime identity、source inventory、条件、row ID別の`pass|fail`結果を`pre-edit-parity.json`として記録する。
 
 Browserまたは条件が欠けるnegative case、およびbaseline source、fixture、authorization、queryを一つずつdriftさせるnegative caseでは、production差分が0件であることを確認する。
 
@@ -241,7 +251,9 @@ PID、cwd、command、owner、mount、URLを再確認し、最終matrixの全row
 
 cleanupはbaselineとの差分にあるagent-owned PID/container/service/volume/network/dependency artifactだけを対象にする。identityを再照合してから個別に停止または削除する。
 
-baselineに存在したresource、user-owned resource、user-owned dependencyは維持する。広域Compose停止commandが実行されていないこともcommand logで確認する。
+baselineに存在したresource、user-owned resource、user-owned dependencyは維持する。verified `web` restart以外のユーザー所有resource操作と広域Compose停止commandが実行されていないこともcommand logで確認する。
+
+記録にはphase別経過時間、shell command数、Browser操作数、全matrix実行回数を含める。plan feedback中の全matrixは0回、1回の`$implement`でpre-editとfinalは各1回、承認とverified `web` restartの追加ユーザー往復は0回を合格条件とする。
 
 ## HTML review
 

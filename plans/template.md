@@ -18,7 +18,9 @@
 - UI変更: なし
 - prototype: なし
 - approval contract: なし
+- validation profile: なし
 - prototype revision: UI変更なし
+- UI承認方式: UI変更なし
 - production baseline: なし
 - comparison conditions: なし
 - baseline state inventory: なし
@@ -30,9 +32,6 @@
 - stateとinteraction: なし
 - comparison targets: なし
 - parity matrix: なし
-- parity evidence: なし
-- machine parity: UI変更なし
-- UI承認記録: UI変更なし
 
 # インターフェースとデータフロー
 

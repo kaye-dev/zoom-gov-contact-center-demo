@@ -207,6 +207,21 @@ test("approval対象のui-contract.jsonをrevisionへ含める", async (context)
   assert.notEqual(after, before);
 });
 
+test("validation profileのparity-spec.jsonをrevisionへ含める", async (context) => {
+  const fixture = await createRepositoryFixture(context);
+  const prototype = await createPrototype(fixture, "profile-change", [
+    ...representativeEntries,
+    ["parity-spec.json", '{"version":1,"marker":"before"}\n'],
+  ]);
+  const before = revisionFrom(runRevision(fixture, [prototype.relative]));
+  await writeFile(
+    path.join(prototype.absolute, "parity-spec.json"),
+    '{"version":1,"marker":"after"}\n',
+  );
+  const after = revisionFrom(runRevision(fixture, [prototype.relative]));
+  assert.notEqual(after, before);
+});
+
 test("ui-contract.jsonの欠落、不正schema、evidence混入を拒否する", async (context) => {
   const fixture = await createRepositoryFixture(context);
   const prototype = await createPrototype(fixture, "invalid-contract", [
