@@ -77,7 +77,7 @@ export const ADMIN_RESOURCE_CATALOG = [
   },
   {
     key: "reservations",
-    displayPaths: ["/admin/reservations"],
+    displayPaths: ["/admin/reservations", "/admin/reservations/api-keys"],
     supportedActions: ["VIEW", "UPDATE"],
     requiresAdminUser: false,
   },

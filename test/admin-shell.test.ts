@@ -37,6 +37,6 @@ test("reservation system is a direct responsive navigation item", () => {
   assert.match(shell, /flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto/u);
   assert.ok(settingsMenu < reservationLink);
   assert.ok(reservationLink < signOut);
-  assert.match(shell, /pathname === "\/admin\/reservations" \? "page"/u);
+  assert.match(shell, /pathname\.startsWith\("\/admin\/reservations"\) \? "page"/u);
   assert.match(layout, /visibleItems\.push\("reservations"\)/u);
 });

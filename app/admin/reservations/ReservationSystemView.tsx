@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 import { ChevronLeftIcon } from "@/app/components/svg/ChevronLeftIcon";
 import { ChevronRightIcon } from "@/app/components/svg/ChevronRightIcon";
@@ -108,6 +109,14 @@ export function ReservationSystemView({
           <h1 className="text-2xl font-bold">{copy.title}</h1>
           <p className="text-sm leading-6 text-fg-muted">{copy.description}</p>
         </div>
+        <div className="flex flex-wrap gap-3 sm:shrink-0">
+        <Link
+          id="api-key-management-link"
+          href="/admin/reservations/api-keys"
+          className="inline-flex items-center rounded-md border border-line bg-surface px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          {copy.apiKeys.entry}
+        </Link>
         <button
           ref={randomButtonRef}
           id="random-fill-button"
@@ -115,10 +124,11 @@ export function ReservationSystemView({
           onClick={generateDemoReservations}
           disabled={!canEdit || isGenerating}
           aria-busy={isGenerating || undefined}
-          className="cursor-pointer rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50 sm:shrink-0"
+          className="cursor-pointer rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
         >
           {copy.demoFill}
         </button>
+        </div>
       </div>
 
       <p

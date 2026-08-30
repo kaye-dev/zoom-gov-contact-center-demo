@@ -170,7 +170,9 @@ test("reservation persistence contains no PII and no Virtual Agent integration",
     source("../app/admin/reservations/page.tsx"),
     source("../app/admin/reservations/ReservationSystemView.tsx"),
   ].join("\n");
-  const model = schema.slice(schema.indexOf("model ReservationBooking"));
+  const modelStart = schema.indexOf("model ReservationBooking");
+  const nextModel = schema.indexOf("\nmodel ", modelStart + 1);
+  const model = schema.slice(modelStart, nextModel === -1 ? undefined : nextModel);
   for (const forbidden of ["name", "address", "email", "phone", "consultationContent", "receiptNumber"]) {
     assert.doesNotMatch(model, new RegExp(`\\b${forbidden}\\b`, "iu"));
     assert.doesNotMatch(migration, new RegExp(`\\b${forbidden}\\b`, "iu"));

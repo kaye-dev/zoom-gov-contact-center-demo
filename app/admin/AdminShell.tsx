@@ -128,7 +128,7 @@ export function AdminShell({ children, visibleItems }: AdminShellProps) {
 
   return (
     <div
-      id={pathname === "/admin/reservations" ? "reservation-system-page" : undefined}
+      id={pathname.startsWith("/admin/reservations") ? "reservation-system-page" : undefined}
       className="min-h-screen bg-surface text-fg"
     >
       <header className="sticky top-0 z-50 border-b border-line bg-surface-raised">
@@ -218,9 +218,9 @@ export function AdminShell({ children, visibleItems }: AdminShellProps) {
             {visibleItems.includes("reservations") ? (
               <Link
                 href="/admin/reservations"
-                aria-current={pathname === "/admin/reservations" ? "page" : undefined}
+                aria-current={pathname.startsWith("/admin/reservations") ? "page" : undefined}
                 className={`whitespace-nowrap rounded-md px-3 py-2 text-sm font-semibold transition-colors hover:bg-surface-hover hover:text-accent ${
-                  pathname === "/admin/reservations" ? "text-accent" : "text-fg"
+                  pathname.startsWith("/admin/reservations") ? "text-accent" : "text-fg"
                 }`}
               >
                 {t.admin.reservations}
@@ -261,6 +261,6 @@ function isCurrentAdminItem(pathname: string, key: AdminNavigationItemKey) {
     "maintenance-settings": "/admin/maintenance-settings",
     "developer-api": "/admin/developer-api",
   };
-  if (key === "reservations") return pathname === "/admin/reservations";
+  if (key === "reservations") return pathname.startsWith("/admin/reservations");
   return pathname === exactPaths[key];
 }

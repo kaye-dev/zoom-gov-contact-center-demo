@@ -57,6 +57,14 @@ enum AdminAccessSystemRole {
   NO_ACCESS
 }
 
+enum ReservationApiPermission {
+  LIST
+  READ
+  CREATE
+  UPDATE
+  DELETE
+}
+
 model user {
   id                        String    @id
   name                      String
@@ -80,6 +88,9 @@ model user {
   reviewedPasswordRequests PasswordResetRequest[] @relation("PasswordResetRequestReviewer")
   accessRoleAssignments     AdminAccessRoleAssignment[] @relation("AdminAccessRoleAssignmentUser")
   assignedRoleAssignments   AdminAccessRoleAssignment[] @relation("AdminAccessRoleAssignmentActor")
+  createdReservationApiKeys ReservationApiKey[] @relation("ReservationApiKeyCreatedBy")
+  revokedReservationApiKeys ReservationApiKey[] @relation("ReservationApiKeyRevokedBy")
+  updatedReservationApiUsageSettings ReservationApiUsageSetting[] @relation("ReservationApiUsageSettingUpdatedBy")
 
   @@unique([email])
   @@map("user")
@@ -285,8 +296,60 @@ model ReservationBooking {
   startMinute     Int
   isDemo          Boolean  @default(false)
   createdAt       DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime? @updatedAt @db.Timestamptz(3)
 
   @@index([serviceKey, reservationDate, startMinute])
   @@index([reservationDate, isDemo])
   @@map("reservation_bookings")
+}
+
+model ReservationApiKey {
+  id              String   @id @default(cuid())
+  publicId        String   @unique
+  name            String
+  secretHash      String   @unique
+  revision        Int      @default(1)
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+  lastUsedAt      DateTime? @db.Timestamptz(3)
+  revokedAt       DateTime? @db.Timestamptz(3)
+  createdByUserId String?
+  revokedByUserId String?
+
+  createdBy   user? @relation("ReservationApiKeyCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  revokedBy   user? @relation("ReservationApiKeyRevokedBy", fields: [revokedByUserId], references: [id], onDelete: SetNull)
+  permissions ReservationApiKeyPermission[]
+
+  @@index([createdAt, id])
+  @@index([revokedAt])
+  @@map("reservation_api_keys")
+}
+
+model ReservationApiKeyPermission {
+  apiKeyId   String
+  permission ReservationApiPermission
+
+  apiKey ReservationApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  @@id([apiKeyId, permission])
+  @@map("reservation_api_key_permissions")
+}
+
+model ReservationApiUsageSetting {
+  id              Int      @id @default(1)
+  monthlyLimit    BigInt?
+  revision        Int      @default(1)
+  updatedAt       DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+  updatedByUserId String?
+
+  updatedBy user? @relation("ReservationApiUsageSettingUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@map("reservation_api_usage_settings")
+}
+
+model ReservationApiMonthlyUsage {
+  periodStart DateTime @id @db.Date
+  requestCount BigInt  @default(0)
+  updatedAt   DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+
+  @@map("reservation_api_monthly_usage")
 }
