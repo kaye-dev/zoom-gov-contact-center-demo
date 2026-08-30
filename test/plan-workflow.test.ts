@@ -200,6 +200,58 @@ test("skill metadataは明示呼び出しを維持しUI説明の長さとprompt�
   }
 });
 
+test("skill別モデル推奨は通常既定と手動切替を定義し固定routingを追加しない", async () => {
+  const [config, workflow, ...skillFiles] = await Promise.all([
+    read(".codex/config.toml"),
+    read("docs/development/codex-development-workflow.md"),
+    ...allSkillNames.flatMap((name) => [
+      read(`.agents/skills/${name}/SKILL.md`),
+      read(`.agents/skills/${name}/agents/openai.yaml`),
+    ]),
+  ]);
+
+  const firstTableOffset = config.search(/^\s*\[/m);
+  assert.notEqual(firstTableOffset, -1);
+  const topLevelConfig = config.slice(0, firstTableOffset);
+  assert.match(topLevelConfig, /^model = "gpt-5\.6-terra"$/m);
+  assert.match(topLevelConfig, /^model_reasoning_effort = "medium"$/m);
+  assert.equal(config.match(/^model\s*=/gm)?.length, 1);
+  assert.equal(config.match(/^model_reasoning_effort\s*=/gm)?.length, 1);
+  assert.match(config, /^\[mcp_servers\."openaiDeveloperDocs"\]$/m);
+
+  for (const row of [
+    "| `$plan` | `gpt-5.6-sol` | `high` |",
+    "| `$plan-critic` | `gpt-5.6-terra` | `high` |",
+    "| `$implement` | `gpt-5.6-sol` | `high` |",
+    "| `$review` | `gpt-5.6-sol` | `high` |",
+    "| `$git-commit-push-pr` | `gpt-5.6-luna` | `medium` |",
+    "| `$workflow-retrospective` | `gpt-5.6-terra` | `high` |",
+  ]) {
+    assert.ok(workflow.includes(row), `workflow omitted model recommendation: ${row}`);
+  }
+  assert.match(workflow, /composerで次のモデルとreasoningを手動選択する/);
+  assert.match(workflow, /`\$plan-critic`と`\$review`の履歴なしsubagent/);
+  assert.match(workflow, /spawn時のmodelまたはreasoning overrideを渡さない/);
+  assert.match(workflow, /親taskで選択したmodelとreasoningを継承する/);
+  assert.match(workflow, /`xhigh`、`max`、`ultra`は通常既定にもskill別推奨にも使わない/);
+  assert.match(workflow, /品質不足が確認された場合だけ/);
+  assert.match(workflow, /project-local `profiles`はこの手動切替の適用対象外/);
+
+  const modelSelection = workflow.match(/^## モデル選択\n[\s\S]*?(?=^## )/m)?.[0];
+  assert.ok(modelSelection, "workflow is missing the model selection section");
+  assert.doesNotMatch(modelSelection, /モデル.{0,20}自動(?:選択|切替)|自動routingを(?:行う|使う)/u);
+  assert.doesNotMatch(modelSelection, /週次換算率|削減率/u);
+
+  assert.doesNotMatch(config, /^\s*\[agents(?:\.|\])/m);
+  assert.doesNotMatch(config, /^\s*\[profiles(?:\.|\])/m);
+  assert.doesNotMatch(config, /^\s*agents\.default_subagent_/m);
+  assert.doesNotMatch(config, /^\s*(?:agents|profiles)\s*=/m);
+  await assert.rejects(access(path.join(root, ".codex/agents")), { code: "ENOENT" });
+  for (const skillFile of skillFiles) {
+    assert.doesNotMatch(skillFile, /gpt-5\.|^\s*(?:model|model_reasoning_effort|reasoning_effort)\s*[:=]/m);
+  }
+});
+
 test("明示的な6 skill構成を保ちlifecycle・固定model・旧agentを復活させない", async () => {
   const removed = [
     ".agents/skills/implementation-planner/SKILL.md",
