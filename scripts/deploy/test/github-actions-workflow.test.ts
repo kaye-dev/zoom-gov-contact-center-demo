@@ -173,3 +173,13 @@ test("only strictly validated non-secret phase results become job outputs", () =
     1,
   );
 });
+
+test("canonical smoke still runs when the optional migration job is skipped", () => {
+  const smoke = jobBlock("canonical_smoke");
+
+  assert.match(
+    smoke,
+    /if: >-\n\s+\$\{\{\n\s+always\(\) &&\n\s+needs\.validate_and_plan\.result == 'success' &&\n\s+needs\.production_deploy\.result == 'success'\n\s+\}\}/u,
+  );
+  assert.doesNotMatch(smoke, /needs\.production_migration/u);
+});

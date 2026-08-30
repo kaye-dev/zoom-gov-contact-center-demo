@@ -413,6 +413,12 @@ jobs:
     needs:
       - validate_and_plan
       - production_deploy
+    if: >-
+      ${{
+        always() &&
+        needs.validate_and_plan.result == 'success' &&
+        needs.production_deploy.result == 'success'
+      }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: production-deploy
