@@ -93,11 +93,16 @@ runnerはDocker内の固定Node / Vercel CLIを使い、Parameter StoreとNeon A
 
 project ID、connection string、token、admin credential、plan確認文字列、deploy承認は入力しません。migrationがup-to-dateなら、品質検査、Vercel環境変数同期、direct Production deploy、canonical smokeまで無人で進みます。pending migrationがある場合だけplanを表示し、適用前に1回`[y/N]`で承認を求めます。拒否した場合はDB、Vercel環境変数、Productionを変更せず停止します。
 
-次の両方が表示された時点でdeployとsmokeは成功です。
+canonical smokeの成功後、最後に次のbannerが表示された時点でdeployとsmokeは成功です。
 
 ```text
-Canonical smoke passed: <deployment ID>
-Deployment completed: <deployment ID> (<commit SHA>)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✓ PRODUCTION DEPLOYMENT SUCCEEDED
+  Productionデプロイに成功しました。
+  Canonical URL : <canonical origin>
+  Deployment ID: <deployment ID>
+  Git commit    : <commit SHA>
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
 Neon APIから動的URIを取得できない、対象が一致しない、migrationまたはcanonical smokeが失敗した場合はメンテナンスを解除しません。対象を広げたり古いconnection stringへ戻したり、新しいdeployを重ねたりせず、失敗phaseとNeon / Vercelの実状態を確認します。

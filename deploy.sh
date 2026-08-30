@@ -26,10 +26,47 @@ DEPLOY_AWS_PROFILE=""
 DEPLOY_AWS_ACCOUNT_ID=""
 DEPLOY_EXPECTED_AWS_ACCOUNT_ID=""
 DEPLOY_ENV_WAS_ABSENT=0
+DEPLOY_LOG_STYLE="plain"
 
 die() {
   echo "$*" >&2
   exit 1
+}
+
+is_deploy_color_terminal() {
+  [[ -t 1 && -t 2 ]]
+}
+
+resolve_deploy_log_style() {
+  if is_deploy_color_terminal && [[ -z "${NO_COLOR+x}" && "${TERM:-}" != "dumb" ]]; then
+    printf 'ansi\n'
+  else
+    printf 'plain\n'
+  fi
+}
+
+log_wrapper_step() {
+  if [[ "${DEPLOY_LOG_STYLE}" == "ansi" ]]; then
+    printf '\033[1;36m▶ %s\033[0m\n' "$*"
+  else
+    printf '▶ %s\n' "$*"
+  fi
+}
+
+log_wrapper_success() {
+  if [[ "${DEPLOY_LOG_STYLE}" == "ansi" ]]; then
+    printf '\033[1;32m✓ %s\033[0m\n' "$*"
+  else
+    printf '✓ %s\n' "$*"
+  fi
+}
+
+log_wrapper_warning() {
+  if [[ "${DEPLOY_LOG_STYLE}" == "ansi" ]]; then
+    printf '\033[1;33m⚠ %s\033[0m\n' "$*" >&2
+  else
+    printf '⚠ %s\n' "$*" >&2
+  fi
 }
 
 safe_remove_temporary_directory() {
@@ -300,16 +337,16 @@ maybe_login_aws_sso() {
   is_expired_aws_sso_error "${authentication_error}" || return 1
   aws_profile_uses_sso || return 1
 
-  echo "AWS profile '${DEPLOY_AWS_PROFILE}' のSSOセッションが無効または期限切れです。" >&2
+  log_wrapper_warning "AWS profile '${DEPLOY_AWS_PROFILE}' のSSOセッションが無効または期限切れです。"
   printf 'AWS SSOへログインして処理を続行しますか? [y/N] ' >&2
   IFS= read -r answer || return 1
   [[ "${answer}" =~ ^([yY]|[yY][eE][sS])$ ]] || return 1
 
-  echo "AWS SSO device authorizationを開始します。表示されるURLとcodeで認証してください。" >&2
+  log_wrapper_step "AWS SSO device authorizationを開始します。表示されるURLとcodeで認証してください。" >&2
   if ! run_aws_sso_login; then
     die "AWS SSO login failed for profile '${DEPLOY_AWS_PROFILE}'. The current operation was stopped."
   fi
-  echo "AWS SSO login succeeded. Continuing the original command." >&2
+  log_wrapper_success "AWS SSO login succeeded. Continuing the original command." >&2
 }
 
 read_aws_account_id() {
@@ -478,6 +515,7 @@ run_deploy_phase() {
     --env "DEPLOY_AWS_ACCOUNT_ID=${DEPLOY_AWS_ACCOUNT_ID}"
     --env "DEPLOY_AWS_PROFILE=${DEPLOY_AWS_PROFILE}"
     --env "DEPLOY_BOOTSTRAP_NPM_CI=1"
+    --env "DEPLOY_LOG_STYLE=${DEPLOY_LOG_STYLE}"
     --env "DEPLOY_OUTPUT_PATH=/deploy-output/result"
     --volume "${output_directory}:/deploy-output"
   )
@@ -495,7 +533,7 @@ run_deploy_phase() {
     "${container_arguments[@]}" \
     "${DEPLOY_RUNNER_IMAGE}" \
     sh -ceu "${DEPLOY_PRIVATE_OUTPUT_ENTRYPOINT}" sh \
-    node --import tsx scripts/deploy/main.ts
+    node --no-warnings --import tsx scripts/deploy/main.ts
   local status=$?
   set -e
   if [[ -f "${output_directory}/result" && ! -L "${output_directory}/result" ]]; then
@@ -607,11 +645,14 @@ parse_deploy_arguments() {
 main() {
   local requested_profile validate_directory migrate_directory release_directory smoke_directory validate_status
   requested_profile="$(parse_deploy_arguments "$@")"
+  DEPLOY_LOG_STYLE="$(resolve_deploy_log_style)"
   require_host_tools
   require_clean_worktree
   resolve_aws_profile "${requested_profile}"
   read_aws_account_id
+  log_wrapper_step "Immutable deploy runner imageを準備しています"
   build_deploy_runner_image
+  log_wrapper_step "AWS deployment settingsを確認しています"
   run_aws_preflight
   maybe_create_env_file
 

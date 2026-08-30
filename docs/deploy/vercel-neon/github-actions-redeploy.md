@@ -60,7 +60,7 @@ pending migrationがあるrunは`production-migration` Environmentの承認待�
 
 ## 完了判定
 
-`Verify the canonical Production deployment`まで成功し、logにcanonical smoke成功と対象commit / deployment IDの一致が表示された時点で完了です。`Deploy directly to Production`の成功だけでは受入完了としません。
+`Verify the canonical Production deployment`まで成功し、logの最後に`✓ PRODUCTION DEPLOYMENT SUCCEEDED`と対象canonical URL / commit / deployment IDが表示された時点で完了です。GitHub ActionsではANSI colorを出しませんが、記号と文言はlocal実行と同じです。`Deploy directly to Production`の成功だけでは受入完了としません。
 
 ブラウザでも必要に応じて次を確認します。
 
