@@ -78,6 +78,15 @@ import {
   SETTINGS_ERROR_CODES,
   parseLanguageSettings,
 } from "@/lib/site-settings";
+import {
+  RESERVATION_ERROR_CODES,
+  isReservationMonthInRange,
+  isReservationServiceKey,
+} from "@/lib/reservations";
+import {
+  getReservationCalendarSnapshot,
+  regenerateDemoReservations,
+} from "@/lib/server/reservations";
 
 export const runtime = "nodejs";
 
@@ -1038,6 +1047,66 @@ app.put("/admin/maintenance-settings", async (c) => {
   }
 });
 
+app.get("/admin/reservations", async (c) => {
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "reservations",
+    "VIEW",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
+  }
+
+  const now = new Date();
+  const parsed = parseReservationCalendarRequest(new URL(c.req.raw.url), now);
+  if (!parsed) {
+    return c.json({ error: RESERVATION_ERROR_CODES.invalidRequest }, 400);
+  }
+
+  try {
+    const calendar = await getReservationCalendarSnapshot(prisma, {
+      ...parsed,
+      now,
+    });
+    return c.json({ calendar });
+  } catch {
+    console.error("Failed to load reservation availability.");
+    return c.json({ error: RESERVATION_ERROR_CODES.saveFailed }, 500);
+  }
+});
+
+app.post("/admin/reservations/demo-fill", async (c) => {
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "reservations",
+    "UPDATE",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
+  }
+
+  const now = new Date();
+  const body = await readJsonBody(c.req.raw);
+  if (!isReservationDemoFillPayload(body) || !isReservationMonthInRange(body.month, now)) {
+    return c.json({ error: RESERVATION_ERROR_CODES.invalidRequest }, 400);
+  }
+
+  try {
+    return c.json(await regenerateDemoReservations(prisma, { month: body.month, now }));
+  } catch {
+    console.error("Failed to generate demo reservations.");
+    return c.json({ error: RESERVATION_ERROR_CODES.saveFailed }, 500);
+  }
+});
+
 app.get("/admin/roles", async (c) => {
   const auth = c.get("auth");
   const prisma = c.get("prisma");
@@ -1417,6 +1486,42 @@ function isDemoRecordPayload(value: unknown): value is { message: string } {
     value !== null &&
     "message" in value &&
     typeof value.message === "string"
+  );
+}
+
+function parseReservationCalendarRequest(url: URL, now: Date) {
+  const keys = [...url.searchParams.keys()];
+  if (
+    keys.length !== 2 ||
+    keys.some((key) => key !== "service" && key !== "month") ||
+    url.searchParams.getAll("service").length !== 1 ||
+    url.searchParams.getAll("month").length !== 1
+  ) {
+    return null;
+  }
+  const service = url.searchParams.get("service");
+  const month = url.searchParams.get("month");
+  if (
+    !service ||
+    !month ||
+    !isReservationServiceKey(service) ||
+    !isReservationMonthInRange(month, now)
+  ) {
+    return null;
+  }
+  return { service, month };
+}
+
+function isReservationDemoFillPayload(
+  value: unknown,
+): value is { month: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === 1 &&
+    "month" in value &&
+    typeof value.month === "string"
   );
 }
 

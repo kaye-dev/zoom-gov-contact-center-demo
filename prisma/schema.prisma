@@ -277,3 +277,16 @@ model AdminAccessMutationState {
 
   @@map("admin_access_mutation_state")
 }
+
+model ReservationBooking {
+  id              String   @id @default(cuid())
+  serviceKey      String
+  reservationDate DateTime @db.Date
+  startMinute     Int
+  isDemo          Boolean  @default(false)
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([serviceKey, reservationDate, startMinute])
+  @@index([reservationDate, isDemo])
+  @@map("reservation_bookings")
+}

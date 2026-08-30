@@ -75,6 +75,12 @@ export const ADMIN_RESOURCE_CATALOG = [
     supportedActions: ["VIEW", "UPDATE"],
     requiresAdminUser: false,
   },
+  {
+    key: "reservations",
+    displayPaths: ["/admin/reservations"],
+    supportedActions: ["VIEW", "UPDATE"],
+    requiresAdminUser: false,
+  },
 ] as const satisfies readonly AdminResourceDefinition[];
 
 export function getAdminResourceDefinition(resourceKey: string) {

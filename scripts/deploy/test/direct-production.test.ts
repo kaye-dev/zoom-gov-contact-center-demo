@@ -241,6 +241,10 @@ test("reviewed migration manifest exactly classifies the current SHA-verified ch
         name: "20260829231500_add_developer_api_settings",
         classification: "expand-compatible",
       },
+      {
+        name: "20260830120000_add_reservation_bookings",
+        classification: "expand-compatible",
+      },
     ],
   );
 });

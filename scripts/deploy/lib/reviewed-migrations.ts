@@ -68,6 +68,19 @@ const EXACT_MIGRATION_CHAIN = [
 
 const EXACT_APPLIED_PREFIX_LENGTH = 5;
 
+const EXACT_POST_REVIEWED_CHAIN = [
+  {
+    name: "20260829231500_add_developer_api_settings",
+    sha256: "73fdf3fb7c5d101b9a0abce16c7ae29b825e1e1560d68dad02f0e530e0ac430a",
+    classification: "expand-compatible",
+  },
+  {
+    name: "20260830120000_add_reservation_bookings",
+    sha256: "396d117b293417b8b473be2f9f9f13a8fa31bc0bea72d44067d2e41243bee435",
+    classification: "expand-compatible",
+  },
+] as const satisfies readonly ExactBatchMigration[];
+
 export type ReviewedMigrationBatchPlan = {
   schemaVersion: 1;
   batchId: typeof ADMIN_ACCESS_REVIEWED_BATCH_ID;
@@ -254,12 +267,20 @@ function assertExactLocalMigrationChain(
     }
   }
 
-  for (const migration of migrations.slice(EXACT_MIGRATION_CHAIN.length)) {
+  const postReviewedMigrations = migrations.slice(EXACT_MIGRATION_CHAIN.length);
+  if (postReviewedMigrations.length !== EXACT_POST_REVIEWED_CHAIN.length) {
+    throw new Error(
+      `The local chain does not match the exact reviewed post-'${ADMIN_ACCESS_REVIEWED_BATCH_ID}' chain.`,
+    );
+  }
+
+  for (const [index, migration] of postReviewedMigrations.entries()) {
+    const expected = EXACT_POST_REVIEWED_CHAIN[index];
     if (
-      migration.name !== "20260829231500_add_developer_api_settings" ||
-      migration.hash !==
-        "73fdf3fb7c5d101b9a0abce16c7ae29b825e1e1560d68dad02f0e530e0ac430a" ||
-      migration.classification !== "expand-compatible"
+      expected === undefined ||
+      migration.name !== expected.name ||
+      migration.hash !== expected.sha256 ||
+      migration.classification !== expected.classification
     ) {
       throw new Error(
         `Local migration '${migration.name}' does not match the exact reviewed post-'${ADMIN_ACCESS_REVIEWED_BATCH_ID}' chain.`,

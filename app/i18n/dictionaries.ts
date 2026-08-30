@@ -15,6 +15,10 @@ import type {
   AdminAccessSystemRole,
   AdminResourceKey,
 } from '@/lib/admin-access/types';
+import type {
+  ReservationAvailabilityStatus,
+  ReservationServiceKey,
+} from '@/lib/reservations';
 
 export const locales = SITE_LOCALES;
 
@@ -275,6 +279,7 @@ export type Dictionary = {
     languageSettings: string;
     maintenanceSettings: string;
     developerApi: string;
+    reservations: string;
     settingsMenu: string;
     userListTitle: string;
     searchPlaceholder: string;
@@ -573,7 +578,97 @@ export type Dictionary = {
       propagationNote: string;
       updatedAtLabel: string;
     };
+    reservationManagement: ReservationManagementDictionary;
   };
+};
+
+export type ReservationManagementDictionary = {
+  title: string;
+  description: string;
+  demoFill: string;
+  serviceLabel: string;
+  previousMonth: string;
+  currentMonth: string;
+  nextMonth: string;
+  methods: { DATE: string; DATETIME: string };
+  facilityMethod: string;
+  services: Record<ReservationServiceKey, { name: string; description: string }>;
+  weekdays: readonly [string, string, string, string, string, string, string];
+  statuses: Record<ReservationAvailabilityStatus, string>;
+  legend: string;
+  availableTimes: string;
+  availableDate: string;
+  noSlots: string;
+  dateSlot: string;
+  bookedCount: string;
+  openSlotCount: string;
+  dateCount: string;
+  readOnlyNotice: string;
+  generated: string;
+  loadingError: string;
+  generationError: string;
+};
+
+const reservationManagementCopy: Record<Locale, ReservationManagementDictionary> = {
+  ja: {
+    title: '予約システム',
+    description: '自治体業務ごとの受付日と予約状況をカレンダーで確認します。',
+    demoFill: '表示月のデモ予約を生成',
+    serviceLabel: '予約業務', previousMonth: '前の月', currentMonth: '今月', nextMonth: '次の月',
+    methods: { DATE: '日付予約', DATETIME: '日時予約' }, facilityMethod: '施設利用枠',
+    services: {
+      'my-number-card': { name: 'マイナンバーカード交付・更新', description: '平日の9:00から17:00まで、30分単位で来庁日時を予約できます。' },
+      'legal-consultation': { name: '無料法律相談', description: '毎週水曜日の午後に、60分単位で弁護士相談枠を予約できます。' },
+      'bulky-waste': { name: '粗大ごみ収集', description: '月曜日から土曜日まで、収集日を日単位で予約できます。' },
+      'civic-facility': { name: '公民館・市民会館・会議室利用', description: '午前・午後・夜間の施設利用枠から予約できます。' },
+    },
+    weekdays: ['日', '月', '火', '水', '木', '金', '土'],
+    statuses: { AVAILABLE: '空きあり', LIMITED: '残りわずか', FULL: '満員', UNAVAILABLE: '受付なし' },
+    legend: '予約状況の凡例', availableTimes: '予約可能な時間を選択できます。', availableDate: 'この日の収集予約状況です。', noSlots: 'この日は予約を受け付けていません。', dateSlot: '収集日',
+    bookedCount: '予約 {booked}/{capacity}件・残り {remaining}件', openSlotCount: '空き{count}枠', dateCount: '{booked}/{capacity}件',
+    readOnlyNotice: 'デモ予約の生成には予約システムの編集権限が必要です。', generated: '表示月の4業務にデモ予約を生成しました。', loadingError: '予約状況を読み込めませんでした。もう一度お試しください。', generationError: 'デモ予約を生成できませんでした。もう一度お試しください。',
+  },
+  en: {
+    title: 'Reservation system', description: 'View appointment dates and availability for municipal services on a calendar.', demoFill: 'Generate demo bookings for this month', serviceLabel: 'Service', previousMonth: 'Previous month', currentMonth: 'Current month', nextMonth: 'Next month',
+    methods: { DATE: 'Date booking', DATETIME: 'Date and time booking' }, facilityMethod: 'Facility time slots',
+    services: {
+      'my-number-card': { name: 'My Number card issuance and renewal', description: 'Book a 30-minute visit between 9:00 and 17:00 on weekdays.' },
+      'legal-consultation': { name: 'Free legal consultation', description: 'Book a 60-minute consultation between 13:00 and 16:00 on Wednesdays.' },
+      'bulky-waste': { name: 'Bulky waste collection', description: 'Book a collection date from Monday through Saturday.' },
+      'civic-facility': { name: 'Civic halls and meeting rooms', description: 'Book a morning, afternoon, or evening facility slot.' },
+    },
+    weekdays: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], statuses: { AVAILABLE: 'Available', LIMITED: 'Almost full', FULL: 'Full', UNAVAILABLE: 'Closed' }, legend: 'Availability legend', availableTimes: 'Available times for this date.', availableDate: 'Collection availability for this date.', noSlots: 'Bookings are not accepted on this date.', dateSlot: 'Collection date', bookedCount: '{booked}/{capacity} booked · {remaining} remaining', openSlotCount: '{count} slots open', dateCount: '{booked}/{capacity}', readOnlyNotice: 'Edit permission for the reservation system is required to generate demo bookings.', generated: 'Demo bookings were generated for all four services in this month.', loadingError: 'Could not load availability. Please try again.', generationError: 'Could not generate demo bookings. Please try again.',
+  },
+  'zh-Hans': {
+    title: '预约系统', description: '通过日历查看各项市政服务的受理日期和预约情况。', demoFill: '生成本月演示预约', serviceLabel: '预约业务', previousMonth: '上个月', currentMonth: '本月', nextMonth: '下个月', methods: { DATE: '按日期预约', DATETIME: '按日期和时间预约' }, facilityMethod: '设施使用时段',
+    services: {
+      'my-number-card': { name: '个人编号卡领取与更新', description: '工作日9:00至17:00可按30分钟预约到访。' },
+      'legal-consultation': { name: '免费法律咨询', description: '每周三13:00至16:00可按60分钟预约咨询。' },
+      'bulky-waste': { name: '大件垃圾收集', description: '周一至周六可按日期预约收集。' },
+      'civic-facility': { name: '公民馆、市民会馆和会议室', description: '可预约上午、下午或晚间设施时段。' },
+    },
+    weekdays: ['日', '一', '二', '三', '四', '五', '六'], statuses: { AVAILABLE: '有空位', LIMITED: '余位不多', FULL: '已满', UNAVAILABLE: '不受理' }, legend: '预约状态图例', availableTimes: '请选择该日期可预约的时间。', availableDate: '该日期的收集预约情况。', noSlots: '该日期不受理预约。', dateSlot: '收集日期', bookedCount: '已预约 {booked}/{capacity}件・剩余 {remaining}件', openSlotCount: '空余{count}个时段', dateCount: '{booked}/{capacity}件', readOnlyNotice: '生成演示预约需要预约系统编辑权限。', generated: '已为本月全部4项业务生成演示预约。', loadingError: '无法加载预约情况，请重试。', generationError: '无法生成演示预约，请重试。',
+  },
+  'zh-Hant': {
+    title: '預約系統', description: '透過日曆查看各項市政服務的受理日期及預約狀況。', demoFill: '產生本月示範預約', serviceLabel: '預約業務', previousMonth: '上個月', currentMonth: '本月', nextMonth: '下個月', methods: { DATE: '按日期預約', DATETIME: '按日期及時間預約' }, facilityMethod: '設施使用時段',
+    services: {
+      'my-number-card': { name: '個人編號卡領取及更新', description: '平日9:00至17:00可按30分鐘預約到訪。' },
+      'legal-consultation': { name: '免費法律諮詢', description: '每週三13:00至16:00可按60分鐘預約諮詢。' },
+      'bulky-waste': { name: '大型垃圾收集', description: '週一至週六可按日期預約收集。' },
+      'civic-facility': { name: '公民館、市民會館及會議室', description: '可預約上午、下午或晚間設施時段。' },
+    },
+    weekdays: ['日', '一', '二', '三', '四', '五', '六'], statuses: { AVAILABLE: '尚有空位', LIMITED: '名額將滿', FULL: '已額滿', UNAVAILABLE: '不受理' }, legend: '預約狀態圖例', availableTimes: '請選擇該日期可預約的時間。', availableDate: '該日期的收集預約狀況。', noSlots: '該日期不受理預約。', dateSlot: '收集日期', bookedCount: '已預約 {booked}/{capacity}件・剩餘 {remaining}件', openSlotCount: '尚有{count}個時段', dateCount: '{booked}/{capacity}件', readOnlyNotice: '產生示範預約需要預約系統編輯權限。', generated: '已為本月全部4項業務產生示範預約。', loadingError: '無法載入預約狀況，請重試。', generationError: '無法產生示範預約，請重試。',
+  },
+  ko: {
+    title: '예약 시스템', description: '달력에서 지방자치단체 업무별 접수일과 예약 현황을 확인합니다.', demoFill: '표시 월의 데모 예약 생성', serviceLabel: '예약 업무', previousMonth: '이전 달', currentMonth: '이번 달', nextMonth: '다음 달', methods: { DATE: '날짜 예약', DATETIME: '날짜 및 시간 예약' }, facilityMethod: '시설 이용 시간',
+    services: {
+      'my-number-card': { name: '마이넘버 카드 교부 및 갱신', description: '평일 9:00부터 17:00까지 30분 단위로 방문 시간을 예약할 수 있습니다.' },
+      'legal-consultation': { name: '무료 법률 상담', description: '수요일 13:00부터 16:00까지 60분 단위로 상담을 예약할 수 있습니다.' },
+      'bulky-waste': { name: '대형 폐기물 수거', description: '월요일부터 토요일까지 수거일을 예약할 수 있습니다.' },
+      'civic-facility': { name: '공민관·시민회관·회의실 이용', description: '오전, 오후 또는 야간 시설 이용 시간을 예약할 수 있습니다.' },
+    },
+    weekdays: ['일', '월', '화', '수', '목', '금', '토'], statuses: { AVAILABLE: '예약 가능', LIMITED: '잔여 소수', FULL: '마감', UNAVAILABLE: '접수 없음' }, legend: '예약 현황 범례', availableTimes: '이 날짜에 예약 가능한 시간을 선택할 수 있습니다.', availableDate: '이 날짜의 수거 예약 현황입니다.', noSlots: '이 날짜에는 예약을 받지 않습니다.', dateSlot: '수거일', bookedCount: '예약 {booked}/{capacity}건・잔여 {remaining}건', openSlotCount: '빈 시간 {count}개', dateCount: '{booked}/{capacity}건', readOnlyNotice: '데모 예약을 생성하려면 예약 시스템 편집 권한이 필요합니다.', generated: '표시 월의 4개 업무에 데모 예약을 생성했습니다.', loadingError: '예약 현황을 불러올 수 없습니다. 다시 시도해 주세요.', generationError: '데모 예약을 생성할 수 없습니다. 다시 시도해 주세요.',
+  },
 };
 
 export const dictionaries: Record<Locale, Dictionary> = {
@@ -940,7 +1035,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       languageSettings: '言語管理',
       maintenanceSettings: 'メンテナンス管理',
       developerApi: 'Developer API',
+      reservations: '予約システム',
       settingsMenu: '設定',
+      reservationManagement: reservationManagementCopy.ja,
       userListTitle: 'ユーザー管理',
       searchPlaceholder: '氏名またはメールアドレスで検索',
       search: '検索',
@@ -1066,6 +1163,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'language-settings': '言語設定',
           'maintenance-settings': 'メンテナンス設定',
           'developer-api': 'Developer API',
+          reservations: '予約システム',
         },
         resourceDescriptions: {
           users: '管理ユーザーの一覧・詳細、作成、権限変更、停止、再開、削除、パスワード再設定、アクセス概要を扱います。',
@@ -1077,6 +1175,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'language-settings': '公開サイトの利用言語と表示順を扱います。',
           'maintenance-settings': '環境別モードとスケジュールを扱います。',
           'developer-api': '外部連携用のAPIとWebhook認証情報を管理します。',
+          reservations: '自治体業務の予約状況を閲覧し、デモ予約を生成します。',
         },
         actionLabels: { VIEW: '表示', CREATE: '追加', UPDATE: '編集', DELETE: '削除' },
       },
@@ -1729,7 +1828,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       languageSettings: 'Languages',
       maintenanceSettings: 'Maintenance',
       developerApi: 'Developer API',
+      reservations: 'Reservation system',
       settingsMenu: 'Settings',
+      reservationManagement: reservationManagementCopy.en,
       userListTitle: 'User Management',
       searchPlaceholder: 'Search by name or email',
       search: 'Search',
@@ -1855,6 +1956,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'language-settings': 'Language settings',
           'maintenance-settings': 'Maintenance settings',
           'developer-api': 'Developer API',
+          reservations: 'Reservation system',
         },
         resourceDescriptions: {
           users: 'Lists and manages admin users, passwords, status, and access summaries.',
@@ -1866,6 +1968,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'language-settings': 'Manages public-site languages and order.',
           'maintenance-settings': 'Manages environment modes and schedules.',
           'developer-api': 'Manages API and webhook credentials for integrations.',
+          reservations: 'Views municipal availability and generates demo bookings.',
         },
         actionLabels: { VIEW: 'View', CREATE: 'Create', UPDATE: 'Edit', DELETE: 'Delete' },
       },
@@ -2503,7 +2606,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       languageSettings: '语言管理',
       maintenanceSettings: '维护管理',
       developerApi: 'Developer API',
+      reservations: '预约系统',
       settingsMenu: '设置',
+      reservationManagement: reservationManagementCopy['zh-Hans'],
       userListTitle: '用户管理',
       searchPlaceholder: '按姓名或电子邮件搜索',
       search: '搜索',
@@ -2606,6 +2711,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'chat-settings': 'AI聊天设置', 'language-settings': '语言设置',
           'maintenance-settings': '维护设置',
           'developer-api': 'Developer API',
+          reservations: '预约系统',
         },
         resourceDescriptions: {
           users: '管理用户列表、详情、创建、权限、状态、密码和访问摘要。',
@@ -2617,6 +2723,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'language-settings': '管理公共网站语言和显示顺序。',
           'maintenance-settings': '管理各环境的模式和计划。',
           'developer-api': '管理外部集成使用的 API 和 Webhook 凭据。',
+          reservations: '查看市政服务预约情况并生成演示预约。',
         },
         actionLabels: { VIEW: '查看', CREATE: '添加', UPDATE: '编辑', DELETE: '删除' },
       },
@@ -3229,7 +3336,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       languageSettings: '語言管理',
       maintenanceSettings: '維護管理',
       developerApi: 'Developer API',
+      reservations: '預約系統',
       settingsMenu: '設定',
+      reservationManagement: reservationManagementCopy['zh-Hant'],
       userListTitle: '使用者管理',
       searchPlaceholder: '依姓名或電子郵件搜尋',
       search: '搜尋',
@@ -3332,6 +3441,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'chat-settings': 'AI聊天設定', 'language-settings': '語言設定',
           'maintenance-settings': '維護設定',
           'developer-api': 'Developer API',
+          reservations: '預約系統',
         },
         resourceDescriptions: {
           users: '管理使用者清單、詳細資料、建立、權限、狀態、密碼及存取摘要。',
@@ -3343,6 +3453,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'language-settings': '管理公開網站語言及顯示順序。',
           'maintenance-settings': '管理各環境的模式及排程。',
           'developer-api': '管理外部整合使用的 API 與 Webhook 認證資訊。',
+          reservations: '查看市政服務預約狀況並產生示範預約。',
         },
         actionLabels: { VIEW: '檢視', CREATE: '新增', UPDATE: '編輯', DELETE: '刪除' },
       },
@@ -3957,7 +4068,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       languageSettings: '언어 관리',
       maintenanceSettings: '점검 관리',
       developerApi: 'Developer API',
+      reservations: '예약 시스템',
       settingsMenu: '설정',
+      reservationManagement: reservationManagementCopy.ko,
       userListTitle: '사용자 관리',
       searchPlaceholder: '이름 또는 이메일로 검색',
       search: '검색',
@@ -4062,6 +4175,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'chat-settings': 'AI 채팅 설정', 'language-settings': '언어 설정',
           'maintenance-settings': '점검 설정',
           'developer-api': 'Developer API',
+          reservations: '예약 시스템',
         },
         resourceDescriptions: {
           users: '관리 사용자 목록, 상세, 생성, 권한, 상태, 비밀번호 및 접근 요약을 관리합니다.',
@@ -4073,6 +4187,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'language-settings': '공개 사이트 언어와 표시 순서를 관리합니다.',
           'maintenance-settings': '환경별 모드와 일정을 관리합니다.',
           'developer-api': '외부 연동용 API 및 Webhook 인증 정보를 관리합니다.',
+          reservations: '지방자치단체 업무의 예약 현황을 보고 데모 예약을 생성합니다.',
         },
         actionLabels: { VIEW: '보기', CREATE: '추가', UPDATE: '편집', DELETE: '삭제' },
       },

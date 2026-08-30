@@ -26,3 +26,17 @@ test("admin overlays remain above the sticky header stacking context", () => {
   assert.match(userDirectory, /fixed z-\[70\]/u);
   assert.match(modal, /fixed inset-0 z-\[80\]/u);
 });
+
+test("reservation system is a direct responsive navigation item", () => {
+  const shell = source("../app/admin/AdminShell.tsx");
+  const layout = source("../app/admin/layout.tsx");
+  const settingsMenu = shell.indexOf('key: "settings"');
+  const reservationLink = shell.indexOf('href="/admin/reservations"');
+  const signOut = shell.indexOf("onClick={signOut}");
+
+  assert.match(shell, /flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto/u);
+  assert.ok(settingsMenu < reservationLink);
+  assert.ok(reservationLink < signOut);
+  assert.match(shell, /pathname === "\/admin\/reservations" \? "page"/u);
+  assert.match(layout, /visibleItems\.push\("reservations"\)/u);
+});
