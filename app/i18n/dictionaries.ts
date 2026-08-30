@@ -9,6 +9,7 @@ import {
   type SiteLocale,
 } from '@/lib/site-settings';
 import type { AdminUserErrorCode } from '@/lib/admin-users';
+import type { DeveloperApiErrorCode } from '@/lib/developer-api-settings';
 import type {
   AdminAccessAction,
   AdminAccessSystemRole,
@@ -273,6 +274,7 @@ export type Dictionary = {
     chatSettings: string;
     languageSettings: string;
     maintenanceSettings: string;
+    developerApi: string;
     settingsMenu: string;
     userListTitle: string;
     searchPlaceholder: string;
@@ -466,6 +468,19 @@ export type Dictionary = {
       aiPhoneDescription: string;
       aiPhoneLabel: string;
       hidden: string;
+    };
+    developerApiManagement: {
+      title: string;
+      description: string;
+      oauthTitle: string;
+      oauthDescription: string;
+      webhookTitle: string;
+      webhookDescription: string;
+      accountId: string;
+      clientId: string;
+      clientSecret: string;
+      secretToken: string;
+      errors: Record<DeveloperApiErrorCode, string>;
     };
     chatManagement: {
       title: string;
@@ -924,6 +939,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       chatSettings: 'AIチャット管理',
       languageSettings: '言語管理',
       maintenanceSettings: 'メンテナンス管理',
+      developerApi: 'Developer API',
       settingsMenu: '設定',
       userListTitle: 'ユーザー管理',
       searchPlaceholder: '氏名またはメールアドレスで検索',
@@ -1049,6 +1065,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'chat-settings': 'AIチャット設定',
           'language-settings': '言語設定',
           'maintenance-settings': 'メンテナンス設定',
+          'developer-api': 'Developer API',
         },
         resourceDescriptions: {
           users: '管理ユーザーの一覧・詳細、作成、権限変更、停止、再開、削除、パスワード再設定、アクセス概要を扱います。',
@@ -1059,6 +1076,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'chat-settings': 'Web Chatの動作モードと接続設定を扱います。',
           'language-settings': '公開サイトの利用言語と表示順を扱います。',
           'maintenance-settings': '環境別モードとスケジュールを扱います。',
+          'developer-api': '外部連携用のAPIとWebhook認証情報を管理します。',
         },
         actionLabels: { VIEW: '表示', CREATE: '追加', UPDATE: '編集', DELETE: '削除' },
       },
@@ -1201,6 +1219,29 @@ export const dictionaries: Record<Locale, Dictionary> = {
           '公開サイトで選択中の言語に応じて発信する電話番号を設定します。空欄の場合は未設定として保存されます。',
         aiPhoneLabel: 'AI電話番号（E.164）',
         hidden: '非表示中',
+      },
+      developerApiManagement: {
+        title: 'Developer API',
+        description: '外部連携に使用する認証情報とWebhookのSecret Tokenを設定します。',
+        oauthTitle: 'Server-To-Server OAuth',
+        oauthDescription: 'Zoom API接続に使用する認証情報を設定します。',
+        webhookTitle: 'Webhook only app',
+        webhookDescription: 'Webhookの検証に使用するSecret Tokenを設定します。',
+        accountId: 'Account ID',
+        clientId: 'Client ID',
+        clientSecret: 'Client Secret',
+        secretToken: 'Secret Token',
+        errors: {
+          DEVELOPER_API_INVALID_REQUEST: '入力内容を確認してください。',
+          DEVELOPER_API_INVALID_ACCOUNT_ID: 'Account IDは1〜255文字で入力してください。',
+          DEVELOPER_API_INVALID_CLIENT_ID: 'Client IDは1〜255文字で入力してください。',
+          DEVELOPER_API_OAUTH_SECRET_REQUIRED: 'Server-To-Server OAuthの初回保存時はClient Secretが必要です。',
+          DEVELOPER_API_WEBHOOK_SECRET_REQUIRED: 'Webhook only appの初回保存時はSecret Tokenが必要です。',
+          DEVELOPER_API_ENCRYPTION_UNAVAILABLE: '暗号化設定を利用できないため保存できません。',
+          DEVELOPER_API_SECRET_NOT_CONFIGURED: '表示できるSecretが設定されていません。',
+          DEVELOPER_API_SECRET_REVEAL_FAILED: 'Secretを表示できませんでした。',
+          DEVELOPER_API_SAVE_FAILED: 'Developer API設定を保存できませんでした。',
+        },
       },
       chatManagement: {
         title: 'AIチャット管理',
@@ -1687,6 +1728,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       chatSettings: 'AI Chat Management',
       languageSettings: 'Languages',
       maintenanceSettings: 'Maintenance',
+      developerApi: 'Developer API',
       settingsMenu: 'Settings',
       userListTitle: 'User Management',
       searchPlaceholder: 'Search by name or email',
@@ -1812,6 +1854,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'chat-settings': 'AI chat settings',
           'language-settings': 'Language settings',
           'maintenance-settings': 'Maintenance settings',
+          'developer-api': 'Developer API',
         },
         resourceDescriptions: {
           users: 'Lists and manages admin users, passwords, status, and access summaries.',
@@ -1822,6 +1865,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'chat-settings': 'Manages Web Chat mode and connection settings.',
           'language-settings': 'Manages public-site languages and order.',
           'maintenance-settings': 'Manages environment modes and schedules.',
+          'developer-api': 'Manages API and webhook credentials for integrations.',
         },
         actionLabels: { VIEW: 'View', CREATE: 'Create', UPDATE: 'Edit', DELETE: 'Delete' },
       },
@@ -1966,6 +2010,29 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'Set the phone number dialed for each selected site language. A blank value is saved as not configured.',
         aiPhoneLabel: 'AI phone number (E.164)',
         hidden: 'Hidden',
+      },
+      developerApiManagement: {
+        title: 'Developer API',
+        description: 'Configure credentials and the Webhook Secret Token used by external integrations.',
+        oauthTitle: 'Server-To-Server OAuth',
+        oauthDescription: 'Configure credentials used to connect to the Zoom API.',
+        webhookTitle: 'Webhook only app',
+        webhookDescription: 'Configure the Secret Token used to verify webhooks.',
+        accountId: 'Account ID',
+        clientId: 'Client ID',
+        clientSecret: 'Client Secret',
+        secretToken: 'Secret Token',
+        errors: {
+          DEVELOPER_API_INVALID_REQUEST: 'Review the entered values.',
+          DEVELOPER_API_INVALID_ACCOUNT_ID: 'Enter an Account ID from 1 to 255 characters.',
+          DEVELOPER_API_INVALID_CLIENT_ID: 'Enter a Client ID from 1 to 255 characters.',
+          DEVELOPER_API_OAUTH_SECRET_REQUIRED: 'Client Secret is required for the initial Server-To-Server OAuth save.',
+          DEVELOPER_API_WEBHOOK_SECRET_REQUIRED: 'Secret Token is required for the initial Webhook only app save.',
+          DEVELOPER_API_ENCRYPTION_UNAVAILABLE: 'Unable to save because encryption is unavailable.',
+          DEVELOPER_API_SECRET_NOT_CONFIGURED: 'No configured secret is available to reveal.',
+          DEVELOPER_API_SECRET_REVEAL_FAILED: 'Unable to reveal the secret.',
+          DEVELOPER_API_SAVE_FAILED: 'Unable to save Developer API settings.',
+        },
       },
       chatManagement: {
         title: 'AI Chat Management',
@@ -2435,6 +2502,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       chatSettings: 'AI聊天管理',
       languageSettings: '语言管理',
       maintenanceSettings: '维护管理',
+      developerApi: 'Developer API',
       settingsMenu: '设置',
       userListTitle: '用户管理',
       searchPlaceholder: '按姓名或电子邮件搜索',
@@ -2537,6 +2605,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'role-assignments': '角色成员', 'phone-settings': '电话设置',
           'chat-settings': 'AI聊天设置', 'language-settings': '语言设置',
           'maintenance-settings': '维护设置',
+          'developer-api': 'Developer API',
         },
         resourceDescriptions: {
           users: '管理用户列表、详情、创建、权限、状态、密码和访问摘要。',
@@ -2547,6 +2616,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'chat-settings': '管理Web Chat模式和连接设置。',
           'language-settings': '管理公共网站语言和显示顺序。',
           'maintenance-settings': '管理各环境的模式和计划。',
+          'developer-api': '管理外部集成使用的 API 和 Webhook 凭据。',
         },
         actionLabels: { VIEW: '查看', CREATE: '添加', UPDATE: '编辑', DELETE: '删除' },
       },
@@ -2674,6 +2744,26 @@ export const dictionaries: Record<Locale, Dictionary> = {
           '按公开网站当前选择的语言设置拨打号码。留空时保存为未设置。',
         aiPhoneLabel: 'AI电话号码（E.164）',
         hidden: '已隐藏',
+      },
+      developerApiManagement: {
+        title: 'Developer API',
+        description: '设置外部集成使用的凭据和 Webhook Secret Token。',
+        oauthTitle: 'Server-To-Server OAuth',
+        oauthDescription: '设置连接 Zoom API 时使用的凭据。',
+        webhookTitle: 'Webhook only app',
+        webhookDescription: '设置验证 Webhook 时使用的 Secret Token。',
+        accountId: 'Account ID', clientId: 'Client ID', clientSecret: 'Client Secret', secretToken: 'Secret Token',
+        errors: {
+          DEVELOPER_API_INVALID_REQUEST: '请检查输入内容。',
+          DEVELOPER_API_INVALID_ACCOUNT_ID: 'Account ID 请输入 1 至 255 个字符。',
+          DEVELOPER_API_INVALID_CLIENT_ID: 'Client ID 请输入 1 至 255 个字符。',
+          DEVELOPER_API_OAUTH_SECRET_REQUIRED: '首次保存 Server-To-Server OAuth 时需要 Client Secret。',
+          DEVELOPER_API_WEBHOOK_SECRET_REQUIRED: '首次保存 Webhook only app 时需要 Secret Token。',
+          DEVELOPER_API_ENCRYPTION_UNAVAILABLE: '加密设置不可用，无法保存。',
+          DEVELOPER_API_SECRET_NOT_CONFIGURED: '没有可显示的已设置 Secret。',
+          DEVELOPER_API_SECRET_REVEAL_FAILED: '无法显示 Secret。',
+          DEVELOPER_API_SAVE_FAILED: '无法保存 Developer API 设置。',
+        },
       },
       chatManagement: {
         title: 'AI聊天管理',
@@ -3138,6 +3228,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       chatSettings: 'AI聊天管理',
       languageSettings: '語言管理',
       maintenanceSettings: '維護管理',
+      developerApi: 'Developer API',
       settingsMenu: '設定',
       userListTitle: '使用者管理',
       searchPlaceholder: '依姓名或電子郵件搜尋',
@@ -3240,6 +3331,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'role-assignments': '角色成員', 'phone-settings': '電話設定',
           'chat-settings': 'AI聊天設定', 'language-settings': '語言設定',
           'maintenance-settings': '維護設定',
+          'developer-api': 'Developer API',
         },
         resourceDescriptions: {
           users: '管理使用者清單、詳細資料、建立、權限、狀態、密碼及存取摘要。',
@@ -3250,6 +3342,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'chat-settings': '管理 Web Chat 模式及連線設定。',
           'language-settings': '管理公開網站語言及顯示順序。',
           'maintenance-settings': '管理各環境的模式及排程。',
+          'developer-api': '管理外部整合使用的 API 與 Webhook 認證資訊。',
         },
         actionLabels: { VIEW: '檢視', CREATE: '新增', UPDATE: '編輯', DELETE: '刪除' },
       },
@@ -3378,6 +3471,26 @@ export const dictionaries: Record<Locale, Dictionary> = {
           '依公開網站目前選擇的語言設定撥打號碼。留白時儲存為未設定。',
         aiPhoneLabel: 'AI電話號碼（E.164）',
         hidden: '已隱藏',
+      },
+      developerApiManagement: {
+        title: 'Developer API',
+        description: '設定外部整合使用的認證資訊與 Webhook Secret Token。',
+        oauthTitle: 'Server-To-Server OAuth',
+        oauthDescription: '設定連線至 Zoom API 時使用的認證資訊。',
+        webhookTitle: 'Webhook only app',
+        webhookDescription: '設定驗證 Webhook 時使用的 Secret Token。',
+        accountId: 'Account ID', clientId: 'Client ID', clientSecret: 'Client Secret', secretToken: 'Secret Token',
+        errors: {
+          DEVELOPER_API_INVALID_REQUEST: '請檢查輸入內容。',
+          DEVELOPER_API_INVALID_ACCOUNT_ID: 'Account ID 請輸入 1 至 255 個字元。',
+          DEVELOPER_API_INVALID_CLIENT_ID: 'Client ID 請輸入 1 至 255 個字元。',
+          DEVELOPER_API_OAUTH_SECRET_REQUIRED: '首次儲存 Server-To-Server OAuth 時需要 Client Secret。',
+          DEVELOPER_API_WEBHOOK_SECRET_REQUIRED: '首次儲存 Webhook only app 時需要 Secret Token。',
+          DEVELOPER_API_ENCRYPTION_UNAVAILABLE: '加密設定無法使用，因此無法儲存。',
+          DEVELOPER_API_SECRET_NOT_CONFIGURED: '沒有可顯示的已設定 Secret。',
+          DEVELOPER_API_SECRET_REVEAL_FAILED: '無法顯示 Secret。',
+          DEVELOPER_API_SAVE_FAILED: '無法儲存 Developer API 設定。',
+        },
       },
       chatManagement: {
         title: 'AI聊天管理',
@@ -3843,6 +3956,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       chatSettings: 'AI 채팅 관리',
       languageSettings: '언어 관리',
       maintenanceSettings: '점검 관리',
+      developerApi: 'Developer API',
       settingsMenu: '설정',
       userListTitle: '사용자 관리',
       searchPlaceholder: '이름 또는 이메일로 검색',
@@ -3947,6 +4061,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'role-assignments': '역할 멤버', 'phone-settings': '전화 설정',
           'chat-settings': 'AI 채팅 설정', 'language-settings': '언어 설정',
           'maintenance-settings': '점검 설정',
+          'developer-api': 'Developer API',
         },
         resourceDescriptions: {
           users: '관리 사용자 목록, 상세, 생성, 권한, 상태, 비밀번호 및 접근 요약을 관리합니다.',
@@ -3957,6 +4072,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'chat-settings': 'Web Chat 모드와 연결 설정을 관리합니다.',
           'language-settings': '공개 사이트 언어와 표시 순서를 관리합니다.',
           'maintenance-settings': '환경별 모드와 일정을 관리합니다.',
+          'developer-api': '외부 연동용 API 및 Webhook 인증 정보를 관리합니다.',
         },
         actionLabels: { VIEW: '보기', CREATE: '추가', UPDATE: '편집', DELETE: '삭제' },
       },
@@ -4092,6 +4208,26 @@ export const dictionaries: Record<Locale, Dictionary> = {
           '공개 사이트에서 선택한 언어에 따라 발신할 번호를 설정합니다. 빈칸은 미설정으로 저장됩니다.',
         aiPhoneLabel: 'AI 전화번호(E.164)',
         hidden: '숨김',
+      },
+      developerApiManagement: {
+        title: 'Developer API',
+        description: '외부 연동에 사용할 인증 정보와 Webhook Secret Token을 설정합니다.',
+        oauthTitle: 'Server-To-Server OAuth',
+        oauthDescription: 'Zoom API 연결에 사용할 인증 정보를 설정합니다.',
+        webhookTitle: 'Webhook only app',
+        webhookDescription: 'Webhook 검증에 사용할 Secret Token을 설정합니다.',
+        accountId: 'Account ID', clientId: 'Client ID', clientSecret: 'Client Secret', secretToken: 'Secret Token',
+        errors: {
+          DEVELOPER_API_INVALID_REQUEST: '입력 내용을 확인하세요.',
+          DEVELOPER_API_INVALID_ACCOUNT_ID: 'Account ID는 1~255자로 입력하세요.',
+          DEVELOPER_API_INVALID_CLIENT_ID: 'Client ID는 1~255자로 입력하세요.',
+          DEVELOPER_API_OAUTH_SECRET_REQUIRED: 'Server-To-Server OAuth 최초 저장 시 Client Secret이 필요합니다.',
+          DEVELOPER_API_WEBHOOK_SECRET_REQUIRED: 'Webhook only app 최초 저장 시 Secret Token이 필요합니다.',
+          DEVELOPER_API_ENCRYPTION_UNAVAILABLE: '암호화 설정을 사용할 수 없어 저장할 수 없습니다.',
+          DEVELOPER_API_SECRET_NOT_CONFIGURED: '표시할 수 있는 Secret이 설정되어 있지 않습니다.',
+          DEVELOPER_API_SECRET_REVEAL_FAILED: 'Secret을 표시할 수 없습니다.',
+          DEVELOPER_API_SAVE_FAILED: 'Developer API 설정을 저장할 수 없습니다.',
+        },
       },
       chatManagement: {
         title: 'AI 채팅 관리',

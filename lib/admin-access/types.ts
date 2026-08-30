@@ -18,6 +18,7 @@ export const ADMIN_RESOURCE_KEYS = [
   "chat-settings",
   "language-settings",
   "maintenance-settings",
+  "developer-api",
 ] as const;
 
 export type AdminResourceKey = (typeof ADMIN_RESOURCE_KEYS)[number];

@@ -22,6 +22,7 @@ export type AdminNavigationItemKey =
   | "chat-settings"
   | "language-settings"
   | "maintenance-settings"
+  | "developer-api"
   | "roles";
 
 type AdminMenuKey = "users" | "settings";
@@ -103,6 +104,11 @@ export function AdminShell({ children, visibleItems }: AdminShellProps) {
           key: "roles",
           href: "/admin/roles",
           label: t.admin.accessControl.rolesNav,
+        },
+        {
+          key: "developer-api",
+          href: "/admin/developer-api",
+          label: t.admin.developerApi,
         },
       ],
     },
@@ -238,6 +244,7 @@ function isCurrentAdminItem(pathname: string, key: AdminNavigationItemKey) {
     "chat-settings": "/admin/chat-settings",
     "language-settings": "/admin/languages",
     "maintenance-settings": "/admin/maintenance-settings",
+    "developer-api": "/admin/developer-api",
   };
   return pathname === exactPaths[key];
 }

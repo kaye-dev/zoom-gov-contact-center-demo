@@ -237,6 +237,10 @@ test("reviewed migration manifest exactly classifies the current SHA-verified ch
         name: "20260828210000_enforce_single_admin_access_role",
         classification: "destructive-reviewed",
       },
+      {
+        name: "20260829231500_add_developer_api_settings",
+        classification: "expand-compatible",
+      },
     ],
   );
 });

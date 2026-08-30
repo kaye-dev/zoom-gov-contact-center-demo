@@ -45,6 +45,11 @@
       "name": "20260828210000_enforce_single_admin_access_role",
       "sha256": "ab3399e4fcf00a061bc35b8afad3ec56b9a3b35b393f2a3e4742186c4b7af62d",
       "classification": "destructive-reviewed"
+    },
+    {
+      "name": "20260829231500_add_developer_api_settings",
+      "sha256": "73fdf3fb7c5d101b9a0abce16c7ae29b825e1e1560d68dad02f0e530e0ac430a",
+      "classification": "expand-compatible"
     }
   ]
 }

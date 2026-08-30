@@ -20,7 +20,15 @@ test("shared password input owns accessible visibility controls", () => {
   assert.match(passwordInputSource, /aria-label=\{/);
   assert.match(passwordInputSource, /aria-pressed=\{isVisible\}/);
   assert.match(passwordInputSource, /aria-controls=\{inputId\}/);
-  assert.match(passwordInputSource, /disabled=\{disabled\}/);
+  assert.match(passwordInputSource, /visibilityButtonId\?: string/);
+  assert.match(passwordInputSource, /visible\?: boolean/);
+  assert.match(passwordInputSource, /onVisibleChange\?: \(visible: boolean\) => void/);
+  assert.match(passwordInputSource, /visibilityBusy\?: boolean/);
+  assert.match(passwordInputSource, /const isVisible = visible \?\? internalVisible/);
+  assert.match(passwordInputSource, /onVisibleChange\?\.\(nextVisible\)/);
+  assert.match(passwordInputSource, /id=\{visibilityButtonId\}/);
+  assert.match(passwordInputSource, /aria-busy=\{visibilityBusy \|\| undefined\}/);
+  assert.match(passwordInputSource, /disabled=\{disabled \|\| visibilityBusy\}/);
 });
 
 test("every password entry field uses the shared component", () => {

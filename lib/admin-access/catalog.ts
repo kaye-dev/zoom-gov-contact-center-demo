@@ -69,6 +69,12 @@ export const ADMIN_RESOURCE_CATALOG = [
     supportedActions: ["VIEW", "UPDATE"],
     requiresAdminUser: false,
   },
+  {
+    key: "developer-api",
+    displayPaths: ["/admin/developer-api"],
+    supportedActions: ["VIEW", "UPDATE"],
+    requiresAdminUser: false,
+  },
 ] as const satisfies readonly AdminResourceDefinition[];
 
 export function getAdminResourceDefinition(resourceKey: string) {

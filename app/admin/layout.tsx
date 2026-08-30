@@ -21,6 +21,7 @@ export default async function AdminLayout({
   if (canAdminAccess(actor, "chat-settings", "VIEW")) visibleItems.push("chat-settings");
   if (canAdminAccess(actor, "language-settings", "VIEW")) visibleItems.push("language-settings");
   if (canAdminAccess(actor, "maintenance-settings", "VIEW")) visibleItems.push("maintenance-settings");
+  if (canAdminAccess(actor, "developer-api", "VIEW")) visibleItems.push("developer-api");
   if (canAdminAccess(actor, "roles", "VIEW")) visibleItems.push("roles");
 
   return (
