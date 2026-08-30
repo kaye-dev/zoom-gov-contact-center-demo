@@ -5,7 +5,7 @@ description: "Implement and verify one repository goal; explicit $implement invo
 
 # Implement
 
-Treat the resolved goal as the specification. The current agent owns implementation and verification; do not route through repository-specific implementers, fixed models, or lifecycle machinery.
+Treat the resolved goal as the specification. The current agent owns implementation and verification; do not delegate implementation to a custom agent or route it through lifecycle machinery.
 
 ## Resolve and capture approval
 

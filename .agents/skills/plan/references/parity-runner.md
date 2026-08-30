@@ -39,7 +39,7 @@ The profile is inside `prototype/`, so `prototype-revision.mjs` includes it in t
 - `affected`: legacy evidence selection only; new runs do not execute it.
 - `final`: the recorded affected selection after implementation and static verification are otherwise complete.
 
-Interaction risk tags (`dialog`, `menu`, `keyboard`, `focus`) select the changed interaction state and execute all probes mapped to it. `$plan` and `$plan-critic` do not run `pre-edit` or `final`.
+Interaction risk tags (`dialog`, `menu`, `keyboard`, `focus`) select the changed interaction state and execute all probes mapped to it. `$plan` does not run `pre-edit` or `final`.
 
 `final` defaults to `matrixScope: "targeted"` and requires explicit changed targets and states; for viewport-specific behavior, also supply `changedViewports` or repeated `--viewport` arguments. Use `matrixScope: "full"` or `--matrix-scope full` only for prototype/contract changes, global style or token changes, shared shell layout/navigation structure, cross-breakpoint responsive changes, multiple unrelated surfaces, or an explicit user/release requirement. File count and shared-component ownership alone do not make a run full-scope.
 
