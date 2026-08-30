@@ -15,8 +15,17 @@ test("Developer API navigation and page use the approved route and sections", ()
   const shell = read("../app/admin/AdminShell.tsx");
   const page = read("../app/admin/developer-api/page.tsx");
   const form = read("../app/admin/developer-api/DeveloperApiSettingsForm.tsx");
+  const route = read("../app/api/[[...route]]/route.ts");
   assert.match(shell, /key: "developer-api",\s*href: "\/admin\/developer-api"/u);
   assert.match(page, /requireAdminAccess\(\s*"developer-api",\s*"VIEW"/u);
+  assert.match(
+    route,
+    /app\.put\("\/admin\/developer-api"[\s\S]*?"developer-api",\s*"UPDATE"/u,
+  );
+  assert.match(
+    route,
+    /app\.post\("\/admin\/developer-api\/reveal"[\s\S]*?"developer-api",\s*"VIEW"/u,
+  );
   assert.match(form, /id="server-to-server-oauth"/u);
   assert.match(form, /id="webhook-only-app"/u);
   assert.ok(form.indexOf('id="account-id"') < form.indexOf('id="client-id"'));
@@ -38,6 +47,19 @@ test("Developer API navigation and page use the approved route and sections", ()
   assert.match(form, /setClientSecret\(MASKED_SECRET\)/u);
   assert.match(form, /setSecretToken\(MASKED_SECRET\)/u);
   assert.match(form, /data-reveal-state=\{secretRevealState\(/u);
+  assert.equal(
+    form.match(/readOnly=\{\s*!canEdit \|\| Boolean\(submitting\[/gu)?.length,
+    4,
+  );
+  assert.match(
+    form,
+    /Boolean\(submitting\["server-to-server-oauth"\]\) \|\|\s*\(!canEdit && !settings\.clientSecretConfigured\)/u,
+  );
+  assert.match(
+    form,
+    /Boolean\(submitting\["webhook-only-app"\]\) \|\|\s*\(!canEdit && !settings\.secretTokenConfigured\)/u,
+  );
+  assert.equal(form.match(/disabled=\{!canEdit \|\| Boolean\(submitting\[/gu)?.length, 2);
   assert.match(form, /id="server-to-server-oauth-feedback"/u);
   assert.match(form, /id="webhook-only-app-feedback"/u);
   assert.doesNotMatch(form, /client-secret-help|secret-token-help|aria-describedby/u);

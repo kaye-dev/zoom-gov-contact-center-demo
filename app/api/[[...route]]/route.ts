@@ -900,7 +900,7 @@ app.post("/admin/developer-api/reveal", async (c) => {
     prisma,
     c.req.raw.headers,
     "developer-api",
-    "UPDATE",
+    "VIEW",
   );
   if (!authorization.ok) {
     return c.json({ error: authorization.error }, authorization.status);

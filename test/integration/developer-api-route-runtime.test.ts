@@ -10,6 +10,7 @@ import { withIsolatedPostgresDatabase } from "../helpers/isolated-postgres";
 const TEST_AUTH_SECRET = "runtime-developer-api-test-secret-000000000";
 const FULL_ADMIN = "developer-api-full-admin";
 const VIEW_ADMIN = "developer-api-view-admin";
+const NO_ACCESS_ADMIN = "developer-api-no-access-admin";
 const PASSWORD_ADMIN = "developer-api-password-admin";
 
 type HonoRoute = typeof import("../../app/api/[[...route]]/route");
@@ -27,15 +28,23 @@ test(
       try {
         await createUser(client, FULL_ADMIN, false);
         await createUser(client, VIEW_ADMIN, false);
+        await createUser(client, NO_ACCESS_ADMIN, false);
         await createUser(client, PASSWORD_ADMIN, true);
         await grantViewOnlyDeveloperApi(client, VIEW_ADMIN);
-        for (const userId of [FULL_ADMIN, VIEW_ADMIN, PASSWORD_ADMIN]) {
+        await assignNoAccess(client, NO_ACCESS_ADMIN);
+        for (const userId of [
+          FULL_ADMIN,
+          VIEW_ADMIN,
+          NO_ACCESS_ADMIN,
+          PASSWORD_ADMIN,
+        ]) {
           await createSession(client, userId, `${userId}-token`);
         }
 
         const route = await import("../../app/api/[[...route]]/route");
         const fullCookie = signedSessionCookie(`${FULL_ADMIN}-token`);
         const viewCookie = signedSessionCookie(`${VIEW_ADMIN}-token`);
+        const noAccessCookie = signedSessionCookie(`${NO_ACCESS_ADMIN}-token`);
         const passwordCookie = signedSessionCookie(`${PASSWORD_ADMIN}-token`);
 
         const validOauth = {
@@ -124,7 +133,7 @@ test(
 
         for (const [cookie, expectedStatus] of [
           [undefined, 401],
-          [viewCookie, 403],
+          [noAccessCookie, 403],
           [passwordCookie, 403],
         ] as const) {
           const response = await invokeJson(
@@ -170,7 +179,7 @@ test(
           route.POST,
           "POST",
           "/api/admin/developer-api/reveal",
-          fullCookie,
+          viewCookie,
           { field: "clientSecret" },
         );
         assert.equal(notConfigured.status, 404);
@@ -237,16 +246,18 @@ test(
           ["clientSecret", "client-secret-plain"],
           ["secretToken", "secret-token-plain"],
         ] as const) {
-          const response = await invokeJson(
-            route.POST,
-            "POST",
-            "/api/admin/developer-api/reveal",
-            fullCookie,
-            { field },
-          );
-          assert.equal(response.status, 200, await response.clone().text());
-          assertNoStore(response);
-          assert.deepEqual(await response.json(), { field, value: expectedValue });
+          for (const cookie of [fullCookie, viewCookie]) {
+            const response = await invokeJson(
+              route.POST,
+              "POST",
+              "/api/admin/developer-api/reveal",
+              cookie,
+              { field },
+            );
+            assert.equal(response.status, 200, await response.clone().text());
+            assertNoStore(response);
+            assert.deepEqual(await response.json(), { field, value: expectedValue });
+          }
         }
 
         process.env.DEVELOPER_API_SETTINGS_ENCRYPTION_KEY = "invalid";
@@ -403,6 +414,25 @@ async function grantViewOnlyDeveloperApi(client: Client, userId: string) {
     await client.query(
       `INSERT INTO admin_access_role_assignments ("userId", "roleId")
        VALUES ($1, 'developer-api-view-only')`,
+      [userId],
+    );
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  }
+}
+
+async function assignNoAccess(client: Client, userId: string) {
+  await client.query("BEGIN");
+  try {
+    await client.query(
+      `DELETE FROM admin_access_role_assignments WHERE "userId" = $1`,
+      [userId],
+    );
+    await client.query(
+      `INSERT INTO admin_access_role_assignments ("userId", "roleId")
+       VALUES ($1, 'system-no-access')`,
       [userId],
     );
     await client.query("COMMIT");

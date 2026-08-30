@@ -297,8 +297,12 @@ export function DeveloperApiSettingsForm({ initialSettings, canEdit }: Props) {
                     setSecretVisibility("clientSecret", visible)
                   }
                   visibilityBusy={clientSecret.revealing}
-                  disabled={
+                  readOnly={
                     !canEdit || Boolean(submitting["server-to-server-oauth"])
+                  }
+                  disabled={
+                    Boolean(submitting["server-to-server-oauth"]) ||
+                    (!canEdit && !settings.clientSecretConfigured)
                   }
                   className="placeholder:text-fg-muted focus:ring-2 focus:ring-accent/30"
                 />
@@ -352,7 +356,11 @@ export function DeveloperApiSettingsForm({ initialSettings, canEdit }: Props) {
                   setSecretVisibility("secretToken", visible)
                 }
                 visibilityBusy={secretToken.revealing}
-                disabled={!canEdit || Boolean(submitting["webhook-only-app"])}
+                readOnly={!canEdit || Boolean(submitting["webhook-only-app"])}
+                disabled={
+                  Boolean(submitting["webhook-only-app"]) ||
+                  (!canEdit && !settings.secretTokenConfigured)
+                }
                 className="placeholder:text-fg-muted focus:ring-2 focus:ring-accent/30"
               />
             </div>
