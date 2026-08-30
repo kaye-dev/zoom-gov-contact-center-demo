@@ -99,7 +99,7 @@ async function createPrototype(
   slug: string,
   entries: readonly PrototypeEntry[],
 ) {
-  const relative = `plans/${slug}/prototype`;
+  const relative = `plan/${slug}/prototype`;
   const absolute = path.join(fixture.root, relative);
   await mkdir(absolute, { recursive: true });
   if (!entries.some(([entry]) => entry === "ui-contract.json")) {
@@ -768,13 +768,13 @@ test("複数production baseline sourceのsnapshot差し替えを拒否する", a
 test("prototype rootとancestor directoryのsymlinkを拒否する", async (context) => {
   const fixture = await createRepositoryFixture(context);
   const rootTarget = await createPrototype(fixture, "root-target", representativeEntries);
-  const rootLinkParent = path.join(fixture.root, "plans/root-link");
+  const rootLinkParent = path.join(fixture.root, "plan/root-link");
   await mkdir(rootLinkParent, { recursive: true });
   await symlink(rootTarget.absolute, path.join(rootLinkParent, "prototype"));
-  assertRejected(runRevision(fixture, ["plans/root-link/prototype"]), /symlink/i);
+  assertRejected(runRevision(fixture, ["plan/root-link/prototype"]), /symlink/i);
 
-  await symlink(path.dirname(rootTarget.absolute), path.join(fixture.root, "plans/ancestor-link"));
-  assertRejected(runRevision(fixture, ["plans/ancestor-link/prototype"]), /symlink/i);
+  await symlink(path.dirname(rootTarget.absolute), path.join(fixture.root, "plan/ancestor-link"));
+  assertRejected(runRevision(fixture, ["plan/ancestor-link/prototype"]), /symlink/i);
 });
 
 test("repository外、予約slug、legacy、階層違い、dot segment、不正slugを拒否する", async (context) => {
@@ -786,14 +786,14 @@ test("repository外、予約slug、legacy、階層違い、dot segment、不正s
   context.after(() => rm(outside, { recursive: true, force: true }));
 
   const invalidTargets = [
-    "plans/tmp/prototype",
-    "plans/reviews/prototype",
-    `plans/tmp/valid-target/prototype`,
-    `plans/${prototype.relative.split("/")[1]}/review`,
+    "plan/tmp/prototype",
+    "plan/reviews/prototype",
+    `plan/tmp/valid-target/prototype`,
+    `plan/${prototype.relative.split("/")[1]}/review`,
     `${prototype.relative}/nested`,
-    `plans/valid-target/../valid-target/prototype`,
-    "plans/Bad-Slug/prototype",
-    "plans/-bad/prototype",
+    `plan/valid-target/../valid-target/prototype`,
+    "plan/Bad-Slug/prototype",
+    "plan/-bad/prototype",
     `${prototype.relative}/`,
     prototype.relative.replaceAll("/", "\\"),
     outside,
@@ -814,7 +814,7 @@ test("存在しないdirectoryとindex.html欠落を拒否する", async (contex
   ]);
 
   assertRejected(
-    runRevision(fixture, ["plans/missing-directory/prototype"]),
+    runRevision(fixture, ["plan/missing-directory/prototype"]),
     /directory does not exist/i,
   );
   assertRejected(runRevision(fixture, [withoutIndex.relative]), /index\.html/i);

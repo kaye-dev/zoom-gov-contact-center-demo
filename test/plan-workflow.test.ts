@@ -19,7 +19,7 @@ const workflowSkillNames = ["plan", "plan-critic", "implement", "review", "workf
 const allSkillNames = [...workflowSkillNames, "git-commit-push-pr"];
 
 test("templateはgoal設計とinvocation approvalだけを持ちmutable parityを重複しない", async () => {
-  const template = await read("plans/template.md");
+  const template = await read("plan/template.md");
   assert.deepEqual(template.match(/^# .+$/gm), headings);
   assert.match(template, /^## 要件クロージャ$/m);
   assert.match(template, /^## UI契約$/m);
@@ -59,7 +59,7 @@ test("planとcriticはauthoring後の返却直前にsmokeを1回だけ行う", a
 
   for (const contract of [plan, critic]) {
     assert.match(contract, /authoritative requirements bundle/);
-    assert.match(contract, /plans\/<slug>\/goal\.md/);
+    assert.match(contract, /plan\/<slug>\/goal\.md/);
     assert.match(contract, /parity-spec\.json/);
     assert.match(contract, /prototype revision/);
     assert.match(contract, /smoke/);
@@ -157,7 +157,7 @@ test("reviewはstructured evidenceを先に検証して二つのpassを並行実
   assert.match(review, /not the plan, conversation, evidence verdict, or prior review/);
   assert.match(review, /not the blind result or conversation/);
   assert.match(review, /source[\s\S]*severity[\s\S]*title[\s\S]*body[\s\S]*location[\s\S]*recommendation/);
-  assert.match(review, /plans\/<slug>\/review\//);
+  assert.match(review, /plan\/<slug>\/review\//);
 });
 
 test("parity runnerとprototype helperはcanonical artifactsを検証する", async () => {
@@ -283,9 +283,9 @@ test("plan生成物はignoredでshipping skillと自動結合しない", async (
     read(".gitignore"),
     read(".agents/skills/git-commit-push-pr/SKILL.md"),
   ]);
-  assert.match(gitignore, /^\/plans\/\*\.md$/m);
-  assert.match(gitignore, /^!\/plans\/template\.md$/m);
-  assert.match(gitignore, /^\/plans\/\*\/$/m);
+  assert.match(gitignore, /^\/plan\/\*$/m);
+  assert.match(gitignore, /^!\/plan\/template\.md$/m);
+  assert.match(gitignore, /^\/plans\/$/m);
   assert.match(shipping, /Generate the commit message only from the staged diff/);
   assert.match(shipping, /cleanup is a separate user-authorized operation/);
 });

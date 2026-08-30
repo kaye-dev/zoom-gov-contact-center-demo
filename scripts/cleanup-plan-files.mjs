@@ -77,17 +77,17 @@ export async function cleanupPlanFiles({ repositoryRoot, apply = false, remove =
   if (!repositoryRoot) throw new Error("repositoryRoot is required");
 
   const root = path.resolve(repositoryRoot);
-  const plansDirectory = path.join(root, "plans");
-  const templatePath = path.join(plansDirectory, TEMPLATE_NAME);
-  await requireDirectory(plansDirectory, "plans directory");
-  await requireRegularFile(templatePath, "plans/template.md");
+  const planDirectory = path.join(root, "plan");
+  const templatePath = path.join(planDirectory, TEMPLATE_NAME);
+  await requireDirectory(planDirectory, "plan directory");
+  await requireRegularFile(templatePath, "plan/template.md");
 
-  const topLevelEntries = (await readdir(plansDirectory, { withFileTypes: true }))
+  const topLevelEntries = (await readdir(planDirectory, { withFileTypes: true }))
     .filter((entry) => entry.name !== TEMPLATE_NAME)
     .sort(sortByName);
   const candidates = [];
   for (const entry of topLevelEntries) {
-    candidates.push(...await listEntry(root, path.join(plansDirectory, entry.name)));
+    candidates.push(...await listEntry(root, path.join(planDirectory, entry.name)));
   }
 
   onCandidates?.(candidates);
@@ -95,7 +95,7 @@ export async function cleanupPlanFiles({ repositoryRoot, apply = false, remove =
 
   const removed = [];
   for (const entry of topLevelEntries) {
-    const absolutePath = path.join(plansDirectory, entry.name);
+    const absolutePath = path.join(planDirectory, entry.name);
     const relative = relativePath(root, absolutePath, entry.isDirectory() && !entry.isSymbolicLink());
     try {
       await remove(absolutePath, { recursive: true, force: false, maxRetries: 2, retryDelay: 100 });
@@ -111,13 +111,13 @@ export async function cleanupPlanFiles({ repositoryRoot, apply = false, remove =
 
 function printCandidates(candidates, apply) {
   if (candidates.length === 0) {
-    console.log("削除候補はありません。plans/template.mdは保持されています。");
+    console.log("削除候補はありません。plan/template.mdは保持されています。");
     return;
   }
 
   console.log(apply ? "削除対象:" : "削除候補 (preview):");
   for (const candidate of candidates) console.log(`- ${candidate}`);
-  if (!apply) console.log("削除するには `npm run plans:cleanup -- --apply` を実行してください。");
+  if (!apply) console.log("削除するには `npm run plan:cleanup -- --apply` を実行してください。");
 }
 
 const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : "";

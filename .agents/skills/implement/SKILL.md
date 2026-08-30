@@ -9,11 +9,11 @@ Treat the resolved goal as the specification. The current agent owns implementat
 
 ## Resolve and capture approval
 
-1. Use the explicit `plans/<slug>/goal.md`, or the only `plans/*/goal.md`; stop for zero or multiple candidates. Reject invalid or reserved slugs.
+1. Use the explicit `plan/<slug>/goal.md`, or the only `plan/*/goal.md`; stop for zero or multiple candidates. Reject invalid or reserved slugs.
 2. Read repository rules, the complete goal, current Git status, affected implementation, [goal-quality.md](../plan/references/goal-quality.md), and applicable UI references.
 3. Validate the six goal headings, requirement closure, interfaces, completion criteria, and unresolved decisions. Independently classify UI impact from the expected diff.
 4. For UI work, require canonical `ui-contract.json` version 1, `parity-spec.json` version 1, and the goal's matching approval-contract, validation-profile, and prototype-revision fields. Validate with `prototype-revision.mjs` and `parity-runner.mjs validate`.
-5. Create a fresh run ID. Hash the complete goal, capture the current prototype revision and validation-profile digest, and use `createApprovalEvidence` plus `writeRunEvidence` from [parity-runner.md](../plan/references/parity-runner.md) to write `plans/<slug>/evidence/<run-id>/approval.json`.
+5. Create a fresh run ID. Hash the complete goal, capture the current prototype revision and validation-profile digest, and use `createApprovalEvidence` plus `writeRunEvidence` from [parity-runner.md](../plan/references/parity-runner.md) to write `plan/<slug>/evidence/<run-id>/approval.json`.
 
 The user's explicit `$implement` invocation is the approval basis. Do not require a prior machine-parity field, manual UI-approval field, revision transcription, or another approval question. This approval does not authorize deployment, destructive data changes, secrets, external writes, or GitHub mutations.
 

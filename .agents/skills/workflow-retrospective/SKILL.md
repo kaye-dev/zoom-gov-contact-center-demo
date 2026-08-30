@@ -17,7 +17,7 @@ Use this order:
 2. An explicit rollout JSONL whose `session_meta.payload.id` identifies one task.
 3. An explicit project path. List matching recent tasks; if more than one can qualify, stop and ask the user to select one before auditing.
 
-Use only the canonical ID returned by task lookup or `session_meta`. Reject path separators, dot segments, or an ID that would resolve outside the exact `plans/workflow-retrospectives/` parent. Reject a symlinked parent, ancestor, or existing report.
+Use only the canonical ID returned by task lookup or `session_meta`. Reject path separators, dot segments, or an ID that would resolve outside the exact `plan/workflow-retrospectives/` parent. Reject a symlinked parent, ancestor, or existing report.
 
 Resolve each worktree root and its repository common Git directory to real paths. Compare the common-directory identity so linked worktrees of the same repository remain valid; stop when identity is missing or differs. Record the source worktree path separately.
 
@@ -29,7 +29,7 @@ Before classifying findings, read the current workflow document, affected skills
 
 Use audit mode unless the user explicitly selects candidate IDs from an existing report to improve or apply. Merely asking about, comparing, or quoting a candidate ID remains read-only and must not apply it.
 
-- Record the starting Git status. The only write allowed is `plans/workflow-retrospectives/<thread-id>.md`; do not change tracked files, the Git index, or runtime state.
+- Record the starting Git status. The only write allowed is `plan/workflow-retrospectives/<thread-id>.md`; do not change tracked files, the Git index, or runtime state.
 - In `対象と結果`, record the canonical source ID, repository common-directory identity, source worktree real path, and audited revision, cursor, or rollout digest needed to detect later drift.
 - Re-auditing the same task rewrites that same report. Do not create dated history files.
 - Measure total elapsed time, time to first production edit, `$plan` and `$implement` invocation counts, shell commands, failed commands, retries, Browser operations, full-matrix runs, context compactions, and user interventions. Use transcript timestamps and events; write `未確認` when telemetry is absent instead of inferring zero.
@@ -47,7 +47,7 @@ Use these report sections: `対象と結果`, `定量証拠`, `分類`, `改善�
 Apply changes only when the user explicitly selects candidate IDs that exist in the report.
 
 1. Re-read the report, current contract, and Git status. Stop if the evidence or candidate has become stale.
-2. Resolve an explicit report path and accept only a canonical, non-symlinked `plans/workflow-retrospectives/<thread-id>.md` whose filename, stored source ID, and selected candidate IDs agree.
+2. Resolve an explicit report path and accept only a canonical, non-symlinked `plan/workflow-retrospectives/<thread-id>.md` whose filename, stored source ID, and selected candidate IDs agree.
 3. Re-fetch the source before tracked writes. Require the stored repository common-directory identity, source worktree path, and revision, cursor, or rollout digest to match and the external source to remain non-running; otherwise stop and require a new audit.
 4. Build an exact file allowlist from only the selected candidates. It may contain the necessary `.agents/skills/**` files, `docs/development/codex-development-workflow.md`, a common workflow runner, and directly related tests or evals.
 5. Preserve unrelated dirty changes. Never change product code, goals, prototypes, unrelated review artifacts, the Git index, commits, pushes, or pull requests.
@@ -56,4 +56,4 @@ Apply changes only when the user explicitly selects candidate IDs that exist in 
 8. A P0 may exceed that budget only when the selected report explains why the safety or correctness gain requires it.
 9. Run validation proportional to the selected files, update the same report with the decision, exact diff scope, complexity result, and validation result, then return without Git shipping actions.
 
-The temporary report remains a normal `plans:cleanup` candidate.
+The temporary report remains a normal `plan:cleanup` candidate.

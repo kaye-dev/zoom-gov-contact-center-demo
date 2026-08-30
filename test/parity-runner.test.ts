@@ -515,7 +515,7 @@ test("approvalとphase evidenceを同じfresh run directoryへ一度ずつ保存
   const { createApprovalEvidence, writeRunEvidence } = await parityModulePromise;
   const temporary = await mkdtemp(path.join(tmpdir(), "parity-evidence-"));
   context.after(() => rm(temporary, { recursive: true, force: true }));
-  await mkdir(path.join(temporary, "plans", "fixture"), { recursive: true });
+  await mkdir(path.join(temporary, "plan", "fixture"), { recursive: true });
   const approval = createApprovalEvidence({
     runId: "run-1",
     goalSha256: digest,
@@ -530,7 +530,7 @@ test("approvalとphase evidenceを同じfresh run directoryへ一度ずつ保存
     name: "approval.json",
     evidence: approval,
   });
-  assert.equal(approvalPath, "plans/fixture/evidence/run-1/approval.json");
+  assert.equal(approvalPath, "plan/fixture/evidence/run-1/approval.json");
   assert.equal(
     JSON.parse(await readFile(path.join(temporary, approvalPath), "utf8")).basis,
     "explicit-$implement-invocation",
@@ -542,7 +542,7 @@ test("approvalとphase evidenceを同じfresh run directoryへ一度ずつ保存
     name: "pre-edit-parity.json",
     evidence: { schemaVersion: 1 },
   });
-  assert.equal(phasePath, "plans/fixture/evidence/run-1/pre-edit-parity.json");
+  assert.equal(phasePath, "plan/fixture/evidence/run-1/pre-edit-parity.json");
   await assert.rejects(
     writeRunEvidence({
       repositoryRootPath: temporary,

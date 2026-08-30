@@ -6,6 +6,7 @@
 # Local-only tooling and generated artifacts.
 .vercel
 .playwright-cli
+plan
 plans
 core
 core.*

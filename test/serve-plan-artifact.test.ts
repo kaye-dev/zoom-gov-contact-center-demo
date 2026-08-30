@@ -259,56 +259,42 @@ async function assertPrototypeSurface(url: string, files: Map<string, Buffer | s
   assert.equal(await head.text(), "");
 }
 
-test("canonicalとlegacy prototypeは複数HTML・nested asset・query・HEADを配信する", async (context) => {
+test("canonical prototypeは複数HTML・nested asset・query・HEADを配信する", async (context) => {
   const repository = await createTestRepository(context);
   const slug = uniqueSlug("prototype-server-test");
-  const surfaces = [`plans/${slug}/prototype`, `plans/tmp/${slug}/prototype`];
-
-  for (const relativeArtifact of surfaces) {
-    await context.test(relativeArtifact, async (surfaceContext) => {
-      const { files } = await createPrototypeFixture(repository, relativeArtifact);
-      const { url } = await startServer(surfaceContext, repository, relativeArtifact);
-      await assertPrototypeSurface(url, files);
-    });
-  }
+  const relativeArtifact = `plan/${slug}/prototype`;
+  const { files } = await createPrototypeFixture(repository, relativeArtifact);
+  const { url } = await startServer(context, repository, relativeArtifact);
+  await assertPrototypeSurface(url, files);
 });
 
-test("canonicalと2種類のlegacy reviewは固定5ファイルだけを配信する", async (context) => {
+test("canonical reviewは固定5ファイルだけを配信する", async (context) => {
   const repository = await createTestRepository(context);
   const slug = uniqueSlug("review-server-test");
-  const surfaces = [
-    `plans/${slug}/review`,
-    `plans/reviews/${slug}`,
-    `plans/tmp/${slug}/implementation-review`,
-  ];
+  const relativeArtifact = `plan/${slug}/review`;
+  await createReviewFixture(repository, relativeArtifact);
+  const { url } = await startServer(context, repository, relativeArtifact);
 
-  for (const relativeArtifact of surfaces) {
-    await context.test(relativeArtifact, async (surfaceContext) => {
-      await createReviewFixture(repository, relativeArtifact);
-      const { url } = await startServer(surfaceContext, repository, relativeArtifact);
+  const rootResponse = await fetchArtifact(url, "/");
+  assert.equal(rootResponse.status, 200);
+  assert.equal(await rootResponse.text(), reviewFiles.get("index.html")!.body);
 
-      const rootResponse = await fetchArtifact(url, "/");
-      assert.equal(rootResponse.status, 200);
-      assert.equal(await rootResponse.text(), reviewFiles.get("index.html")!.body);
-
-      for (const [relative, file] of reviewFiles) {
-        const response = await fetchArtifact(url, `/${relative}`);
-        assert.equal(response.status, 200, relative);
-        assert.equal(response.headers.get("content-type"), file.contentType, relative);
-        assert.equal(await response.text(), file.body, relative);
-      }
-
-      const extra = await fetchArtifact(url, "/extra.json");
-      assert.equal(extra.status, 404);
-      assert.equal(await extra.text(), "Not Found");
-    });
+  for (const [relative, file] of reviewFiles) {
+    const response = await fetchArtifact(url, `/${relative}`);
+    assert.equal(response.status, 200, relative);
+    assert.equal(response.headers.get("content-type"), file.contentType, relative);
+    assert.equal(await response.text(), file.body, relative);
   }
+
+  const extra = await fetchArtifact(url, "/extra.json");
+  assert.equal(extra.status, 404);
+  assert.equal(await extra.text(), "Not Found");
 });
 
 test("HTTP境界はHost・method・encoded path・symlink・未対応対象を拒否する", async (context) => {
   const repository = await createTestRepository(context);
   const slug = uniqueSlug("security-server-test");
-  const relativeArtifact = `plans/${slug}/prototype`;
+  const relativeArtifact = `plan/${slug}/prototype`;
   const { artifact } = await createPrototypeFixture(repository, relativeArtifact);
   await writeFile(path.join(path.dirname(artifact), "outside.json"), '{"secret":true}');
   await symlink(path.join(path.dirname(artifact), "outside.json"), path.join(artifact, "external-link.json"));
@@ -360,7 +346,7 @@ test("HTTP境界はHost・method・encoded path・symlink・未対応対象を�
 test("SIGINTは処理中のHTTP接続が残っていてもserverを終了する", async (context) => {
   const repository = await createTestRepository(context);
   const slug = uniqueSlug("shutdown-server-test");
-  const relativeArtifact = `plans/${slug}/prototype`;
+  const relativeArtifact = `plan/${slug}/prototype`;
   await createPrototypeFixture(repository, relativeArtifact);
 
   const { child, url } = await startServer(context, repository, relativeArtifact);
@@ -391,11 +377,11 @@ test("SIGINTは処理中のHTTP接続が残っていてもserverを終了する"
 test("artifact root/index symlinkと不正なCLI引数を起動前に拒否する", async (context) => {
   const repository = await createTestRepository(context);
   const slug = uniqueSlug("cli-server-test");
-  const validArtifact = `plans/${slug}/prototype`;
+  const validArtifact = `plan/${slug}/prototype`;
   await createPrototypeFixture(repository, validArtifact);
 
   const symlinkSlug = uniqueSlug("root-symlink-server-test");
-  const symlinkPlanRoot = path.join(repository.root, "plans", symlinkSlug);
+  const symlinkPlanRoot = path.join(repository.root, "plan", symlinkSlug);
   const realPrototype = path.join(symlinkPlanRoot, "real-prototype");
   const linkedPrototype = path.join(symlinkPlanRoot, "prototype");
   await mkdir(realPrototype, { recursive: true });
@@ -403,13 +389,13 @@ test("artifact root/index symlinkと不正なCLI引数を起動前に拒否す�
   await symlink(realPrototype, linkedPrototype, "dir");
 
   const internalIndexSlug = uniqueSlug("internal-index-symlink-server-test");
-  const internalIndexArtifact = path.join(repository.root, "plans", internalIndexSlug, "prototype");
+  const internalIndexArtifact = path.join(repository.root, "plan", internalIndexSlug, "prototype");
   await mkdir(internalIndexArtifact, { recursive: true });
   await writeFile(path.join(internalIndexArtifact, "real-index.html"), "<!doctype html><title>internal index</title>");
   await symlink("real-index.html", path.join(internalIndexArtifact, "index.html"));
 
   const externalIndexSlug = uniqueSlug("external-index-symlink-server-test");
-  const externalIndexArtifact = path.join(repository.root, "plans", externalIndexSlug, "prototype");
+  const externalIndexArtifact = path.join(repository.root, "plan", externalIndexSlug, "prototype");
   const externalIndexTarget = path.join(repository.root, "outside-index.html");
   await mkdir(externalIndexArtifact, { recursive: true });
   await writeFile(externalIndexTarget, "<!doctype html><title>external index</title>");
@@ -418,13 +404,12 @@ test("artifact root/index symlinkと不正なCLI引数を起動前に拒否す�
   const cases = [
     { args: [], label: "missing argument" },
     { args: [validArtifact, "unexpected"], label: "extra argument" },
-    { args: [`plans/${slug}/../${slug}/prototype`], label: "ambiguous dot segment" },
-    { args: [`plans/${symlinkSlug}/prototype`], label: "root symlink" },
-    { args: [`plans/${internalIndexSlug}/prototype`], label: "internal index symlink" },
-    { args: [`plans/${externalIndexSlug}/prototype`], label: "external index symlink" },
-    { args: ["plans/tmp/prototype"], label: "reserved tmp prototype collision" },
-    { args: ["plans/tmp/review"], label: "reserved tmp review collision" },
-    { args: ["plans/reviews"], label: "incomplete reviews legacy path" },
+    { args: [`plan/${slug}/../${slug}/prototype`], label: "ambiguous dot segment" },
+    { args: [`plan/${symlinkSlug}/prototype`], label: "root symlink" },
+    { args: [`plan/${internalIndexSlug}/prototype`], label: "internal index symlink" },
+    { args: [`plan/${externalIndexSlug}/prototype`], label: "external index symlink" },
+    { args: ["plan/tmp/prototype"], label: "legacy prototype path" },
+    { args: ["plan/reviews"], label: "legacy review path" },
   ];
 
   for (const cliCase of cases) {
