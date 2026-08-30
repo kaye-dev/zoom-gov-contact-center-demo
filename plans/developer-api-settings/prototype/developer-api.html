@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ja" class="light scheme-light h-full antialiased dark:scheme-dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Developer API | 未来市 管理画面</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="bg-surface text-fg">
+    <div id="developer-api-page" class="min-h-screen bg-surface text-fg">
+      <header class="border-b border-line bg-surface-raised">
+        <div class="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-4 md:px-6">
+          <a href="/" class="text-lg font-bold text-fg transition-colors hover:text-accent">未来市</a>
+          <span class="text-sm text-fg-muted">管理画面</span>
+          <nav aria-label="管理画面" class="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto">
+            <div class="relative">
+              <button id="users-menu-trigger" type="button" data-admin-menu-trigger aria-expanded="false" aria-controls="admin-users-menu" class="flex cursor-pointer items-center gap-1 whitespace-nowrap rounded-md px-3 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-hover hover:text-accent">
+                <span>ユーザー管理</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" class="h-6 w-6 shrink-0" height="24" width="24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M480-360 280-560h400L480-360Z" /></svg>
+              </button>
+              <ul id="admin-users-menu" hidden class="absolute left-0 top-full z-50 mt-2 min-w-48 overflow-hidden rounded-lg border border-line bg-surface-raised py-1 shadow-lg">
+                <li><a href="./index.html" class="block whitespace-nowrap px-4 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-hover hover:text-accent">ユーザー管理</a></li>
+                <li><a href="/admin/users/new" class="block whitespace-nowrap px-4 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-hover hover:text-accent">ユーザー作成</a></li>
+                <li><a href="/admin/password-reset-requests" class="block whitespace-nowrap px-4 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-hover hover:text-accent">再設定申請</a></li>
+              </ul>
+            </div>
+            <div class="relative">
+              <button id="settings-menu-trigger" type="button" data-admin-menu-trigger aria-expanded="false" aria-controls="admin-settings-menu" class="flex cursor-pointer items-center gap-1 whitespace-nowrap rounded-md px-3 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-hover hover:text-accent">
+                <span>設定</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" class="h-6 w-6 shrink-0" height="24" width="24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M480-360 280-560h400L480-360Z" /></svg>
+              </button>
+              <ul id="admin-settings-menu" hidden class="absolute right-0 top-full z-50 mt-2 min-w-48 overflow-hidden rounded-lg border border-line bg-surface-raised py-1 shadow-lg">
+                <li><a href="/admin/phone-settings" class="block whitespace-nowrap px-4 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-hover hover:text-accent">電話管理</a></li>
+                <li><a href="/admin/chat-settings" class="block whitespace-nowrap px-4 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-hover hover:text-accent">AIチャット管理</a></li>
+                <li><a href="/admin/languages" class="block whitespace-nowrap px-4 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-hover hover:text-accent">言語管理</a></li>
+                <li><a href="/admin/maintenance-settings" class="block whitespace-nowrap px-4 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-hover hover:text-accent">メンテナンス管理</a></li>
+                <li><a href="/admin/roles" class="block whitespace-nowrap px-4 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-hover hover:text-accent">ロール管理</a></li>
+                <li><a href="./developer-api.html" aria-current="page" class="block whitespace-nowrap px-4 py-2 text-sm font-semibold text-accent transition-colors hover:bg-surface-hover">Developer API</a></li>
+              </ul>
+            </div>
+            <button type="button" class="cursor-pointer rounded-md border border-line px-3 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-hover">ログアウト</button>
+          </nav>
+        </div>
+      </header>
+      <main class="mx-auto w-full max-w-7xl px-4 py-8 md:px-6">
+        <section id="developer-api-content" class="mx-auto max-w-5xl space-y-6">
+          <div class="space-y-2">
+            <h1 class="text-2xl font-bold">Developer API</h1>
+            <p class="text-sm leading-6 text-fg-muted">外部連携に使用する認証情報とWebhookのSecret Tokenを設定します。</p>
+          </div>
+          <div id="developer-api-form" class="space-y-6">
+            <form id="server-to-server-oauth-form" class="space-y-4">
+            <fieldset id="server-to-server-oauth" class="space-y-5 rounded-lg border border-line bg-surface-raised p-5 shadow-sm md:p-6">
+              <legend class="px-2 text-lg font-bold">Server-To-Server OAuth</legend>
+              <p class="text-sm leading-6 text-fg-muted">Zoom API接続に使用する認証情報を設定します。</p>
+              <div id="oauth-fields" class="max-w-xl space-y-5">
+                <label id="account-id-field" class="block space-y-2"><span class="block text-sm font-semibold">Account ID</span><input id="account-id" name="accountId" type="text" autocomplete="off" value="account_example_01" class="w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/30" /></label>
+                <label id="client-id-field" class="block space-y-2"><span class="block text-sm font-semibold">Client ID</span><input id="client-id" name="clientId" type="text" autocomplete="off" value="client_example_01" class="w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/30" /></label>
+                <div id="client-secret-field" class="space-y-2">
+                  <label for="client-secret" class="block text-sm font-semibold">Client Secret</label>
+                  <div class="relative">
+                    <input id="client-secret" name="clientSecret" type="password" autocomplete="new-password" placeholder="••••••••••••" data-configured="true" data-reveal-state="masked" class="w-full rounded-md border border-line bg-surface py-2 pl-3 pr-10 text-fg outline-none transition-colors placeholder:text-fg-muted focus:border-accent disabled:opacity-60" />
+                    <button id="client-secret-visibility" type="button" data-password-toggle aria-label="パスワードを表示" aria-pressed="false" aria-controls="client-secret" class="absolute inset-y-0 right-0 z-10 flex cursor-pointer items-center rounded-r-md px-3 text-fg-muted transition-colors hover:text-accent focus-visible:outline-none focus-visible:text-accent">
+                      <svg data-show-icon xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" height="14" width="14" fill="currentColor" aria-hidden="true" focusable="false"><path d="M480-320q75 0 127.5-52.5T660-500q0-75-52.5-127.5T480-680q-75 0-127.5 52.5T300-500q0 75 52.5 127.5T480-320Zm0-72q-45 0-76.5-31.5T372-500q0-45 31.5-76.5T480-608q45 0 76.5 31.5T588-500q0 45-31.5 76.5T480-392Zm0 192q-146 0-266-81.5T40-500q54-137 174-218.5T480-800q146 0 266 81.5T920-500q-54 137-174 218.5T480-200Zm0-300Zm0 220q113 0 207.5-59.5T832-500q-50-101-144.5-160.5T480-720q-113 0-207.5 59.5T128-500q50 101 144.5 160.5T480-280Z" /></svg>
+                      <svg data-hide-icon hidden xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" height="14" width="14" fill="currentColor" aria-hidden="true" focusable="false"><path d="m644-428-58-58q9-47-27-88t-93-32l-58-58q17-8 34.5-12t37.5-4q75 0 127.5 52.5T660-500q0 20-4 37.5T644-428Zm128 126-58-56q38-29 67.5-63.5T832-500q-50-101-143.5-160.5T480-720q-29 0-57 4t-55 12l-62-62q41-17 84-25.5t90-8.5q151 0 269 83.5T920-500q-23 59-60.5 109.5T772-302Zm20 246L624-222q-35 11-70.5 16.5T480-200q-151 0-269-83.5T40-500q21-53 53-98.5t73-81.5L56-792l56-56 736 736-56 56ZM222-624q-29 26-53 57t-41 67q50 101 143.5 160.5T480-280q20 0 39-2.5t39-5.5l-36-38q-11 3-21 4.5t-21 1.5q-75 0-127.5-52.5T300-500q0-11 1.5-21t4.5-21l-84-82Zm319 93Zm-151 75Z" /></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </fieldset>
+            <p id="server-to-server-oauth-feedback" role="status" aria-live="polite" hidden class="rounded-md bg-green-50 px-4 py-3 text-sm text-green-800 dark:bg-green-950/50 dark:text-green-200">設定を保存しました。</p>
+            <button id="save-server-to-server-oauth" type="submit" class="cursor-pointer rounded-md bg-primary px-5 py-2.5 font-semibold text-white transition-colors hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50">設定を保存</button>
+            </form>
+            <form id="webhook-only-app-form" class="space-y-4">
+            <fieldset id="webhook-only-app" class="space-y-5 rounded-lg border border-line bg-surface-raised p-5 shadow-sm md:p-6">
+              <legend class="px-2 text-lg font-bold">Webhook only app</legend>
+              <p class="text-sm leading-6 text-fg-muted">Webhookの検証に使用するSecret Tokenを設定します。</p>
+              <div id="secret-token-field" class="max-w-xl space-y-2">
+                <label for="secret-token" class="block text-sm font-semibold">Secret Token</label>
+                <div class="relative">
+                  <input id="secret-token" name="secretToken" type="password" autocomplete="new-password" placeholder="••••••••••••" data-configured="true" data-reveal-state="masked" class="w-full rounded-md border border-line bg-surface py-2 pl-3 pr-10 text-fg outline-none transition-colors placeholder:text-fg-muted focus:border-accent disabled:opacity-60" />
+                  <button id="secret-token-visibility" type="button" data-password-toggle aria-label="パスワードを表示" aria-pressed="false" aria-controls="secret-token" class="absolute inset-y-0 right-0 z-10 flex cursor-pointer items-center rounded-r-md px-3 text-fg-muted transition-colors hover:text-accent focus-visible:outline-none focus-visible:text-accent">
+                    <svg data-show-icon xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" height="14" width="14" fill="currentColor" aria-hidden="true" focusable="false"><path d="M480-320q75 0 127.5-52.5T660-500q0-75-52.5-127.5T480-680q-75 0-127.5 52.5T300-500q0 75 52.5 127.5T480-320Zm0-72q-45 0-76.5-31.5T372-500q0-45 31.5-76.5T480-608q45 0 76.5 31.5T588-500q0 45-31.5 76.5T480-392Zm0 192q-146 0-266-81.5T40-500q54-137 174-218.5T480-800q146 0 266 81.5T920-500q-54 137-174 218.5T480-200Zm0-300Zm0 220q113 0 207.5-59.5T832-500q-50-101-144.5-160.5T480-720q-113 0-207.5 59.5T128-500q50 101 144.5 160.5T480-280Z" /></svg>
+                    <svg data-hide-icon hidden xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" height="14" width="14" fill="currentColor" aria-hidden="true" focusable="false"><path d="m644-428-58-58q9-47-27-88t-93-32l-58-58q17-8 34.5-12t37.5-4q75 0 127.5 52.5T660-500q0 20-4 37.5T644-428Zm128 126-58-56q38-29 67.5-63.5T832-500q-50-101-143.5-160.5T480-720q-29 0-57 4t-55 12l-62-62q41-17 84-25.5t90-8.5q151 0 269 83.5T920-500q-23 59-60.5 109.5T772-302Zm20 246L624-222q-35 11-70.5 16.5T480-200q-151 0-269-83.5T40-500q21-53 53-98.5t73-81.5L56-792l56-56 736 736-56 56ZM222-624q-29 26-53 57t-41 67q50 101 143.5 160.5T480-280q20 0 39-2.5t39-5.5l-36-38q-11 3-21 4.5t-21 1.5q-75 0-127.5-52.5T300-500q0-11 1.5-21t4.5-21l-84-82Zm319 93Zm-151 75Z" /></svg>
+                  </button>
+                </div>
+              </div>
+            </fieldset>
+            <p id="webhook-only-app-feedback" role="status" aria-live="polite" hidden class="rounded-md bg-green-50 px-4 py-3 text-sm text-green-800 dark:bg-green-950/50 dark:text-green-200">設定を保存しました。</p>
+            <button id="save-webhook-only-app" type="submit" class="cursor-pointer rounded-md bg-primary px-5 py-2.5 font-semibold text-white transition-colors hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50">設定を保存</button>
+            </form>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="./script.js"></script>
+  </body>
+</html>

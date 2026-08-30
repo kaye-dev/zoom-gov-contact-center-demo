@@ -1,0 +1,2120 @@
+{
+  "version": 1,
+  "productionBaseline": {
+    "sources": [
+      "app/layout.tsx",
+      "app/components/ThemeSync.tsx",
+      "app/components/theme-store.ts",
+      "app/admin/AdminShell.tsx",
+      "app/admin/layout.tsx",
+      "app/admin/users/page.tsx",
+      "app/admin/users/UsersView.tsx",
+      "app/admin/phone-settings/page.tsx",
+      "app/admin/phone-settings/PhoneSettingsForm.tsx",
+      "app/components/PasswordInput.tsx",
+      "app/components/svg/ArrowDropDownIcon.tsx",
+      "app/components/svg/VisibilityIcon.tsx",
+      "app/components/svg/VisibilityOffIcon.tsx",
+      "app/i18n/LanguageProvider.tsx",
+      "app/i18n/language-store.ts",
+      "app/i18n/dictionaries.ts",
+      "app/globals.css"
+    ],
+    "runtimeOwner": "local-development-server",
+    "checkout": "/Users/keien/work/zoom-gov-contact-center-demo",
+    "commit": "145a9fb5f3db3cf2b5a1c987bf4ae8dd98b1d33d",
+    "url": "http://localhost:3000/admin/users",
+    "route": "/admin/users"
+  },
+  "comparisonConditions": {
+    "viewports": [
+      "1280x900",
+      "390x844",
+      "639x844",
+      "640x844",
+      "767x844",
+      "768x844"
+    ],
+    "dpr": 1,
+    "scroll": {
+      "x": 0,
+      "y": 0
+    },
+    "locale": "ja",
+    "themes": [
+      "light",
+      "dark"
+    ],
+    "fixture": "admin-user-list-with-settings-menu",
+    "authorization": "authenticated full-access administrator",
+    "query": "none"
+  },
+  "baselineStateInventory": [
+    "representative",
+    "secret-visible",
+    "stored-secret-visible",
+    "post-save-masked"
+  ],
+  "themeContract": [
+    "light",
+    "dark"
+  ],
+  "responsiveContract": [
+    {
+      "id": "desktop",
+      "viewport": "1280x900"
+    },
+    {
+      "id": "mobile",
+      "viewport": "390x844"
+    },
+    {
+      "id": "sm-below",
+      "viewport": "639x844"
+    },
+    {
+      "id": "sm",
+      "viewport": "640x844"
+    },
+    {
+      "id": "md-below",
+      "viewport": "767x844"
+    },
+    {
+      "id": "md",
+      "viewport": "768x844"
+    }
+  ],
+  "visualInvariants": [
+    {
+      "id": "admin-shell",
+      "description": "管理画面の2ドロップダウン、全可視項目、共通矢印SVG、ヘッダー、余白、境界線、semantic tokenを既存AdminShell構造に揃える"
+    },
+    {
+      "id": "settings-form",
+      "description": "OAuthとWebhookは既存設定画面と同じfieldset・入力・保存ボタンの密度とフォーカス表現を保った独立formとし、OAuth入力は全viewportで縦積みにする"
+    },
+    {
+      "id": "responsive-flow",
+      "description": "desktopと390px幅の双方でOAuth入力をAccount ID、Client ID、Client Secretの順に縦積みし、横スクロールを発生させない"
+    },
+    {
+      "id": "secret-mask",
+      "description": "設定済みClient SecretとSecret Tokenは初期状態で平文値を持たないpassword入力に固定マスクを表示し、権限確認付きの明示的なeye操作時だけ対象の保存済み値を表示する。各Secret入力の下に設定済みや操作方法を説明する補足文は表示しない"
+    },
+    {
+      "id": "secret-visibility-toggle",
+      "description": "各Secret入力の右端に既存PasswordInputと同じeye toggleを置き、新規入力はローカル表示切替、設定済み値は対象1項目の取得後に表示し、再非表示時と保存成功後は値を破棄してpassword・aria-pressed=falseへ戻す"
+    },
+    {
+      "id": "stored-secret-reveal",
+      "description": "設定済みSecretのeye操作は対象項目だけを表示し、再非表示では入力値を空へ戻してdata-reveal-state=maskedにする。prototypeは合成値だけを使用する"
+    },
+    {
+      "id": "section-independent-save",
+      "description": "OAuthとWebhookは別form・別submit・別feedbackを持ち、一方のvalidationや保存状態が他方を要求または上書きしない"
+    },
+    {
+      "id": "post-save-secret-mask",
+      "description": "表示中に保存成功しても対象Secretは空値・password・aria-pressed=false・設定済みmaskへ戻り、他sectionの入力とfeedbackを保持する"
+    }
+  ],
+  "intentionalDifferences": [
+    {
+      "id": "prototype-forward-static-entry",
+      "description": "production は /admin/developer-api、静的prototypeは実在する ./developer-api.html へ遷移する"
+    },
+    {
+      "id": "prototype-back-static-entry",
+      "description": "production は /admin/users、静的prototypeは実在する ./index.html へ戻る"
+    }
+  ],
+  "stateAndInteraction": [
+    "settings-menu-toggle",
+    "configured-secret-mask",
+    "stored-secret-reveal-loading",
+    "stored-secret-visible",
+    "stored-secret-rehide-and-discard",
+    "secret-replacement",
+    "password-visibility-toggle",
+    "section-independent-validation",
+    "section-independent-submit",
+    "section-feedback",
+    "post-save-mask-reset",
+    "reveal-error",
+    "keyboard",
+    "focus"
+  ],
+  "comparisonTargets": [
+    {
+      "id": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open"
+    },
+    {
+      "id": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form"
+    }
+  ],
+  "parityMatrix": [
+    {
+      "id": "users-header-representative-desktop-light",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "representative",
+      "viewport": "1280x900",
+      "theme": "light",
+      "breakpoint": "desktop",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-representative-desktop-dark",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "representative",
+      "viewport": "1280x900",
+      "theme": "dark",
+      "breakpoint": "desktop",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-representative-mobile-light",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "representative",
+      "viewport": "390x844",
+      "theme": "light",
+      "breakpoint": "mobile",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-representative-mobile-dark",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "representative",
+      "viewport": "390x844",
+      "theme": "dark",
+      "breakpoint": "mobile",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-representative-sm-below-light",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "representative",
+      "viewport": "639x844",
+      "theme": "light",
+      "breakpoint": "sm-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-representative-sm-below-dark",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "representative",
+      "viewport": "639x844",
+      "theme": "dark",
+      "breakpoint": "sm-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-representative-sm-light",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "representative",
+      "viewport": "640x844",
+      "theme": "light",
+      "breakpoint": "sm",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-representative-sm-dark",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "representative",
+      "viewport": "640x844",
+      "theme": "dark",
+      "breakpoint": "sm",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-representative-md-below-light",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "representative",
+      "viewport": "767x844",
+      "theme": "light",
+      "breakpoint": "md-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-representative-md-below-dark",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "representative",
+      "viewport": "767x844",
+      "theme": "dark",
+      "breakpoint": "md-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-representative-md-light",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "representative",
+      "viewport": "768x844",
+      "theme": "light",
+      "breakpoint": "md",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-representative-md-dark",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "representative",
+      "viewport": "768x844",
+      "theme": "dark",
+      "breakpoint": "md",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-secret-visible-desktop-light",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "secret-visible",
+      "viewport": "1280x900",
+      "theme": "light",
+      "breakpoint": "desktop",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-secret-visible-desktop-dark",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "secret-visible",
+      "viewport": "1280x900",
+      "theme": "dark",
+      "breakpoint": "desktop",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-secret-visible-mobile-light",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "secret-visible",
+      "viewport": "390x844",
+      "theme": "light",
+      "breakpoint": "mobile",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-secret-visible-mobile-dark",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "secret-visible",
+      "viewport": "390x844",
+      "theme": "dark",
+      "breakpoint": "mobile",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-secret-visible-sm-below-light",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "secret-visible",
+      "viewport": "639x844",
+      "theme": "light",
+      "breakpoint": "sm-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-secret-visible-sm-below-dark",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "secret-visible",
+      "viewport": "639x844",
+      "theme": "dark",
+      "breakpoint": "sm-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-secret-visible-sm-light",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "secret-visible",
+      "viewport": "640x844",
+      "theme": "light",
+      "breakpoint": "sm",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-secret-visible-sm-dark",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "secret-visible",
+      "viewport": "640x844",
+      "theme": "dark",
+      "breakpoint": "sm",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-secret-visible-md-below-light",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "secret-visible",
+      "viewport": "767x844",
+      "theme": "light",
+      "breakpoint": "md-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-secret-visible-md-below-dark",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "secret-visible",
+      "viewport": "767x844",
+      "theme": "dark",
+      "breakpoint": "md-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-secret-visible-md-light",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "secret-visible",
+      "viewport": "768x844",
+      "theme": "light",
+      "breakpoint": "md",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-secret-visible-md-dark",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "secret-visible",
+      "viewport": "768x844",
+      "theme": "dark",
+      "breakpoint": "md",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-representative-desktop-light",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "representative",
+      "viewport": "1280x900",
+      "theme": "light",
+      "breakpoint": "desktop",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-representative-desktop-dark",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "representative",
+      "viewport": "1280x900",
+      "theme": "dark",
+      "breakpoint": "desktop",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-representative-mobile-light",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "representative",
+      "viewport": "390x844",
+      "theme": "light",
+      "breakpoint": "mobile",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-representative-mobile-dark",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "representative",
+      "viewport": "390x844",
+      "theme": "dark",
+      "breakpoint": "mobile",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-representative-sm-below-light",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "representative",
+      "viewport": "639x844",
+      "theme": "light",
+      "breakpoint": "sm-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-representative-sm-below-dark",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "representative",
+      "viewport": "639x844",
+      "theme": "dark",
+      "breakpoint": "sm-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-representative-sm-light",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "representative",
+      "viewport": "640x844",
+      "theme": "light",
+      "breakpoint": "sm",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-representative-sm-dark",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "representative",
+      "viewport": "640x844",
+      "theme": "dark",
+      "breakpoint": "sm",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-representative-md-below-light",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "representative",
+      "viewport": "767x844",
+      "theme": "light",
+      "breakpoint": "md-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-representative-md-below-dark",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "representative",
+      "viewport": "767x844",
+      "theme": "dark",
+      "breakpoint": "md-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-representative-md-light",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "representative",
+      "viewport": "768x844",
+      "theme": "light",
+      "breakpoint": "md",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-representative-md-dark",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "representative",
+      "viewport": "768x844",
+      "theme": "dark",
+      "breakpoint": "md",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-secret-visible-desktop-light",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "secret-visible",
+      "viewport": "1280x900",
+      "theme": "light",
+      "breakpoint": "desktop",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-secret-visible-desktop-dark",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "secret-visible",
+      "viewport": "1280x900",
+      "theme": "dark",
+      "breakpoint": "desktop",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-secret-visible-mobile-light",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "secret-visible",
+      "viewport": "390x844",
+      "theme": "light",
+      "breakpoint": "mobile",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-secret-visible-mobile-dark",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "secret-visible",
+      "viewport": "390x844",
+      "theme": "dark",
+      "breakpoint": "mobile",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-secret-visible-sm-below-light",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "secret-visible",
+      "viewport": "639x844",
+      "theme": "light",
+      "breakpoint": "sm-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-secret-visible-sm-below-dark",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "secret-visible",
+      "viewport": "639x844",
+      "theme": "dark",
+      "breakpoint": "sm-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-secret-visible-sm-light",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "secret-visible",
+      "viewport": "640x844",
+      "theme": "light",
+      "breakpoint": "sm",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-secret-visible-sm-dark",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "secret-visible",
+      "viewport": "640x844",
+      "theme": "dark",
+      "breakpoint": "sm",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-secret-visible-md-below-light",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "secret-visible",
+      "viewport": "767x844",
+      "theme": "light",
+      "breakpoint": "md-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-secret-visible-md-below-dark",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "secret-visible",
+      "viewport": "767x844",
+      "theme": "dark",
+      "breakpoint": "md-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-secret-visible-md-light",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "secret-visible",
+      "viewport": "768x844",
+      "theme": "light",
+      "breakpoint": "md",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-secret-visible-md-dark",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "secret-visible",
+      "viewport": "768x844",
+      "theme": "dark",
+      "breakpoint": "md",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-stored-secret-visible-desktop-light",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "stored-secret-visible",
+      "viewport": "1280x900",
+      "theme": "light",
+      "breakpoint": "desktop",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-stored-secret-visible-desktop-dark",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "stored-secret-visible",
+      "viewport": "1280x900",
+      "theme": "dark",
+      "breakpoint": "desktop",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-stored-secret-visible-mobile-light",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "stored-secret-visible",
+      "viewport": "390x844",
+      "theme": "light",
+      "breakpoint": "mobile",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-stored-secret-visible-mobile-dark",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "stored-secret-visible",
+      "viewport": "390x844",
+      "theme": "dark",
+      "breakpoint": "mobile",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-stored-secret-visible-sm-below-light",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "stored-secret-visible",
+      "viewport": "639x844",
+      "theme": "light",
+      "breakpoint": "sm-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-stored-secret-visible-sm-below-dark",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "stored-secret-visible",
+      "viewport": "639x844",
+      "theme": "dark",
+      "breakpoint": "sm-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-stored-secret-visible-sm-light",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "stored-secret-visible",
+      "viewport": "640x844",
+      "theme": "light",
+      "breakpoint": "sm",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-stored-secret-visible-sm-dark",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "stored-secret-visible",
+      "viewport": "640x844",
+      "theme": "dark",
+      "breakpoint": "sm",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-stored-secret-visible-md-below-light",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "stored-secret-visible",
+      "viewport": "767x844",
+      "theme": "light",
+      "breakpoint": "md-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-stored-secret-visible-md-below-dark",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "stored-secret-visible",
+      "viewport": "767x844",
+      "theme": "dark",
+      "breakpoint": "md-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-stored-secret-visible-md-light",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "stored-secret-visible",
+      "viewport": "768x844",
+      "theme": "light",
+      "breakpoint": "md",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-stored-secret-visible-md-dark",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "stored-secret-visible",
+      "viewport": "768x844",
+      "theme": "dark",
+      "breakpoint": "md",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-stored-secret-visible-desktop-light",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "stored-secret-visible",
+      "viewport": "1280x900",
+      "theme": "light",
+      "breakpoint": "desktop",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle",
+        "stored-secret-reveal"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-stored-secret-visible-desktop-dark",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "stored-secret-visible",
+      "viewport": "1280x900",
+      "theme": "dark",
+      "breakpoint": "desktop",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle",
+        "stored-secret-reveal"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-stored-secret-visible-mobile-light",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "stored-secret-visible",
+      "viewport": "390x844",
+      "theme": "light",
+      "breakpoint": "mobile",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle",
+        "stored-secret-reveal"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-stored-secret-visible-mobile-dark",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "stored-secret-visible",
+      "viewport": "390x844",
+      "theme": "dark",
+      "breakpoint": "mobile",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle",
+        "stored-secret-reveal"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-stored-secret-visible-sm-below-light",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "stored-secret-visible",
+      "viewport": "639x844",
+      "theme": "light",
+      "breakpoint": "sm-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle",
+        "stored-secret-reveal"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-stored-secret-visible-sm-below-dark",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "stored-secret-visible",
+      "viewport": "639x844",
+      "theme": "dark",
+      "breakpoint": "sm-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle",
+        "stored-secret-reveal"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-stored-secret-visible-sm-light",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "stored-secret-visible",
+      "viewport": "640x844",
+      "theme": "light",
+      "breakpoint": "sm",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle",
+        "stored-secret-reveal"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-stored-secret-visible-sm-dark",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "stored-secret-visible",
+      "viewport": "640x844",
+      "theme": "dark",
+      "breakpoint": "sm",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle",
+        "stored-secret-reveal"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-stored-secret-visible-md-below-light",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "stored-secret-visible",
+      "viewport": "767x844",
+      "theme": "light",
+      "breakpoint": "md-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle",
+        "stored-secret-reveal"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-stored-secret-visible-md-below-dark",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "stored-secret-visible",
+      "viewport": "767x844",
+      "theme": "dark",
+      "breakpoint": "md-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle",
+        "stored-secret-reveal"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-stored-secret-visible-md-light",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "stored-secret-visible",
+      "viewport": "768x844",
+      "theme": "light",
+      "breakpoint": "md",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle",
+        "stored-secret-reveal"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-stored-secret-visible-md-dark",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "stored-secret-visible",
+      "viewport": "768x844",
+      "theme": "dark",
+      "breakpoint": "md",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle",
+        "stored-secret-reveal"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-post-save-masked-desktop-light",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "post-save-masked",
+      "viewport": "1280x900",
+      "theme": "light",
+      "breakpoint": "desktop",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-post-save-masked-desktop-dark",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "post-save-masked",
+      "viewport": "1280x900",
+      "theme": "dark",
+      "breakpoint": "desktop",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-post-save-masked-mobile-light",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "post-save-masked",
+      "viewport": "390x844",
+      "theme": "light",
+      "breakpoint": "mobile",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-post-save-masked-mobile-dark",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "post-save-masked",
+      "viewport": "390x844",
+      "theme": "dark",
+      "breakpoint": "mobile",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-post-save-masked-sm-below-light",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "post-save-masked",
+      "viewport": "639x844",
+      "theme": "light",
+      "breakpoint": "sm-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-post-save-masked-sm-below-dark",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "post-save-masked",
+      "viewport": "639x844",
+      "theme": "dark",
+      "breakpoint": "sm-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-post-save-masked-sm-light",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "post-save-masked",
+      "viewport": "640x844",
+      "theme": "light",
+      "breakpoint": "sm",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-post-save-masked-sm-dark",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "post-save-masked",
+      "viewport": "640x844",
+      "theme": "dark",
+      "breakpoint": "sm",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-post-save-masked-md-below-light",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "post-save-masked",
+      "viewport": "767x844",
+      "theme": "light",
+      "breakpoint": "md-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-post-save-masked-md-below-dark",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "post-save-masked",
+      "viewport": "767x844",
+      "theme": "dark",
+      "breakpoint": "md-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-post-save-masked-md-light",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "post-save-masked",
+      "viewport": "768x844",
+      "theme": "light",
+      "breakpoint": "md",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "users-header-post-save-masked-md-dark",
+      "targetId": "users-header",
+      "entry": "index.html",
+      "route": "/admin/users",
+      "surface": "users route header with settings menu open",
+      "state": "post-save-masked",
+      "viewport": "768x844",
+      "theme": "dark",
+      "breakpoint": "md",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-forward-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-post-save-masked-desktop-light",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "post-save-masked",
+      "viewport": "1280x900",
+      "theme": "light",
+      "breakpoint": "desktop",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle",
+        "section-independent-save",
+        "post-save-secret-mask"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-post-save-masked-desktop-dark",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "post-save-masked",
+      "viewport": "1280x900",
+      "theme": "dark",
+      "breakpoint": "desktop",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle",
+        "section-independent-save",
+        "post-save-secret-mask"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-post-save-masked-mobile-light",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "post-save-masked",
+      "viewport": "390x844",
+      "theme": "light",
+      "breakpoint": "mobile",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle",
+        "section-independent-save",
+        "post-save-secret-mask"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-post-save-masked-mobile-dark",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "post-save-masked",
+      "viewport": "390x844",
+      "theme": "dark",
+      "breakpoint": "mobile",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle",
+        "section-independent-save",
+        "post-save-secret-mask"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-post-save-masked-sm-below-light",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "post-save-masked",
+      "viewport": "639x844",
+      "theme": "light",
+      "breakpoint": "sm-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle",
+        "section-independent-save",
+        "post-save-secret-mask"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-post-save-masked-sm-below-dark",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "post-save-masked",
+      "viewport": "639x844",
+      "theme": "dark",
+      "breakpoint": "sm-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle",
+        "section-independent-save",
+        "post-save-secret-mask"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-post-save-masked-sm-light",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "post-save-masked",
+      "viewport": "640x844",
+      "theme": "light",
+      "breakpoint": "sm",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle",
+        "section-independent-save",
+        "post-save-secret-mask"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-post-save-masked-sm-dark",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "post-save-masked",
+      "viewport": "640x844",
+      "theme": "dark",
+      "breakpoint": "sm",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle",
+        "section-independent-save",
+        "post-save-secret-mask"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-post-save-masked-md-below-light",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "post-save-masked",
+      "viewport": "767x844",
+      "theme": "light",
+      "breakpoint": "md-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle",
+        "section-independent-save",
+        "post-save-secret-mask"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-post-save-masked-md-below-dark",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "post-save-masked",
+      "viewport": "767x844",
+      "theme": "dark",
+      "breakpoint": "md-below",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle",
+        "section-independent-save",
+        "post-save-secret-mask"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-post-save-masked-md-light",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "post-save-masked",
+      "viewport": "768x844",
+      "theme": "light",
+      "breakpoint": "md",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle",
+        "section-independent-save",
+        "post-save-secret-mask"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    },
+    {
+      "id": "developer-api-post-save-masked-md-dark",
+      "targetId": "developer-api",
+      "entry": "developer-api.html",
+      "route": "/admin/developer-api",
+      "surface": "Developer API settings form",
+      "state": "post-save-masked",
+      "viewport": "768x844",
+      "theme": "dark",
+      "breakpoint": "md",
+      "expectedInvariantIds": [
+        "admin-shell",
+        "settings-form",
+        "responsive-flow",
+        "secret-mask",
+        "secret-visibility-toggle",
+        "section-independent-save",
+        "post-save-secret-mask"
+      ],
+      "intentionalDifferenceIds": [
+        "prototype-back-static-entry"
+      ]
+    }
+  ]
+}

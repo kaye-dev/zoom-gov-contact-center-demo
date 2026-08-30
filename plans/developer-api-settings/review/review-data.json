@@ -1,0 +1,240 @@
+{
+  "title": "Developer API設定の実装レビュー",
+  "generatedAt": "2026-08-30T00:12:55+09:00",
+  "planPath": "plans/developer-api-settings/goal.md",
+  "base": "HEAD",
+  "head": "working tree",
+  "summary": "Developer API設定画面、暗号化保存、権限、デプロイ導線をレビューした。独立保存の実装自体は確認できるが、承認済みprototypeとの不一致と最終parity証拠の欠落により、現状は完了扱いにできない。",
+  "reviewedPaths": [
+    ".env.example",
+    "app/admin/AdminShell.tsx",
+    "app/admin/developer-api/DeveloperApiSettingsForm.tsx",
+    "app/admin/developer-api/page.tsx",
+    "app/admin/layout.tsx",
+    "app/admin/page.tsx",
+    "app/api/[[...route]]/route.ts",
+    "app/components/PasswordInput.tsx",
+    "app/i18n/dictionaries.ts",
+    "compose.yaml",
+    "docs/deploy/vercel-neon/initial-deploy.md",
+    "docs/deploy/vercel-neon/redeploy.md",
+    "lib/admin-access/authorization.ts",
+    "lib/admin-access/catalog.ts",
+    "lib/admin-access/types.ts",
+    "lib/developer-api-settings.ts",
+    "lib/server/developer-api-crypto.ts",
+    "lib/server/developer-api-settings.ts",
+    "prisma/migrations/20260829231500_add_developer_api_settings/migration.sql",
+    "prisma/schema.prisma",
+    "scripts/deploy/lib/migrations.ts",
+    "scripts/deploy/main.ts",
+    "scripts/deploy/test/deploy.test.ts",
+    "test/developer-api-crypto.test.ts",
+    "test/developer-api.test.ts",
+    "test/integration/developer-api-runtime.test.ts",
+    "test/password-input.test.ts"
+  ],
+  "excludedPaths": [],
+  "validations": [
+    {
+      "command": "node .agents/skills/plan/scripts/prototype-revision.mjs plans/developer-api-settings/prototype",
+      "status": "passed",
+      "summary": "prototype revisionはgoalおよびapproval.jsonの値と一致した。"
+    },
+    {
+      "command": "node .agents/skills/plan/scripts/parity-runner.mjs validate plans/developer-api-settings/prototype",
+      "status": "passed",
+      "summary": "version 1 profile、48行、profile digestを静的検証した。"
+    },
+    {
+      "command": "find plans/developer-api-settings/evidence -maxdepth 2 -type f -print | sort",
+      "status": "failed",
+      "summary": "approval.jsonは存在するが、必須のschema-version-3 implementation-parity.jsonがない。"
+    },
+    {
+      "command": "node --import tsx --test test/developer-api.test.ts test/developer-api-crypto.test.ts test/integration/developer-api-runtime.test.ts test/password-input.test.ts test/admin-access-authorization.test.ts test/admin-access-ui.test.ts",
+      "status": "passed",
+      "summary": "関連テスト28件が成功した。"
+    },
+    {
+      "command": "npm run lint && npm run typecheck && git diff --check",
+      "status": "passed",
+      "summary": "lint、型検査、diff whitespace検査が成功した。"
+    },
+    {
+      "command": "npm run build",
+      "status": "passed",
+      "summary": "Next.js production buildが成功し、Developer API routeが生成された。"
+    }
+  ],
+  "groups": [
+    {
+      "id": "admin-ui-and-access",
+      "title": "管理画面UI・ナビゲーション・権限",
+      "summary": "Developer APIの管理画面導線、独立した2セクション、権限フィルタ、多言語表示を追加する変更。",
+      "risk": "critical",
+      "blastRadius": "管理者の設定メニュー、Developer API設定画面、閲覧・更新権限、全5ロケールの表示に影響する。",
+      "files": [
+        "app/admin/AdminShell.tsx",
+        "app/admin/developer-api/DeveloperApiSettingsForm.tsx",
+        "app/admin/developer-api/page.tsx",
+        "app/admin/layout.tsx",
+        "app/admin/page.tsx",
+        "app/i18n/dictionaries.ts",
+        "lib/admin-access/authorization.ts",
+        "lib/admin-access/catalog.ts",
+        "lib/admin-access/types.ts"
+      ],
+      "locations": [
+        "app/admin/AdminShell.tsx@file",
+        "app/admin/developer-api/DeveloperApiSettingsForm.tsx:108-245",
+        "app/admin/developer-api/page.tsx@file",
+        "app/admin/layout.tsx@file",
+        "app/admin/page.tsx@file",
+        "app/i18n/dictionaries.ts@file",
+        "lib/admin-access/authorization.ts@file",
+        "lib/admin-access/catalog.ts@file",
+        "lib/admin-access/types.ts@file"
+      ],
+      "findings": [
+        {
+          "source": "conformance",
+          "severity": "blocker",
+          "title": "必須のimplementation parity証拠が欠落している",
+          "body": "UI impactがtrueでfull scopeの48行検証が要求されているが、evidenceにはapproval.jsonしかなく、schema-version-3 implementation-parity.jsonがない。light/dark、6 viewport、2 state、scroll実測、console/network、production/prototype parityの完了を証明できない。",
+          "location": "app/admin/developer-api/DeveloperApiSettingsForm.tsx@file",
+          "recommendation": "最新の承認済みgoalとprototypeに対して規定のfull matrixを一度実行し、48行すべての結果と実測scrollを含む最終証拠を生成する。"
+        },
+        {
+          "source": "conformance",
+          "severity": "blocker",
+          "title": "独立保存UIが承認済みprototypeと一致していない",
+          "body": "productionはOAuth用とWebhook用の2つのformおよび2つの保存ボタンを実装しているが、承認済みprototypeは単一formと単一保存ボタンのままである。現行profileのequal screenshotとtext probeは通過できず、独立validation/save interactionもcontract化されていない。",
+          "location": "app/admin/developer-api/DeveloperApiSettingsForm.tsx:115",
+          "recommendation": "同じplanを更新し、prototype、ui-contract、parity-specへ2つの独立form・feedback・validation/save probeを反映する。新revisionを明示承認してから最終parityを取得する。"
+        }
+      ],
+      "planDeviations": [
+        "最新要求のセクション別validation/saveがgoalとprototypeへ反映されていない。",
+        "full scopeのschema-version-3最終parity証拠がない。"
+      ],
+      "evidence": [
+        "goalとprototype revision/profile digestはapproval.jsonと一致した。",
+        "prototypeは単一form、working treeは2つの独立formである。",
+        "evidence directoryにはapproval.jsonのみ存在する。"
+      ]
+    },
+    {
+      "id": "credential-storage-and-api",
+      "title": "認証情報の入力・API・暗号化保存",
+      "summary": "セクション別payload、AES-GCM暗号化、singleton保存、mask/toggle、APIレスポンスの非漏えいを実装する変更。",
+      "risk": "high",
+      "blastRadius": "管理者が入力するOAuth/Webhook認証情報、DB ciphertext、管理API、共通PasswordInputと関連テストに影響する。",
+      "files": [
+        ".env.example",
+        "app/api/[[...route]]/route.ts",
+        "app/components/PasswordInput.tsx",
+        "compose.yaml",
+        "lib/developer-api-settings.ts",
+        "lib/server/developer-api-crypto.ts",
+        "lib/server/developer-api-settings.ts",
+        "prisma/migrations/20260829231500_add_developer_api_settings/migration.sql",
+        "prisma/schema.prisma",
+        "test/developer-api-crypto.test.ts",
+        "test/developer-api.test.ts",
+        "test/integration/developer-api-runtime.test.ts",
+        "test/password-input.test.ts"
+      ],
+      "locations": [
+        ".env.example@file",
+        "app/api/[[...route]]/route.ts:844-885",
+        "app/components/PasswordInput.tsx:24-74",
+        "compose.yaml@file",
+        "lib/developer-api-settings.ts@file",
+        "lib/server/developer-api-crypto.ts@file",
+        "lib/server/developer-api-settings.ts@file",
+        "prisma/migrations/20260829231500_add_developer_api_settings/migration.sql@file",
+        "prisma/schema.prisma@file",
+        "test/developer-api-crypto.test.ts@file",
+        "test/developer-api.test.ts@file",
+        "test/integration/developer-api-runtime.test.ts@file",
+        "test/password-input.test.ts@file"
+      ],
+      "findings": [
+        {
+          "source": "conformance",
+          "severity": "major",
+          "title": "表示状態のまま保存すると設定済みSecretがtext inputとして残る",
+          "body": "PasswordInputのisVisibleは内部stateのままで、保存成功時に親が値を空へ戻してもfalseへ戻らない。表示状態で保存するとconfigured後も空inputのtypeがtextのままとなり、次の置換値も最初から平文表示される。",
+          "location": "app/components/PasswordInput.tsx:36",
+          "recommendation": "保存成功時に対象inputのvisibilityをfalseへ戻せるAPIまたは安全な再mountを追加し、保存後のvalue空、type=password、aria-pressed=falseを両Secretでテストする。"
+        },
+        {
+          "source": "blind",
+          "severity": "minor",
+          "title": "セキュリティ境界である管理APIルートがテストされていない",
+          "body": "追加されたintegration testは保存関数をmock Prismaへ直接呼ぶだけで、PUT管理APIを通らない。認証なし、VIEWのみ、UPDATE許可、malformed JSON、暗号鍵不備、成功レスポンスの平文非漏えいというroute-level契約が回帰テストされていない。",
+          "location": "test/integration/developer-api-runtime.test.ts:8",
+          "recommendation": "実際のHono routeを呼ぶテストを追加し、認証・権限・validation・暗号化不能・成功レスポンスの非漏えいを検証する。"
+        }
+      ],
+      "planDeviations": [
+        "toggle表示中の保存後mask復帰が未実装・未検証である。",
+        "goalが要求するAPI guardと401/403/503/500のroute-level確認が不足する。"
+      ],
+      "evidence": [
+        "関連テスト28件、lint、typecheck、buildは成功した。",
+        "PasswordInputはvisibilityを内部stateとして保持し、親からのreset契約を持たない。",
+        "runtime testはsaveDeveloperApiSettingsを直接呼び、Hono routeを経由しない。"
+      ]
+    },
+    {
+      "id": "deployment-and-recovery",
+      "title": "デプロイ環境変数・migration・復旧手順",
+      "summary": "暗号鍵をProduction allowlistへ追加し、migration検査と運用文書を更新する変更。",
+      "risk": "high",
+      "blastRadius": "Production環境変数の更新、既存ciphertextの復号可能性、Neon migrationと再デプロイ手順に影響する。",
+      "files": [
+        "docs/deploy/vercel-neon/initial-deploy.md",
+        "docs/deploy/vercel-neon/redeploy.md",
+        "scripts/deploy/lib/migrations.ts",
+        "scripts/deploy/main.ts",
+        "scripts/deploy/test/deploy.test.ts"
+      ],
+      "locations": [
+        "docs/deploy/vercel-neon/initial-deploy.md:167",
+        "docs/deploy/vercel-neon/redeploy.md:59-65",
+        "scripts/deploy/lib/migrations.ts@file",
+        "scripts/deploy/main.ts:408-446",
+        "scripts/deploy/test/deploy.test.ts@file"
+      ],
+      "findings": [
+        {
+          "source": "blind",
+          "severity": "major",
+          "title": "暗号鍵消失時に既存ciphertextを確認せず新しい鍵を自動生成する",
+          "body": "Production環境変数から暗号鍵が消え、DBに既存ciphertextが残る状態でも新しいランダム鍵を生成する。旧鍵で暗号化された値は復号不能となるが、設定画面はconfiguredのままになり得るため、環境変数欠落を初回導入と誤認している。",
+          "location": "scripts/deploy/main.ts:411",
+          "recommendation": "鍵がない場合はdirect DBで既存ciphertextの有無を確認し、存在すれば新規生成せず停止する。テーブル未作成または全ciphertextがNULLの場合だけ生成し、この復旧経路をテストする。"
+        },
+        {
+          "source": "conformance",
+          "severity": "minor",
+          "title": "デプロイ文書のmigration件数が現行実装と矛盾している",
+          "body": "デプロイスクリプトは10件のreviewed migrationを扱う一方、initial-deployとredeployは既存5件だけと説明している。運用者が新migrationは未対応だと誤認する。",
+          "location": "docs/deploy/vercel-neon/redeploy.md:65",
+          "recommendation": "両文書の件数を現行の10件へ更新し、次に追加されるmigrationを11件目として説明する。"
+        }
+      ],
+      "planDeviations": [
+        "鍵喪失時は同一鍵復旧かSecret再入力のみとするgoalに対し、deploy scriptが新鍵を自動生成し得る。",
+        "migration件数の運用文書が実装と一致しない。"
+      ],
+      "evidence": [
+        "deploy scriptは環境変数の存在だけで新鍵生成を判断する。",
+        "REVIEWED_MIGRATION_COUNTは10だが、両文書は5件と記載する。",
+        "deploy関連テストは成功したが、既存ciphertextがある鍵欠落経路を対象にしない。"
+      ]
+    }
+  ]
+}
