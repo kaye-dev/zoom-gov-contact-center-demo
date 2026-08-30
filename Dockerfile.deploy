@@ -33,4 +33,4 @@ ENV DEPLOY_GIT_BRANCH=${DEPLOY_GIT_BRANCH}
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NO_COLOR=1
 
-CMD ["node", "--import", "tsx", "scripts/deploy/main.ts"]
+CMD ["node", "--no-warnings", "--import", "tsx", "scripts/deploy/main.ts"]

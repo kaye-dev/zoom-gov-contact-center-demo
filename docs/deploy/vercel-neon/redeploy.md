@@ -46,11 +46,18 @@ AWS IAM Identity Center sessionが失効している場合だけ、AWSへの再l
 
 ## 完了判定
 
-次の両方が表示された時点で、スクリプト上の再デプロイは完了です。
+対話terminalではphaseがcyan、警告がyellow、成功がgreenで表示されます。pipe、redirect、GitHub Actions、`NO_COLOR`指定時はANSI colorを出しませんが、同じ記号と文言を表示します。
+
+canonical smokeの成功後、最後に次のbannerが表示された時点で、スクリプト上の再デプロイは完了です。途中の`Production deployment verified`だけでは完了ではありません。
 
 ```text
-Canonical smoke passed: <deployment ID>
-Deployment completed: <deployment ID> (<commit SHA>)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✓ PRODUCTION DEPLOYMENT SUCCEEDED
+  Productionデプロイに成功しました。
+  Canonical URL : <canonical origin>
+  Deployment ID: <deployment ID>
+  Git commit    : <commit SHA>
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
 必要に応じてブラウザでも次を確認します。
