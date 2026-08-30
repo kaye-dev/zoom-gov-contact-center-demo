@@ -38,8 +38,19 @@ import {
   type CommandRunner,
 } from "./lib/process";
 import {
+  renderDeploymentDetail,
+  renderDeploymentFailure,
+  renderDeploymentPhase,
+  renderDeploymentRevalidation,
+  renderDeploymentSuccess,
+  renderDeploymentSuccessSummary,
+  renderDeploymentWarning,
+  resolveDeploymentLogStyle,
+} from "./lib/logging";
+import {
   capturePublicSiteBaseline,
   runSmokeChecks,
+  type RequestFunction,
   type SmokeCredentials,
 } from "./lib/smoke";
 import {
@@ -88,6 +99,13 @@ const VERCEL_ENVIRONMENT_PAGE_LIMIT = 100;
 const VERCEL_ENVIRONMENT_MAX_PAGES = 32;
 const SYNTHETIC_BUILD_DATABASE_URL =
   "postgresql://deploy_build:deploy_build@127.0.0.1:5432/deploy_build?sslmode=disable";
+const CANONICAL_PUBLIC_STATUS_ATTEMPTS = 12;
+const CANONICAL_PUBLIC_STATUS_DELAY_MS = 5_000;
+const DEPLOYMENT_LOG_STYLE = resolveDeploymentLogStyle(
+  process.env.DEPLOY_LOG_STYLE,
+);
+const PG_SSL_WARNING_PREFIX =
+  "SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.";
 
 class CliUnavailableError extends Error {}
 
@@ -106,6 +124,48 @@ export type ProductionEnvironmentAudit = {
 };
 
 type DeploymentPhase = "validate" | "migrate" | "release" | "smoke";
+
+function logDeploymentPhase(step: number, label: string): void {
+  console.log(renderDeploymentPhase(step, label, DEPLOYMENT_LOG_STYLE));
+}
+
+function logDeploymentRevalidation(label: string): void {
+  console.log(renderDeploymentRevalidation(label, DEPLOYMENT_LOG_STYLE));
+}
+
+function logDeploymentDetail(message: string): void {
+  console.log(renderDeploymentDetail(message, DEPLOYMENT_LOG_STYLE));
+}
+
+function logDeploymentSuccess(message: string): void {
+  console.log(renderDeploymentSuccess(message, DEPLOYMENT_LOG_STYLE));
+}
+
+export function summarizeDeploymentProcessWarning(
+  warningName: string,
+  warningMessage: string,
+  phase: DeploymentPhase,
+): string | undefined {
+  if (warningMessage.startsWith(PG_SSL_WARNING_PREFIX)) {
+    return phase === "validate"
+      ? "Database TLS: sslmode=requireは現在verify-full相当です。pgの次回major更新前に接続設定を見直してください。"
+      : undefined;
+  }
+  return `${warningName}: ${warningMessage.trim()}`;
+}
+
+function installDeploymentWarningHandler(phase: DeploymentPhase): void {
+  process.on("warning", (warning) => {
+    const message = summarizeDeploymentProcessWarning(
+      warning.name,
+      warning.message,
+      phase,
+    );
+    if (message !== undefined) {
+      console.warn(renderDeploymentWarning(message, DEPLOYMENT_LOG_STYLE));
+    }
+  });
+}
 
 type DeploymentGitSnapshot = {
   branch: string;
@@ -171,7 +231,16 @@ export async function runDeploymentWorkflow(
         process.env.DEPLOY_EXPECTED_PREVIOUS_DEPLOYMENT_ID,
       );
     }
-    console.log("[1/5] Deployment target validation");
+    if (phase === "validate") {
+      logDeploymentPhase(1, "デプロイ対象の検証");
+    } else {
+      const labels: Record<Exclude<DeploymentPhase, "validate">, string> = {
+        migrate: "Migration適用前のデプロイ対象を再検証",
+        release: "Production反映前のデプロイ対象を再検証",
+        smoke: "Canonical smoke前のデプロイ対象を再検証",
+      };
+      logDeploymentRevalidation(labels[phase]);
+    }
     validateLocalDeploymentConfig(projectRoot);
     const target = await loadVerifiedDeploymentTarget(
       runner,
@@ -180,14 +249,22 @@ export async function runDeploymentWorkflow(
       expectedTargetFingerprint,
     );
     state.target = target;
-    console.log(`Git commit: ${git.commitSha}`);
-    console.log(
-      `Vercel target: ${redactIdentifier(target.link.projectId)} @ ${redactHostname(target.canonicalUrl.hostname)}`,
-    );
-    console.log(`Neon target: ${redactIdentifier(target.database.endpointId)}`);
+    if (phase === "validate") {
+      logDeploymentDetail(`Git commit: ${git.commitSha}`);
+      logDeploymentDetail(
+        `Vercel target: ${redactIdentifier(target.link.projectId)} @ ${redactHostname(target.canonicalUrl.hostname)}`,
+      );
+      logDeploymentDetail(
+        `Neon target: ${redactIdentifier(target.database.endpointId)}`,
+      );
+    } else {
+      logDeploymentSuccess(
+        `デプロイ対象の再検証完了 (${git.commitSha.slice(0, 12)})`,
+      );
+    }
 
     if (phase === "smoke") {
-      console.log("[5/5] Canonical smoke");
+      logDeploymentPhase(5, "Canonical smoke");
       if (state.attemptedDeploymentId === undefined) {
         throw new Error("The expected smoke deployment ID is unavailable.");
       }
@@ -196,15 +273,24 @@ export async function runDeploymentWorkflow(
         target,
         state.attemptedDeploymentId,
       );
-      console.log(`Canonical smoke passed: ${state.attemptedDeploymentId}`);
+      logDeploymentSuccess(
+        `Canonical smoke passed: ${state.attemptedDeploymentId}`,
+      );
       console.log(
-        `Deployment completed: ${state.attemptedDeploymentId} (${git.commitSha})`,
+        renderDeploymentSuccessSummary(
+          {
+            canonicalOrigin: target.canonicalUrl.origin,
+            commitSha: git.commitSha,
+            deploymentId: state.attemptedDeploymentId,
+          },
+          DEPLOYMENT_LOG_STYLE,
+        ),
       );
       return;
     }
 
     if (phase === "validate") {
-      console.log("[2/5] Quality gates");
+      logDeploymentPhase(2, "品質ゲート");
       const buildAuthSecret = randomBytes(48).toString("base64url");
       secrets.add(buildAuthSecret);
       const buildEnvironment = createBuildEnvironment(
@@ -216,7 +302,13 @@ export async function runDeploymentWorkflow(
       assertDeploymentGitSnapshotUnchanged(git, process.env);
     }
 
-    console.log("[3/5] Migration verification");
+    if (phase === "validate") {
+      logDeploymentPhase(3, "DB migrationの確認");
+    } else if (phase === "migrate") {
+      logDeploymentPhase(3, "承認済みDB migrationの適用");
+    } else {
+      logDeploymentRevalidation("Production反映前のmigration状態を再検証");
+    }
     const migrationPlan = await createMigrationPlan({
       projectRoot,
       directUrl: target.database.directUrl,
@@ -228,7 +320,7 @@ export async function runDeploymentWorkflow(
       if (migrationPlan.state === "pending") {
         console.log(renderMigrationPlan(migrationPlan));
       } else {
-        console.log("Migration state: up to date");
+        logDeploymentSuccess("Migration state: up to date");
       }
       writeDeploymentOutputs({
         "migration-required":
@@ -236,7 +328,7 @@ export async function runDeploymentWorkflow(
         "plan-digest": migrationPlan.planHash,
         "target-fingerprint": target.targetFingerprint,
       });
-      console.log("Validation completed without Production mutation.");
+      logDeploymentSuccess("検証完了（Production変更なし）");
       if (shouldRequireLocalMigrationApproval(migrationPlan.state, process.env)) {
         throw new MigrationApprovalRequiredError();
       }
@@ -270,12 +362,12 @@ export async function runDeploymentWorkflow(
       applyMigrationPlan(runner, target.database.directUrl);
       await assertMigrationUpToDate(runner, target.database.directUrl, projectRoot);
       await verifyMaintenanceSettingsDatabase(target.database.directUrl);
-      console.log("Migration applied and verified.");
+      logDeploymentSuccess("Migration applied and verified");
       return;
     }
 
     if (migrationPlan.state === "up-to-date") {
-      console.log("Migration state: up to date");
+      logDeploymentSuccess("Migration state: up to date");
     }
 
     if (phase === "release" && migrationPlan.state !== "up-to-date") {
@@ -287,7 +379,7 @@ export async function runDeploymentWorkflow(
       await verifyMaintenanceSettingsDatabase(target.database.directUrl);
       assertDeploymentGitSnapshotUnchanged(git, process.env);
 
-      console.log("[4/5] Direct Production deployment");
+      logDeploymentPhase(4, "Productionへ直接デプロイ");
       const previousProduction = readCanonicalDeployment(
         runner,
         target.link,
@@ -300,11 +392,11 @@ export async function runDeploymentWorkflow(
           target.canonicalUrl,
           globalThis.fetch,
         );
-        console.log(
+        logDeploymentDetail(
           `Canonical before deployment: ${previousProduction.id} (HTTP ${publicBaseline.status})`,
         );
       } else {
-        console.log("Canonical before deployment: none");
+        logDeploymentDetail("Canonical before deployment: none");
       }
 
       state.productionDeploymentAttempted = true;
@@ -338,7 +430,9 @@ export async function runDeploymentWorkflow(
           "The canonical domain does not resolve to the exact direct Production deployment.",
         );
       }
-      console.log(`Production deployment verified: ${productionDeployment.id}`);
+      logDeploymentSuccess(
+        `Production deployment verified: ${productionDeployment.id}`,
+      );
       writeDeploymentOutputs({
         "deployment-id": productionDeployment.id,
         "previous-deployment-id": previousProduction?.id ?? "none",
@@ -779,6 +873,18 @@ async function runCanonicalSmoke(
         target.database.directUrl,
         "PRODUCTION",
       );
+      await waitForCanonicalPublicStatus(
+        target.canonicalUrl,
+        expectedDeploymentId,
+        expectation.status,
+        () =>
+          readCanonicalDeployment(
+            runner,
+            target.link,
+            target.canonicalUrl,
+            target.vercelEnvironment,
+          ),
+      );
       await runSmokeChecks(
         target.canonicalUrl,
         target.adminCredentials,
@@ -810,6 +916,71 @@ export async function runCanonicalDeploymentBoundSmoke(
       `Canonical Production changed to '${after?.id ?? "none"}' after smoke, expected '${expectedDeploymentId}'.`,
     );
   }
+}
+
+export async function waitForCanonicalPublicStatus(
+  canonicalUrl: URL,
+  expectedDeploymentId: string,
+  expectedStatus: 200 | 503,
+  readCurrent: () => { id: string } | undefined,
+  options: {
+    attempts?: number;
+    delayMs?: number;
+    request?: RequestFunction;
+    sleep?: (milliseconds: number) => Promise<void>;
+  } = {},
+): Promise<void> {
+  const attempts = options.attempts ?? CANONICAL_PUBLIC_STATUS_ATTEMPTS;
+  const delayMs = options.delayMs ?? CANONICAL_PUBLIC_STATUS_DELAY_MS;
+  const request = options.request ?? globalThis.fetch;
+  const sleep =
+    options.sleep ??
+    ((milliseconds: number) =>
+      new Promise<void>((resolveDelay) => setTimeout(resolveDelay, milliseconds)));
+  if (!Number.isSafeInteger(attempts) || attempts < 1 || delayMs < 0) {
+    throw new Error("Canonical public status wait options are invalid.");
+  }
+
+  let lastFailure = "no response";
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const current = readCurrent();
+    if (current?.id !== expectedDeploymentId) {
+      throw new Error(
+        `Canonical Production changed to '${current?.id ?? "none"}' while waiting for public routing, expected '${expectedDeploymentId}'.`,
+      );
+    }
+
+    try {
+      const response = await request(new URL("/", canonicalUrl), {
+        cache: "no-store",
+        headers: {
+          "cache-control": "no-cache",
+          "user-agent": "zoom-gov-demo-deployment-smoke/1.0",
+        },
+        redirect: "manual",
+        signal: AbortSignal.timeout(15_000),
+      });
+      const responseUrl = response.url ? new URL(response.url) : canonicalUrl;
+      await response.arrayBuffer();
+      if (responseUrl.origin !== canonicalUrl.origin) {
+        lastFailure = `redirected outside the canonical origin to '${responseUrl.origin}'`;
+      } else if (response.status === expectedStatus) {
+        return;
+      } else {
+        lastFailure = `returned HTTP ${response.status}; expected ${expectedStatus}`;
+      }
+    } catch (error) {
+      lastFailure = error instanceof Error ? error.message : "request failed";
+    }
+
+    if (attempt < attempts) {
+      await sleep(delayMs);
+    }
+  }
+
+  throw new Error(
+    `Canonical public routing did not converge for deployment '${expectedDeploymentId}': ${lastFailure}.`,
+  );
 }
 
 async function assertMigrationUpToDate(
@@ -1646,7 +1817,7 @@ export function setVercelEnvironment(
     { input: `${value}\n`, env: { ...environment, NO_COLOR: "1" } },
   );
   assertCommandSucceeded(result, `Vercel env update for ${name}`);
-  console.log(`Updated Vercel Production env: ${name}`);
+  logDeploymentSuccess(`Vercel Production env updated: ${name}`);
 }
 
 function runQualityGates(
@@ -1670,7 +1841,7 @@ function runQualityGates(
     ["npm", ["run", "build"], buildEnvironment],
   ];
   for (const [command, arguments_, env] of commands) {
-    console.log(`Running: ${command} ${arguments_.join(" ")}`);
+    logDeploymentDetail(`実行: ${command} ${arguments_.join(" ")}`);
     const result = runner.run(command, arguments_, {
       cwd: projectRoot,
       env: env ?? qualityEnvironment,
@@ -1926,6 +2097,9 @@ async function main(): Promise<void> {
   const secrets = new SecretRegistry();
   const runner = new SystemCommandRunner(secrets, PROJECT_ROOT);
   try {
+    installDeploymentWarningHandler(
+      readDeploymentPhase(process.env.DEPLOY_PHASE),
+    );
     await runDeploymentWorkflow(runner, secrets);
   } catch (error) {
     if (error instanceof MigrationApprovalRequiredError) {
@@ -1936,6 +2110,9 @@ async function main(): Promise<void> {
       const profileDescription = error.profile
         ? `AWS profile '${error.profile}'`
         : "AWS OIDC role";
+      console.error(
+        renderDeploymentFailure("DEPLOYMENT BLOCKED", DEPLOYMENT_LOG_STYLE),
+      );
       console.error(`${profileDescription} のデプロイ設定が不足しています。`);
       console.error("不足している SSM parameter:");
       for (const name of error.missingParameterNames) {
@@ -1955,6 +2132,9 @@ async function main(): Promise<void> {
       process.exitCode = error.exitCode;
       return;
     }
+    console.error(
+      renderDeploymentFailure("DEPLOYMENT FAILED", DEPLOYMENT_LOG_STYLE),
+    );
     if (error instanceof CliUnavailableError) {
       console.error(error.message);
       console.error(
