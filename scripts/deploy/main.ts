@@ -40,6 +40,7 @@ import {
 import {
   capturePublicSiteBaseline,
   runSmokeChecks,
+  type RequestFunction,
   type SmokeCredentials,
 } from "./lib/smoke";
 import {
@@ -88,6 +89,8 @@ const VERCEL_ENVIRONMENT_PAGE_LIMIT = 100;
 const VERCEL_ENVIRONMENT_MAX_PAGES = 32;
 const SYNTHETIC_BUILD_DATABASE_URL =
   "postgresql://deploy_build:deploy_build@127.0.0.1:5432/deploy_build?sslmode=disable";
+const CANONICAL_PUBLIC_STATUS_ATTEMPTS = 12;
+const CANONICAL_PUBLIC_STATUS_DELAY_MS = 5_000;
 
 class CliUnavailableError extends Error {}
 
@@ -779,6 +782,18 @@ async function runCanonicalSmoke(
         target.database.directUrl,
         "PRODUCTION",
       );
+      await waitForCanonicalPublicStatus(
+        target.canonicalUrl,
+        expectedDeploymentId,
+        expectation.status,
+        () =>
+          readCanonicalDeployment(
+            runner,
+            target.link,
+            target.canonicalUrl,
+            target.vercelEnvironment,
+          ),
+      );
       await runSmokeChecks(
         target.canonicalUrl,
         target.adminCredentials,
@@ -810,6 +825,71 @@ export async function runCanonicalDeploymentBoundSmoke(
       `Canonical Production changed to '${after?.id ?? "none"}' after smoke, expected '${expectedDeploymentId}'.`,
     );
   }
+}
+
+export async function waitForCanonicalPublicStatus(
+  canonicalUrl: URL,
+  expectedDeploymentId: string,
+  expectedStatus: 200 | 503,
+  readCurrent: () => { id: string } | undefined,
+  options: {
+    attempts?: number;
+    delayMs?: number;
+    request?: RequestFunction;
+    sleep?: (milliseconds: number) => Promise<void>;
+  } = {},
+): Promise<void> {
+  const attempts = options.attempts ?? CANONICAL_PUBLIC_STATUS_ATTEMPTS;
+  const delayMs = options.delayMs ?? CANONICAL_PUBLIC_STATUS_DELAY_MS;
+  const request = options.request ?? globalThis.fetch;
+  const sleep =
+    options.sleep ??
+    ((milliseconds: number) =>
+      new Promise<void>((resolveDelay) => setTimeout(resolveDelay, milliseconds)));
+  if (!Number.isSafeInteger(attempts) || attempts < 1 || delayMs < 0) {
+    throw new Error("Canonical public status wait options are invalid.");
+  }
+
+  let lastFailure = "no response";
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const current = readCurrent();
+    if (current?.id !== expectedDeploymentId) {
+      throw new Error(
+        `Canonical Production changed to '${current?.id ?? "none"}' while waiting for public routing, expected '${expectedDeploymentId}'.`,
+      );
+    }
+
+    try {
+      const response = await request(new URL("/", canonicalUrl), {
+        cache: "no-store",
+        headers: {
+          "cache-control": "no-cache",
+          "user-agent": "zoom-gov-demo-deployment-smoke/1.0",
+        },
+        redirect: "manual",
+        signal: AbortSignal.timeout(15_000),
+      });
+      const responseUrl = response.url ? new URL(response.url) : canonicalUrl;
+      await response.arrayBuffer();
+      if (responseUrl.origin !== canonicalUrl.origin) {
+        lastFailure = `redirected outside the canonical origin to '${responseUrl.origin}'`;
+      } else if (response.status === expectedStatus) {
+        return;
+      } else {
+        lastFailure = `returned HTTP ${response.status}; expected ${expectedStatus}`;
+      }
+    } catch (error) {
+      lastFailure = error instanceof Error ? error.message : "request failed";
+    }
+
+    if (attempt < attempts) {
+      await sleep(delayMs);
+    }
+  }
+
+  throw new Error(
+    `Canonical public routing did not converge for deployment '${expectedDeploymentId}': ${lastFailure}.`,
+  );
 }
 
 async function assertMigrationUpToDate(

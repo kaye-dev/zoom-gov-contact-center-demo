@@ -23,6 +23,7 @@ import {
   shouldRequireLocalMigrationApproval,
   validateCanonicalDeploymentResult,
   validateProductionDeploymentEvidence,
+  waitForCanonicalPublicStatus,
 } from "../main";
 
 const neonConfig = {
@@ -542,6 +543,63 @@ test("canonical smoke remains bound to the expected deployment before and after 
     /changed to 'dpl_changed456' after smoke/u,
   );
   assert.equal(smokeCount, 1);
+});
+
+test("canonical public routing waits for a transient old maintenance response", async () => {
+  const expected = "dpl_attempt123";
+  const statuses = [503, 503, 200];
+  const delays: number[] = [];
+  let readCount = 0;
+  await assert.doesNotReject(
+    waitForCanonicalPublicStatus(
+      new URL("https://canonical.example.test"),
+      expected,
+      200,
+      () => {
+        readCount += 1;
+        return { id: expected };
+      },
+      {
+        attempts: 3,
+        delayMs: 5,
+        request: async (input) => {
+          const status = statuses.shift();
+          assert.ok(status !== undefined);
+          const response = new Response("", { status });
+          Object.defineProperty(response, "url", { value: String(input) });
+          return response;
+        },
+        sleep: async (milliseconds) => {
+          delays.push(milliseconds);
+        },
+      },
+    ),
+  );
+  assert.equal(readCount, 3);
+  assert.deepEqual(delays, [5, 5]);
+  assert.deepEqual(statuses, []);
+});
+
+test("canonical public routing fails closed if the deployment changes", async () => {
+  let requestCount = 0;
+  await assert.rejects(
+    waitForCanonicalPublicStatus(
+      new URL("https://canonical.example.test"),
+      "dpl_attempt123",
+      200,
+      () => ({ id: "dpl_changed456" }),
+      {
+        attempts: 3,
+        request: async () => {
+          requestCount += 1;
+          return new Response("", { status: 200 });
+        },
+        sleep: async () => undefined,
+      },
+    ),
+    /changed to 'dpl_changed456' while waiting for public routing/u,
+  );
+  assert.equal(requestCount, 0);
 });
 
 test("Production evidence and existing auth secret are both fail-closed", () => {
