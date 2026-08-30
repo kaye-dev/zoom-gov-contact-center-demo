@@ -27,7 +27,6 @@ plans/<slug>/
 | skill | 推奨モデル | reasoning |
 | --- | --- | --- |
 | `$plan` | `gpt-5.6-sol` | `high` |
-| `$plan-critic` | `gpt-5.6-terra` | `high` |
 | `$implement` | `gpt-5.6-sol` | `high` |
 | `$review` | `gpt-5.6-sol` | `high` |
 | `$git-commit-push-pr` | `gpt-5.6-luna` | `medium` |
@@ -39,7 +38,6 @@ read-only custom agentのモデルはスキルメタデータではなく、`.co
 | --- | --- | --- | --- | --- |
 | `$kabeuchi` | `product_advisor` | `gpt-5.6-terra` | `medium` | 明示呼び出しで1体だけ起動する。利用不能なら壁打ち未実行として停止する |
 | `$plan` | `project_explorer` | `gpt-5.6-luna` | `medium` | 複数subsystemまたは大量資料を横断するread-only探索だけで最大1体起動する。利用不能なら親が継続して未使用を報告する |
-| `$plan-critic` | `independent_reviewer` | `gpt-5.6-terra` | `high` | freshな独立reviewに1体起動する。利用不能なら停止する |
 | `$review` | `independent_reviewer` | `gpt-5.6-terra` | `high` | 分離したblind reviewとgoal適合reviewに2体を並行起動する。片方でも利用不能なら停止する |
 
 これらのcustom agentはすべて`read-only`とし、spawn時のmodelまたはreasoning overrideを渡さない。`$implement`、`$git-commit-push-pr`、`$workflow-retrospective`はsubagentへ委譲せず、親エージェントが単独で実行する。全体のsubagent既定モデル、既定reasoning、同時実行数制限はproject-local設定へ追加しない。上表以外の一般subagentは、Codexの通常動作として親taskで選択した設定を継承する。ユーザーまたは管理者の上位設定によるoverrideはrepositoryの管理対象外とする。
@@ -59,10 +57,9 @@ skillメタデータとproject-local `profiles`ではmodelを指定しない。�
 基本は次の順で進める。
 
 1. `$plan`: goalと必要なUI prototypeを作る。
-2. `$plan-critic`（任意）: goalとprototypeを独立reviewする。
-3. `$implement`: 現在のgoalとprototypeを承認して実装・検証する。
-4. `$review`（必要な場合）: diffとgoalへの適合性をreviewする。
-5. `$git-commit-push-pr`（明示依頼時）: commit、push、PRを行う。
+2. `$implement`: 現在のgoalとprototypeを承認して実装・検証する。
+3. `$review`（必要な場合）: diffとgoalへの適合性をreviewする。
+4. `$git-commit-push-pr`（明示依頼時）: commit、push、PRを行う。
 
 plan成果物のcleanupは、この流れとは別の明示操作として行う。
 
@@ -77,15 +74,20 @@ plan成果物のcleanupは、この流れとは別の明示操作として行う
 
 フィードバックでは同じplanを最終設計として更新する。Browserをauthoring中に使わず、静的作業が完了した返却直前に影響scopeのsmokeを1回だけ行う。全matrixや承認状態は作らない。
 
-### `$plan-critic`
+#### プランの再整理
 
-1. 対象のgoal、prototype、contract、profileを特定する。
-2. freshな履歴なし`independent_reviewer`で要件、設計、検証、UI parityを独立reviewする。
-3. 採用済み要件とlive evidenceから一意に直せる欠陥だけを修正する。
-4. goalを監査し、UI変更時はCSS build、contract/profile validation、revision再計算を終えてから、返却直前に影響scopeのsmokeを1回行う。
-5. 更新path、revision、smoke結果、修正内容、残るriskを返す。
+会話履歴、却下案、以前の設計との比較が蓄積してplanを理解しづらくなった場合は、同じtaskへ次のpromptを送る。
 
-新しい製品判断または不足するlive evidenceが必要な場合だけユーザーへ確認する。全matrix、承認証跡、production変更は作らない。
+```text
+最終設計を、最初からこの結論を採用していたものとして全面的に書き直してください。
+
+読者はこの会話の経緯を一切知らない新規参加者とする。経緯を知らないと意味が通じない文は残さないこと。
+
+過去案、却下理由、変更履歴、以前の設計との比較として書かれた「◯◯はやらない」は削除してください。
+ただし、現在の仕様として必要な制約、安全境界、対象外、互換性、移行・ロールバック条件は残してください。
+```
+
+この再整理は同じ`plans/<slug>/goal.md`を編集上の履歴がない最終設計へ書き直す操作である。別skill、custom agent、追加のBrowser確認は起動しない。prototypeまたはUI契約も変更する場合だけ、通常の`$plan`フィードバックとして静的検証、revision更新、返却直前のsmokeを行う。
 
 ### `$implement`
 
@@ -117,12 +119,11 @@ HTML reportは実装を変更せず、`採用 / 却下 / 未確定`、comment、
 
 1. 各指摘の判断とcommentを確定し、Markdownをcopyする。
 2. goal、完成UI、interaction、contract、profileを変える場合は同じgoalへ`$plan`する。
-3. 必要なら`$plan-critic`する。
-4. 採用指摘がある場合は最新goalへ`$implement`する。
-5. 必要なら再度`$review`する。
-6. 出荷する場合だけ`$git-commit-push-pr`する。
+3. 採用指摘がある場合は最新goalへ`$implement`する。
+4. 必要なら再度`$review`する。
+5. 出荷する場合だけ`$git-commit-push-pr`する。
 
-現行goalへの実装逸脱、test不足、証跡不備だけなら2と3を省略する。focus trap、Tab循環、背景の`inert`化などUI契約を変える指摘は`$plan`後の別メッセージで`$implement`する。
+現行goalへの実装逸脱、test不足、証跡不備だけなら2を省略する。focus trap、Tab循環、背景の`inert`化などUI契約を変える指摘は`$plan`後の別メッセージで`$implement`する。
 
 ```text
 $plan plans/<slug>/goal.md

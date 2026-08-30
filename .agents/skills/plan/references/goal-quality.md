@@ -53,7 +53,7 @@ node .agents/skills/plan/scripts/prototype-revision.mjs \
   plans/<slug>/prototype
 ```
 
-The helper hashes every supported artifact path and byte, including `styles.css`, `ui-contract.json`, and `parity-spec.json`. Record the exact result as `prototype revision`. During `$plan` and `$plan-critic`, finish authoring and static validation first, then run one risk-selected `smoke` selection immediately before returning the result. Browser unavailability leaves those rows unverified but does not prevent a reviewable plan from being returned.
+The helper hashes every supported artifact path and byte, including `styles.css`, `ui-contract.json`, and `parity-spec.json`. Record the exact result as `prototype revision`. During `$plan`, finish authoring and static validation first, then run one risk-selected `smoke` selection immediately before returning the result. Browser unavailability leaves those rows unverified but does not prevent a reviewable plan from being returned.
 
 An explicit `$implement` invocation is the approval for the resolved goal, current prototype revision, and validation-profile digest. `$implement` fixes one `targeted` or `full` matrix scope and writes `approval.json`, but performs no Browser work before or during production editing. After implementation and static verification are otherwise complete, it runs one final Browser selection and writes schema-version-3 `implementation-parity.json`. These structured files live below `plans/<slug>/evidence/<run-id>/`; a missing file means that phase was not run. In the current schema, a missing final file means the completion review was not run, so do not generate pending rows.
 

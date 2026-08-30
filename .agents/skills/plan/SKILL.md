@@ -20,6 +20,8 @@ Create a reviewable implementation specification and, for user-visible work, its
 
 Write only the currently adopted design, evidence, interfaces, data flow, verification commands, completion criteria, assumptions, exclusions, and risks. Remove discussion history, rejected alternatives, stale conclusions, lifecycle metadata, task tables, progress logs, and draft/final variants. Do not invent a high-impact decision. Complete `## 要件クロージャ` for every atomic requirement, verify that every Markdown row has exactly five columns, and use an executable check for compile-time or API promises.
 
+When the user explicitly asks to reorganize a confusing existing plan, update the same `plans/<slug>/goal.md` as if the current conclusion had been selected from the beginning. Remove historical comparisons, rejected options, change history, and contrast-only statements such as "do not do the former approach". Preserve every current constraint, safety boundary, exclusion, compatibility requirement, and migration or rollback condition. Do not start another skill or custom agent, and do not run Browser solely for this editorial rewrite. If the feedback also changes the prototype or UI contract, follow the normal revision and final-smoke workflow below.
+
 ## Build an iterative UI prototype
 
 For user-visible work:

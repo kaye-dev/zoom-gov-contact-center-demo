@@ -16,7 +16,7 @@ const headings = [
   "# 前提・対象外・リスク",
 ];
 
-const workflowSkillNames = ["plan", "plan-critic", "implement", "review", "workflow-retrospective"];
+const workflowSkillNames = ["plan", "implement", "review", "workflow-retrospective"];
 const allSkillNames = [...workflowSkillNames, "git-commit-push-pr", "kabeuchi"];
 
 function parseToml(relative: string): Record<string, unknown> {
@@ -63,24 +63,21 @@ test("templateはgoal設計とinvocation approvalだけを持ちmutable parity�
   assert.doesNotMatch(template, /metadata|lifecycle status|task表|G0[1-6]|進捗|実行記録|draft|final/iu);
 });
 
-test("planとcriticはauthoring後の返却直前にsmokeを1回だけ行う", async () => {
-  const [plan, critic, quality, goalQuality, parityReference] = await Promise.all([
+test("planはauthoring後の返却直前にsmokeを1回だけ行う", async () => {
+  const [plan, quality, goalQuality, parityReference] = await Promise.all([
     read(".agents/skills/plan/SKILL.md"),
-    read(".agents/skills/plan-critic/SKILL.md"),
     read(".agents/skills/plan/references/ui-prototype-quality.md"),
     read(".agents/skills/plan/references/goal-quality.md"),
     read(".agents/skills/plan/references/parity-runner.md"),
   ]);
 
-  for (const contract of [plan, critic]) {
-    assert.match(contract, /authoritative requirements bundle/);
-    assert.match(contract, /plans\/<slug>\/goal\.md/);
-    assert.match(contract, /parity-spec\.json/);
-    assert.match(contract, /prototype revision/);
-    assert.match(contract, /smoke/);
-    assert.match(contract, /Do not run the (?:complete|full) matrix|Do not run the full matrix/);
-    assert.doesNotMatch(contract, /machineParityResults|UI承認記録|<row-id>=pending/);
-  }
+  assert.match(plan, /authoritative requirements bundle/);
+  assert.match(plan, /plans\/<slug>\/goal\.md/);
+  assert.match(plan, /parity-spec\.json/);
+  assert.match(plan, /prototype revision/);
+  assert.match(plan, /smoke/);
+  assert.match(plan, /Do not run the complete matrix/);
+  assert.doesNotMatch(plan, /machineParityResults|UI承認記録|<row-id>=pending/);
   assert.match(plan, /user can give feedback|user.*feedback/iu);
   assert.match(plan, /Browser unavailability does not block a reviewable plan/);
   assert.match(plan, /Do not open the Browser while authoring/);
@@ -88,16 +85,31 @@ test("planとcriticはauthoring後の返却直前にsmokeを1回だけ行う", a
   assert.match(plan, /at most one fresh no-history `project_explorer` custom agent/);
   assert.match(plan, /multiple independent subsystems or a large code\/document inventory/);
   assert.match(plan, /If it is unavailable, continue the investigation locally and report/);
-  assert.match(critic, /run one final smoke immediately before returning/);
-  assert.match(critic, /fresh no-history `independent_reviewer` custom agent/);
-  assert.match(critic, /Stop if the custom agent or its configured model is unavailable/);
-  assert.match(critic, /There is no plan-time approval state to reset/);
   assert.match(quality, /Prepare iterative review/);
   assert.match(goalQuality, /explicit `\$implement` invocation is the approval/);
   assert.match(goalQuality, /missing file means that phase was not run/);
   assert.match(parityReference, /representative desktop and 390×844/);
   assert.match(parityReference, /theme.*semantic-token.*native-control/);
   assert.match(parityReference, /responsive.*shell.*navigation.*layout/);
+});
+
+test("読みにくいplanは同じgoalを履歴なしの最終設計へ再整理する", async () => {
+  const [workflow, plan] = await Promise.all([
+    read("docs/development/codex-development-workflow.md"),
+    read(".agents/skills/plan/SKILL.md"),
+  ]);
+  const rewritePrompt = `最終設計を、最初からこの結論を採用していたものとして全面的に書き直してください。
+
+読者はこの会話の経緯を一切知らない新規参加者とする。経緯を知らないと意味が通じない文は残さないこと。
+
+過去案、却下理由、変更履歴、以前の設計との比較として書かれた「◯◯はやらない」は削除してください。
+ただし、現在の仕様として必要な制約、安全境界、対象外、互換性、移行・ロールバック条件は残してください。`;
+  assert.ok(workflow.includes(rewritePrompt));
+  assert.match(workflow, /同じ`plans\/<slug>\/goal\.md`/);
+  assert.match(workflow, /別skill、custom agent、追加のBrowser確認は起動しない/);
+  assert.match(plan, /as if the current conclusion had been selected from the beginning/);
+  assert.match(plan, /Preserve every current constraint, safety boundary, exclusion, compatibility requirement, and migration or rollback condition/);
+  assert.match(plan, /Do not start another skill or custom agent, and do not run Browser solely for this editorial rewrite/);
 });
 
 test("implementはinvocation approval後にBrowserを使わず実装し完了直前のfinalだけを要求する", async () => {
@@ -263,7 +275,6 @@ test("親モデル既定を持たず3つのread-only custom agentへ限定routin
 
   for (const row of [
     "| `$plan` | `gpt-5.6-sol` | `high` |",
-    "| `$plan-critic` | `gpt-5.6-terra` | `high` |",
     "| `$implement` | `gpt-5.6-sol` | `high` |",
     "| `$review` | `gpt-5.6-sol` | `high` |",
     "| `$git-commit-push-pr` | `gpt-5.6-luna` | `medium` |",
@@ -274,7 +285,6 @@ test("親モデル既定を持たず3つのread-only custom agentへ限定routin
   for (const row of [
     "| `$kabeuchi` | `product_advisor` | `gpt-5.6-terra` | `medium` |",
     "| `$plan` | `project_explorer` | `gpt-5.6-luna` | `medium` |",
-    "| `$plan-critic` | `independent_reviewer` | `gpt-5.6-terra` | `high` |",
     "| `$review` | `independent_reviewer` | `gpt-5.6-terra` | `high` |",
   ]) {
     assert.ok(workflow.includes(row), `workflow omitted custom agent routing: ${row}`);
@@ -332,8 +342,10 @@ test("実装・shipping・振り返りはcustom agentへ委譲しない", async 
   }
 });
 
-test("明示的な7 skill構成を保ちlifecycle・旧implementation agentを復活させない", async () => {
+test("明示的な6 skill構成を保ち廃止skill・lifecycle・旧implementation agentを復活させない", async () => {
   const removed = [
+    ".agents/skills/plan-critic/SKILL.md",
+    ".agents/skills/plan-critic/agents/openai.yaml",
     ".agents/skills/implementation-planner/SKILL.md",
     ".agents/skills/implementation-executor/SKILL.md",
     ".agents/skills/implementation-review/SKILL.md",
@@ -355,6 +367,7 @@ test("明示的な7 skill構成を保ちlifecycle・旧implementation agentを�
   assert.match(config, /^\[agents\.product_advisor\]$/m);
   assert.match(config, /^\[agents\.project_explorer\]$/m);
   assert.match(config, /^\[agents\.independent_reviewer\]$/m);
+  assert.doesNotMatch(workflow, /\$plan-critic|plan-critic/);
   for (const skill of skills) {
     assert.doesNotMatch(skill, /implementation-(?:planner|executor|review)|final-plan-rewriter|G0[1-6]|gpt-5\./);
   }

@@ -45,16 +45,12 @@ async function temporaryEntries(prefix: string) {
   return (await readdir(tmpdir())).filter((entry) => entry.startsWith(prefix));
 }
 
-test("plan skill behavioral evalは実promptの12 scenarioを公開する", async () => {
+test("plan skill behavioral evalは実promptの8 scenarioを公開する", async () => {
   const { stdout } = await execFileAsync(process.execPath, [evaluator, "--list"], { cwd: root });
   assert.deepEqual(stdout.trim().split("\n"), [
     "plan-canonical",
     "plan-existing-collision",
     "plan-ui-revision",
-    "critic-requirement-closure",
-    "critic-untrusted-source-data",
-    "critic-missing-artifact-repair",
-    "critic-prototype-repair",
     "implement-stale-revision",
     "implement-contract-mismatch",
     "implement-related-source-drift",
@@ -77,10 +73,6 @@ test("plan skill behavioral evalはsymlink経由のCLI起動でもmainを実行�
     "plan-canonical",
     "plan-existing-collision",
     "plan-ui-revision",
-    "critic-requirement-closure",
-    "critic-untrusted-source-data",
-    "critic-missing-artifact-repair",
-    "critic-prototype-repair",
     "implement-stale-revision",
     "implement-contract-mismatch",
     "implement-related-source-drift",
@@ -94,7 +86,7 @@ test("plan skill behavioral evalのartifact graderはpositive/negative control�
     cwd: root,
     timeout: 180_000,
   });
-  assert.match(stdout, /self-test passed: 12 scenarios/);
+  assert.match(stdout, /self-test passed: 8 scenarios/);
 });
 
 test("eval fixtureは外部MCPなしで必要なcustom agent定義を読み込める", async (context) => {
@@ -521,7 +513,7 @@ fs.writeFileSync(process.argv[index + 1], "fake final output\\n");
   await assert.rejects(access(hookMarker), { code: "ENOENT" });
 
   const trustedHelperFixture = await evaluatorModule.prepareScenario(
-    "critic-prototype-repair",
+    "plan-ui-revision",
     `trusted-helper-${process.pid}`,
   );
   const helperMarker = path.join(fakeBin, "untrusted-helper-executed.txt");
@@ -529,15 +521,15 @@ fs.writeFileSync(process.argv[index + 1], "fake final output\\n");
     await trustedHelperFixture.scenario.simulate(trustedHelperFixture.repo);
     const ignoredUnexpected = path.join(
       trustedHelperFixture.repo,
-      "plans/prototype-repair/unexpected-note.md",
+      "plans/plan-ui-revision/unexpected-note.md",
     );
     await writeFile(ignoredUnexpected, "unexpected ignored artifact\n");
     await assert.rejects(
       evaluatorModule.gradePreparedScenario(
         trustedHelperFixture,
-        "prototypeを決定論的に修正し、Browser未利用のため影響rowのsmokeは未確認です。",
+        "planとprototypeを作成し、Browser未利用のため影響rowのsmokeは未確認です。",
       ),
-      /unexpected fixture changes: plans\/prototype-repair\/unexpected-note\.md/u,
+      /unexpected fixture changes: plans\/plan-ui-revision\/unexpected-note\.md/u,
     );
     await rm(ignoredUnexpected);
     await writeFile(
@@ -550,7 +542,7 @@ fs.writeFileSync(process.argv[index + 1], "fake final output\\n");
     await assert.rejects(
       evaluatorModule.gradePreparedScenario(
         trustedHelperFixture,
-        "prototypeを決定論的に修正し、Browser未利用のため影響rowのsmokeは未確認です。",
+        "planとprototypeを作成し、Browser未利用のため影響rowのsmokeは未確認です。",
       ),
       /unexpected fixture changes/u,
     );
