@@ -20,8 +20,6 @@ const builderScript = path.join(
   ".agents/skills/plan/scripts/build-prototype-css.mjs",
 );
 
-type PrototypeLocation = "canonical" | "legacy";
-
 interface PrototypeFixture {
   absolute: string;
   relative: string;
@@ -37,15 +35,10 @@ function runBuilder(args: string[], cwd = repositoryRoot) {
 
 async function createPrototype(
   context: test.TestContext,
-  location: PrototypeLocation = "canonical",
 ): Promise<PrototypeFixture> {
   const slug = `css-builder-${randomUUID()}`;
-  const planRoot = location === "canonical"
-    ? path.join(repositoryRoot, "plans", slug)
-    : path.join(repositoryRoot, "plans", "tmp", slug);
-  const relative = location === "canonical"
-    ? `plans/${slug}/prototype`
-    : `plans/tmp/${slug}/prototype`;
+  const planRoot = path.join(repositoryRoot, "plan", slug);
+  const relative = `plan/${slug}/prototype`;
   const absolute = path.join(repositoryRoot, relative);
   const styles = path.join(absolute, "styles.css");
   context.after(() => rm(planRoot, { recursive: true, force: true }));
@@ -55,9 +48,7 @@ async function createPrototype(
     writeFile(path.join(absolute, "index.html"), '<div class="text-red-500">prototype</div>\n'),
     writeFile(
       path.join(absolute, "tailwind.css"),
-      location === "canonical"
-        ? '@import "../../../app/globals.css";\n@source ".";\n'
-        : '@import "../../../../app/globals.css";\n@source ".";\n',
+      '@import "../../../app/globals.css";\n@source ".";\n',
     ),
   ]);
   return { absolute, relative, styles };
@@ -75,14 +66,12 @@ async function assertStylesUnavailable(styles: string) {
   await assert.rejects(access(styles), { code: "ENOENT" });
 }
 
-test("canonicalとlegacyのprototype directoryでTailwind CSSを生成する", async (context) => {
-  for (const location of ["canonical", "legacy"] as const) {
-    const fixture = await createPrototype(context, location);
-    const result = runBuilder([fixture.relative]);
+test("canonical prototype directoryでTailwind CSSを生成する", async (context) => {
+  const fixture = await createPrototype(context);
+  const result = runBuilder([fixture.relative]);
 
-    assertBuildSucceeded(result, fixture);
-    assert.match(await readFile(fixture.styles, "utf8"), /\.text-red-500/);
-  }
+  assertBuildSucceeded(result, fixture);
+  assert.match(await readFile(fixture.styles, "utf8"), /\.text-red-500/);
 });
 
 test("repository外のcwdでも同じrepository-relative pathを同じ対象として扱う", async (context) => {
@@ -101,7 +90,7 @@ test("repository外のcwdでも同じrepository-relative pathを同じ対象と�
 
 test("review、repository外、dot segmentを含む曖昧pathを拒否する", async (context) => {
   const reviewSlug = `css-builder-review-${randomUUID()}`;
-  const reviewPlanRoot = path.join(repositoryRoot, "plans", reviewSlug);
+  const reviewPlanRoot = path.join(repositoryRoot, "plan", reviewSlug);
   const review = path.join(reviewPlanRoot, "review");
   context.after(() => rm(reviewPlanRoot, { recursive: true, force: true }));
   await mkdir(review, { recursive: true });
@@ -113,10 +102,10 @@ test("review、repository外、dot segmentを含む曖昧pathを拒否する", a
 
   const ambiguousFixture = await createPrototype(context);
   const slug = ambiguousFixture.relative.split("/")[1];
-  const ambiguous = `plans/${slug}/../${slug}/prototype`;
+  const ambiguous = `plan/${slug}/../${slug}/prototype`;
 
   for (const target of [
-    `plans/${reviewSlug}/review`,
+    `plan/${reviewSlug}/review`,
     outside,
     ambiguous,
   ]) {
@@ -131,7 +120,7 @@ test("review、repository外、dot segmentを含む曖昧pathを拒否する", a
 
 test("prototype rootのsymlinkを拒否する", async (context) => {
   const slug = `css-builder-root-link-${randomUUID()}`;
-  const planRoot = path.join(repositoryRoot, "plans", slug);
+  const planRoot = path.join(repositoryRoot, "plan", slug);
   const linkedPrototype = path.join(planRoot, "prototype");
   const outside = await mkdtemp(path.join(tmpdir(), "prototype-css-root-link-"));
   context.after(() => rm(planRoot, { recursive: true, force: true }));
@@ -142,7 +131,7 @@ test("prototype rootのsymlinkを拒否する", async (context) => {
   ]);
   await symlink(outside, linkedPrototype);
 
-  const result = runBuilder([`plans/${slug}/prototype`]);
+  const result = runBuilder([`plan/${slug}/prototype`]);
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /symlink/i);

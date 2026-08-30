@@ -509,7 +509,7 @@ fs.writeFileSync(process.argv[index + 1], "fake final output\\n");
     await trustedHelperFixture.scenario.simulate(trustedHelperFixture.repo);
     const ignoredUnexpected = path.join(
       trustedHelperFixture.repo,
-      "plans/prototype-repair/unexpected-note.md",
+      "plan/prototype-repair/unexpected-note.md",
     );
     await writeFile(ignoredUnexpected, "unexpected ignored artifact\n");
     await assert.rejects(
@@ -517,7 +517,7 @@ fs.writeFileSync(process.argv[index + 1], "fake final output\\n");
         trustedHelperFixture,
         "prototypeを決定論的に修正し、Browser未利用のため影響rowのsmokeは未確認です。",
       ),
-      /unexpected fixture changes: plans\/prototype-repair\/unexpected-note\.md/u,
+      /unexpected fixture changes: plan\/prototype-repair\/unexpected-note\.md/u,
     );
     await rm(ignoredUnexpected);
     await writeFile(

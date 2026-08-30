@@ -34,20 +34,20 @@ Do not invent a hero, breadcrumb, sidebar, hamburger menu, card shadow, backgrou
 This application uses Tailwind CSS v4 and semantic tokens from `app/globals.css`.
 
 1. Copy the exact production utility strings and direct-child structure for unchanged shell, rows, forms, buttons, inputs, focus styles, disabled states, and responsive variants.
-2. Create `prototype/tailwind.css` that imports the production stylesheet and registers every prototype HTML and JavaScript source. From `plans/<slug>/prototype/`, the import is:
+2. Create `prototype/tailwind.css` that imports the production stylesheet and registers every prototype HTML and JavaScript source. From `plan/<slug>/prototype/`, the import is:
 
    ```css
    @import "../../../app/globals.css";
    @source ".";
    ```
 
-   Keep this file byte-for-byte identical to the two lines above, including its final newline. The builder rejects custom `@import`, `@source`, `@plugin`, `@config`, and all other additions so an ignored artifact cannot load code or read outside its prototype directory. The legacy `plans/tmp/<slug>/prototype/` contract differs only in using `../../../../app/globals.css`.
+   Keep this file byte-for-byte identical to the two lines above, including its final newline. The builder rejects custom `@import`, `@source`, `@plugin`, `@config`, and all other additions so an ignored artifact cannot load code or read outside its prototype directory.
 
 3. Compile the local stylesheet:
 
    ```sh
    node .agents/skills/plan/scripts/build-prototype-css.mjs \
-     plans/<slug>/prototype
+     plan/<slug>/prototype
    ```
 
 4. Load only the generated `styles.css`. Keep HTML, CSS, and JavaScript in separate local files because the artifact server rejects inline script and style through its CSP. Do not use a CDN, remote asset, or copied token palette.
@@ -95,7 +95,7 @@ For each state record rendered, removed, hidden, disabled, and inert elements; a
 
 Serve the artifact with `./dev-prototype.sh <slug>` only after the goal, prototype, CSS build, contract/profile validation, revision, and static audit are ready. Run one representative Browser smoke immediately before returning its URL. The user may review and give partial feedback repeatedly; do not delay that loop to perfect every matrix row or use Browser checks while authoring.
 
-Keep the material UI contract in `plans/<slug>/prototype/ui-contract.json` and record exactly `approval contract: plans/<slug>/prototype/ui-contract.json — version 1` in the goal. Keep deterministic state setup and probes in `plans/<slug>/prototype/parity-spec.json` and record exactly `validation profile: plans/<slug>/prototype/parity-spec.json — version 1`. Read [parity-runner.md](parity-runner.md) for the schema and phase contract.
+Keep the material UI contract in `plan/<slug>/prototype/ui-contract.json` and record exactly `approval contract: plan/<slug>/prototype/ui-contract.json — version 1` in the goal. Keep deterministic state setup and probes in `plan/<slug>/prototype/parity-spec.json` and record exactly `validation profile: plan/<slug>/prototype/parity-spec.json — version 1`. Read [parity-runner.md](parity-runner.md) for the schema and phase contract.
 
 The manifest records the complete baseline `sources`, runtime identity, actual comparison conditions, states, responsive boundaries, invariants, intentional deltas, targets, and immutable matrix rows. Populate `scroll.x` and `scroll.y` from actual `window.scrollX` and `window.scrollY`. The goal summarizes the same intent and coverage but references the manifest for the mechanical row list.
 
@@ -109,4 +109,4 @@ Hard failures include mismatched comparison conditions, approximate handwritten 
 
 Create an immutable comparison-target inventory in `UI契約`. Give every target a stable unique ID, canonical prototype entry, canonical origin-relative production route, and surface or overlay; include `index.html`. Create the immutable parity matrix with complete coverage for every declared target, material state, breakpoint viewport, and theme combination. Give every row a stable unique ID and record only its target ID, matching entry/route/surface, state, exact viewport, theme, breakpoint ID, expected visual-invariant IDs, and intentional-difference IDs. Do not put results, dates, screenshots, pass/fail values, or evidence locations into the matrix or manifest.
 
-Mutable results never go in the goal, manifest, or profile. `$implement` invocation records approval, defers Browser work until the completion candidate is otherwise ready, and writes one final JSON result under `plans/<slug>/evidence/<run-id>/implementation-parity.json`. `targeted` is the default for precisely bounded changes; `full` is reserved for prototype/contract, global style/token, shell layout/navigation structure, cross-breakpoint responsive, multiple unrelated targets, or explicit user/release requirements. New runs do not create pre-edit or affected Browser evidence. Any unexplained difference, missing selected row, or condition drift fails final review.
+Mutable results never go in the goal, manifest, or profile. `$implement` invocation records approval, defers Browser work until the completion candidate is otherwise ready, and writes one final JSON result under `plan/<slug>/evidence/<run-id>/implementation-parity.json`. `targeted` is the default for precisely bounded changes; `full` is reserved for prototype/contract, global style/token, shell layout/navigation structure, cross-breakpoint responsive, multiple unrelated targets, or explicit user/release requirements. New runs do not create pre-edit or affected Browser evidence. Any unexplained difference, missing selected row, or condition drift fails final review.

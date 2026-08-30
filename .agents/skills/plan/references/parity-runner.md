@@ -1,10 +1,10 @@
 # UI parity runner contract
 
-Use this reference only for UI prototype authoring, `$implement` parity, or `$review` evidence validation. `ui-contract.json` version 1 remains the UI acceptance contract. `parity-spec.json` version 1 supplies deterministic state setup and probes; mutable results live under `plans/<slug>/evidence/<run-id>/`.
+Use this reference only for UI prototype authoring, `$implement` parity, or `$review` evidence validation. `ui-contract.json` version 1 remains the UI acceptance contract. `parity-spec.json` version 1 supplies deterministic state setup and probes; mutable results live under `plan/<slug>/evidence/<run-id>/`.
 
 ## Validation profile
 
-Create `plans/<slug>/prototype/parity-spec.json` with exactly these top-level fields:
+Create `plan/<slug>/prototype/parity-spec.json` with exactly these top-level fields:
 
 - `version`: `1`.
 - `stateSetups`: one entry for every `targetId` and `state` pair in the manifest.
@@ -24,8 +24,8 @@ Each probe has `id`, `kind`, `mode`, `productionSelector`, `prototypeSelector`, 
 Validate and inspect row selection with:
 
 ```sh
-node .agents/skills/plan/scripts/parity-runner.mjs validate plans/<slug>/prototype
-node .agents/skills/plan/scripts/parity-runner.mjs select plans/<slug>/prototype \
+node .agents/skills/plan/scripts/parity-runner.mjs validate plan/<slug>/prototype
+node .agents/skills/plan/scripts/parity-runner.mjs select plan/<slug>/prototype \
   --phase smoke --target <target-id> --state <state> \
   --viewport <width>x<height> --risk <risk-tag>
 ```
@@ -62,7 +62,7 @@ Wrap the selected Browser API with one adapter object exposing:
 
 ## Approval and evidence
 
-An explicit `$implement` invocation approves the resolved `goal.md`, current prototype revision, and validation-profile digest. Approval evidence remains schema version 1. Newly generated final parity evidence uses schema version 3 so its matrix scope and selection are explicit and no pre-edit run is implied. Write these immutable files under one fresh `plans/<slug>/evidence/<run-id>/` directory:
+An explicit `$implement` invocation approves the resolved `goal.md`, current prototype revision, and validation-profile digest. Approval evidence remains schema version 1. Newly generated final parity evidence uses schema version 3 so its matrix scope and selection are explicit and no pre-edit run is implied. Write these immutable files under one fresh `plan/<slug>/evidence/<run-id>/` directory:
 
 - `approval.json`: created before runtime work with `basis: "explicit-$implement-invocation"`.
 - `implementation-parity.json`: the complete final run after the last related change.

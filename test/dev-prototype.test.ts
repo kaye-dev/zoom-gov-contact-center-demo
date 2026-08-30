@@ -37,8 +37,6 @@ function resolveZshExecutable(): string {
 
 const zshExecutable = resolveZshExecutable();
 
-type PrototypeLocation = "canonical" | "legacy";
-
 interface Fixture {
   bin: string;
   emptyBin: string;
@@ -73,20 +71,17 @@ async function createRepositoryFixture(context: test.TestContext): Promise<Fixtu
   return { bin, emptyBin, root, script };
 }
 
-function prototypePath(root: string, location: PrototypeLocation, slug: string) {
-  return location === "canonical"
-    ? path.join(root, "plans", slug, "prototype")
-    : path.join(root, "plans", "tmp", slug, "prototype");
+function prototypePath(root: string, slug: string) {
+  return path.join(root, "plan", slug, "prototype");
 }
 
 async function createPrototype(
   root: string,
-  location: PrototypeLocation,
   slug: string,
   modifiedAt: Date,
   nestedFiles: Array<{ modifiedAt: Date; relative: string }> = [],
 ) {
-  const directory = prototypePath(root, location, slug);
+  const directory = prototypePath(root, slug);
   const files = [
     { modifiedAt, relative: "index.html" },
     ...nestedFiles,
@@ -127,94 +122,33 @@ test("dev-prototype.shはrepositoryで実行可能になっている", async () 
   assert.notEqual(metadata.mode & 0o111, 0);
 });
 
-test("slugを明示するとlegacyが新しくてもcanonical prototypeを選ぶ", async (context) => {
+test("slugを明示するとcanonical prototypeを選ぶ", async (context) => {
   const fixture = await createRepositoryFixture(context);
   const slug = "chosen-prototype";
-  await createPrototype(fixture.root, "canonical", slug, new Date("2026-01-01T00:00:00Z"));
-  await createPrototype(fixture.root, "legacy", slug, new Date("2026-01-03T00:00:00Z"));
+  await createPrototype(fixture.root, slug, new Date("2026-01-01T00:00:00Z"));
 
   const result = runLauncher(fixture, [slug]);
 
-  assertServed(result, `plans/${slug}/prototype`);
-  assert.doesNotMatch(result.stderr, /warning|legacy/i);
-  assert.doesNotMatch(result.stdout, new RegExp(`plans/tmp/${slug}/prototype`));
+  assertServed(result, `plan/${slug}/prototype`);
 });
 
-test("自動選択はcanonicalが1件でもあれば、より新しいlegacyを候補にしない", async (context) => {
+test("旧pathだけにprototypeがあっても起動しない", async (context) => {
   const fixture = await createRepositoryFixture(context);
-  await createPrototype(
-    fixture.root,
-    "canonical",
-    "canonical-prototype",
-    new Date("2026-01-01T00:00:00Z"),
-  );
-  await createPrototype(
-    fixture.root,
-    "legacy",
-    "newer-legacy-prototype",
-    new Date("2026-02-01T00:00:00Z"),
-  );
+  const legacy = path.join(fixture.root, "plan", "tmp", "legacy-only", "prototype");
+  await mkdir(legacy, { recursive: true });
+  await writeFile(path.join(legacy, "index.html"), "<!doctype html>\n");
 
-  const result = runLauncher(fixture);
-
-  assertServed(result, "plans/canonical-prototype/prototype");
-  assert.doesNotMatch(result.stderr, /warning|legacy/i);
-  assert.doesNotMatch(result.stdout, /plans\/tmp\/newer-legacy-prototype\/prototype/);
-});
-
-test("canonicalが0件のときだけ自動選択でlegacyを使い、stderrへ警告する", async (context) => {
-  const fixture = await createRepositoryFixture(context);
-  await createPrototype(
-    fixture.root,
-    "legacy",
-    "legacy-prototype",
-    new Date("2026-01-01T00:00:00Z"),
-  );
-
-  const result = runLauncher(fixture);
-
-  assertServed(result, "plans/tmp/legacy-prototype/prototype");
-  assert.match(result.stderr, /legacy/i);
-});
-
-test("明示slugはcanonical directoryがない場合だけlegacyへfallbackして警告する", async (context) => {
-  const fixture = await createRepositoryFixture(context);
-  const slug = "legacy-only";
-  await createPrototype(fixture.root, "legacy", slug, new Date("2026-01-01T00:00:00Z"));
-
-  const result = runLauncher(fixture, [slug]);
-
-  assertServed(result, `plans/tmp/${slug}/prototype`);
-  assert.match(result.stderr, /legacy/i);
-});
-
-test("canonical directoryにindex.htmlがなければ同名legacyへ隠れてfallbackしない", async (context) => {
-  const fixture = await createRepositoryFixture(context);
-  const slug = "incomplete-canonical";
-  const canonical = prototypePath(fixture.root, "canonical", slug);
-  await mkdir(canonical, { recursive: true });
-  await writeFile(path.join(canonical, "app.js"), "document.body.dataset.ready = 'true';\n");
-  await createPrototype(fixture.root, "legacy", slug, new Date("2026-01-01T00:00:00Z"));
-
-  const explicitResult = runLauncher(fixture, [slug]);
-
-  assert.equal(explicitResult.status, 1);
-  assert.match(explicitResult.stderr, new RegExp(`plans/${slug}/prototype/index\\.html`));
-  assert.doesNotMatch(explicitResult.stdout, /FAKE_NODE_ARG=/);
-  assert.doesNotMatch(explicitResult.stderr, /warning:.*legacy/i);
-
-  const automaticResult = runLauncher(fixture);
-  assert.equal(automaticResult.status, 1);
-  assert.match(automaticResult.stderr, /canonical.*index\.html/i);
-  assert.doesNotMatch(automaticResult.stdout, /FAKE_NODE_ARG=/);
-  assert.doesNotMatch(automaticResult.stderr, /warning:.*legacy/i);
+  for (const args of [[], ["legacy-only"]]) {
+    const result = runLauncher(fixture, args);
+    assert.equal(result.status, 1, result.stderr);
+    assert.doesNotMatch(result.stdout, /FAKE_NODE_ARG=/);
+  }
 });
 
 test("自動選択はprototype直下だけでなくnested fileのmtimeも比較する", async (context) => {
   const fixture = await createRepositoryFixture(context);
   await createPrototype(
     fixture.root,
-    "canonical",
     "nested-latest",
     new Date("2026-01-01T00:00:00Z"),
     [
@@ -226,14 +160,13 @@ test("自動選択はprototype直下だけでなくnested fileのmtimeも比較�
   );
   await createPrototype(
     fixture.root,
-    "canonical",
     "newer-index",
     new Date("2026-01-03T00:00:00Z"),
   );
 
   const result = runLauncher(fixture);
 
-  assertServed(result, "plans/nested-latest/prototype");
+  assertServed(result, "plan/nested-latest/prototype");
 });
 
 test("無効なslugと予約slugをserver起動前に拒否する", async (context) => {
@@ -251,7 +184,6 @@ test("Node.jsがPATHにない場合はserverを起動せず終了する", async 
   const fixture = await createRepositoryFixture(context);
   await createPrototype(
     fixture.root,
-    "canonical",
     "node-unavailable",
     new Date("2026-01-01T00:00:00Z"),
   );
@@ -301,12 +233,11 @@ test("repository外のcwdからでもscript自身のrepositoryにあるprototype
   context.after(() => rm(otherCwd, { recursive: true, force: true }));
   await createPrototype(
     fixture.root,
-    "canonical",
     "cwd-independent",
     new Date("2026-01-01T00:00:00Z"),
   );
 
   const result = runLauncher(fixture, ["cwd-independent"], { cwd: otherCwd });
 
-  assertServed(result, "plans/cwd-independent/prototype");
+  assertServed(result, "plan/cwd-independent/prototype");
 });

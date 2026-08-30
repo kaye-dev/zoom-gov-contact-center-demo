@@ -67,7 +67,7 @@ export function normalizeData(raw) {
   const summary = requiredText(raw.summary, "summary");
   const generatedAt = requiredText(raw.generatedAt, "generatedAt");
   if (Number.isNaN(Date.parse(generatedAt))) invalid("generatedAtが不正です");
-  if (!/^plans\/(?!tmp\/|reviews\/)[a-z0-9][a-z0-9-]*\/goal\.md$/u.test(raw.planPath)) invalid("planPathが不正です");
+  if (!/^plan\/(?!tmp\/|reviews\/)[a-z0-9][a-z0-9-]*\/goal\.md$/u.test(raw.planPath)) invalid("planPathが不正です");
   const planPath = requiredText(raw.planPath, "planPath");
   const base = requiredText(raw.base, "base");
   const head = requiredText(raw.head, "head");

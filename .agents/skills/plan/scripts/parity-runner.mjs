@@ -773,7 +773,7 @@ async function loadParityDefinition(requestedDirectory, requestedRoot = reposito
   const root = await realpath(requestedRoot);
   ensure(root === requestedRoot, "repository root must not traverse symlinks");
   const match = /^plans\/([a-z0-9][a-z0-9-]*)\/prototype$/u.exec(requestedDirectory);
-  ensure(match && !["tmp", "reviews"].includes(match[1]), "target must be plans/<slug>/prototype");
+  ensure(match && !["tmp", "reviews"].includes(match[1]), "target must be plan/<slug>/prototype");
   const prototypeRoot = path.join(root, requestedDirectory);
   const beforeRevision = await prototypeRevisionInRepository(requestedDirectory, root);
   const [contractText, specText] = await Promise.all([
@@ -1186,7 +1186,7 @@ async function writeRunEvidence({ repositoryRootPath = repositoryRoot, slug, run
   ensure(/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(runId), "invalid run ID");
   ensure(["approval.json", "pre-edit-parity.json", "implementation-parity.json"].includes(name), "invalid evidence file name");
   const root = await realpath(repositoryRootPath);
-  const planRoot = path.join(root, "plans", slug);
+  const planRoot = path.join(root, "plan", slug);
   const metadata = await lstat(planRoot);
   ensure(metadata.isDirectory() && !metadata.isSymbolicLink(), "plan directory must be a real directory");
   ensure((await realpath(planRoot)) === planRoot, "plan directory must not traverse symlinks");
@@ -1214,7 +1214,7 @@ async function writeRunEvidence({ repositoryRootPath = repositoryRoot, slug, run
 }
 
 function parseCliArguments(argv) {
-  ensure(argv.length >= 2, "usage: parity-runner.mjs <validate|select> plans/<slug>/prototype [options]");
+  ensure(argv.length >= 2, "usage: parity-runner.mjs <validate|select> plan/<slug>/prototype [options]");
   const [command, target, ...rest] = argv;
   ensure(command === "validate" || command === "select", "command must be validate or select");
   const options = {

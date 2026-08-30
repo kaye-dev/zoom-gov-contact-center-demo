@@ -11,29 +11,29 @@
 
 ## plan prototypeとHTMLレビュー
 
-`plans/<slug>/prototype/`は次の軽量なloopback serverで配信する。引数なしではcanonical prototypeから最終更新されたものを自動選択し、canonicalが1件もない場合だけ`plans/tmp/<slug>/prototype/`へフォールバックする。このpathは閲覧とCSS buildの後方互換だけであり、parity、実装、reviewには使わない。それらの前にcanonical `plans/<slug>/prototype/`へ移行し、version 1 manifestとvalidation profileを作成する。対象を指定する場合だけslugを渡す。
+`plan/<slug>/prototype/`は次の軽量なloopback serverで配信する。引数なしではcanonical prototypeから最終更新されたものを自動選択する。対象を指定する場合だけslugを渡す。
 
 ```sh
 ./dev-prototype.sh
 ./dev-prototype.sh <slug>
 ```
 
-`plans/<slug>/review/`は対象を明示して同じserver本体で配信する。
+`plan/<slug>/review/`は対象を明示して同じserver本体で配信する。
 
 ```sh
-node scripts/serve-plan-artifact.mjs plans/<slug>/review
+node scripts/serve-plan-artifact.mjs plan/<slug>/review
 ```
 
 - 出力された`127.0.0.1`のURLをCodexアプリ内Browserで開く。
 - `$implement`ではimplementationと静的検証が終わった後に`./dev-prototype.sh <slug>`を1回だけ起動し、final parityまで同じprocessを使う。2つ目を起動しない。`$implement`が承認digestを取得した後にartifact、goal、またはvalidation profileが変わった場合は、新しい`$implement`実行を必要とする。
 - UI prototypeは作成前に最も近い実画面、shell、token、共通componentを確認する。mockにしてよいのはdata、永続化、authorization、backend side effectだけであり、brand、navigation、layout、typography、color、control、icon、responsive behaviorは本番相当とする。
 - prototypeは本番と同じTailwind utilityと`app/globals.css`を使う。plan中は変更target/stateを代表desktopと390×844でsmoke確認し、theme・responsive・interactionのrisk tagに応じてlight/dark、breakpoint境界、keyboard/focusを追加する。`$implement`中は`targeted`を既定とし、prototype・contract、global style・token、shell layout・navigation構造、横断responsive規則、複数の無関係target、または明示要求を変える場合だけ`full`を使う。
-- prototypeの最終CSS build後に`prototype-revision.mjs`を実行し、goalの`approval contract: plans/<slug>/prototype/ui-contract.json — version 1`、`validation profile: plans/<slug>/prototype/parity-spec.json — version 1`、`prototype revision`を照合する。`ui-contract.json`は完全な`sources` inventory、runtime identity、comparison conditions、comparison target、不変なmatrix rowを保持する。`parity-spec.json`はstate setup、probe、row mappingを保持し、共通runnerがtab、viewport、DOM・a11y、computed style、focus、console、networkと実測scrollを検証する。
+- prototypeの最終CSS build後に`prototype-revision.mjs`を実行し、goalの`approval contract: plan/<slug>/prototype/ui-contract.json — version 1`、`validation profile: plan/<slug>/prototype/parity-spec.json — version 1`、`prototype revision`を照合する。`ui-contract.json`は完全な`sources` inventory、runtime identity、comparison conditions、comparison target、不変なmatrix rowを保持する。`parity-spec.json`はstate setup、probe、row mappingを保持し、共通runnerがtab、viewport、DOM・a11y、computed style、focus、console、networkと実測scrollを検証する。
 - HTML reviewのcanonical assetsが未変更ならdesktopと390×844のload、console、networkだけを確認する。リスクfilter、判断button、コメント、Markdown生成・copy、keyboard、focusの全確認はassetsまたはruntime contractが変わった場合だけ行う。
 - `file://`、外部CDN、外部API、analytics、repo全体を公開するserverは使わない。
 - prototype確認、HTML review、実装後の実アプリ確認は別の証拠として扱う。
 - Browserを利用できない場合は未検証と報告する。
-- 新規`$implement`は`plans/<slug>/evidence/<run-id>/approval.json`とschema-version-3 `implementation-parity.json`だけを作る。Browserは完了候補ができた最後に1回だけ使い、pre-edit/affected parityを作らない。最終fileは`matrixScope`とselectionを持ち、各executed rowは1回だけ現れ、statusは`pass`または`fail`とする。各surfaceのscrollは`{x, y, source: "window.scrollX/window.scrollY"}`として記録する。その後の関連変更は最終証拠を失効させる。同じBrowser assertionを追加sweepや個別manual checkで重複確認せず、task固有の大規模adapterやruntime shimをfeature実装中に作らない。
+- 新規`$implement`は`plan/<slug>/evidence/<run-id>/approval.json`とschema-version-3 `implementation-parity.json`だけを作る。Browserは完了候補ができた最後に1回だけ使い、pre-edit/affected parityを作らない。最終fileは`matrixScope`とselectionを持ち、各executed rowは1回だけ現れ、statusは`pass`または`fail`とする。各surfaceのscrollは`{x, y, source: "window.scrollX/window.scrollY"}`として記録する。その後の関連変更は最終証拠を失効させる。同じBrowser assertionを追加sweepや個別manual checkで重複確認せず、task固有の大規模adapterやruntime shimをfeature実装中に作らない。
 - 終了時は完全なbaselineとの差分だけをcleanupし、今回のagentだけが起動・生成した正確なPID・container・Compose service・volume・network・dependency artifactだけをstable identityと所有権の再確認後に個別停止または削除する。広域な`docker compose down`、`docker compose down -v`、project全体のstopは実行せず、既存またはユーザー所有のprocess、container、service、volume、network、dependencyを停止・削除しない。
 
 Codexのproject-local設定は`.codex/config.toml`を参照する。`.mcp.json`はClaude Code用である。
