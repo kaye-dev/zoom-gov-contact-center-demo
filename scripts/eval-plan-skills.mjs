@@ -685,12 +685,31 @@ async function createBaseFixture(name) {
     await Promise.all([
       mkdir(path.join(requestedRepo, ".agents", "skills"), { recursive: true }),
       mkdir(path.join(requestedRepo, ".claude", "rules"), { recursive: true }),
+      mkdir(path.join(requestedRepo, ".codex", "agents"), { recursive: true }),
       mkdir(path.join(requestedRepo, "plans"), { recursive: true }),
     ]);
     const repo = await realpath(requestedRepo);
     for (const skill of ["plan", "plan-critic", "implement", "review"]) {
       await copySkill(repo, skill);
     }
+    for (const agent of ["project_explorer", "independent_reviewer"]) {
+      await cp(
+        path.join(repositoryRoot, ".codex", "agents", `${agent}.toml`),
+        path.join(repo, ".codex", "agents", `${agent}.toml`),
+      );
+    }
+    await write(
+      repo,
+      ".codex/config.toml",
+      `[agents.project_explorer]
+description = "Read-only explorer for broad repository and document investigations."
+config_file = "./agents/project_explorer.toml"
+
+[agents.independent_reviewer]
+description = "Read-only reviewer for isolated plan, diff, and goal-conformance reviews."
+config_file = "./agents/independent_reviewer.toml"
+`,
+    );
     await cp(path.join(repositoryRoot, "plans", "template.md"), path.join(repo, "plans", "template.md"));
     await cp(
       path.join(repositoryRoot, ".claude", "rules", "dev-server.md"),

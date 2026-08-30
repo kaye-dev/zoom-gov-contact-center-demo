@@ -97,6 +97,26 @@ test("plan skill behavioral evalのartifact graderはpositive/negative control�
   assert.match(stdout, /self-test passed: 12 scenarios/);
 });
 
+test("eval fixtureは外部MCPなしで必要なcustom agent定義を読み込める", async (context) => {
+  const evaluatorModule = await evaluatorModulePromise;
+  const fixture = await evaluatorModule.prepareScenario(
+    "plan-canonical",
+    `agent-routing-${process.pid}`,
+  );
+  context.after(() => rm(fixture.fixtureRoot, { recursive: true, force: true }));
+
+  const config = await readFile(path.join(fixture.repo, ".codex/config.toml"), "utf8");
+  assert.match(config, /^\[agents\.project_explorer\]$/m);
+  assert.match(config, /^\[agents\.independent_reviewer\]$/m);
+  assert.doesNotMatch(config, /mcp_servers/);
+  for (const name of ["project_explorer", "independent_reviewer"]) {
+    assert.match(config, new RegExp(`config_file = "\\./agents/${name}\\.toml"`));
+    const agent = await readFile(path.join(fixture.repo, `.codex/agents/${name}.toml`), "utf8");
+    assert.match(agent, new RegExp(`^name = "${name}"$`, "m"));
+    assert.match(agent, /^sandbox_mode = "read-only"$/m);
+  }
+});
+
 test("eval runnerは環境と出力量を制限し通常のtimeout・子process treeをcleanupする", async (context) => {
   const evaluatorModule = await evaluatorModulePromise;
   const secretKey = "PLAN_SKILL_EVAL_SECRET_SENTINEL";

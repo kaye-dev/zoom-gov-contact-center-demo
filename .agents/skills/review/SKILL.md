@@ -21,12 +21,12 @@ Record malformed schema, stale digest, missing/duplicate/extra row, failed row, 
 
 ## Run both passes in parallel
 
-After the shared deterministic audit, start both fresh no-history subagents concurrently:
+After the shared deterministic audit, start two fresh no-history `independent_reviewer` custom agents concurrently. Do not pass a model or reasoning override:
 
 1. Blind diff review: pass only the exact diff and necessary repository context—not the plan, conversation, evidence verdict, or prior review. Ask for correctness, security, regression, accessibility, maintainability, test-gap, and unexplained-change findings.
 2. Goal conformance review: pass the exact goal, same diff/context, checks run, deterministic audit, and applicable prototype/contracts/evidence—not the blind result or conversation. Ask for missing requirements, deviations, incomplete flows, and unsupported completion claims.
 
-Each finding contains `source`, `severity`, `title`, `body`, `location`, and `recommendation`. Preserve both result sets. Stop if independent subagents are unavailable.
+Each finding contains `source`, `severity`, `title`, `body`, `location`, and `recommendation`. Preserve both result sets. Stop if either custom agent or its configured model is unavailable; do not substitute another reviewer.
 
 ## Build and verify the report
 

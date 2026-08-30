@@ -2,7 +2,7 @@
 
 ## 目的
 
-大きな変更を、goal、必要なUI prototype、production実装、独立reviewの順に進める。各skillは成果物を次工程へ渡す薄い役割とし、独自runtime、専用agent、固定model routing、lifecycle state machineは作らない。
+大きな変更を、goal、必要なUI prototype、production実装、独立reviewの順に進める。各skillは成果物を次工程へ渡す薄い役割とし、独自runtime、custom implementation agent、lifecycle state machineは作らない。custom agentは、壁打ち、広範な読み取り探索、独立reviewという限定されたread-onlyロールだけに使う。
 
 本文は日常の判断と操作だけを示す。詳細契約は各`SKILL.md`と`.agents/skills/plan/references/`、HTML report仕様は`.agents/skills/review/references/review-contract.md`、dev server操作は`.claude/rules/dev-server.md`を正本とする。この責務分離は[OpenAIのskill設計ガイド](https://learn.chatgpt.com/docs/build-skills)に従う。
 
@@ -22,7 +22,7 @@ plans/<slug>/
 
 ## モデル選択
 
-project-localの通常既定は`.codex/config.toml`の`gpt-5.6-terra`、reasoning `medium`とする。各skillの実行前に、品質と利用量のバランスに応じてCodexのcomposerで次のモデルとreasoningを手動選択する。
+親エージェントのproject-local既定モデルは設けない。通常処理と各skillの親エージェントは、Codexのcomposerでユーザーが選択したモデルとreasoningを維持する。品質と利用量のバランスを考える際は、次の組み合わせを参考に手動選択する。
 
 | skill | 推奨モデル | reasoning |
 | --- | --- | --- |
@@ -33,11 +33,26 @@ project-localの通常既定は`.codex/config.toml`の`gpt-5.6-terra`、reasonin
 | `$git-commit-push-pr` | `gpt-5.6-luna` | `medium` |
 | `$workflow-retrospective` | `gpt-5.6-terra` | `high` |
 
-`$plan-critic`と`$review`の履歴なしsubagentには、spawn時のmodelまたはreasoning overrideを渡さない。repository側にも`[agents]`やcustom agentを設けないため、subagentは呼び出し時に親taskで選択したmodelとreasoningを継承する。ユーザーまたは管理者の上位設定によるoverrideはrepositoryの管理対象外とする。
+read-only custom agentのモデルはスキルメタデータではなく、`.codex/config.toml`の登録と`.codex/agents/*.toml`で固定する。
 
-`xhigh`、`max`、`ultra`は通常既定にもskill別推奨にも使わない。推奨設定で品質不足が確認された場合だけ、対象taskで明示的に選択する。
+| 呼び出し元 | custom agent | 固定モデル | reasoning | 起動条件とfallback |
+| --- | --- | --- | --- | --- |
+| `$kabeuchi` | `product_advisor` | `gpt-5.6-terra` | `medium` | 明示呼び出しで1体だけ起動する。利用不能なら壁打ち未実行として停止する |
+| `$plan` | `project_explorer` | `gpt-5.6-luna` | `medium` | 複数subsystemまたは大量資料を横断するread-only探索だけで最大1体起動する。利用不能なら親が継続して未使用を報告する |
+| `$plan-critic` | `independent_reviewer` | `gpt-5.6-terra` | `high` | freshな独立reviewに1体起動する。利用不能なら停止する |
+| `$review` | `independent_reviewer` | `gpt-5.6-terra` | `high` | 分離したblind reviewとgoal適合reviewに2体を並行起動する。片方でも利用不能なら停止する |
 
-skillメタデータではmodelを指定せず、`[agents]`、custom agent、project-local `profiles`による固定routingも追加しない。project-local `profiles`はこの手動切替の適用対象外とし、model切替はcomposerだけで行う。モデルの役割とreasoningは[OpenAIモデルガイド](https://developers.openai.com/api/docs/guides/latest-model)、通常既定の設定は[Codex Configuration Reference](https://learn.chatgpt.com/docs/config-file/config-reference)、subagentの継承は[Subagents](https://learn.chatgpt.com/docs/agent-configuration/subagents)を根拠とする。
+これらのcustom agentはすべて`read-only`とし、spawn時のmodelまたはreasoning overrideを渡さない。`$implement`、`$git-commit-push-pr`、`$workflow-retrospective`はsubagentへ委譲せず、親エージェントが単独で実行する。全体のsubagent既定モデル、既定reasoning、同時実行数制限はproject-local設定へ追加しない。上表以外の一般subagentは、Codexの通常動作として親taskで選択した設定を継承する。ユーザーまたは管理者の上位設定によるoverrideはrepositoryの管理対象外とする。
+
+`xhigh`、`max`、`ultra`は親エージェントのskill別推奨にもcustom agentの固定設定にも使わない。推奨設定で品質不足が確認された場合だけ、対象taskの親エージェントで明示的に選択する。
+
+skillメタデータとproject-local `profiles`ではmodelを指定しない。親エージェントのmodel切替はcomposerだけで行い、custom agentの固定routingだけを`.codex/agents/*.toml`で管理する。モデルの役割とreasoningは[OpenAIモデルガイド](https://developers.openai.com/api/docs/guides/latest-model)、設定項目は[Codex Configuration Reference](https://learn.chatgpt.com/docs/config-file/config-reference)、custom agentとsubagentの継承は[Subagents](https://learn.chatgpt.com/docs/agent-configuration/subagents)を根拠とする。
+
+## 任意の壁打ち
+
+`$kabeuchi`は標準の実装フローとは独立した、明示呼び出し専用のread-only相談である。現在の相談、確定済み判断、必要最小限のrepository evidenceだけをfreshな`product_advisor`へ渡す。親エージェントは助言を証拠と照合し、推奨案、トレードオフ、未確認事項、次に決めることを統合して返す。
+
+壁打ちではファイル編集、plan作成、実装、Git操作、外部変更を行わない。変更が必要なら、相談を終えた後に対応するskillを別途明示実行する。
 
 ## 標準フロー
 
@@ -54,7 +69,7 @@ plan成果物のcleanupは、この流れとは別の明示操作として行う
 ### `$plan`
 
 1. 最新要求、確定済み判断、採用済み資料を整理する。
-2. repository、runtime、code、testを確認し、UI変更時はclosest live UIも確認する。
+2. repository、runtime、code、testを確認し、UI変更時はclosest live UIも確認する。複数subsystemまたは大量資料を横断し、独立した要約で親のcontextを節約できる場合だけ、最大1体の`project_explorer`を使う。
 3. 自己完結した最終設計と`## 要件クロージャ`を`plans/<slug>/goal.md`へ書く。
 4. UI変更時は完成UI、`ui-contract.json`、`parity-spec.json`を作る。
 5. goalを監査し、UI変更時はCSS build、contract/profile validation、revision計算を終えてから、返却直前に影響scopeのsmokeを1回行う。
@@ -65,7 +80,7 @@ plan成果物のcleanupは、この流れとは別の明示操作として行う
 ### `$plan-critic`
 
 1. 対象のgoal、prototype、contract、profileを特定する。
-2. freshな履歴なしsubagentで要件、設計、検証、UI parityを独立reviewする。
+2. freshな履歴なし`independent_reviewer`で要件、設計、検証、UI parityを独立reviewする。
 3. 採用済み要件とlive evidenceから一意に直せる欠陥だけを修正する。
 4. goalを監査し、UI変更時はCSS build、contract/profile validation、revision再計算を終えてから、返却直前に影響scopeのsmokeを1回行う。
 5. 更新path、revision、smoke結果、修正内容、残るriskを返す。
@@ -93,7 +108,7 @@ pre-editとaffectedのBrowser phaseは新規runで実行しない。同じBrowse
 ### `$review`
 
 1. exact diffと必要なcontextを固定し、UI影響と構造化証跡を監査する。
-2. blind diff reviewとgoal適合reviewを独立した履歴なしsubagentで並行実行する。
+2. blind diff reviewとgoal適合reviewを独立した履歴なし`independent_reviewer`で並行実行する。
 3. `plans/<slug>/review/`へHTML reportを作り、desktopと390×844で確認する。
 
 HTML reportは実装を変更せず、`採用 / 却下 / 未確定`、comment、Markdown生成、copyを提供する。
