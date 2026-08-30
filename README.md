@@ -106,10 +106,17 @@ curl http://localhost:3000/docs/privacy-policy.md
 
 ### Vercel Hobby + Neon Freeへデプロイ
 
-公開はリポジトリルートの`./deploy.sh`だけから行い、VercelのGit自動デプロイは使用しません。`deploy.sh`はmigration後にPostgreSQLの3環境行、version 1、revision、5つの制約を値を表示せずに検証し、candidateでは`PREVIEW`、promotion後は`PRODUCTION`の実効設定に応じて公開HTMLの200 / 503を検証します。併せてHTMLのrobots meta、全レスポンスの`X-Robots-Tag`、`/robots.txt`、`/sitemap.xml`も検証します。手順は次を参照してください。
+ローカルからの公開はリポジトリルートの`./deploy.sh`だけを使い、VercelのGit自動デプロイは使用しません。初回にVercel / Neon / 管理者の設定とcredentialをAWS Systems Manager Parameter Storeへ保存した後は、Node.js、Vercel CLI、Neon CLIをhostへ個別にインストールせず、Docker上の固定deploy runnerから再利用します。通常は入力不要で、pending migrationがある場合だけ適用前に1回承認します。
 
-- [新規デプロイ](docs/deploy/vercel-neon/initial-deploy.md)
+`deploy.sh`は対象、plan、migration、環境変数を再検証し、対象commitをVercel Productionへ直接deployします。最後にPostgreSQLの実効メンテナンス設定に応じた公開HTMLの200 / 503、認証、robots meta、全レスポンスの`X-Robots-Tag`、`/robots.txt`、`/sitemap.xml`をcanonical URLで検証します。手順は次を参照してください。
+
+- [既存Productionの初回設定と切替](docs/deploy/vercel-neon/initial-deploy.md)
+- [AWS Parameter Storeの初回設定](docs/deploy/vercel-neon/setup-deploy-aws.md)
 - [2回目以降の再デプロイ](docs/deploy/vercel-neon/redeploy.md)
+- [GitHub Actions用AWS IAM / OIDC設定](docs/deploy/vercel-neon/aws-iam-oidc.md)
+- [GitHub Actionsからの再デプロイ](docs/deploy/vercel-neon/github-actions-redeploy.md)
+
+GitHub ActionsもhostでNode.js / npm / Vercel CLIを実行しません。対象`GITHUB_SHA`のarchiveからdeploy runnerをOIDC取得前にbuildし、短期AWS credentialで取得したSSM responseだけをcontainerのstdinへ渡します。
 
 Vercel Hobbyの対象となる個人・非商用利用であり、本番データや日本国内のデータ所在要件がないデモだけを対象とします。業務・商用利用では適合するVercel planを選んでください。
 
@@ -165,8 +172,9 @@ node .agents/skills/plan/scripts/prototype-revision.mjs plans/<slug>/prototype
 | `npm run typecheck` | アプリのTypeScript型検査を実行 |
 | `npm run audit:runtime` | デプロイ成果物に含まれる依存関係の脆弱性監査を実行 |
 | `npm run test:deploy` | Vercel/Neon/PostgreSQLデプロイの安全ゲートをstubで検証 |
+| `./setup-deploy-aws.sh` | 初回設定または明示したcredentialをAWS Parameter Storeへ安全に保存・更新 |
+| `./deploy.sh` | Docker上でpreflight、必要時のmigration承認、direct Production deploy、canonical smokeを実行 |
 | `npm run eval:plan-skills` | 一時repositoryでplan系skillの実prompt behavioral evalを実行 |
-| `./deploy.sh` | Vercel/Neon/PostgreSQLのpreflight、migration、200/503 staged smoke、promotionを対話式で実行 |
 | `npm run db:generate` | Prisma Client を生成 |
 | `npm run db:migrate` | Prisma migration を作成し、ローカル DB に適用 |
 | `npm run db:deploy` | Prisma migration をデプロイ先 DB に適用 |

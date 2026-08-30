@@ -350,7 +350,7 @@ const SITEMAP_REPRESENTATIVE_PATHS = [
   "/life/frequently-asked-questions/administrative-service-center/location-and-access",
   "/docs/privacy-policy",
 ] as const;
-const EXPECTED_SITEMAP_URL_COUNT = 275;
+const EXPECTED_SITEMAP_URL_COUNT = 276;
 
 async function assertRobotsResponse(
   response: Response,

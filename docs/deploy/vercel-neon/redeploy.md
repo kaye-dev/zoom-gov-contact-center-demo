@@ -1,73 +1,97 @@
-# Vercel / Neonへ再デプロイ
+# Vercel / Neonへローカルから再デプロイ
 
-初回設定が完了している環境の2回目以降の手順です。初めての場合は[新規デプロイ](initial-deploy.md)を参照してください。
+初回設定済み環境の2回目以降は、リポジトリルートの`./deploy.sh`だけを実行します。Node.js、Vercel CLI、Neon CLIを個別にhostへインストールする必要はありません。初めての場合は[既存Productionの初回設定と切替](initial-deploy.md)と[AWS Parameter Storeの初回設定](setup-deploy-aws.md)を先に完了してください。
 
-## 1. デプロイ対象を準備する
+GitHub Actionsから実行する場合は[GitHub ActionsからProductionへ手動デプロイ](github-actions-redeploy.md)を参照してください。
 
-デプロイする変更をcommitし、Node.js 24でworktreeがcleanなことを確認します。
+## 実行前の確認
+
+- デプロイ対象がcommit済みで、worktreeがcleanである。
+- Dockerが起動している。
+- 初回設定時と同じAWS accountのIAM Identity Center profileを利用できる。
+- Vercel Hobby / Neon Freeを使う個人・非商用デモであり、本番データや日本国内のデータ所在要件がない。
+- 同時に別のProduction deployやmigrationを実行していない。
 
 ```bash
 cd /Users/keien/dev/zoom/zoom-gov-contact-center-demo
 git status --short
-node --version
-```
-
-`git status --short`は何も表示されない状態にします。Vercelのlink先、Git未接続、System Environment Variables、Fluid Compute、Production domainに加え、Build Command、Output Directory、Root Directoryが未上書き、`Settings > Deployment Protection`が`None`のまま変わっていないことも確認します。Framework Presetが`Other`と表示されても、リポジトリの[`vercel.json`](../../../vercel.json)が`Next.js`を指定するため変更しません。`Protection Bypass for Automation`は作成しません。認証切れは`deploy.sh`が検出し、loginを実行する前に確認します。
-
-`node --version`が`v24.x`でない場合は、HomebrewのNode.js 24を選択してから再確認します。
-
-```bash
-brew install node@24
-export PATH="/opt/homebrew/opt/node@24/bin:$PATH"
-hash -r
-node --version
-```
-
-fresh cloneなどで`.vercel/project.json`がない場合は`vercel link`を実行し、新規作成せず既存projectへlinkします。
-
-`Settings > Environment Variables`のProduction対象は`DATABASE_URL`、`BETTER_AUTH_SECRET`、`BETTER_AUTH_URL`、`BETTER_AUTH_TRUSTED_ORIGINS`、`BETTER_AUTH_TRUST_PROXY_HEADERS`、`DEVELOPER_API_SETTINGS_ENCRYPTION_KEY`、`APP_CANONICAL_ORIGIN`の7項目だけにします。これ以外のProduction変数が残っている場合、`deploy.sh`は値を読まずに停止するため、用途を確認して不要な項目を手動で削除してから再実行します。同画面の`Shared` tab／Shared Environment Variables sectionにも、このprojectへlinkされたProduction対象の共有変数がないことを確認してください。存在する場合はprojectからunlinkします。`deploy.sh`もVercel APIのproject ID filterで環境変数更新の前後とcandidate作成直前に監査し、Production対象が1件でもある場合、API権限が不足する場合、またはレスポンスを完全に検証できない場合はkeyや値を表示せず停止します。Developer API設定用の鍵は置換せず、鍵喪失時は同一鍵を復旧するかClient SecretとSecret Tokenを再入力します。rollback時も`site_developer_api_settings` tableをdropせずciphertextを保持してください。
-
-旧Edge Config版から初めて切り替える場合、本手順は旧版が本番運用されておらず、引き継ぐメンテナンス設定がないという承認済み前提に限ります。旧storeや資格情報は保持・移行せず、5番目のmigrationが3環境を`DISABLED`で初期化します。実運用中の設定値が存在する環境では本手順を使わず、別のデータ移行とrollback計画をレビューしてください。
-
-直前のProductionがPostgreSQL対応版になるまでは、旧deploymentへコードrollbackしてもPostgreSQLのメンテナンス設定は引き継がれません。`deploy.sh`はcandidate作成前に既存canonicalの公開HTML statusと`Retry-After`をbaselineとして検証し、rollback後は新DBの設定値ではなく、そのbaselineに対して公開可用性を確認します。予定終了日時を過ぎてからrollbackした場合は、baselineの`Retry-After`に従って公開HTMLの期待値を200へ更新します。初回deploymentのように直前のProductionがない場合、baseline取得とrollbackは行いません。
-
-## 2. Neonの接続URLを用意する
-
-Neon Project Dashboardの`Connect`を開き、同じbranch・database・roleで次の2つをコピーします。
-
-- primary/read-write branchの`Connection pooling`を有効にしたpooled URL（read replicaは使用しない）
-- `Connection pooling`を無効にしたdirect URL
-
-pooled URLはhostに`-pooler`が付き、direct URLには付きません。両方とも`sslmode=require`を含むことを確認します。URLは毎回入力し、ファイルやVercelへdirect URLを保存しません。
-Connect画面の表示形式は`Connection string`を選び、`postgresql://`から始まるURL本体だけをコピーします。`DATABASE_URL=`、引用符、`psql`コマンドは含めず、hostnameの`.c-2.`などのproxy部分も編集しません。
-
-## 3. 再デプロイする
-
-対話可能なターミナルから直接実行します。
-
-```bash
 ./deploy.sh
 ```
 
-スクリプトはtest、lint、typecheck、audit、Production buildを自動実行します。表示された対象が想定と違う場合は承認せず、停止します。
+`.env`の`DEPLOY_AWS_PROFILE`を使わず、その回だけprofileを明示する場合は次の形式です。
 
-表示順に、次を入力します。
+```bash
+./deploy.sh --profile <AWS_PROFILE_NAME>
+```
 
-1. `hobby`、Production URL、Neon project ID／nameを入力する。
-2. Neon planをAPIで確認できない場合だけ、ConsoleでFreeであることを確認して`free`と入力する。
-3. 非表示プロンプトへpooled URL、direct URLの順に貼り付ける。
-4. 対象project、domain、DB hostとProduction限定の7環境変数を確認し、環境変数更新へ`y`と入力する。既存の`BETTER_AUTH_SECRET`と`DEVELOPER_API_SETTINGS_ENCRYPTION_KEY`は維持され、`BETTER_AUTH_URL`と`APP_CANONICAL_ORIGIN`は同じcanonical HTTPS originになる。
-5. migrationがup-to-dateならそのまま進む。pendingが表示された場合だけ、計画を確認して`y`、実行直前に`migrate`と入力する。migration後はPostgreSQLの3環境行、version 1、revision、5制約が検証される。
-6. 通常は管理者作成・更新でEnterを押し、既存管理者のemailに`admin@keien.dev`、続けて保存したpasswordを入力する。管理者を更新する場合だけ`y`を選び、表示された変更内容を再確認する。
-7. staged candidateのsmoke test後、5分間の無通信と、Neon管理APIのidle／active反映待ち（各最大約5分、合計最大約15分）の間はcandidate、Production URL、Neon SQL Editorへアクセスせずに待つ。candidateは`PREVIEW`、promotion後のcanonicalは`PRODUCTION`のDB設定に応じて、公開HTMLが200または503であることを検証する。さらにHTMLの`noindex, nofollow` robots meta、全レスポンスの`X-Robots-Tag: noindex`、`/robots.txt`と`/sitemap.xml`のcanonical内容も検証する。確認が完了したらpromotionへ`y`と入力する。
-`Canonical smoke passed`に続いて`Deployment completed: <Production URL> (<commit SHA>)`が表示されれば、Productionの再デプロイは完了です。
+`<AWS_PROFILE_NAME>`は秘密値ではありません。shell historyへtoken、API key、database URL、passwordを入力しません。
 
-現行`deploy.sh`が扱えるmigrationは、リポジトリにある既存10件です。次に追加するmigrationは11件目として、デプロイスクリプトとテストを先に更新し、この手順では実行しません。
+## 実行中の動作
 
-Production暗号鍵が未設定の場合、ciphertext検査の開始からcandidate promotion完了までDeveloper API設定を変更しないでください。既存ciphertextが検出された場合は新鍵を作らず停止するため、元の`DEVELOPER_API_SETTINGS_ENCRYPTION_KEY`を復旧してから再実行します。
+`deploy.sh`は固定versionのdeploy runner imageを使い、Parameter Storeの4件を値を表示せずに取得します。`config`が初回setupまたはcredential更新の途中状態なら、同じprofileで`./setup-deploy-aws.sh`を再実行するよう案内し、Production関連処理を始めず停止します。完了済みの場合は保存されたVercel / Neon対象をAPIで再確認し、Neonからpooled / direct connection stringを取得して次の順に処理します。
 
-認証だけが故障した場合のtransaction SQLと、DB停止時に503を維持する復旧順は[メンテナンスモード緊急解除](maintenance-recovery.md)を参照してください。
+1. Gitのbranch / commit / clean worktree、AWS account、provider plan、project、domain、region、DB endpointを検証する。
+2. test、lint、typecheck、runtime audit、Production buildを実行する。
+3. migration状態、manifest、checksum、schema driftを検査する。
+4. migrationがpendingの場合だけplanを表示し、1回だけ`[y/N]`で承認を求める。
+5. migrationがup-to-dateであることを再確認し、Vercel Production環境変数を同期する。
+6. 対象commitをVercel Productionへ直接deployし、返されたdeployment ID、project、commit、regionを照合する。
+7. canonical URLの200 / 503、認証、robots meta、`X-Robots-Tag`、`robots.txt`、`sitemap.xml`をsmoke検証する。
 
-## 停止した場合
+migrationがup-to-dateなら、provider情報、project ID、connection string、管理者credential、plan確認文字列、deploy承認の入力はありません。pending migrationへの承認を拒否した場合は、DB、Vercel環境変数、Productionを変更せず停止します。
 
-環境変数、candidate、migration、管理者更新、promotionは自動で元に戻りません。再実行前に最後に成功した工程を確認します。canonical受入失敗時にrollback確認が表示された場合も、DB migrationは戻らず、直前のProductionが旧版ならメンテナンス設定も引き継がれません。表示されたprevious deployment ID、candidate作成前に検証されたbaseline、影響を確認してから判断してください。
+通常の`deploy.sh`がexact `admin-access-v1` batchを検出して停止した場合だけ、[review済みadmin access migrationのProduction適用](reviewed-admin-access-migration.md)に従います。このsingle-purpose手順でDBをup-to-dateにした後は、通常の`./deploy.sh`とGitHub Actionsへ戻ります。
+
+AWS IAM Identity Center sessionが失効している場合だけ、AWSへの再loginが必要です。これは保存値の再入力ではなく短期credentialの更新です。login後に同じ`./deploy.sh`を再実行します。
+
+## 完了判定
+
+次の両方が表示された時点で、スクリプト上の再デプロイは完了です。
+
+```text
+Canonical smoke passed: <deployment ID>
+Deployment completed: <deployment ID> (<commit SHA>)
+```
+
+必要に応じてブラウザでも次を確認します。
+
+1. `/`と内部リンクが正常に表示される。
+2. `/login`から登録済み管理者でログインできる。
+3. `/admin/users`が認証済みだけに表示される。
+4. logout後に管理画面が未認証で保護される。
+
+メンテナンス中は公開HTMLの503と`Cache-Control: no-store`が正常です。canonical smokeはDBの`PRODUCTION`設定に従って200または503を検証します。
+
+## 設定変更とcredential rotation
+
+通常の再デプロイではParameter Storeを編集しません。設定を変更する場合は`setup-deploy-aws.sh`を引数なしで実行します。非秘密項目は現在値、秘密項目は値を伏せたSSM versionとともに一覧表示されるため、更新対象を1件選択します。空入力または`0`は変更せず検証だけを行います。
+
+```bash
+./setup-deploy-aws.sh
+```
+
+メニューの`1`から`10`ではcanonical origin、project、branch、database、role、管理者emailなどの非秘密設定を1件、`11`から`13`ではVercel token、Neon API key、管理者passwordを1件更新できます。選択した項目だけを再入力し、完成形の対象をAPIで検証してから保存します。入力形式や秘密値の確認不一致では同じ項目だけを再入力します。別の項目も変更する場合は、完了後にもう一度実行します。
+
+更新対象をcommandで明示する従来の運用では、非秘密設定をまとめて再入力する`--reconfigure`と、秘密値を指定する`--rotate`を利用できます。
+
+```bash
+./setup-deploy-aws.sh --reconfigure
+./setup-deploy-aws.sh --rotate vercel-token
+./setup-deploy-aws.sh --rotate neon-api-key
+./setup-deploy-aws.sh --rotate admin-password
+```
+
+profileをその回だけ指定する場合は各コマンドへ`--profile <AWS_PROFILE_NAME>`を追加します。`admin-password`は既存管理者でsmokeログインする保存値だけを更新し、管理者user自体は作成・更新しません。先にレビュー済みの管理画面操作で同じ管理者のpasswordを変更してから更新します。秘密値の更新は対象`SecureString`だけを新しいversionへ更新し、`config.secretVersions`との対応を保ちます。途中でAWS / provider APIエラーや中断が発生した場合は自動再試行せず、次のsetup実行で保存済みversionを照合して再開します。実行後は値を表示せず、次の通常デプロイでprovider認証と対象一致を検証します。
+
+## 停止・失敗した場合
+
+errorの直前に表示されたphaseを確認し、状態不明のまま再実行しません。
+
+| 停止箇所                            | 外部状態                                       | 対応                                                   |
+| ----------------------------------- | ---------------------------------------------- | ------------------------------------------------------ |
+| target / quality / migration plan   | 外部変更なし                                   | 設定またはコードを修正して再実行する                   |
+| migration apply / verify            | DBが一部または全部変更済みの可能性あり         | Neon migration状態とschemaを確認し、自動rollbackしない |
+| Vercel env sync / Production deploy | 環境変数またはProductionが変更済みの可能性あり | Vercel deployment IDと最後に成功した工程を確認する     |
+| canonical smoke                     | Productionはすでに公開済み                     | deployを重ねず、canonicalの実状態を確認して復旧する    |
+
+DB migrationはVercelのrollbackでは戻りません。認証だけが故障した場合やDB停止時は[メンテナンスモード緊急解除](maintenance-recovery.md)を参照してください。

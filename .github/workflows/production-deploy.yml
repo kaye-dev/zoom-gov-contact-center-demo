@@ -1,0 +1,510 @@
+name: Manual production deployment
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-northeast-1
+  DEPLOY_RUNNER_IMAGE: zoom-gov-contact-center-demo-deploy:${{ github.sha }}
+  DEPLOY_CONFIG_PARAMETER: /zoom-gov-contact-center-demo/production/deploy/config
+  DEPLOY_VERCEL_TOKEN_PARAMETER: /zoom-gov-contact-center-demo/production/deploy/vercel-token
+  DEPLOY_NEON_API_KEY_PARAMETER: /zoom-gov-contact-center-demo/production/deploy/neon-api-key
+  DEPLOY_ADMIN_PASSWORD_PARAMETER: /zoom-gov-contact-center-demo/production/deploy/admin-password
+
+jobs:
+  validate_and_plan:
+    name: Validate and plan migration
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production-deploy
+    outputs:
+      migration-required: ${{ steps.validate.outputs['migration-required'] }}
+      plan-digest: ${{ steps.validate.outputs['plan-digest'] }}
+      target-fingerprint: ${{ steps.validate.outputs['target-fingerprint'] }}
+    steps:
+      - name: Check out the dispatched commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Build the immutable deploy runner before AWS authentication
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${GITHUB_REF}" == "refs/heads/main" ]] || {
+            echo "::error title=Unexpected ref::Production deployment must run from refs/heads/main."
+            exit 1
+          }
+          [[ "${GITHUB_SHA}" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error title=Unexpected commit::GITHUB_SHA is invalid."
+            exit 1
+          }
+          [[ "$(git rev-parse HEAD)" == "${GITHUB_SHA}" ]] || {
+            echo "::error title=Unexpected commit::The checked-out commit does not match GITHUB_SHA."
+            exit 1
+          }
+          command -v docker >/dev/null
+          command -v aws >/dev/null
+          docker version >/dev/null
+          aws --version
+          build_context="$(mktemp -d "${RUNNER_TEMP:?}/zoom-deploy-build.XXXXXX")"
+          [[ -d "${build_context}" && ! -L "${build_context}" ]]
+          git archive --format=tar "${GITHUB_SHA}" | tar -xf - -C "${build_context}"
+          [[ -f "${build_context}/Dockerfile.deploy" && ! -L "${build_context}/Dockerfile.deploy" ]]
+          docker build \
+            --file "${build_context}/Dockerfile.deploy" \
+            --build-arg "DEPLOY_GIT_SHA=${GITHUB_SHA}" \
+            --build-arg "DEPLOY_GIT_BRANCH=main" \
+            --tag "${DEPLOY_RUNNER_IMAGE}" \
+            "${build_context}"
+
+      - name: Assume the production AWS role
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: ${{ vars.AWS_PRODUCTION_DEPLOY_ROLE_ARN }}
+          role-session-name: gha-plan-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+
+      - name: Validate the target and create the migration plan
+        id: validate
+        shell: bash
+        env:
+          EXPECTED_AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          caller_account_id="$(aws sts get-caller-identity --query Account --output text --no-cli-pager --region "${AWS_REGION}")"
+          [[ "${caller_account_id}" =~ ^[0-9]{12}$ && "${caller_account_id}" == "${EXPECTED_AWS_ACCOUNT_ID}" ]]
+          output_directory="$(mktemp -d "${RUNNER_TEMP:?}/zoom-deploy-output.XXXXXX")"
+          chmod 700 "${output_directory}"
+          [[ -d "${output_directory}" && ! -L "${output_directory}" ]]
+
+          stream_ssm_context() {
+            if aws ssm get-parameters \
+              --names \
+              "${DEPLOY_CONFIG_PARAMETER}" \
+              "${DEPLOY_VERCEL_TOKEN_PARAMETER}" \
+              "${DEPLOY_NEON_API_KEY_PARAMETER}" \
+              "${DEPLOY_ADMIN_PASSWORD_PARAMETER}" \
+              --with-decryption \
+              --output json \
+              --no-cli-pager \
+              --region "${AWS_REGION}" 2>/dev/null; then
+              printf '\n%s\n' 'ZOOM_DEPLOY_SSM_CONTEXT_COMPLETE_V1'
+              return 0
+            fi
+            echo "::error title=SSM GetParameters failed::Exact Parameter Store read or KMS decryption failed." >&2
+            return 1
+          }
+
+          stream_ssm_context | docker run --rm --init --interactive --user 0 \
+            --env "GITHUB_ACTIONS=true" \
+            --env "GITHUB_EVENT_NAME=workflow_dispatch" \
+            --env "GITHUB_REF=refs/heads/main" \
+            --env "GITHUB_SHA=${GITHUB_SHA}" \
+            --env "GITHUB_RUN_ID=${GITHUB_RUN_ID}" \
+            --env "DEPLOY_CONTEXT_SOURCE=stdin" \
+            --env "DEPLOY_PHASE=validate" \
+            --env "DEPLOY_GIT_SHA=${GITHUB_SHA}" \
+            --env "DEPLOY_GIT_BRANCH=main" \
+            --env "DEPLOY_GITHUB_ENVIRONMENT=production-deploy" \
+            --env "DEPLOY_AWS_ACCOUNT_ID=${caller_account_id}" \
+            --env "DEPLOY_BOOTSTRAP_NPM_CI=1" \
+            --env "DEPLOY_OUTPUT_PATH=/deploy-output/result" \
+            --volume "${output_directory}:/deploy-output" \
+            "${DEPLOY_RUNNER_IMAGE}"
+
+          result_file="${output_directory}/result"
+          [[ -f "${result_file}" && ! -L "${result_file}" ]]
+          docker run --rm --user 0 \
+            --volume "${output_directory}:/deploy-output" \
+            --entrypoint chown \
+            "${DEPLOY_RUNNER_IMAGE}" \
+            "$(id -u):$(id -g)" /deploy-output/result
+          [[ "$(stat -c '%u:%g:%a' "${result_file}")" == "$(id -u):$(id -g):600" ]]
+
+          migration_required=""
+          plan_digest=""
+          target_fingerprint=""
+          result_line_count=0
+          while IFS= read -r result_line || [[ -n "${result_line}" ]]; do
+            result_line_count=$((result_line_count + 1))
+            result_key="${result_line%%=*}"
+            result_value="${result_line#*=}"
+            [[ "${result_line}" == *=* ]]
+            case "${result_key}" in
+              migration-required)
+                [[ -z "${migration_required}" && "${result_value}" =~ ^(true|false)$ ]]
+                migration_required="${result_value}"
+                ;;
+              plan-digest)
+                [[ -z "${plan_digest}" && "${result_value}" =~ ^[0-9a-f]{64}$ ]]
+                plan_digest="${result_value}"
+                ;;
+              target-fingerprint)
+                [[ -z "${target_fingerprint}" && "${result_value}" =~ ^[0-9a-f]{64}$ ]]
+                target_fingerprint="${result_value}"
+                ;;
+              *)
+                echo "::error title=Invalid phase output::The validate phase returned an unsupported field."
+                exit 1
+                ;;
+            esac
+          done < "${result_file}"
+          [[ ${result_line_count} -eq 3 && -n "${migration_required}" && -n "${plan_digest}" && -n "${target_fingerprint}" ]]
+          {
+            printf 'migration-required=%s\n' "${migration_required}"
+            printf 'plan-digest=%s\n' "${plan_digest}"
+            printf 'target-fingerprint=%s\n' "${target_fingerprint}"
+          } >> "${GITHUB_OUTPUT}"
+
+  production_migration:
+    name: Approve and apply production migration
+    needs: validate_and_plan
+    if: ${{ needs.validate_and_plan.outputs['migration-required'] == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production-migration
+    steps:
+      - name: Check out the validated commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Build the immutable deploy runner before AWS authentication
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${GITHUB_REF}" == "refs/heads/main" ]]
+          [[ "${GITHUB_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(git rev-parse HEAD)" == "${GITHUB_SHA}" ]]
+          command -v docker >/dev/null
+          command -v aws >/dev/null
+          docker version >/dev/null
+          aws --version
+          build_context="$(mktemp -d "${RUNNER_TEMP:?}/zoom-deploy-build.XXXXXX")"
+          [[ -d "${build_context}" && ! -L "${build_context}" ]]
+          git archive --format=tar "${GITHUB_SHA}" | tar -xf - -C "${build_context}"
+          [[ -f "${build_context}/Dockerfile.deploy" && ! -L "${build_context}/Dockerfile.deploy" ]]
+          docker build \
+            --file "${build_context}/Dockerfile.deploy" \
+            --build-arg "DEPLOY_GIT_SHA=${GITHUB_SHA}" \
+            --build-arg "DEPLOY_GIT_BRANCH=main" \
+            --tag "${DEPLOY_RUNNER_IMAGE}" \
+            "${build_context}"
+
+      - name: Assume the production AWS role
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: ${{ vars.AWS_PRODUCTION_DEPLOY_ROLE_ARN }}
+          role-session-name: gha-migrate-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+
+      - name: Revalidate and apply the approved migration
+        shell: bash
+        env:
+          EXPECTED_AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          EXPECTED_PLAN_DIGEST: ${{ needs.validate_and_plan.outputs['plan-digest'] }}
+          EXPECTED_TARGET_FINGERPRINT: ${{ needs.validate_and_plan.outputs['target-fingerprint'] }}
+        run: |
+          set -euo pipefail
+          [[ "${EXPECTED_PLAN_DIGEST}" =~ ^[0-9a-f]{64}$ ]]
+          [[ "${EXPECTED_TARGET_FINGERPRINT}" =~ ^[0-9a-f]{64}$ ]]
+          caller_account_id="$(aws sts get-caller-identity --query Account --output text --no-cli-pager --region "${AWS_REGION}")"
+          [[ "${caller_account_id}" =~ ^[0-9]{12}$ && "${caller_account_id}" == "${EXPECTED_AWS_ACCOUNT_ID}" ]]
+          output_directory="$(mktemp -d "${RUNNER_TEMP:?}/zoom-deploy-output.XXXXXX")"
+          chmod 700 "${output_directory}"
+          [[ -d "${output_directory}" && ! -L "${output_directory}" ]]
+
+          stream_ssm_context() {
+            if aws ssm get-parameters \
+              --names \
+              "${DEPLOY_CONFIG_PARAMETER}" \
+              "${DEPLOY_VERCEL_TOKEN_PARAMETER}" \
+              "${DEPLOY_NEON_API_KEY_PARAMETER}" \
+              "${DEPLOY_ADMIN_PASSWORD_PARAMETER}" \
+              --with-decryption \
+              --output json \
+              --no-cli-pager \
+              --region "${AWS_REGION}" 2>/dev/null; then
+              printf '\n%s\n' 'ZOOM_DEPLOY_SSM_CONTEXT_COMPLETE_V1'
+              return 0
+            fi
+            echo "::error title=SSM GetParameters failed::Exact Parameter Store read or KMS decryption failed." >&2
+            return 1
+          }
+
+          stream_ssm_context | docker run --rm --init --interactive --user 0 \
+            --env "GITHUB_ACTIONS=true" \
+            --env "GITHUB_EVENT_NAME=workflow_dispatch" \
+            --env "GITHUB_REF=refs/heads/main" \
+            --env "GITHUB_SHA=${GITHUB_SHA}" \
+            --env "GITHUB_RUN_ID=${GITHUB_RUN_ID}" \
+            --env "DEPLOY_CONTEXT_SOURCE=stdin" \
+            --env "DEPLOY_PHASE=migrate" \
+            --env "DEPLOY_GIT_SHA=${GITHUB_SHA}" \
+            --env "DEPLOY_GIT_BRANCH=main" \
+            --env "DEPLOY_GITHUB_ENVIRONMENT=production-migration" \
+            --env "DEPLOY_AWS_ACCOUNT_ID=${caller_account_id}" \
+            --env "DEPLOY_BOOTSTRAP_NPM_CI=1" \
+            --env "DEPLOY_OUTPUT_PATH=/deploy-output/result" \
+            --env "DEPLOY_EXPECTED_PLAN_DIGEST=${EXPECTED_PLAN_DIGEST}" \
+            --env "DEPLOY_EXPECTED_TARGET_FINGERPRINT=${EXPECTED_TARGET_FINGERPRINT}" \
+            --volume "${output_directory}:/deploy-output" \
+            "${DEPLOY_RUNNER_IMAGE}"
+          [[ ! -e "${output_directory}/result" && ! -L "${output_directory}/result" ]]
+
+  production_deploy:
+    name: Deploy directly to Production
+    needs:
+      - validate_and_plan
+      - production_migration
+    if: >-
+      ${{
+        always() &&
+        needs.validate_and_plan.result == 'success' &&
+        (
+          needs.validate_and_plan.outputs['migration-required'] == 'false' ||
+          needs.production_migration.result == 'success'
+        )
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production-deploy
+    outputs:
+      deployment-id: ${{ steps.release.outputs['deployment-id'] }}
+      previous-deployment-id: ${{ steps.release.outputs['previous-deployment-id'] }}
+    steps:
+      - name: Check out the validated commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Build the immutable deploy runner before AWS authentication
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${GITHUB_REF}" == "refs/heads/main" ]]
+          [[ "${GITHUB_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(git rev-parse HEAD)" == "${GITHUB_SHA}" ]]
+          command -v docker >/dev/null
+          command -v aws >/dev/null
+          docker version >/dev/null
+          aws --version
+          build_context="$(mktemp -d "${RUNNER_TEMP:?}/zoom-deploy-build.XXXXXX")"
+          [[ -d "${build_context}" && ! -L "${build_context}" ]]
+          git archive --format=tar "${GITHUB_SHA}" | tar -xf - -C "${build_context}"
+          [[ -f "${build_context}/Dockerfile.deploy" && ! -L "${build_context}/Dockerfile.deploy" ]]
+          docker build \
+            --file "${build_context}/Dockerfile.deploy" \
+            --build-arg "DEPLOY_GIT_SHA=${GITHUB_SHA}" \
+            --build-arg "DEPLOY_GIT_BRANCH=main" \
+            --tag "${DEPLOY_RUNNER_IMAGE}" \
+            "${build_context}"
+
+      - name: Assume the production AWS role
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: ${{ vars.AWS_PRODUCTION_DEPLOY_ROLE_ARN }}
+          role-session-name: gha-deploy-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+
+      - name: Sync the reviewed environment and deploy directly to Production
+        id: release
+        shell: bash
+        env:
+          EXPECTED_AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          EXPECTED_TARGET_FINGERPRINT: ${{ needs.validate_and_plan.outputs['target-fingerprint'] }}
+        run: |
+          set -euo pipefail
+          [[ "${EXPECTED_TARGET_FINGERPRINT}" =~ ^[0-9a-f]{64}$ ]]
+          caller_account_id="$(aws sts get-caller-identity --query Account --output text --no-cli-pager --region "${AWS_REGION}")"
+          [[ "${caller_account_id}" =~ ^[0-9]{12}$ && "${caller_account_id}" == "${EXPECTED_AWS_ACCOUNT_ID}" ]]
+          output_directory="$(mktemp -d "${RUNNER_TEMP:?}/zoom-deploy-output.XXXXXX")"
+          chmod 700 "${output_directory}"
+          [[ -d "${output_directory}" && ! -L "${output_directory}" ]]
+
+          stream_ssm_context() {
+            if aws ssm get-parameters \
+              --names \
+              "${DEPLOY_CONFIG_PARAMETER}" \
+              "${DEPLOY_VERCEL_TOKEN_PARAMETER}" \
+              "${DEPLOY_NEON_API_KEY_PARAMETER}" \
+              "${DEPLOY_ADMIN_PASSWORD_PARAMETER}" \
+              --with-decryption \
+              --output json \
+              --no-cli-pager \
+              --region "${AWS_REGION}" 2>/dev/null; then
+              printf '\n%s\n' 'ZOOM_DEPLOY_SSM_CONTEXT_COMPLETE_V1'
+              return 0
+            fi
+            echo "::error title=SSM GetParameters failed::Exact Parameter Store read or KMS decryption failed." >&2
+            return 1
+          }
+
+          stream_ssm_context | docker run --rm --init --interactive --user 0 \
+            --env "GITHUB_ACTIONS=true" \
+            --env "GITHUB_EVENT_NAME=workflow_dispatch" \
+            --env "GITHUB_REF=refs/heads/main" \
+            --env "GITHUB_SHA=${GITHUB_SHA}" \
+            --env "GITHUB_RUN_ID=${GITHUB_RUN_ID}" \
+            --env "DEPLOY_CONTEXT_SOURCE=stdin" \
+            --env "DEPLOY_PHASE=release" \
+            --env "DEPLOY_GIT_SHA=${GITHUB_SHA}" \
+            --env "DEPLOY_GIT_BRANCH=main" \
+            --env "DEPLOY_GITHUB_ENVIRONMENT=production-deploy" \
+            --env "DEPLOY_AWS_ACCOUNT_ID=${caller_account_id}" \
+            --env "DEPLOY_BOOTSTRAP_NPM_CI=1" \
+            --env "DEPLOY_OUTPUT_PATH=/deploy-output/result" \
+            --env "DEPLOY_EXPECTED_TARGET_FINGERPRINT=${EXPECTED_TARGET_FINGERPRINT}" \
+            --volume "${output_directory}:/deploy-output" \
+            "${DEPLOY_RUNNER_IMAGE}"
+
+          result_file="${output_directory}/result"
+          [[ -f "${result_file}" && ! -L "${result_file}" ]]
+          docker run --rm --user 0 \
+            --volume "${output_directory}:/deploy-output" \
+            --entrypoint chown \
+            "${DEPLOY_RUNNER_IMAGE}" \
+            "$(id -u):$(id -g)" /deploy-output/result
+          [[ "$(stat -c '%u:%g:%a' "${result_file}")" == "$(id -u):$(id -g):600" ]]
+
+          deployment_id=""
+          previous_deployment_id=""
+          result_line_count=0
+          while IFS= read -r result_line || [[ -n "${result_line}" ]]; do
+            result_line_count=$((result_line_count + 1))
+            result_key="${result_line%%=*}"
+            result_value="${result_line#*=}"
+            [[ "${result_line}" == *=* ]]
+            case "${result_key}" in
+              deployment-id)
+                [[ -z "${deployment_id}" && "${result_value}" =~ ^dpl_[A-Za-z0-9]+$ ]]
+                deployment_id="${result_value}"
+                ;;
+              previous-deployment-id)
+                [[ -z "${previous_deployment_id}" && "${result_value}" =~ ^(none|dpl_[A-Za-z0-9]+)$ ]]
+                previous_deployment_id="${result_value}"
+                ;;
+              *)
+                echo "::error title=Invalid phase output::The release phase returned an unsupported field."
+                exit 1
+                ;;
+            esac
+          done < "${result_file}"
+          [[ ${result_line_count} -eq 2 && -n "${deployment_id}" && -n "${previous_deployment_id}" ]]
+          {
+            printf 'deployment-id=%s\n' "${deployment_id}"
+            printf 'previous-deployment-id=%s\n' "${previous_deployment_id}"
+          } >> "${GITHUB_OUTPUT}"
+
+  canonical_smoke:
+    name: Verify the canonical Production deployment
+    needs:
+      - validate_and_plan
+      - production_deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production-deploy
+    steps:
+      - name: Check out the deployed commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Build the immutable deploy runner before AWS authentication
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${GITHUB_REF}" == "refs/heads/main" ]]
+          [[ "${GITHUB_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(git rev-parse HEAD)" == "${GITHUB_SHA}" ]]
+          command -v docker >/dev/null
+          command -v aws >/dev/null
+          docker version >/dev/null
+          aws --version
+          build_context="$(mktemp -d "${RUNNER_TEMP:?}/zoom-deploy-build.XXXXXX")"
+          [[ -d "${build_context}" && ! -L "${build_context}" ]]
+          git archive --format=tar "${GITHUB_SHA}" | tar -xf - -C "${build_context}"
+          [[ -f "${build_context}/Dockerfile.deploy" && ! -L "${build_context}/Dockerfile.deploy" ]]
+          docker build \
+            --file "${build_context}/Dockerfile.deploy" \
+            --build-arg "DEPLOY_GIT_SHA=${GITHUB_SHA}" \
+            --build-arg "DEPLOY_GIT_BRANCH=main" \
+            --tag "${DEPLOY_RUNNER_IMAGE}" \
+            "${build_context}"
+
+      - name: Assume the production AWS role
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: ${{ vars.AWS_PRODUCTION_DEPLOY_ROLE_ARN }}
+          role-session-name: gha-smoke-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+
+      - name: Run canonical smoke checks against the deployed ID
+        shell: bash
+        env:
+          EXPECTED_AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          EXPECTED_DEPLOYMENT_ID: ${{ needs.production_deploy.outputs['deployment-id'] }}
+          EXPECTED_PREVIOUS_DEPLOYMENT_ID: ${{ needs.production_deploy.outputs['previous-deployment-id'] }}
+          EXPECTED_TARGET_FINGERPRINT: ${{ needs.validate_and_plan.outputs['target-fingerprint'] }}
+        run: |
+          set -euo pipefail
+          [[ "${EXPECTED_DEPLOYMENT_ID}" =~ ^dpl_[A-Za-z0-9]+$ ]]
+          [[ "${EXPECTED_PREVIOUS_DEPLOYMENT_ID}" =~ ^(none|dpl_[A-Za-z0-9]+)$ ]]
+          [[ "${EXPECTED_TARGET_FINGERPRINT}" =~ ^[0-9a-f]{64}$ ]]
+          caller_account_id="$(aws sts get-caller-identity --query Account --output text --no-cli-pager --region "${AWS_REGION}")"
+          [[ "${caller_account_id}" =~ ^[0-9]{12}$ && "${caller_account_id}" == "${EXPECTED_AWS_ACCOUNT_ID}" ]]
+          output_directory="$(mktemp -d "${RUNNER_TEMP:?}/zoom-deploy-output.XXXXXX")"
+          chmod 700 "${output_directory}"
+          [[ -d "${output_directory}" && ! -L "${output_directory}" ]]
+
+          stream_ssm_context() {
+            if aws ssm get-parameters \
+              --names \
+              "${DEPLOY_CONFIG_PARAMETER}" \
+              "${DEPLOY_VERCEL_TOKEN_PARAMETER}" \
+              "${DEPLOY_NEON_API_KEY_PARAMETER}" \
+              "${DEPLOY_ADMIN_PASSWORD_PARAMETER}" \
+              --with-decryption \
+              --output json \
+              --no-cli-pager \
+              --region "${AWS_REGION}" 2>/dev/null; then
+              printf '\n%s\n' 'ZOOM_DEPLOY_SSM_CONTEXT_COMPLETE_V1'
+              return 0
+            fi
+            echo "::error title=SSM GetParameters failed::Exact Parameter Store read or KMS decryption failed." >&2
+            return 1
+          }
+
+          stream_ssm_context | docker run --rm --init --interactive --user 0 \
+            --env "GITHUB_ACTIONS=true" \
+            --env "GITHUB_EVENT_NAME=workflow_dispatch" \
+            --env "GITHUB_REF=refs/heads/main" \
+            --env "GITHUB_SHA=${GITHUB_SHA}" \
+            --env "GITHUB_RUN_ID=${GITHUB_RUN_ID}" \
+            --env "DEPLOY_CONTEXT_SOURCE=stdin" \
+            --env "DEPLOY_PHASE=smoke" \
+            --env "DEPLOY_GIT_SHA=${GITHUB_SHA}" \
+            --env "DEPLOY_GIT_BRANCH=main" \
+            --env "DEPLOY_GITHUB_ENVIRONMENT=production-deploy" \
+            --env "DEPLOY_AWS_ACCOUNT_ID=${caller_account_id}" \
+            --env "DEPLOY_BOOTSTRAP_NPM_CI=1" \
+            --env "DEPLOY_OUTPUT_PATH=/deploy-output/result" \
+            --env "DEPLOY_EXPECTED_DEPLOYMENT_ID=${EXPECTED_DEPLOYMENT_ID}" \
+            --env "DEPLOY_EXPECTED_PREVIOUS_DEPLOYMENT_ID=${EXPECTED_PREVIOUS_DEPLOYMENT_ID}" \
+            --env "DEPLOY_EXPECTED_TARGET_FINGERPRINT=${EXPECTED_TARGET_FINGERPRINT}" \
+            --volume "${output_directory}:/deploy-output" \
+            "${DEPLOY_RUNNER_IMAGE}"
+          [[ ! -e "${output_directory}/result" && ! -L "${output_directory}/result" ]]

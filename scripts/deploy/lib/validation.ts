@@ -210,7 +210,9 @@ export function readVercelLink(path: string): VercelLink {
     typeof projectId !== "string" ||
     !/^prj_[A-Za-z0-9]+$/.test(projectId)
   ) {
-    throw new Error("The Vercel link does not contain valid orgId/projectId values.");
+    throw new Error(
+      "The Vercel link does not contain valid team/project ID values.",
+    );
   }
   return { orgId, projectId };
 }
@@ -248,7 +250,7 @@ export function parseVercelProjectApi(
   }
   if (parsed.ssoProtection !== null) {
     throw new Error(
-      "Vercel Authentication protects the generated staged URL. Set Project Settings > Deployment Protection to None before using deploy.sh.",
+      "Vercel Authentication protects the generated deployment URL. Set Project Settings > Deployment Protection to None before using deploy.sh.",
     );
   }
   if (
@@ -449,24 +451,13 @@ export function parseDeploymentOutput(output: string): DeploymentCommandOutput {
   };
 }
 
-export function assertDeploymentOutputMatchesCandidate(
-  output: DeploymentCommandOutput,
-  candidateId: string,
-): void {
-  if (output.id !== undefined && output.id !== candidateId) {
-    throw new Error(
-      "Vercel deploy JSON deployment ID does not match inspect and API evidence.",
-    );
-  }
-}
-
 function parseDeploymentOrigin(value: string): URL {
   if (!/^https:\/\/[A-Za-z0-9-]+\.vercel\.app\/?$/.test(value)) {
-    throw new Error("Vercel staged deployment URL is not an HTTPS origin.");
+    throw new Error("Vercel Production deployment URL is not an HTTPS origin.");
   }
   const url = new URL(value);
   if (url.pathname !== "/" || url.search || url.hash) {
-    throw new Error("Vercel staged deployment URL is not an HTTPS origin.");
+    throw new Error("Vercel Production deployment URL is not an HTTPS origin.");
   }
   return url;
 }
