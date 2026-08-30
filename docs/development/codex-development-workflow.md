@@ -20,6 +20,25 @@ plans/<slug>/
 
 生成directoryはGitへ追加しない。`plans/tmp/<slug>/prototype/`は閲覧とCSS buildだけに使える後方互換pathであり、parity、承認、実装、reviewの前にcanonical directoryへ移行する。
 
+## モデル選択
+
+project-localの通常既定は`.codex/config.toml`の`gpt-5.6-terra`、reasoning `medium`とする。各skillの実行前に、品質と利用量のバランスに応じてCodexのcomposerで次のモデルとreasoningを手動選択する。
+
+| skill | 推奨モデル | reasoning |
+| --- | --- | --- |
+| `$plan` | `gpt-5.6-sol` | `high` |
+| `$plan-critic` | `gpt-5.6-terra` | `high` |
+| `$implement` | `gpt-5.6-sol` | `high` |
+| `$review` | `gpt-5.6-sol` | `high` |
+| `$git-commit-push-pr` | `gpt-5.6-luna` | `medium` |
+| `$workflow-retrospective` | `gpt-5.6-terra` | `high` |
+
+`$plan-critic`と`$review`の履歴なしsubagentには、spawn時のmodelまたはreasoning overrideを渡さない。repository側にも`[agents]`やcustom agentを設けないため、subagentは呼び出し時に親taskで選択したmodelとreasoningを継承する。ユーザーまたは管理者の上位設定によるoverrideはrepositoryの管理対象外とする。
+
+`xhigh`、`max`、`ultra`は通常既定にもskill別推奨にも使わない。推奨設定で品質不足が確認された場合だけ、対象taskで明示的に選択する。
+
+skillメタデータではmodelを指定せず、`[agents]`、custom agent、project-local `profiles`による固定routingも追加しない。project-local `profiles`はこの手動切替の適用対象外とし、model切替はcomposerだけで行う。モデルの役割とreasoningは[OpenAIモデルガイド](https://developers.openai.com/api/docs/guides/latest-model)、通常既定の設定は[Codex Configuration Reference](https://learn.chatgpt.com/docs/config-file/config-reference)、subagentの継承は[Subagents](https://learn.chatgpt.com/docs/agent-configuration/subagents)を根拠とする。
+
 ## 標準フロー
 
 基本は次の順で進める。
