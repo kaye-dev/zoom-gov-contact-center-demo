@@ -1,0 +1,7 @@
+interface:
+  display_name: "Product & Engineering Kabeuchi"
+  short_description: "Get senior product and engineering advice"
+  default_prompt: "Use $kabeuchi to challenge this product or engineering decision and recommend the next step."
+
+policy:
+  allow_implicit_invocation: false

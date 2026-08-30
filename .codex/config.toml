@@ -1,5 +1,14 @@
-model = "gpt-5.6-terra"
-model_reasoning_effort = "medium"
-
 [mcp_servers."openaiDeveloperDocs"]
 url = "https://developers.openai.com/mcp"
+
+[agents.product_advisor]
+description = "Read-only product and engineering advisor for explicit kabeuchi sessions."
+config_file = "./agents/product_advisor.toml"
+
+[agents.project_explorer]
+description = "Read-only explorer for broad repository and document investigations."
+config_file = "./agents/project_explorer.toml"
+
+[agents.independent_reviewer]
+description = "Read-only reviewer for isolated plan, diff, and goal-conformance reviews."
+config_file = "./agents/independent_reviewer.toml"

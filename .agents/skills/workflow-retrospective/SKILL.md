@@ -5,7 +5,7 @@ description: "Audit one completed Codex development task, prioritize lean workfl
 
 # Workflow Retrospective
 
-Audit exactly one completed or intentionally interrupted Codex task. Optimize toward one `$plan` invocation plus one `$implement` invocation without treating legitimate product decisions, safety gates, or user-requested stops as defects.
+Audit exactly one completed or intentionally interrupted Codex task in the current agent. Do not delegate the audit to a custom agent. Optimize toward one `$plan` invocation plus one `$implement` invocation without treating legitimate product decisions, safety gates, or user-requested stops as defects.
 
 Prefer a new task with `$workflow-retrospective codex://threads/<thread-id>`. Never run, suggest, or notify about this skill automatically at the end of `$plan`, `$implement`, or `$review`.
 

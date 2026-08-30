@@ -5,7 +5,7 @@ description: "Ship already-implemented current-task changes with local git and t
 
 # Git Commit Push PR
 
-Complete the shipping workflow with shell `git` and direct `gh` commands. Do not use a GitHub plugin, connector, MCP server, or a language-runtime wrapper around `gh`.
+Complete the shipping workflow in the current agent with shell `git` and direct `gh` commands. Do not delegate it to a custom agent or use a GitHub plugin, connector, MCP server, or a language-runtime wrapper around `gh`.
 
 ## Invocation contract
 
