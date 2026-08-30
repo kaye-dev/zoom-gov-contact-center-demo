@@ -63,7 +63,7 @@ git status --short
 ./setup-deploy-aws.sh
 ```
 
-`.env`にprofileがない場合は対話一覧から選択します。選択したprofileのSSO sessionが失効している場合は、errorに表示される`aws sso login --profile <AWS_PROFILE_NAME>`を実行してから、`--profile`を追加せずに元のcommandを再実行できます。特定profileをその回だけ固定する場合だけ`--profile <AWS_PROFILE_NAME>`を追加します。
+`.env`にprofileがない場合は対話一覧から選択します。選択したprofileのSSO sessionが失効している場合は、wrapperが再loginするか確認します。承認すると固定AWS CLI containerのdevice authorizationを開始し、loginとSTS再確認に成功した時点から元のcommandを続行します。特定profileをその回だけ固定する場合だけ`--profile <AWS_PROFILE_NAME>`を追加します。非対話実行ではlogin確認を表示せず停止します。
 
 parameterがない場合、setupは初期設定を開始することを表示します。AWS accountへの書き込みを完全一致で承認した後、Vercel / Neonの既存project、plan、domain、branch、database、roleを項目ごとに入力・検証します。検証済みの非秘密項目は同じ`config`へ途中保存し、Vercel token、Neon API key、既存admin passwordは確認できたものから専用KMS keyの`SecureString`へ保存します。秘密値は`config`へ保存しません。
 

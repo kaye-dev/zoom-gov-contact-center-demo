@@ -185,7 +185,7 @@ test("setup wrapper verifies the selected AWS session before building the runner
   );
 });
 
-test("AWS configuration stays read-only while CLI role cache uses tmpfs", () => {
+test("AWS configuration stays read-only except for the exact SSO login cache", () => {
   const deploySource = readFileSync(deployScript, "utf8");
   const setupSource = readFileSync(setupDeployAwsScript, "utf8");
 
@@ -197,6 +197,20 @@ test("AWS configuration stays read-only while CLI role cache uses tmpfs", () => 
   assert.equal(
     deploySource.match(/--tmpfs "\$\{AWS_ROOT_CLI_CACHE_TMPFS\}"/g)?.length,
     2,
+  );
+  assert.match(deploySource, /--user "\$\{host_uid\}:\$\{host_gid\}"/);
+  assert.match(deploySource, /--env "HOME=\/aws-home"/);
+  assert.match(
+    deploySource,
+    /--volume "\$\{sso_cache_directory\}:\/aws-home\/\.aws\/sso\/cache:rw"/,
+  );
+  assert.match(
+    deploySource,
+    /sso_cli_cache_tmpfs="\/aws-home\/\.aws\/cli\/cache:[^"]+uid=\$\{host_uid\},gid=\$\{host_gid\}"/,
+  );
+  assert.match(
+    deploySource,
+    /sso login \\\n+    --profile "\$\{DEPLOY_AWS_PROFILE\}" \\\n+    --use-device-code \\\n+    --no-browser/,
   );
   assert.match(setupSource, /:\/home\/node\/\.aws:ro/);
   assert.match(
@@ -250,6 +264,17 @@ test("AWS cache mountpoint creation is private and rejects symlinks", () => {
       lstatSync(join(awsDirectory, "cli", "cache")).mode & 0o777,
       0o700,
     );
+    const createdSso = runFixture(
+      root,
+      `HOME=${shellQuote(awsHome)}\nprepare_aws_sso_cache_directory`,
+    );
+    assert.equal(createdSso.status, 0, createdSso.stderr);
+    assert.equal(createdSso.stdout, `${join(awsDirectory, "sso", "cache")}\n`);
+    assert.equal(lstatSync(join(awsDirectory, "sso")).mode & 0o777, 0o700);
+    assert.equal(
+      lstatSync(join(awsDirectory, "sso", "cache")).mode & 0o777,
+      0o700,
+    );
 
     rmSync(join(awsDirectory, "cli", "cache"), { recursive: true });
     symlinkSync("../outside", join(awsDirectory, "cli", "cache"));
@@ -259,6 +284,20 @@ test("AWS cache mountpoint creation is private and rejects symlinks", () => {
     );
     assert.notEqual(rejected.status, 0);
     assert.match(rejected.stderr, /cache directory is unavailable or unsafe/);
+
+    rmSync(join(awsDirectory, "cli", "cache"));
+    mkdirSync(join(awsDirectory, "cli", "cache"), { mode: 0o700 });
+    rmSync(join(awsDirectory, "sso", "cache"), { recursive: true });
+    symlinkSync("../../outside", join(awsDirectory, "sso", "cache"));
+    const rejectedSso = runFixture(
+      root,
+      `HOME=${shellQuote(awsHome)}\nprepare_aws_sso_cache_directory`,
+    );
+    assert.notEqual(rejectedSso.status, 0);
+    assert.match(
+      rejectedSso.stderr,
+      /cache directory is unavailable or unsafe/,
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -343,6 +382,112 @@ test("AWS authentication failure identifies the selected profile without exposin
     assert.match(result.stderr, /profile 'demo-keien-01'/);
     assert.match(result.stderr, /aws sso login --profile demo-keien-01/);
     assert.ok(!result.stderr.includes(syntheticAwsError));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("an expired interactive SSO session can login once and resume the original command", () => {
+  const root = initializeWrapperFixture();
+  const firstAttemptMarker = join(root, "first-sts-attempt");
+  const loginMarker = join(root, "sso-login");
+  try {
+    const result = runFixture(
+      root,
+      [
+        "DEPLOY_AWS_PROFILE=demo-keien-01",
+        "is_interactive_terminal() { return 0; }",
+        "aws_profile_uses_sso() { return 0; }",
+        [
+          "run_aws_helper() {",
+          `  if [[ ! -e ${shellQuote(firstAttemptMarker)} ]]; then`,
+          `    : > ${shellQuote(firstAttemptMarker)}`,
+          "    printf '%s\\n' 'Error loading SSO Token: Token has expired and refresh failed' >&2",
+          "    return 255",
+          "  fi",
+          "  printf '%s\\n' '444134576171'",
+          "}",
+        ].join("\n"),
+        `run_aws_sso_login() { : > ${shellQuote(loginMarker)}; }`,
+        "read_aws_account_id <<< 'y'",
+        "printf '%s' \"${DEPLOY_AWS_ACCOUNT_ID}\"",
+      ].join("\n"),
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, "444134576171");
+    assert.equal(spawnSync("test", ["-e", loginMarker]).status, 0);
+    assert.match(result.stderr, /ログインして処理を続行しますか\? \[y\/N\]/u);
+    assert.match(result.stderr, /Continuing the original command/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("declining an expired SSO login stops without starting login", () => {
+  const root = initializeWrapperFixture();
+  const loginMarker = join(root, "must-not-login");
+  try {
+    const result = runFixture(
+      root,
+      [
+        "DEPLOY_AWS_PROFILE=demo-keien-01",
+        "is_interactive_terminal() { return 0; }",
+        "aws_profile_uses_sso() { return 0; }",
+        "run_aws_helper() { printf '%s\\n' 'Error loading SSO Token' >&2; return 255; }",
+        `run_aws_sso_login() { : > ${shellQuote(loginMarker)}; }`,
+        "read_aws_account_id <<< 'n'",
+      ].join("\n"),
+    );
+    assert.notEqual(result.status, 0);
+    assert.equal(spawnSync("test", ["-e", loginMarker]).status, 1);
+    assert.match(result.stderr, /ログインして処理を続行しますか/u);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("non-interactive expired SSO sessions fail without starting login", () => {
+  const root = initializeWrapperFixture();
+  const loginMarker = join(root, "must-not-login");
+  try {
+    const result = runFixture(
+      root,
+      [
+        "DEPLOY_AWS_PROFILE=demo-keien-01",
+        "is_interactive_terminal() { return 1; }",
+        "aws_profile_uses_sso() { return 0; }",
+        "run_aws_helper() { printf '%s\\n' 'Error loading SSO Token' >&2; return 255; }",
+        `run_aws_sso_login() { : > ${shellQuote(loginMarker)}; }`,
+        "read_aws_account_id",
+      ].join("\n"),
+    );
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /aws sso login --profile demo-keien-01/);
+    assert.equal(spawnSync("test", ["-e", loginMarker]).status, 1);
+    assert.doesNotMatch(result.stderr, /ログインして処理を続行しますか/u);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("non-SSO authentication failures never start interactive SSO login", () => {
+  const root = initializeWrapperFixture();
+  const loginMarker = join(root, "must-not-login");
+  try {
+    const result = runFixture(
+      root,
+      [
+        "DEPLOY_AWS_PROFILE=static-profile",
+        "is_interactive_terminal() { return 0; }",
+        "aws_profile_uses_sso() { return 1; }",
+        "run_aws_helper() { printf '%s\\n' 'AccessDenied' >&2; return 255; }",
+        `run_aws_sso_login() { : > ${shellQuote(loginMarker)}; }`,
+        "read_aws_account_id <<< 'y'",
+      ].join("\n"),
+    );
+    assert.notEqual(result.status, 0);
+    assert.equal(spawnSync("test", ["-e", loginMarker]).status, 1);
+    assert.doesNotMatch(result.stderr, /ログインして処理を続行しますか/u);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

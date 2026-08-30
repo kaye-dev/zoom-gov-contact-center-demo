@@ -41,7 +41,7 @@ Neonのpooled / direct connection stringは保存しません。deployの各phas
 
 Node.js、npm、Vercel CLI、Neon CLIをhostへインストールする必要はありません。deploy runner image内の固定versionを使います。
 
-AWS IAM Identity Center sessionが失効している場合は、使用するprofileを明示してブラウザまたはdevice authorizationで再loginします。
+AWS IAM Identity Center sessionが失効している場合、対話terminalで実行したlocal wrapperが再loginするか確認します。`y`または`yes`で承認すると、固定AWS CLI containerからdevice authorizationを開始し、login成功後に元のcommandを続行します。ホストへAWS CLIをインストールして次のcommandを事前実行する必要はありません。手動で更新する場合だけ、使用するprofileを明示します。
 
 ```bash
 aws sso login --profile <AWS_PROFILE_NAME>
@@ -49,7 +49,7 @@ aws sso login --profile <AWS_PROFILE_NAME>
 
 SSO session cacheは`~/.aws/sso/cache`にあり、tokenや一時credentialをリポジトリへコピーしません。[AWS CLIのIAM Identity Center認証](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sso.html)も参照してください。
 
-local wrapperは`~/.aws`をread-onlyでcontainerへmountします。AWS CLIがrole session用に必要とする`~/.aws/cli/cache`だけは、hostへcredentialを書き戻さない揮発性tmpfsで覆い、container終了時に破棄します。mountpointがない場合は、秘密値を含まない空ディレクトリをmode `0700`でhostに作成します。
+local wrapperは通常処理で`~/.aws`をread-onlyでcontainerへmountします。AWS CLIがrole session用に必要とする`~/.aws/cli/cache`は、hostへcredentialを書き戻さない揮発性tmpfsで覆い、container終了時に破棄します。承認済みのSSO login中だけ、host userのUID / GIDでcontainerを実行し、token保存先である`~/.aws/sso/cache`を正確なnested mountとしてwrite可能にします。mountpointがない場合は、秘密値を含まない空ディレクトリをmode `0700`でhostに作成します。
 
 初回setup用identityには、少なくとも次のAPIを対象account / Regionで許可します。`CreateKey`は作成前にkey ARNを限定できないため、初回だけ使う管理者identityへ分離し、setup完了後の通常deploy identityには付与しません。
 
@@ -99,7 +99,7 @@ connection stringを事前にコピーする必要はありません。setupとd
 
 profileを省略した場合は、`.env`の`DEPLOY_AWS_PROFILE`を使用します。それもない対話terminalでは利用可能なprofileから選択します。特定profileをその回だけ固定する場合は`--profile <AWS_PROFILE_NAME>`を使います。非対話実行でprofileを決定できない場合は停止します。
 
-setupはprofile解決直後にSTS認証を確認し、失敗した場合はdeploy runner imageをbuildしません。SSO profileの場合はerrorに表示された`aws sso login --profile <AWS_PROFILE_NAME>`を実行し、元のcommandを再実行します。対話選択を使う場合、再実行時も`--profile`は必要ありません。
+setupはprofile解決直後にSTS認証を確認し、SSO sessionの失効を検出すると再loginするか1回だけ確認します。承認した場合はdevice authorizationと再STS確認に成功してから、元のsetupを続行します。拒否、login失敗、再STS失敗ではdeploy runner imageをbuildせず停止します。非対話実行、SSO以外のprofile、AccessDeniedや通信障害ではlogin確認を出さず、認証エラーとして停止します。
 
 setupは4件のparameterを確認し、次の3状態のいずれかとして開始します。
 

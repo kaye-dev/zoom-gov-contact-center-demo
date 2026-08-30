@@ -161,6 +161,14 @@ prepare_aws_host_directory() {
   printf '%s\n' "${aws_directory}"
 }
 
+prepare_aws_sso_cache_directory() {
+  local aws_directory
+  aws_directory="$(prepare_aws_host_directory)"
+  ensure_private_aws_directory "${aws_directory}/sso"
+  ensure_private_aws_directory "${aws_directory}/sso/cache"
+  printf '%s\n' "${aws_directory}/sso/cache"
+}
+
 run_aws_helper() {
   local aws_directory
   aws_directory="$(prepare_aws_host_directory)"
@@ -171,6 +179,29 @@ run_aws_helper() {
     "$@" \
     --region "${DEPLOY_REGION}" \
     --profile "${DEPLOY_AWS_PROFILE}"
+}
+
+run_aws_sso_login() {
+  local aws_directory sso_cache_directory host_uid host_gid sso_cli_cache_tmpfs
+  aws_directory="$(prepare_aws_host_directory)"
+  sso_cache_directory="$(prepare_aws_sso_cache_directory)"
+  host_uid="$(id -u)"
+  host_gid="$(id -g)"
+  [[ "${host_uid}" =~ ^[0-9]+$ && "${host_gid}" =~ ^[0-9]+$ ]] || \
+    die "Could not resolve the host identity for AWS SSO login."
+  sso_cli_cache_tmpfs="/aws-home/.aws/cli/cache:rw,noexec,nosuid,nodev,size=1m,mode=0700,uid=${host_uid},gid=${host_gid}"
+  docker run --rm --interactive --tty \
+    --user "${host_uid}:${host_gid}" \
+    --env "HOME=/aws-home" \
+    --volume "${aws_directory}:/aws-home/.aws:ro" \
+    --volume "${sso_cache_directory}:/aws-home/.aws/sso/cache:rw" \
+    --tmpfs "${sso_cli_cache_tmpfs}" \
+    "${AWS_CLI_IMAGE}" \
+    sso login \
+    --profile "${DEPLOY_AWS_PROFILE}" \
+    --use-device-code \
+    --no-browser \
+    --no-cli-pager
 }
 
 list_aws_profiles() {
@@ -236,10 +267,65 @@ resolve_aws_profile() {
   select_aws_profile_by_index "${selection}" "${profiles[@]}"
 }
 
+is_interactive_terminal() {
+  [[ -t 0 && -t 1 ]]
+}
+
+aws_profile_uses_sso() {
+  local value
+  if value="$(run_aws_helper configure get sso_session 2>/dev/null)" && [[ -n "${value}" ]]; then
+    return 0
+  fi
+  if value="$(run_aws_helper configure get sso_start_url 2>/dev/null)" && [[ -n "${value}" ]]; then
+    return 0
+  fi
+  return 1
+}
+
+is_expired_aws_sso_error() {
+  local message="$1"
+  case "${message}" in
+    *"Error loading SSO Token"* | \
+      *"UnauthorizedSSOTokenError"* | \
+      *"The SSO session associated with this profile has expired"* | \
+      *"Token has expired and refresh failed"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+maybe_login_aws_sso() {
+  local authentication_error="$1"
+  local answer
+  is_interactive_terminal || return 1
+  is_expired_aws_sso_error "${authentication_error}" || return 1
+  aws_profile_uses_sso || return 1
+
+  echo "AWS profile '${DEPLOY_AWS_PROFILE}' のSSOセッションが無効または期限切れです。" >&2
+  printf 'AWS SSOへログインして処理を続行しますか? [y/N] ' >&2
+  IFS= read -r answer || return 1
+  [[ "${answer}" =~ ^([yY]|[yY][eE][sS])$ ]] || return 1
+
+  echo "AWS SSO device authorizationを開始します。表示されるURLとcodeで認証してください。" >&2
+  if ! run_aws_sso_login; then
+    die "AWS SSO login failed for profile '${DEPLOY_AWS_PROFILE}'. The current operation was stopped."
+  fi
+  echo "AWS SSO login succeeded. Continuing the original command." >&2
+}
+
 read_aws_account_id() {
-  local account_id
-  if ! account_id="$(run_aws_helper sts get-caller-identity --query Account --output text --no-cli-pager 2>/dev/null)"; then
-    die "AWS authentication failed for profile '${DEPLOY_AWS_PROFILE}'. If this profile uses IAM Identity Center (SSO), run 'aws sso login --profile ${DEPLOY_AWS_PROFILE}' and retry the original command."
+  local account_id authentication_error
+  if account_id="$(run_aws_helper sts get-caller-identity --query Account --output text --no-cli-pager 2>&1)"; then
+    :
+  else
+    authentication_error="${account_id}"
+    account_id=""
+    if maybe_login_aws_sso "${authentication_error}"; then
+      if ! account_id="$(run_aws_helper sts get-caller-identity --query Account --output text --no-cli-pager 2>/dev/null)"; then
+        die "AWS authentication still failed for profile '${DEPLOY_AWS_PROFILE}' after SSO login. The current operation was stopped."
+      fi
+    else
+      die "AWS authentication failed for profile '${DEPLOY_AWS_PROFILE}'. If this profile uses IAM Identity Center (SSO), run 'aws sso login --profile ${DEPLOY_AWS_PROFILE}' and retry the original command."
+    fi
   fi
   [[ "${account_id}" =~ ^[0-9]{12}$ ]] || die "AWS STS returned an invalid account ID."
   if [[ -n "${DEPLOY_EXPECTED_AWS_ACCOUNT_ID}" && "${account_id}" != "${DEPLOY_EXPECTED_AWS_ACCOUNT_ID}" ]]; then
