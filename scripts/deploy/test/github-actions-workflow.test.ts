@@ -101,6 +101,11 @@ test("phase containers receive only the marked SSM stdin and non-secret metadata
     workflow.match(/ZOOM_DEPLOY_SSM_CONTEXT_COMPLETE_V1/gu)?.length,
     jobNames.length,
   );
+  assert.equal(
+    workflow.match(/stream_ssm_context \| docker run --rm --init --interactive/gu)?.length,
+    jobNames.length,
+    "every phase container must use an init process to reap terminated test descendants",
+  );
   assert.doesNotMatch(
     workflow,
     /--env\s+"(?:AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|AWS_SESSION_TOKEN|GITHUB_TOKEN|ACTIONS_ID_TOKEN)/u,
