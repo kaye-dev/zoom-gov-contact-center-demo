@@ -50,8 +50,21 @@ test("deployment phases make Colima bind-mounted output private before execution
   );
   assert.match(
     source,
-    /"\$\{DEPLOY_RUNNER_IMAGE\}" \\\n+    sh -ceu "\$\{DEPLOY_PRIVATE_OUTPUT_ENTRYPOINT\}" sh \\\n+    node --import tsx scripts\/deploy\/main\.ts/u,
+    /"\$\{DEPLOY_RUNNER_IMAGE\}" \\\n+    sh -ceu "\$\{DEPLOY_PRIVATE_OUTPUT_ENTRYPOINT\}" sh \\\n+    node --no-warnings --import tsx scripts\/deploy\/main\.ts/u,
   );
+});
+
+test("deployment runner suppresses default Node warnings for concise handling", () => {
+  const source = readFileSync(deployDockerfile, "utf8");
+  assert.match(
+    source,
+    /CMD \["node", "--no-warnings", "--import", "tsx", "scripts\/deploy\/main\.ts"\]/u,
+  );
+});
+
+test("deployment phases receive the wrapper-selected log style", () => {
+  const source = readFileSync(deployScript, "utf8");
+  assert.match(source, /--env "DEPLOY_LOG_STYLE=\$\{DEPLOY_LOG_STYLE\}"/u);
 });
 
 test("deployment output uses the Git metadata directory shared by Colima", () => {
@@ -246,6 +259,73 @@ function runFixture(root: string, body: string) {
     encoding: "utf8",
   });
 }
+
+test("interactive deployment logs use ANSI unless color is disabled", () => {
+  const root = initializeWrapperFixture();
+  try {
+    const colored = runFixture(
+      root,
+      [
+        "is_deploy_color_terminal() { return 0; }",
+        "unset NO_COLOR",
+        "TERM=xterm-256color",
+        "resolve_deploy_log_style",
+        "DEPLOY_LOG_STYLE=ansi",
+        "log_wrapper_success complete",
+      ].join("\n"),
+    );
+    assert.equal(colored.status, 0, colored.stderr);
+    assert.match(
+      colored.stdout,
+      /^ansi\n\u001B\[1;32m✓ complete\u001B\[0m\n$/u,
+    );
+
+    const noColor = runFixture(
+      root,
+      [
+        "is_deploy_color_terminal() { return 0; }",
+        "NO_COLOR=",
+        "TERM=xterm-256color",
+        "resolve_deploy_log_style",
+      ].join("\n"),
+    );
+    assert.equal(noColor.status, 0, noColor.stderr);
+    assert.equal(noColor.stdout, "plain\n");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("non-interactive and dumb terminals keep deployment logs plain", () => {
+  const root = initializeWrapperFixture();
+  try {
+    const nonInteractive = runFixture(
+      root,
+      [
+        "is_deploy_color_terminal() { return 1; }",
+        "unset NO_COLOR",
+        "TERM=xterm-256color",
+        "resolve_deploy_log_style",
+      ].join("\n"),
+    );
+    assert.equal(nonInteractive.status, 0, nonInteractive.stderr);
+    assert.equal(nonInteractive.stdout, "plain\n");
+
+    const dumbTerminal = runFixture(
+      root,
+      [
+        "is_deploy_color_terminal() { return 0; }",
+        "unset NO_COLOR",
+        "TERM=dumb",
+        "resolve_deploy_log_style",
+      ].join("\n"),
+    );
+    assert.equal(dumbTerminal.status, 0, dumbTerminal.stderr);
+    assert.equal(dumbTerminal.stdout, "plain\n");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("AWS cache mountpoint creation is private and rejects symlinks", () => {
   const root = initializeWrapperFixture();

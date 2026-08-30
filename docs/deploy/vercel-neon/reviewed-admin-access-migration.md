@@ -67,7 +67,7 @@ validation成功後、次の確認を1回だけ表示します。
 次の3点をすべて確認します。
 
 1. `Reviewed Production migration is up to date.`が表示される。
-2. 通常deployの`Canonical smoke passed`と`Deployment completed`が表示され、commit SHAとdeployment IDが一致する。
+2. 通常deployの`✓ PRODUCTION DEPLOYMENT SUCCEEDED` bannerが表示され、canonical URL、commit SHA、deployment IDが一致する。
 3. Production DBのmigrationとadmin access post-conditionがup-to-dateである。
 
 scriptはメンテナンスを自動解除しません。deployとcanonical smokeの成功後、Production管理画面からメンテナンスを`DISABLED`にし、canonical公開HTMLが200へ戻ることを確認します。解除できない場合は、認証だけが故障しDBが正常な時に限り[メンテナンスモード緊急解除](maintenance-recovery.md)を使用します。
