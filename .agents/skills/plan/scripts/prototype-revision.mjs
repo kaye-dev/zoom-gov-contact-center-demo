@@ -628,9 +628,9 @@ function resolvePrototypeDirectory(requestedDirectory, repositoryRootPath) {
   const relativeTarget = path.isAbsolute(requestedDirectory)
     ? toPosix(path.relative(repositoryRootPath, requestedDirectory))
     : requestedDirectory;
-  const match = /^plan\/([^/]+)\/prototype$/u.exec(relativeTarget);
+  const match = /^plans\/([^/]+)\/prototype$/u.exec(relativeTarget);
   if (!match) {
-    throw new Error("target must be exactly plan/<slug>/prototype in this repository");
+    throw new Error("target must be exactly plans/<slug>/prototype in this repository");
   }
 
   const slug = match[1];
@@ -640,7 +640,7 @@ function resolvePrototypeDirectory(requestedDirectory, repositoryRootPath) {
 
   const absoluteTarget = path.resolve(repositoryRootPath, relativeTarget);
   if (path.isAbsolute(requestedDirectory) && requestedDirectory !== absoluteTarget) {
-    throw new Error("target must be inside this repository at plan/<slug>/prototype");
+    throw new Error("target must be inside this repository at plans/<slug>/prototype");
   }
   return { absoluteTarget, relativeTarget };
 }
@@ -887,7 +887,7 @@ async function main() {
   const args = process.argv.slice(2);
   if (args.length !== 1) {
     throw new Error(
-      "usage: node .agents/skills/plan/scripts/prototype-revision.mjs plan/<slug>/prototype",
+      "usage: node .agents/skills/plan/scripts/prototype-revision.mjs plans/<slug>/prototype",
     );
   }
   console.log(await prototypeRevision(args[0]));

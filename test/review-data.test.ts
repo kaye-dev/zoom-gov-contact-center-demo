@@ -13,7 +13,7 @@ function validData() {
   return {
     title: "実装レビュー",
     generatedAt: "2026-08-27T12:00:00+09:00",
-    planPath: "plan/example-change/goal.md",
+    planPath: "plans/example-change/goal.md",
     base: "HEAD",
     head: "working tree",
     summary: "変更を確認した",
@@ -65,9 +65,9 @@ test("schemaは最小dataを正規化しpath集合・source・severityを検証�
   const data = validData();
   const normalized = normalizeData(data);
   assert.deepEqual(normalized.stats, { files: 2, intentGroups: 2, findings: 2, validationsPassed: 1 });
-  assert.equal(normalized.planPath, "plan/example-change/goal.md");
-  assert.throws(() => normalizeData({ ...data, planPath: "plan/example-change.md" }), /planPath/);
-  assert.throws(() => normalizeData({ ...data, planPath: "plan/tmp/example-change/goal.md" }), /planPath/);
+  assert.equal(normalized.planPath, "plans/example-change/goal.md");
+  assert.throws(() => normalizeData({ ...data, planPath: "plans/example-change.md" }), /planPath/);
+  assert.throws(() => normalizeData({ ...data, planPath: "plans/tmp/example-change/goal.md" }), /planPath/);
   assert.throws(() => normalizeData({ ...data, reviewedPaths: ["app/example.ts"] }), /review対象外|一致/);
   assert.throws(() => normalizeData({ ...data, excludedPaths: [{ path: "app/example.ts", reason: "重複" }] }), /対象外path/);
   assert.throws(() => normalizeData({ ...data, groups: [{ ...data.groups[0], risk: "low" }, data.groups[1]] }), /riskが低すぎます/);

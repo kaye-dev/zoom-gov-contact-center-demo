@@ -37,7 +37,7 @@ test("対象解決は明示thread、rollout、project候補の順で実行中tas
   assert.match(skill, /if more than one can qualify, stop and ask the user to select one before auditing/);
   assert.match(skill, /canonical ID returned by task lookup or `session_meta`/);
   assert.match(skill, /Reject path separators, dot segments/);
-  assert.match(skill, /resolve outside the exact `plan\/workflow-retrospectives\/` parent/);
+  assert.match(skill, /resolve outside the exact `plans\/workflow-retrospectives\/` parent/);
   assert.match(skill, /Reject a symlinked parent, ancestor, or existing report/);
   assert.match(skill, /each worktree root and its repository common Git directory to real paths/);
   assert.match(skill, /Compare the common-directory identity so linked worktrees of the same repository remain valid/);
@@ -54,7 +54,7 @@ test("対象解決は明示thread、rollout、project候補の順で実行中tas
 test("初回監査は一時reportだけを書き定量証拠を欠損時に推測しない", async () => {
   const skill = await read(".agents/skills/workflow-retrospective/SKILL.md");
 
-  assert.match(skill, /The only write allowed is `plan\/workflow-retrospectives\/<thread-id>\.md`/);
+  assert.match(skill, /The only write allowed is `plans\/workflow-retrospectives\/<thread-id>\.md`/);
   assert.match(skill, /do not change tracked files, the Git index, or runtime state/);
   assert.match(skill, /Re-auditing the same task rewrites that same report/);
   assert.match(skill, /record the canonical source ID, repository common-directory identity, source worktree real path/);
@@ -116,7 +116,7 @@ test("明示選択された候補だけをallowlistと複雑性予算の内側�
   assert.match(skill, /unless the user explicitly selects candidate IDs from an existing report to improve or apply/);
   assert.match(skill, /Merely asking about, comparing, or quoting a candidate ID remains read-only and must not apply it/);
   assert.match(applyMode, /only when the user explicitly selects candidate IDs that exist in the report/);
-  assert.match(applyMode, /accept only a canonical, non-symlinked `plan\/workflow-retrospectives\/<thread-id>\.md`/);
+  assert.match(applyMode, /accept only a canonical, non-symlinked `plans\/workflow-retrospectives\/<thread-id>\.md`/);
   assert.match(applyMode, /filename, stored source ID, and selected candidate IDs agree/);
   assert.match(applyMode, /Re-fetch the source before tracked writes/);
   assert.match(applyMode, /stored repository common-directory identity, source worktree path, and revision, cursor, or rollout digest to match/);
@@ -151,7 +151,7 @@ test("workflow文書は振り返りを標準フローへ自動挿入しない", 
   assert.match(workflow, /\$workflow-retrospective codex:\/\/threads\/<thread-id>/);
   assert.match(workflow, /別taskから参照するsource taskが実行中なら監査しない/);
   assert.match(workflow, /同じtaskで使う場合は開発完了後に限り、現在の振り返りturnを除いた完了済みturnだけを対象にする/);
-  assert.match(workflow, /plan\/workflow-retrospectives\/<thread-id>\.md/);
+  assert.match(workflow, /plans\/workflow-retrospectives\/<thread-id>\.md/);
   assert.match(workflow, /最大3件/);
   assert.match(workflow, /自動実行・自動提案・自動通知しない/);
   for (const contract of [plan, implement, review]) {

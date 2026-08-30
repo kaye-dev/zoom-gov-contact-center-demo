@@ -14,12 +14,12 @@ const requestedDirectory = process.argv[2];
 
 if (!requestedDirectory || process.argv.length !== 3) {
   throw new Error(
-    "usage: node .agents/skills/plan/scripts/build-prototype-css.mjs plan/<slug>/prototype",
+    "usage: node .agents/skills/plan/scripts/build-prototype-css.mjs plans/<slug>/prototype",
   );
 }
 
 const slug = "[a-z0-9][a-z0-9-]*";
-const canonicalPattern = new RegExp(`^plan/${slug}/prototype$`);
+const canonicalPattern = new RegExp(`^plans/${slug}/prototype$`);
 const rawSegments = requestedDirectory.split(/[\\/]/u);
 if (
   requestedDirectory.includes("\\")
@@ -35,7 +35,7 @@ const lexicalTarget = (
 ).split(path.sep).join("/");
 if (!canonicalPattern.test(lexicalTarget)) {
   throw new Error(
-    "target must be plan/<slug>/prototype in this repository",
+    "target must be plans/<slug>/prototype in this repository",
   );
 }
 
@@ -54,7 +54,7 @@ const relativeTarget = path
   .join("/");
 if (!canonicalPattern.test(relativeTarget)) {
   throw new Error(
-    "target must be plan/<slug>/prototype in this repository",
+    "target must be plans/<slug>/prototype in this repository",
   );
 }
 

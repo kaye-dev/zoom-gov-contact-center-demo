@@ -37,8 +37,8 @@ async function createPrototype(
   context: test.TestContext,
 ): Promise<PrototypeFixture> {
   const slug = `css-builder-${randomUUID()}`;
-  const planRoot = path.join(repositoryRoot, "plan", slug);
-  const relative = `plan/${slug}/prototype`;
+  const planRoot = path.join(repositoryRoot, "plans", slug);
+  const relative = `plans/${slug}/prototype`;
   const absolute = path.join(repositoryRoot, relative);
   const styles = path.join(absolute, "styles.css");
   context.after(() => rm(planRoot, { recursive: true, force: true }));
@@ -90,7 +90,7 @@ test("repository外のcwdでも同じrepository-relative pathを同じ対象と�
 
 test("review、repository外、dot segmentを含む曖昧pathを拒否する", async (context) => {
   const reviewSlug = `css-builder-review-${randomUUID()}`;
-  const reviewPlanRoot = path.join(repositoryRoot, "plan", reviewSlug);
+  const reviewPlanRoot = path.join(repositoryRoot, "plans", reviewSlug);
   const review = path.join(reviewPlanRoot, "review");
   context.after(() => rm(reviewPlanRoot, { recursive: true, force: true }));
   await mkdir(review, { recursive: true });
@@ -102,10 +102,10 @@ test("review、repository外、dot segmentを含む曖昧pathを拒否する", a
 
   const ambiguousFixture = await createPrototype(context);
   const slug = ambiguousFixture.relative.split("/")[1];
-  const ambiguous = `plan/${slug}/../${slug}/prototype`;
+  const ambiguous = `plans/${slug}/../${slug}/prototype`;
 
   for (const target of [
-    `plan/${reviewSlug}/review`,
+    `plans/${reviewSlug}/review`,
     outside,
     ambiguous,
   ]) {
@@ -120,7 +120,7 @@ test("review、repository外、dot segmentを含む曖昧pathを拒否する", a
 
 test("prototype rootのsymlinkを拒否する", async (context) => {
   const slug = `css-builder-root-link-${randomUUID()}`;
-  const planRoot = path.join(repositoryRoot, "plan", slug);
+  const planRoot = path.join(repositoryRoot, "plans", slug);
   const linkedPrototype = path.join(planRoot, "prototype");
   const outside = await mkdtemp(path.join(tmpdir(), "prototype-css-root-link-"));
   context.after(() => rm(planRoot, { recursive: true, force: true }));
@@ -131,7 +131,7 @@ test("prototype rootのsymlinkを拒否する", async (context) => {
   ]);
   await symlink(outside, linkedPrototype);
 
-  const result = runBuilder([`plan/${slug}/prototype`]);
+  const result = runBuilder([`plans/${slug}/prototype`]);
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /symlink/i);

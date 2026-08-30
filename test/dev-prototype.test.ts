@@ -72,7 +72,7 @@ async function createRepositoryFixture(context: test.TestContext): Promise<Fixtu
 }
 
 function prototypePath(root: string, slug: string) {
-  return path.join(root, "plan", slug, "prototype");
+  return path.join(root, "plans", slug, "prototype");
 }
 
 async function createPrototype(
@@ -129,7 +129,7 @@ test("slugを明示するとcanonical prototypeを選ぶ", async (context) => {
 
   const result = runLauncher(fixture, [slug]);
 
-  assertServed(result, `plan/${slug}/prototype`);
+  assertServed(result, `plans/${slug}/prototype`);
 });
 
 test("旧pathだけにprototypeがあっても起動しない", async (context) => {
@@ -166,7 +166,7 @@ test("自動選択はprototype直下だけでなくnested fileのmtimeも比較�
 
   const result = runLauncher(fixture);
 
-  assertServed(result, "plan/nested-latest/prototype");
+  assertServed(result, "plans/nested-latest/prototype");
 });
 
 test("無効なslugと予約slugをserver起動前に拒否する", async (context) => {
@@ -239,5 +239,5 @@ test("repository外のcwdからでもscript自身のrepositoryにあるprototype
 
   const result = runLauncher(fixture, ["cwd-independent"], { cwd: otherCwd });
 
-  assertServed(result, "plan/cwd-independent/prototype");
+  assertServed(result, "plans/cwd-independent/prototype");
 });

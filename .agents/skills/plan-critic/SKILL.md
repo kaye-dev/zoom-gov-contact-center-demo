@@ -9,7 +9,7 @@ Independently review one plan, repair deterministic defects, and leave the same 
 
 ## Resolve and review
 
-- Use the explicit `plan/<slug>/goal.md`, or the only `plan/*/goal.md`; stop for zero or multiple candidates. Reject invalid or reserved slugs.
+- Use the explicit `plans/<slug>/goal.md`, or the only `plans/*/goal.md`; stop for zero or multiple candidates. Reject invalid or reserved slugs.
 - Read [../plan/references/goal-quality.md](../plan/references/goal-quality.md), repository rules, target artifacts, and minimum relevant code/runtime evidence. For UI work also read [../plan/references/ui-prototype-quality.md](../plan/references/ui-prototype-quality.md) and [../plan/references/parity-runner.md](../plan/references/parity-runner.md).
 - The write allowlist is the selected goal and its optional canonical prototype. Never edit production, tests, documentation, configuration, Git state, or `review/`.
 - Start a fresh no-history subagent with only the authoritative requirements bundle, exact goal/prototype, applicable rules, and necessary repository/runtime evidence. Ask it for atomic requirement closure, factual, interface, safety, verification, and UI-parity findings, including exactly five Markdown columns in every closure row; it must not edit files.
@@ -18,7 +18,7 @@ Validate every finding against the authoritative bundle and repository evidence.
 
 ## Rewrite once
 
-Read `plan/template.md` and prepare a complete replacement. Finish prototype repair, CSS build, contract/profile validation, revision calculation, and the static audit before Browser work. Write the goal once as the adopted design, then run one final smoke immediately before returning the result. Preserve the six H1 headings and requirement closure. Do not add lifecycle state, progress, history, or separate draft/final files.
+Read `plans/template.md` and prepare a complete replacement. Finish prototype repair, CSS build, contract/profile validation, revision calculation, and the static audit before Browser work. Write the goal once as the adopted design, then run one final smoke immediately before returning the result. Preserve the six H1 headings and requirement closure. Do not add lifecycle state, progress, history, or separate draft/final files.
 
 For a repaired or newly reconstructed UI prototype:
 

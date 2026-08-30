@@ -5,7 +5,7 @@ description: "Run parallel independent blind and goal-conformance reviews for on
 
 # Review
 
-Review one implementation in two independent contexts and produce the canonical local HTML report. The skill is read-only for implementation, goal, prototype, evidence, Git index, and history; it writes only `plan/<slug>/review/`.
+Review one implementation in two independent contexts and produce the canonical local HTML report. The skill is read-only for implementation, goal, prototype, evidence, Git index, and history; it writes only `plans/<slug>/review/`.
 
 ## Resolve and validate once
 
@@ -30,7 +30,7 @@ Each finding contains `source`, `severity`, `title`, `body`, `location`, and `re
 
 ## Build and verify the report
 
-Read [references/review-contract.md](references/review-contract.md). Copy the canonical assets to `plan/<slug>/review/`, replace `review-data.json`, screen sensitive values, group changes by intent and risk, and preserve source-labelled findings. Do not persist raw reviewer transcripts.
+Read [references/review-contract.md](references/review-contract.md). Copy the canonical assets to `plans/<slug>/review/`, replace `review-data.json`, screen sensitive values, group changes by intent and risk, and preserve source-labelled findings. Do not persist raw reviewer transcripts.
 
 Validate `review-data.json` with the tracked report tests, then serve only the report directory with `scripts/serve-plan-artifact.mjs`. When canonical report assets are unchanged, Browser-check only successful load at desktop and 390×844 plus console/network; do not re-exercise every filter, decision, comment, Markdown/copy, invalid-JSON, keyboard, and focus path on every review. Run that complete interaction matrix only when report assets or their runtime contract changed. Report unavailable Browser checks as unverified.
 

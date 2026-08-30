@@ -332,7 +332,7 @@ Zoom AI、Zoom Virtual Agent、Zoom Contact Center、Zoom Phone への導線は�
 2. 既存アプリを実際に操作し、最も近い画面、コンポーネント、トークンを特定する。
 3. 通常、ホバー、フォーカス、押下、無効、処理中、成功、エラー、空状態を洗い出す。
 4. デスクトップ、モバイル、多言語、ダークモードで変わる点を整理する。
-5. ユーザーに見える UI 変更では、`docs/development/codex-development-workflow.md` に従ってcanonicalな静的 HTML prototypeを作り、`plan/<slug>/prototype/ui-contract.json` version 1をapproval contractとする。page・shell・共通component・global style・tokenのbaseline source inventory、`window.scrollX`/`window.scrollY`実測値による`scroll: {x, y}`、revisionへ紐付いた全rowの`<row-id>=pass|fail` machine parityとユーザーの明示承認を得る。production編集直前にも全sourceのworking treeと現在のfixture・権限・Browser条件を照合して全rowを再実行する。
+5. ユーザーに見える UI 変更では、`docs/development/codex-development-workflow.md` に従ってcanonicalな静的 HTML prototypeを作り、`plans/<slug>/prototype/ui-contract.json` version 1をapproval contractとする。page・shell・共通component・global style・tokenのbaseline source inventory、`window.scrollX`/`window.scrollY`実測値による`scroll: {x, y}`、revisionへ紐付いた全rowの`<row-id>=pass|fail` machine parityとユーザーの明示承認を得る。production編集直前にも全sourceのworking treeと現在のfixture・権限・Browser条件を照合して全rowを再実行する。
 
 prototypeは見た目だけでなく、次を確認できる状態にする。
 

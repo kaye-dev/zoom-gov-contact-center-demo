@@ -53,7 +53,7 @@ select_latest_prototype() {
   integer latest_mtime=-1
   integer matching_directory_count=0
 
-  prototype_directories=("${DEV_PROTOTYPE_SCRIPT_DIR}"/plan/*/prototype(N/))
+  prototype_directories=("${DEV_PROTOTYPE_SCRIPT_DIR}"/plans/*/prototype(N/))
 
   for prototype_directory in "${prototype_directories[@]}"; do
     candidate_slug="${prototype_directory:h:t}"
@@ -99,15 +99,15 @@ if [[ -n "${slug}" ]]; then
     exit 1
   fi
 
-  typeset canonical_directory="${DEV_PROTOTYPE_SCRIPT_DIR}/plan/${slug}/prototype"
+  typeset canonical_directory="${DEV_PROTOTYPE_SCRIPT_DIR}/plans/${slug}/prototype"
   if [[ -e "${canonical_directory}" || -L "${canonical_directory}" ]]; then
     if ! has_entry_point "${canonical_directory}"; then
-      print -u2 "Canonical prototype entry point must be a regular file: plan/${slug}/prototype/index.html"
+      print -u2 "Canonical prototype entry point must be a regular file: plans/${slug}/prototype/index.html"
       exit 1
     fi
-    artifact_path="plan/${slug}/prototype"
+    artifact_path="plans/${slug}/prototype"
   else
-    print -u2 "Prototype entry point is unavailable: plan/${slug}/prototype/index.html"
+    print -u2 "Prototype entry point is unavailable: plans/${slug}/prototype/index.html"
     exit 1
   fi
 else
@@ -123,7 +123,7 @@ else
   fi
 
   if [[ -z "${artifact_path}" ]]; then
-    print -u2 "No prototype was found under plan/<slug>/prototype."
+    print -u2 "No prototype was found under plans/<slug>/prototype."
     print -u2 "Create one first, or pass its slug explicitly."
     exit 1
   fi

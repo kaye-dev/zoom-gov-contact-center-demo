@@ -39,7 +39,7 @@ function fail(message) {
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const requested = process.argv[2];
 if (!requested || process.argv.length !== 3) {
-  fail("usage: node scripts/serve-plan-artifact.mjs plan/<slug>/<prototype|review>");
+  fail("usage: node scripts/serve-plan-artifact.mjs plans/<slug>/<prototype|review>");
 }
 if (
   requested.includes("\\")
@@ -56,7 +56,7 @@ let artifactType;
 
 if (
   segments.length === 3
-  && segments[0] === "plan"
+  && segments[0] === "plans"
   && slugPattern.test(segments[1])
   && segments[1] !== "tmp"
   && segments[1] !== "reviews"
@@ -64,7 +64,7 @@ if (
  ) {
   artifactType = segments[2];
 } else {
-  fail("artifact path must be plan/<slug>/<prototype|review>");
+  fail("artifact path must be plans/<slug>/<prototype|review>");
 }
 const reviewAllowlist = new Set(["index.html", "styles.css", "app.js", "review-data-schema.js", "review-data.json"]);
 
