@@ -758,13 +758,21 @@ function isAllowedExpandCompatibleStatement(
         "iu",
       ).test(alterTable[2]);
     }
-    return isNullableAddColumn(alterTable[2]);
+    return isNullableAddColumn(alterTable[2]) ||
+      isNotValidCheckConstraint(alterTable[2]);
   }
 
   return new RegExp(
     `^ALTER\\s+TYPE\\s+${SQL_QUALIFIED_IDENTIFIER}\\s+ADD\\s+VALUE(?:\\s+IF\\s+NOT\\s+EXISTS)?\\s+${enumLiteral}(?:\\s+(?:BEFORE|AFTER)\\s+${enumLiteral})?$`,
     "iu",
   ).test(statement);
+}
+
+function isNotValidCheckConstraint(action: string): boolean {
+  return new RegExp(
+    `^ADD\\s+CONSTRAINT\\s+${SQL_IDENTIFIER}\\s+CHECK\\s*\\([\\s\\S]+\\)\\s+NOT\\s+VALID$`,
+    "iu",
+  ).test(action);
 }
 
 function isNullableAddColumn(action: string): boolean {

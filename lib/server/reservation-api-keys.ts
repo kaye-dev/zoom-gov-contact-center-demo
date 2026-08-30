@@ -3,10 +3,15 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { Prisma, type PrismaClient } from "@/lib/generated/prisma/client";
 import {
   RESERVATION_API_PERMISSIONS,
+  type ReservationApiKeyUsageDto,
   type ReservationApiPermission,
 } from "@/lib/reservation-api";
 
-import { consumeReservationApiRequest } from "./reservation-api-usage";
+import {
+  consumeReservationApiRequest,
+  getReservationApiPeriod,
+  toReservationApiKeyUsageDto,
+} from "./reservation-api-usage";
 
 export type ReservationApiKeyMetadata = {
   id: string;
@@ -17,6 +22,7 @@ export type ReservationApiKeyMetadata = {
   createdAt: string;
   lastUsedAt: string | null;
   revokedAt: string | null;
+  usage: ReservationApiKeyUsageDto;
 };
 
 type KeyWithPermissions = Prisma.ReservationApiKeyGetPayload<{
@@ -48,17 +54,35 @@ export function previewReservationApiKey(publicId: string): string {
   return `zgcc_rsv_${publicId.slice(0, 4)}••••${publicId.slice(-4)}`;
 }
 
-export async function listReservationApiKeys(prisma: PrismaClient) {
-  const keys = await prisma.reservationApiKey.findMany({
-    include: { permissions: true },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-  });
-  return keys.map(toReservationApiKeyMetadata);
+export async function listReservationApiKeys(prisma: PrismaClient, now = new Date()) {
+  const period = getReservationApiPeriod(now);
+  const [keys, usages] = await Promise.all([
+    prisma.reservationApiKey.findMany({
+      include: { permissions: true },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    }),
+    prisma.reservationApiKeyMonthlyUsage.findMany({
+      where: { periodStart: period.periodDate },
+      select: { apiKeyId: true, requestCount: true },
+    }),
+  ]);
+  const usageByKeyId = new Map(usages.map((usage) => [usage.apiKeyId, usage.requestCount]));
+  return keys.map((key) => toReservationApiKeyMetadata(
+    key,
+    usageByKeyId.get(key.id) ?? BigInt(0),
+    now,
+  ));
 }
 
 export async function issueReservationApiKey(
   prisma: PrismaClient,
-  input: { name: string; permissions: ReservationApiPermission[]; actorId: string },
+  input: {
+    name: string;
+    permissions: ReservationApiPermission[];
+    monthlyLimit: bigint | null;
+    actorId: string;
+    now?: Date;
+  },
 ) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const generated = generateReservationApiKey();
@@ -68,6 +92,7 @@ export async function issueReservationApiKey(
           publicId: generated.publicId,
           name: input.name,
           secretHash: digestReservationApiKey(generated.rawKey),
+          monthlyLimit: input.monthlyLimit,
           createdByUserId: input.actorId,
           permissions: {
             createMany: { data: input.permissions.map((permission) => ({ permission })) },
@@ -75,7 +100,10 @@ export async function issueReservationApiKey(
         },
         include: { permissions: true },
       });
-      return { apiKey: toReservationApiKeyMetadata(apiKey), rawKey: generated.rawKey };
+      return {
+        apiKey: toReservationApiKeyMetadata(apiKey, BigInt(0), input.now),
+        rawKey: generated.rawKey,
+      };
     } catch (error) {
       if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002" || attempt === 2) {
         throw error;
@@ -83,6 +111,53 @@ export async function issueReservationApiKey(
     }
   }
   throw new Error("Failed to generate a unique reservation API key.");
+}
+
+export async function updateReservationApiKeyUsageLimit(
+  prisma: PrismaClient,
+  input: {
+    id: string;
+    monthlyLimit: bigint | null;
+    expectedRevision: number;
+    now?: Date;
+  },
+): Promise<
+  | { status: "UPDATED"; apiKey: ReservationApiKeyMetadata }
+  | { status: "NOT_FOUND" }
+  | { status: "CONFLICT" }
+> {
+  const now = input.now ?? new Date();
+  return prisma.$transaction(async (transaction) => {
+    const exists = await transaction.reservationApiKey.findUnique({
+      where: { id: input.id },
+      select: { id: true },
+    });
+    if (!exists) return { status: "NOT_FOUND" as const };
+
+    const updated = await transaction.reservationApiKey.updateMany({
+      where: { id: input.id, revision: input.expectedRevision, revokedAt: null },
+      data: { monthlyLimit: input.monthlyLimit, revision: { increment: 1 } },
+    });
+    if (updated.count !== 1) return { status: "CONFLICT" as const };
+
+    const period = getReservationApiPeriod(now);
+    const [apiKey, usage] = await Promise.all([
+      transaction.reservationApiKey.findUniqueOrThrow({
+        where: { id: input.id },
+        include: { permissions: true },
+      }),
+      transaction.reservationApiKeyMonthlyUsage.findUnique({
+        where: {
+          apiKeyId_periodStart: { apiKeyId: input.id, periodStart: period.periodDate },
+        },
+        select: { requestCount: true },
+      }),
+    ]);
+    return {
+      status: "UPDATED" as const,
+      apiKey: toReservationApiKeyMetadata(apiKey, usage?.requestCount ?? BigInt(0), now),
+    };
+  });
 }
 
 export async function revokeReservationApiKey(
@@ -110,7 +185,8 @@ export async function authenticateReservationApiRequest(
   input: { authorization: string | null; now?: Date },
 ): Promise<
   | { status: "UNAUTHORIZED" }
-  | { status: "LIMIT_EXCEEDED"; retryAfterSeconds: number }
+  | { status: "GLOBAL_LIMIT_EXCEEDED"; retryAfterSeconds: number }
+  | { status: "KEY_LIMIT_EXCEEDED"; retryAfterSeconds: number }
   | { status: "AUTHENTICATED"; keyId: string; permissions: Set<ReservationApiPermission> }
 > {
   const rawKey = parseBearerHeader(input.authorization);
@@ -123,9 +199,10 @@ export async function authenticateReservationApiRequest(
     const [locked] = await transaction.$queryRaw<Array<{
       id: string;
       secretHash: string;
+      monthlyLimit: bigint | null;
       revokedAt: Date | null;
     }>>(Prisma.sql`
-      SELECT "id", "secretHash", "revokedAt"
+      SELECT "id", "secretHash", "monthlyLimit", "revokedAt"
       FROM "reservation_api_keys"
       WHERE "publicId" = ${parsed.publicId}
       FOR UPDATE
@@ -137,10 +214,14 @@ export async function authenticateReservationApiRequest(
       where: { apiKeyId: locked.id },
       select: { permission: true },
     });
-    const quota = await consumeReservationApiRequest(transaction, { keyId: locked.id, now });
-    if (!quota.allowed) {
+    const quota = await consumeReservationApiRequest(transaction, {
+      keyId: locked.id,
+      keyMonthlyLimit: locked.monthlyLimit,
+      now,
+    });
+    if (quota.status !== "ALLOWED") {
       return {
-        status: "LIMIT_EXCEEDED" as const,
+        status: quota.status,
         retryAfterSeconds: quota.retryAfterSeconds,
       };
     }
@@ -158,7 +239,11 @@ function parseBearerHeader(value: string | null): string | null {
   return match?.[1] ?? null;
 }
 
-function toReservationApiKeyMetadata(key: KeyWithPermissions): ReservationApiKeyMetadata {
+function toReservationApiKeyMetadata(
+  key: KeyWithPermissions,
+  requestCount: bigint,
+  now = new Date(),
+): ReservationApiKeyMetadata {
   const permissions = new Set(key.permissions.map(({ permission }) => permission));
   return {
     id: key.id,
@@ -169,5 +254,6 @@ function toReservationApiKeyMetadata(key: KeyWithPermissions): ReservationApiKey
     createdAt: key.createdAt.toISOString(),
     lastUsedAt: key.lastUsedAt?.toISOString() ?? null,
     revokedAt: key.revokedAt?.toISOString() ?? null,
+    usage: toReservationApiKeyUsageDto(key.monthlyLimit, requestCount, now),
   };
 }

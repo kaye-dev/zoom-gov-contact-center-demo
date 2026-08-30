@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "@/lib/generated/prisma/client";
 import {
+  type ReservationApiKeyUsageDto,
   type ReservationApiUsageLimitDto,
 } from "@/lib/reservation-api";
 import { addCalendarMonths, calendarDateToUtc, getTokyoCalendarDate } from "@/lib/reservations";
@@ -57,10 +58,10 @@ export async function updateReservationApiUsageLimit(
 
 export async function consumeReservationApiRequest(
   transaction: Prisma.TransactionClient,
-  input: { keyId: string; now: Date },
+  input: { keyId: string; keyMonthlyLimit: bigint | null; now: Date },
 ): Promise<
-  | { allowed: true; requestCount: bigint }
-  | { allowed: false; retryAfterSeconds: number }
+  | { status: "ALLOWED"; globalRequestCount: bigint; keyRequestCount: bigint }
+  | { status: "GLOBAL_LIMIT_EXCEEDED" | "KEY_LIMIT_EXCEEDED"; retryAfterSeconds: number }
 > {
   const period = getReservationApiPeriod(input.now);
   const [setting] = await transaction.$queryRaw<LockedUsageSetting[]>(Prisma.sql`
@@ -84,6 +85,19 @@ export async function consumeReservationApiRequest(
   `);
   if (!usage) throw new Error("Reservation API usage counter is missing.");
 
+  await transaction.$executeRaw(Prisma.sql`
+    INSERT INTO "reservation_api_key_monthly_usage" ("apiKeyId", "periodStart", "requestCount", "updatedAt")
+    VALUES (${input.keyId}, ${period.periodDate}, 0, CURRENT_TIMESTAMP)
+    ON CONFLICT ("apiKeyId", "periodStart") DO NOTHING
+  `);
+  const [keyUsage] = await transaction.$queryRaw<{ requestCount: bigint }[]>(Prisma.sql`
+    SELECT "requestCount"
+    FROM "reservation_api_key_monthly_usage"
+    WHERE "apiKeyId" = ${input.keyId} AND "periodStart" = ${period.periodDate}
+    FOR UPDATE
+  `);
+  if (!keyUsage) throw new Error("Reservation API key usage counter is missing.");
+
   await transaction.reservationApiKey.update({
     where: { id: input.keyId },
     data: { lastUsedAt: input.now },
@@ -91,17 +105,50 @@ export async function consumeReservationApiRequest(
 
   if (setting.monthlyLimit !== null && usage.requestCount >= setting.monthlyLimit) {
     return {
-      allowed: false,
+      status: "GLOBAL_LIMIT_EXCEEDED",
       retryAfterSeconds: Math.max(1, Math.ceil((period.resetsAt.getTime() - input.now.getTime()) / 1000)),
     };
   }
 
-  const requestCount = usage.requestCount + BigInt(1);
+  if (input.keyMonthlyLimit !== null && keyUsage.requestCount >= input.keyMonthlyLimit) {
+    return {
+      status: "KEY_LIMIT_EXCEEDED",
+      retryAfterSeconds: Math.max(1, Math.ceil((period.resetsAt.getTime() - input.now.getTime()) / 1000)),
+    };
+  }
+
+  const globalRequestCount = usage.requestCount + BigInt(1);
+  const keyRequestCount = keyUsage.requestCount + BigInt(1);
   await transaction.reservationApiMonthlyUsage.update({
     where: { periodStart: period.periodDate },
-    data: { requestCount },
+    data: { requestCount: globalRequestCount },
   });
-  return { allowed: true, requestCount };
+  await transaction.reservationApiKeyMonthlyUsage.update({
+    where: {
+      apiKeyId_periodStart: { apiKeyId: input.keyId, periodStart: period.periodDate },
+    },
+    data: { requestCount: keyRequestCount },
+  });
+  return { status: "ALLOWED", globalRequestCount, keyRequestCount };
+}
+
+export function toReservationApiKeyUsageDto(
+  monthlyLimit: bigint | null,
+  requestCount: bigint,
+  now = new Date(),
+): ReservationApiKeyUsageDto {
+  const period = getReservationApiPeriod(now);
+  const remaining = monthlyLimit === null
+    ? null
+    : (monthlyLimit > requestCount ? monthlyLimit - requestCount : BigInt(0)).toString();
+  return {
+    mode: monthlyLimit === null ? "UNLIMITED" : "LIMITED",
+    monthlyLimit: monthlyLimit?.toString() ?? null,
+    periodStart: period.periodStart,
+    requestCount: requestCount.toString(),
+    remaining,
+    resetsAt: period.resetsAt.toISOString(),
+  };
 }
 
 function toUsageDto(

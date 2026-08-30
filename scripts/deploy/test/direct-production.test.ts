@@ -249,6 +249,10 @@ test("reviewed migration manifest exactly classifies the current SHA-verified ch
         name: "20260830180000_add_reservation_api_keys",
         classification: "expand-compatible",
       },
+      {
+        name: "20260830230000_add_reservation_api_key_usage_limits",
+        classification: "expand-compatible",
+      },
     ],
   );
 });
@@ -268,6 +272,9 @@ test("expand-compatible SQL allowlist accepts only reviewed forward-compatible f
       ALTER TABLE "new_records"
         ADD CONSTRAINT "new_records_id_check" CHECK ("id" > 0);
       ALTER TABLE "existing_records" ADD COLUMN "optional_note" TEXT;
+      ALTER TABLE "existing_records"
+        ADD CONSTRAINT "existing_optional_note_check"
+        CHECK ("optional_note" IS NULL OR char_length("optional_note") <= 100) NOT VALID;
       ALTER TYPE "PublicState" ADD VALUE 'ARCHIVED' AFTER 'READY';
       COMMIT;
     `),

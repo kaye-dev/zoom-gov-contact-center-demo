@@ -44,21 +44,85 @@ test("reservation API keys, scopes, CRUD, quota, and revocation work end to end"
 
       const issue = await invoke(route.POST, "POST", "/api/admin/reservation-api-keys", {
         cookie: fullCookie,
-        body: { name: "all operations", permissions: ["LIST", "READ", "CREATE", "UPDATE", "DELETE"] },
+        body: {
+          name: "all operations",
+          permissions: ["LIST", "READ", "CREATE", "UPDATE", "DELETE"],
+          usageLimit: { mode: "LIMITED", monthlyLimit: "10000" },
+        },
       });
       assert.equal(issue.status, 201, await issue.clone().text());
-      const issued = await issue.json() as { apiKey: { id: string; revision: number }; rawKey: string };
+      const issued = await issue.json() as {
+        apiKey: {
+          id: string;
+          revision: number;
+          usage: { mode: string; monthlyLimit: string | null; requestCount: string };
+        };
+        rawKey: string;
+      };
       assert.match(issued.rawKey, /^zgcc_rsv_/u);
+      assert.deepEqual(issued.apiKey.usage, {
+        mode: "LIMITED",
+        monthlyLimit: "10000",
+        periodStart: getReservationApiPeriod(new Date()).periodStart,
+        requestCount: "0",
+        remaining: "10000",
+        resetsAt: getReservationApiPeriod(new Date()).resetsAt.toISOString(),
+      });
 
       const limitedIssue = await invoke(route.POST, "POST", "/api/admin/reservation-api-keys", {
         cookie: fullCookie,
-        body: { name: "list only", permissions: ["LIST"] },
+        body: {
+          name: "list only",
+          permissions: ["LIST"],
+          usageLimit: { mode: "UNLIMITED" },
+        },
       });
-      const limitedKey = ((await limitedIssue.json()) as { rawKey: string }).rawKey;
+      assert.equal(limitedIssue.status, 201, await limitedIssue.clone().text());
+      const limitedIssued = (await limitedIssue.json()) as {
+        apiKey: { id: string; revision: number; usage: { mode: string; monthlyLimit: string | null } };
+        rawKey: string;
+      };
+      const limitedKey = limitedIssued.rawKey;
+      assert.equal(limitedIssued.apiKey.usage.mode, "UNLIMITED");
+      assert.equal(limitedIssued.apiKey.usage.monthlyLimit, null);
       const keysResponse = await invoke(route.GET, "GET", "/api/admin/reservation-api-keys", { cookie: fullCookie });
       const keysText = await keysResponse.text();
       assert.equal(keysText.includes(issued.rawKey), false);
       assert.equal(keysText.includes("secretHash"), false);
+      const listedKeys = JSON.parse(keysText) as { apiKeys: Array<{ id: string; usage: { requestCount: string } }> };
+      assert.equal(listedKeys.apiKeys.find(({ id }) => id === issued.apiKey.id)?.usage.requestCount, "0");
+
+      const keyLimitPath = `/api/admin/reservation-api-keys/${issued.apiKey.id}/usage-limit`;
+      assert.equal((await invoke(route.PUT, "PUT", keyLimitPath, {
+        body: { mode: "UNLIMITED", expectedRevision: issued.apiKey.revision },
+      })).status, 401);
+      assert.equal((await invoke(route.PUT, "PUT", keyLimitPath, {
+        cookie: viewCookie,
+        body: { mode: "UNLIMITED", expectedRevision: issued.apiKey.revision },
+      })).status, 403);
+      assert.equal((await invoke(route.PUT, "PUT", keyLimitPath, {
+        cookie: fullCookie,
+        body: { mode: "LIMITED", monthlyLimit: "99", expectedRevision: issued.apiKey.revision },
+      })).status, 400);
+      assert.equal((await invoke(route.PUT, "PUT", "/api/admin/reservation-api-keys/missing/usage-limit", {
+        cookie: fullCookie,
+        body: { mode: "UNLIMITED", expectedRevision: 1 },
+      })).status, 404);
+      const keyLimitUpdate = await invoke(route.PUT, "PUT", keyLimitPath, {
+        cookie: fullCookie,
+        body: { mode: "LIMITED", monthlyLimit: "5000", expectedRevision: issued.apiKey.revision },
+      });
+      assert.equal(keyLimitUpdate.status, 200, await keyLimitUpdate.clone().text());
+      const updatedKey = (await keyLimitUpdate.json()) as {
+        apiKey: { revision: number; usage: { monthlyLimit: string | null; requestCount: string } };
+      };
+      assert.equal(updatedKey.apiKey.usage.monthlyLimit, "5000");
+      assert.equal(updatedKey.apiKey.usage.requestCount, "0");
+      assert.equal((await invoke(route.PUT, "PUT", keyLimitPath, {
+        cookie: fullCookie,
+        body: { mode: "UNLIMITED", expectedRevision: issued.apiKey.revision },
+      })).status, 409);
+      let issuedRevision = updatedKey.apiKey.revision;
 
       const date = nextMyNumberDate(new Date());
       const payload = { serviceKey: "my-number-card", reservationDate: date, startMinute: 540 };
@@ -120,7 +184,83 @@ test("reservation API keys, scopes, CRUD, quota, and revocation work end to end"
 
       const currentSetting = (await (await invoke(route.GET, "GET", "/api/admin/reservation-api-usage-limit", { cookie: fullCookie })).json()) as { usageLimit: { revision: number } };
       assert.equal((await invoke(route.PUT, "PUT", "/api/admin/reservation-api-usage-limit", { cookie: fullCookie, body: { mode: "UNLIMITED", expectedRevision: currentSetting.usageLimit.revision } })).status, 200);
+
+      const keyLimit100 = await invoke(route.PUT, "PUT", keyLimitPath, {
+        cookie: fullCookie,
+        body: { mode: "LIMITED", monthlyLimit: "100", expectedRevision: issuedRevision },
+      });
+      assert.equal(keyLimit100.status, 200, await keyLimit100.clone().text());
+      issuedRevision = ((await keyLimit100.json()) as { apiKey: { revision: number } }).apiKey.revision;
+      await client.query(
+        `UPDATE reservation_api_key_monthly_usage SET "requestCount" = 99 WHERE "apiKeyId" = $1 AND "periodStart" = $2::date`,
+        [issued.apiKey.id, period.periodStart],
+      );
+      const globalBeforeKeyQuota = await client.query<{ requestCount: string }>(
+        `SELECT "requestCount"::text AS "requestCount" FROM reservation_api_monthly_usage WHERE "periodStart" = $1::date`,
+        [period.periodStart],
+      );
+      const concurrentKeyQuota = await Promise.all([
+        invoke(route.GET, "GET", "/api/public/v1/reservations", { bearer: issued.rawKey }),
+        invoke(route.GET, "GET", "/api/public/v1/reservations", { bearer: issued.rawKey }),
+      ]);
+      assert.deepEqual(concurrentKeyQuota.map(({ status }) => status).sort(), [200, 429]);
+      const keyExceeded = concurrentKeyQuota.find(({ status }) => status === 429)!;
+      assert.deepEqual(await keyExceeded.json(), { error: "RESERVATION_API_KEY_MONTHLY_LIMIT_EXCEEDED" });
+      assert.ok(Number(keyExceeded.headers.get("retry-after")) > 0);
+      assert.match(keyExceeded.headers.get("cache-control") ?? "", /no-store/u);
+      const [keyCounter, globalAfterKeyQuota] = await Promise.all([
+        client.query<{ requestCount: string }>(
+          `SELECT "requestCount"::text AS "requestCount" FROM reservation_api_key_monthly_usage WHERE "apiKeyId" = $1 AND "periodStart" = $2::date`,
+          [issued.apiKey.id, period.periodStart],
+        ),
+        client.query<{ requestCount: string }>(
+          `SELECT "requestCount"::text AS "requestCount" FROM reservation_api_monthly_usage WHERE "periodStart" = $1::date`,
+          [period.periodStart],
+        ),
+      ]);
+      assert.equal(keyCounter.rows[0]?.requestCount, "100");
+      assert.equal(
+        globalAfterKeyQuota.rows[0]?.requestCount,
+        (BigInt(globalBeforeKeyQuota.rows[0]!.requestCount) + BigInt(1)).toString(),
+      );
+
+      const keyUnlimited = await invoke(route.PUT, "PUT", keyLimitPath, {
+        cookie: fullCookie,
+        body: { mode: "UNLIMITED", expectedRevision: issuedRevision },
+      });
+      assert.equal(keyUnlimited.status, 200);
+      const unlimitedKeyBody = (await keyUnlimited.json()) as {
+        apiKey: { revision: number; usage: { mode: string; requestCount: string } };
+      };
+      issuedRevision = unlimitedKeyBody.apiKey.revision;
+      assert.equal(unlimitedKeyBody.apiKey.usage.mode, "UNLIMITED");
+      assert.equal(unlimitedKeyBody.apiKey.usage.requestCount, "100");
       assert.equal((await invoke(route.GET, "GET", "/api/public/v1/reservations", { bearer: issued.rawKey })).status, 200);
+
+      const keyLimitedAgain = await invoke(route.PUT, "PUT", keyLimitPath, {
+        cookie: fullCookie,
+        body: { mode: "LIMITED", monthlyLimit: "100", expectedRevision: issuedRevision },
+      });
+      issuedRevision = ((await keyLimitedAgain.json()) as { apiKey: { revision: number } }).apiKey.revision;
+      const globalForPrecedence = (await (await invoke(route.GET, "GET", "/api/admin/reservation-api-usage-limit", { cookie: fullCookie })).json()) as { usageLimit: { revision: number } };
+      assert.equal((await invoke(route.PUT, "PUT", "/api/admin/reservation-api-usage-limit", {
+        cookie: fullCookie,
+        body: { mode: "LIMITED", monthlyLimit: "100", expectedRevision: globalForPrecedence.usageLimit.revision },
+      })).status, 200);
+      const bothExceeded = await invoke(route.GET, "GET", "/api/public/v1/reservations", { bearer: issued.rawKey });
+      assert.equal(bothExceeded.status, 429);
+      assert.deepEqual(await bothExceeded.json(), { error: "RESERVATION_API_MONTHLY_LIMIT_EXCEEDED" });
+
+      const globalRestore = (await (await invoke(route.GET, "GET", "/api/admin/reservation-api-usage-limit", { cookie: fullCookie })).json()) as { usageLimit: { revision: number } };
+      assert.equal((await invoke(route.PUT, "PUT", "/api/admin/reservation-api-usage-limit", {
+        cookie: fullCookie,
+        body: { mode: "UNLIMITED", expectedRevision: globalRestore.usageLimit.revision },
+      })).status, 200);
+      const keyRestore = await invoke(route.PUT, "PUT", keyLimitPath, {
+        cookie: fullCookie,
+        body: { mode: "UNLIMITED", expectedRevision: issuedRevision },
+      });
+      issuedRevision = ((await keyRestore.json()) as { apiKey: { revision: number } }).apiKey.revision;
 
       const legalDate = nextServiceDate("legal-consultation", new Date());
       const concurrentCapacity = await Promise.all([
@@ -133,9 +273,13 @@ test("reservation API keys, scopes, CRUD, quota, and revocation work end to end"
 
       const revoke = await invoke(route.DELETE, "DELETE", `/api/admin/reservation-api-keys/${issued.apiKey.id}`, {
         cookie: fullCookie,
-        body: { expectedRevision: issued.apiKey.revision },
+        body: { expectedRevision: issuedRevision },
       });
       assert.equal(revoke.status, 204);
+      assert.equal((await invoke(route.PUT, "PUT", keyLimitPath, {
+        cookie: fullCookie,
+        body: { mode: "UNLIMITED", expectedRevision: issuedRevision + 1 },
+      })).status, 409);
       const unauthorized = await invoke(route.GET, "GET", "/api/public/v1/reservations", { bearer: issued.rawKey });
       assert.equal(unauthorized.status, 401);
       assert.equal(unauthorized.headers.get("www-authenticate"), "Bearer");

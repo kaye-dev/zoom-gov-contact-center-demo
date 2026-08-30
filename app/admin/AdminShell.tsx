@@ -128,7 +128,13 @@ export function AdminShell({ children, visibleItems }: AdminShellProps) {
 
   return (
     <div
-      id={pathname.startsWith("/admin/reservations") ? "reservation-system-page" : undefined}
+      id={
+        pathname === "/admin/reservations/api-keys"
+          ? "reservation-api-keys-page"
+          : pathname.startsWith("/admin/reservations")
+            ? "reservation-system-page"
+            : undefined
+      }
       className="min-h-screen bg-surface text-fg"
     >
       <header className="sticky top-0 z-50 border-b border-line bg-surface-raised">

@@ -82,14 +82,14 @@ model user {
   passwordChangedAt         DateTime?
   adminAccessRoleRevision   Int       @default(1)
 
-  sessions                 session[]
-  accounts                 account[]
-  passwordResetRequests    PasswordResetRequest[] @relation("PasswordResetRequestUser")
-  reviewedPasswordRequests PasswordResetRequest[] @relation("PasswordResetRequestReviewer")
-  accessRoleAssignments     AdminAccessRoleAssignment[] @relation("AdminAccessRoleAssignmentUser")
-  assignedRoleAssignments   AdminAccessRoleAssignment[] @relation("AdminAccessRoleAssignmentActor")
-  createdReservationApiKeys ReservationApiKey[] @relation("ReservationApiKeyCreatedBy")
-  revokedReservationApiKeys ReservationApiKey[] @relation("ReservationApiKeyRevokedBy")
+  sessions                           session[]
+  accounts                           account[]
+  passwordResetRequests              PasswordResetRequest[]       @relation("PasswordResetRequestUser")
+  reviewedPasswordRequests           PasswordResetRequest[]       @relation("PasswordResetRequestReviewer")
+  accessRoleAssignments              AdminAccessRoleAssignment[]  @relation("AdminAccessRoleAssignmentUser")
+  assignedRoleAssignments            AdminAccessRoleAssignment[]  @relation("AdminAccessRoleAssignmentActor")
+  createdReservationApiKeys          ReservationApiKey[]          @relation("ReservationApiKeyCreatedBy")
+  revokedReservationApiKeys          ReservationApiKey[]          @relation("ReservationApiKeyRevokedBy")
   updatedReservationApiUsageSettings ReservationApiUsageSetting[] @relation("ReservationApiUsageSettingUpdatedBy")
 
   @@unique([email])
@@ -267,8 +267,8 @@ model AdminAccessRoleAssignment {
   assignedAt       DateTime @default(now())
   assignedByUserId String?
 
-  user       user  @relation("AdminAccessRoleAssignmentUser", fields: [userId], references: [id], onDelete: Cascade)
-  assignedBy user? @relation("AdminAccessRoleAssignmentActor", fields: [assignedByUserId], references: [id], onDelete: SetNull)
+  user       user            @relation("AdminAccessRoleAssignmentUser", fields: [userId], references: [id], onDelete: Cascade)
+  assignedBy user?           @relation("AdminAccessRoleAssignmentActor", fields: [assignedByUserId], references: [id], onDelete: SetNull)
   role       AdminAccessRole @relation(fields: [roleId], references: [id], onDelete: Restrict)
 
   @@id([userId, roleId])
@@ -279,23 +279,23 @@ model AdminAccessRoleAssignment {
 }
 
 model AdminAccessMutationState {
-  id        String   @id
-  frozen    Boolean  @default(false)
+  id        String    @id
+  frozen    Boolean   @default(false)
   freezeId  String?
   frozenAt  DateTime?
   reason    String?
-  updatedAt DateTime @default(now()) @updatedAt
+  updatedAt DateTime  @default(now()) @updatedAt
 
   @@map("admin_access_mutation_state")
 }
 
 model ReservationBooking {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   serviceKey      String
-  reservationDate DateTime @db.Date
+  reservationDate DateTime  @db.Date
   startMinute     Int
-  isDemo          Boolean  @default(false)
-  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+  isDemo          Boolean   @default(false)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt       DateTime? @updatedAt @db.Timestamptz(3)
 
   @@index([serviceKey, reservationDate, startMinute])
@@ -304,24 +304,39 @@ model ReservationBooking {
 }
 
 model ReservationApiKey {
-  id              String   @id @default(cuid())
-  publicId        String   @unique
+  id              String    @id @default(cuid())
+  publicId        String    @unique
   name            String
-  secretHash      String   @unique
-  revision        Int      @default(1)
-  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+  secretHash      String    @unique
+  monthlyLimit    BigInt?
+  revision        Int       @default(1)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(3)
   lastUsedAt      DateTime? @db.Timestamptz(3)
   revokedAt       DateTime? @db.Timestamptz(3)
   createdByUserId String?
   revokedByUserId String?
 
-  createdBy   user? @relation("ReservationApiKeyCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  revokedBy   user? @relation("ReservationApiKeyRevokedBy", fields: [revokedByUserId], references: [id], onDelete: SetNull)
-  permissions ReservationApiKeyPermission[]
+  createdBy    user?                           @relation("ReservationApiKeyCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  revokedBy    user?                           @relation("ReservationApiKeyRevokedBy", fields: [revokedByUserId], references: [id], onDelete: SetNull)
+  permissions  ReservationApiKeyPermission[]
+  monthlyUsage ReservationApiKeyMonthlyUsage[]
 
   @@index([createdAt, id])
   @@index([revokedAt])
   @@map("reservation_api_keys")
+}
+
+model ReservationApiKeyMonthlyUsage {
+  apiKeyId     String
+  periodStart  DateTime @db.Date
+  requestCount BigInt   @default(0)
+  updatedAt    DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+
+  apiKey ReservationApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  @@id([apiKeyId, periodStart])
+  @@index([periodStart])
+  @@map("reservation_api_key_monthly_usage")
 }
 
 model ReservationApiKeyPermission {
@@ -347,9 +362,9 @@ model ReservationApiUsageSetting {
 }
 
 model ReservationApiMonthlyUsage {
-  periodStart DateTime @id @db.Date
-  requestCount BigInt  @default(0)
-  updatedAt   DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+  periodStart  DateTime @id @db.Date
+  requestCount BigInt   @default(0)
+  updatedAt    DateTime @default(now()) @updatedAt @db.Timestamptz(3)
 
   @@map("reservation_api_monthly_usage")
 }

@@ -17,18 +17,34 @@ import { getReservationApiPeriod } from "../lib/server/reservation-api-usage";
 
 test("reservation API permissions and strict issue payload are exact", () => {
   assert.deepEqual(RESERVATION_API_PERMISSIONS, ["LIST", "READ", "CREATE", "UPDATE", "DELETE"]);
-  assert.deepEqual(parseReservationApiKeyIssue({ name: "integration", permissions: ["LIST", "CREATE"] }), {
+  assert.deepEqual(parseReservationApiKeyIssue({
     name: "integration",
     permissions: ["LIST", "CREATE"],
+    usageLimit: { mode: "LIMITED", monthlyLimit: "3000" },
+  }), {
+    name: "integration",
+    permissions: ["LIST", "CREATE"],
+    monthlyLimit: BigInt(3000),
   });
+  assert.deepEqual(parseReservationApiKeyIssue({
+    name: "unlimited",
+    permissions: ["LIST"],
+    usageLimit: { mode: "UNLIMITED" },
+  }), { name: "unlimited", permissions: ["LIST"], monthlyLimit: null });
   for (const value of [
-    { name: "", permissions: ["LIST"] },
-    { name: "integration", permissions: [] },
-    { name: "integration", permissions: ["LIST", "LIST"] },
-    { name: "integration", permissions: ["UNKNOWN"] },
-    { name: "integration", permissions: ["LIST"], extra: true },
+    { name: "", permissions: ["LIST"], usageLimit: { mode: "UNLIMITED" } },
+    { name: "integration", permissions: [], usageLimit: { mode: "UNLIMITED" } },
+    { name: "integration", permissions: ["LIST", "LIST"], usageLimit: { mode: "UNLIMITED" } },
+    { name: "integration", permissions: ["UNKNOWN"], usageLimit: { mode: "UNLIMITED" } },
+    { name: "integration", permissions: ["LIST"], usageLimit: { mode: "UNLIMITED" }, extra: true },
+    { name: "integration", permissions: ["LIST"] },
+    { name: "integration", permissions: ["LIST"], usageLimit: { mode: "UNLIMITED", monthlyLimit: "100" } },
   ]) assert.equal(parseReservationApiKeyIssue(value), null);
-  assert.equal(parseReservationApiKeyIssue({ name: " integration ", permissions: ["LIST"] })?.name, "integration");
+  assert.equal(parseReservationApiKeyIssue({
+    name: " integration ",
+    permissions: ["LIST"],
+    usageLimit: { mode: "LIMITED", monthlyLimit: "100" },
+  })?.name, "integration");
 });
 
 test("monthly limit accepts exact bigint rules and unlimited shape", () => {
@@ -43,6 +59,21 @@ test("monthly limit accepts exact bigint rules and unlimited shape", () => {
     expectedRevision: 2,
   });
   assert.equal(parseReservationApiUsageLimit({ mode: "UNLIMITED", monthlyLimit: "100", expectedRevision: 2 }), null);
+
+  for (const value of ["100", "101", "10000", "10100", "9223372036854775800"]) {
+    assert.notEqual(parseReservationApiKeyIssue({
+      name: "key",
+      permissions: ["LIST"],
+      usageLimit: { mode: "LIMITED", monthlyLimit: value },
+    }), null, value);
+  }
+  for (const value of ["99", "0100", "10001", "10150", "9223372036854775801"]) {
+    assert.equal(parseReservationApiKeyIssue({
+      name: "key",
+      permissions: ["LIST"],
+      usageLimit: { mode: "LIMITED", monthlyLimit: value },
+    }), null, value);
+  }
 });
 
 test("monthly usage follows the Asia Tokyo calendar boundary", () => {
@@ -76,7 +107,7 @@ test("reservation writes, patches, list query, and cursor are strict", () => {
 test("all locales contain complete reservation API key copy", () => {
   for (const locale of locales) {
     const copy = dictionaries[locale].admin.reservationManagement.apiKeys;
-    assert.ok(copy.title && copy.description && copy.issue && copy.usage.title && copy.keys.emptyTitle, locale);
+    assert.ok(copy.title && copy.description && copy.issue && copy.usage.title && copy.keys.monthlyLimit && copy.keyUsageDialog.title, locale);
     assert.deepEqual(Object.keys(copy.api.descriptions), [...RESERVATION_API_PERMISSIONS], locale);
   }
 });
@@ -85,7 +116,7 @@ test("reservation API management UI exposes approved semantic selectors", () => 
   const source = readFileSync(new URL("../app/admin/reservations/api-keys/ReservationApiKeysView.tsx", import.meta.url), "utf8");
   for (const selector of [
     "reservation-api-key-content", "usage-limit-card", "public-api-reference", "api-key-list-card",
-    "issue-dialog", "issued-dialog", "revoke-dialog", "usage-limit-dialog", "api-key-empty",
+    "issue-dialog", "issued-dialog", "revoke-dialog", "usage-limit-dialog", "key-usage-limit-dialog", "api-key-empty",
   ]) assert.match(source, new RegExp(selector, "u"));
   assert.doesNotMatch(source, /localStorage|sessionStorage|Zoom SDK|webhook/iu);
 });

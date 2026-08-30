@@ -22,6 +22,7 @@ export const RESERVATION_API_ERROR_CODES = {
   notFound: "RESERVATION_API_NOT_FOUND",
   slotFull: "RESERVATION_SLOT_FULL",
   monthlyLimitExceeded: "RESERVATION_API_MONTHLY_LIMIT_EXCEEDED",
+  keyMonthlyLimitExceeded: "RESERVATION_API_KEY_MONTHLY_LIMIT_EXCEEDED",
   operationFailed: "RESERVATION_API_OPERATION_FAILED",
   keyNotFound: "RESERVATION_API_KEY_NOT_FOUND",
   keyConflict: "RESERVATION_API_KEY_CONFLICT",
@@ -43,6 +44,15 @@ export type ReservationApiUsageLimitDto = {
   mode: "LIMITED" | "UNLIMITED";
   monthlyLimit: string | null;
   revision: number;
+  periodStart: string;
+  requestCount: string;
+  remaining: string | null;
+  resetsAt: string;
+};
+
+export type ReservationApiKeyUsageDto = {
+  mode: "LIMITED" | "UNLIMITED";
+  monthlyLimit: string | null;
   periodStart: string;
   requestCount: string;
   remaining: string | null;
@@ -73,7 +83,7 @@ export function isReservationApiPermission(
 }
 
 export function parseReservationApiKeyIssue(value: unknown) {
-  if (!isExactRecord(value, ["name", "permissions"])) return null;
+  if (!isExactRecord(value, ["name", "permissions", "usageLimit"])) return null;
   if (typeof value.name !== "string") return null;
   const name = value.name.trim();
   if (name.length < 1 || name.length > 100) return null;
@@ -81,7 +91,9 @@ export function parseReservationApiKeyIssue(value: unknown) {
   if (!value.permissions.every(isReservationApiPermission)) return null;
   const permissions = value.permissions as ReservationApiPermission[];
   if (new Set(permissions).size !== permissions.length) return null;
-  return { name, permissions };
+  const usageLimit = parseReservationApiKeyUsageLimit(value.usageLimit);
+  if (!usageLimit) return null;
+  return { name, permissions, monthlyLimit: usageLimit.monthlyLimit };
 }
 
 export function parseReservationApiKeyRevoke(value: unknown) {
@@ -116,6 +128,21 @@ export function isValidMonthlyLimit(value: bigint): boolean {
   return value >= BigInt(100) &&
     value <= MAX_MONTHLY_REQUEST_LIMIT &&
     (value <= BigInt(10_000) || value % BigInt(100) === BigInt(0));
+}
+
+function parseReservationApiKeyUsageLimit(
+  value: unknown,
+): { monthlyLimit: bigint | null } | null {
+  if (!isRecord(value) || typeof value.mode !== "string") return null;
+  if (value.mode === "UNLIMITED") {
+    return hasExactKeys(value, ["mode"]) ? { monthlyLimit: null } : null;
+  }
+  if (value.mode !== "LIMITED" ||
+      !hasExactKeys(value, ["mode", "monthlyLimit"]) ||
+      typeof value.monthlyLimit !== "string" ||
+      !/^(0|[1-9]\d*)$/u.test(value.monthlyLimit)) return null;
+  const monthlyLimit = BigInt(value.monthlyLimit);
+  return isValidMonthlyLimit(monthlyLimit) ? { monthlyLimit } : null;
 }
 
 export function parseReservationWrite(value: unknown): ReservationWriteInput | null {

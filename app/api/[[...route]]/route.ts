@@ -103,6 +103,7 @@ import {
   issueReservationApiKey,
   listReservationApiKeys,
   revokeReservationApiKey,
+  updateReservationApiKeyUsageLimit,
 } from "@/lib/server/reservation-api-keys";
 import {
   getReservationApiUsageSnapshot,
@@ -1182,6 +1183,28 @@ app.delete("/admin/reservation-api-keys/:id", async (c) => {
   return c.body(null, 204);
 });
 
+app.put("/admin/reservation-api-keys/:id/usage-limit", async (c) => {
+  setPrivateNoStore(c);
+  const authorization = await authorizeAdminApi(
+    c.get("auth"), c.get("prisma"), c.req.raw.headers, "reservations", "UPDATE",
+  );
+  if (!authorization.ok) return c.json({ error: authorization.error }, authorization.status);
+  const input = parseReservationApiUsageLimit(await readJsonBody(c.req.raw));
+  if (!input) return c.json({ error: RESERVATION_API_ERROR_CODES.invalidRequest }, 400);
+  const result = await updateReservationApiKeyUsageLimit(c.get("prisma"), {
+    id: c.req.param("id"),
+    monthlyLimit: input.mode === "UNLIMITED" ? null : input.monthlyLimit,
+    expectedRevision: input.expectedRevision,
+  });
+  if (result.status === "NOT_FOUND") {
+    return c.json({ error: RESERVATION_API_ERROR_CODES.keyNotFound }, 404);
+  }
+  if (result.status === "CONFLICT") {
+    return c.json({ error: RESERVATION_API_ERROR_CODES.keyConflict }, 409);
+  }
+  return c.json({ apiKey: result.apiKey });
+});
+
 app.get("/admin/reservation-api-usage-limit", async (c) => {
   setPrivateNoStore(c);
   const authorization = await authorizeAdminApi(
@@ -1653,11 +1676,15 @@ async function guardPublicReservationApi(
       response: c.json({ error: RESERVATION_API_ERROR_CODES.unauthorized }, 401),
     };
   }
-  if (result.status === "LIMIT_EXCEEDED") {
+  if (result.status === "GLOBAL_LIMIT_EXCEEDED" || result.status === "KEY_LIMIT_EXCEEDED") {
     c.header("Retry-After", result.retryAfterSeconds.toString());
     return {
       ok: false as const,
-      response: c.json({ error: RESERVATION_API_ERROR_CODES.monthlyLimitExceeded }, 429),
+      response: c.json({
+        error: result.status === "GLOBAL_LIMIT_EXCEEDED"
+          ? RESERVATION_API_ERROR_CODES.monthlyLimitExceeded
+          : RESERVATION_API_ERROR_CODES.keyMonthlyLimitExceeded,
+      }, 429),
     };
   }
   if (!result.permissions.has(permission)) {
