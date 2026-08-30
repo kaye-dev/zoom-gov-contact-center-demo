@@ -113,6 +113,6 @@ canonical smokeまで成功したら、新しいProductionの管理画面から`
 
 ## 5. GitHub Actionsを追加する
 
-ローカルで同じdeployが成功した後に、[GitHub Actions用AWS IAM / OIDC設定](aws-iam-oidc.md)を一回だけ行います。以後は[GitHub ActionsからProductionへ手動デプロイ](github-actions-redeploy.md)を利用できます。
+ローカルで同じdeployが成功した後に、[フォーク先のGitHub Actions初回設定](github-actions-setup.md)の手順4以降を一回だけ行います。以後は[GitHub ActionsからProductionへ手動デプロイ](github-actions-redeploy.md)を利用できます。
 
 ActionsでもVercel Git自動デプロイは使いません。main限定の`workflow_dispatch`が、validate / migration plan、必要時だけ`production-migration`承認、direct Production deploy、canonical smokeを順に実行します。

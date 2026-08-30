@@ -1,6 +1,6 @@
 # GitHub ActionsからProductionへ手動デプロイ
 
-この手順は、初回設定済みのVercel / Neon環境をGitHub Actionsから手動で再デプロイするrunbookです。VercelのGit自動デプロイは使用しません。初回だけ[AWS IAM / OIDC設定](aws-iam-oidc.md)と[AWS Parameter Storeの初回設定](setup-deploy-aws.md)を完了してください。
+この手順は、初回設定済みのVercel / Neon環境をGitHub Actionsから手動で再デプロイするrunbookです。VercelのGit自動デプロイは使用しません。フォーク先を初めて設定する場合は、[フォーク先のGitHub Actions初回設定](github-actions-setup.md)を上から実施してください。
 
 ## 実行前の確認
 

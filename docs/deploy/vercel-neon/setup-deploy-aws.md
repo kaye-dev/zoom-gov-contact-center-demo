@@ -227,7 +227,7 @@ rotationは対象`SecureString`を新versionへ更新し、同じ操作で`confi
 
 ## 6. GitHub Actionsを設定する
 
-ローカルsetupと同じ4 parameterをActionsから読む場合は、[GitHub Actions用AWS IAM / OIDC設定](aws-iam-oidc.md)に従います。GitHubには長期AWS credentialやprovider secretsを保存せず、Environmentのexact OIDC subjectで許可したRoleから短期credentialを取得します。
+ローカルsetupと同じ4 parameterをActionsから読む場合は、[フォーク先のGitHub Actions初回設定](github-actions-setup.md)を上から実施します。GitHubには長期AWS credentialやprovider secretsを保存せず、Environmentのexact OIDC subjectで許可したRoleから短期credentialを取得します。
 
 ## セキュリティ、料金、制約
 
