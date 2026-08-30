@@ -1,6 +1,6 @@
 interface:
   display_name: "Review Implementation"
   short_description: "Run parallel reviews and build an explanatory HTML report"
-  default_prompt: "Use $review to run both review passes for plan/<slug>/goal.md and build the HTML report."
+  default_prompt: "Use $review to run both review passes for plans/<slug>/goal.md and build the HTML report."
 policy:
   allow_implicit_invocation: false

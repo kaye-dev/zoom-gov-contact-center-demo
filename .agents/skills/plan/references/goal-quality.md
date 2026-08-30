@@ -20,7 +20,7 @@ If two authoritative inputs conflict, use the latest explicit user requirement w
 
 The goal must stand alone for an implementer who has neither the conversation nor unstated project history. Incorporate every binding requirement and adopted decision into the design instead of referring to prior discussion. Include exact repository paths, current behavior and evidence, selected behavior, interfaces and data flow, verification commands, observable completion criteria, assumptions, exclusions, and risks. When applicable, make failure behavior, security and privacy boundaries, permissions, compatibility, data migration and rollback, runtime ownership, and operational recovery explicit; write `変更なし` or `対象外` rather than silently omitting a relevant concern.
 
-Use exactly the six H1 headings from `plan/template.md`, in their existing order. Subsections may clarify the final design, but must not introduce global metadata, lifecycle states, task queues, progress logs, release gates, separate draft/final files, dedicated-agent routing, or a parallel workflow. Describe only the adopted design and the evidence needed to execute it.
+Use exactly the six H1 headings from `plans/template.md`, in their existing order. Subsections may clarify the final design, but must not introduce global metadata, lifecycle states, task queues, progress logs, release gates, separate draft/final files, dedicated-agent routing, or a parallel workflow. Describe only the adopted design and the evidence needed to execute it.
 
 ## Close every requirement
 
@@ -38,7 +38,7 @@ Split compound requirements when their design, prototype state, verification, or
 
 ## Bind UI evidence to the prototype revision
 
-For a user-visible change, keep the acceptance contract in `plan/<slug>/prototype/ui-contract.json` and record exactly `approval contract: plan/<slug>/prototype/ui-contract.json — version 1`. Keep deterministic setup and probes in `plan/<slug>/prototype/parity-spec.json` and record exactly `validation profile: plan/<slug>/prototype/parity-spec.json — version 1`. Read [parity-runner.md](parity-runner.md) when authoring, implementing, or reviewing these files.
+For a user-visible change, keep the acceptance contract in `plans/<slug>/prototype/ui-contract.json` and record exactly `approval contract: plans/<slug>/prototype/ui-contract.json — version 1`. Keep deterministic setup and probes in `plans/<slug>/prototype/parity-spec.json` and record exactly `validation profile: plans/<slug>/prototype/parity-spec.json — version 1`. Read [parity-runner.md](parity-runner.md) when authoring, implementing, or reviewing these files.
 
 `ui-contract.json` remains the machine-readable source for the production baseline, comparison conditions, baseline states, theme and responsive contracts, visual invariants, intentional differences, interactions, targets, and immutable matrix. Its typed version 1 schema is enforced by `prototype-revision.mjs`. The baseline contains the complete regular-file `sources` inventory—including page, shell, reusable controls, global styles, and tokens—plus runtime owner, checkout, full Git SHA, route, and optional URL. Comparison conditions contain viewports, DPR, exact numeric `scroll: {x, y}` measured from `window.scrollX` and `window.scrollY`, locale, themes, fixture, authorization, and query. Targets and rows retain stable unique IDs and complete target × state × breakpoint × theme coverage.
 
@@ -50,12 +50,12 @@ Build final CSS and synchronize both JSON files before calculating the revision:
 
 ```sh
 node .agents/skills/plan/scripts/prototype-revision.mjs \
-  plan/<slug>/prototype
+  plans/<slug>/prototype
 ```
 
 The helper hashes every supported artifact path and byte, including `styles.css`, `ui-contract.json`, and `parity-spec.json`. Record the exact result as `prototype revision`. During `$plan` and `$plan-critic`, finish authoring and static validation first, then run one risk-selected `smoke` selection immediately before returning the result. Browser unavailability leaves those rows unverified but does not prevent a reviewable plan from being returned.
 
-An explicit `$implement` invocation is the approval for the resolved goal, current prototype revision, and validation-profile digest. `$implement` fixes one `targeted` or `full` matrix scope and writes `approval.json`, but performs no Browser work before or during production editing. After implementation and static verification are otherwise complete, it runs one final Browser selection and writes schema-version-3 `implementation-parity.json`. These structured files live below `plan/<slug>/evidence/<run-id>/`; a missing file means that phase was not run. In the current schema, a missing final file means the completion review was not run, so do not generate pending rows.
+An explicit `$implement` invocation is the approval for the resolved goal, current prototype revision, and validation-profile digest. `$implement` fixes one `targeted` or `full` matrix scope and writes `approval.json`, but performs no Browser work before or during production editing. After implementation and static verification are otherwise complete, it runs one final Browser selection and writes schema-version-3 `implementation-parity.json`. These structured files live below `plans/<slug>/evidence/<run-id>/`; a missing file means that phase was not run. In the current schema, a missing final file means the completion review was not run, so do not generate pending rows.
 
 Every executed row appears once with `pass` or `fail`, actual conditions, probe results, and artifact paths. Scroll evidence for both surfaces has `x`, `y`, and `source: "window.scrollX/window.scrollY"`. Final evidence records `matrixScope` plus the exact target/state/viewport/risk selection. `full` requires the complete manifest; `targeted` requires exactly the rows recomputed from its selection. A failed or incomplete final run prevents a completion claim without discarding valid implementation edits.
 
@@ -67,4 +67,4 @@ For a non-UI change, use `prototype: なし`, `approval contract: なし`, `vali
 
 ## Final audit
 
-Re-read the finished goal against the authoritative requirements bundle, repository evidence, `plan/template.md`, and any applicable UI prototype contract. Confirm all six H1 headings, complete closure rows, internally consistent paths and interfaces, executable verification commands, observable completion criteria, and the current prototype revision. A plan is reviewable without full parity; only `$implement` may claim its invocation-bound final evidence.
+Re-read the finished goal against the authoritative requirements bundle, repository evidence, `plans/template.md`, and any applicable UI prototype contract. Confirm all six H1 headings, complete closure rows, internally consistent paths and interfaces, executable verification commands, observable completion criteria, and the current prototype revision. A plan is reviewable without full parity; only `$implement` may claim its invocation-bound final evidence.

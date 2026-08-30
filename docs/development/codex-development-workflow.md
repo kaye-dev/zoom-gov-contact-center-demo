@@ -8,10 +8,10 @@
 
 ## 成果物
 
-`plan/template.md`だけを追跡し、生成物はplan単位で同じdirectoryへ置く。
+`plans/template.md`だけを追跡し、生成物はplan単位で同じdirectoryへ置く。1つのbranchで複数のplanを作成・実装できるよう、各planを固有のslugで`plans/`配下へ並列に保持する。
 
 ```text
-plan/<slug>/
+plans/<slug>/
 ├── goal.md
 ├── prototype/  # UI変更時
 ├── evidence/   # UI変更の$implement時
@@ -55,7 +55,7 @@ plan成果物のcleanupは、この流れとは別の明示操作として行う
 
 1. 最新要求、確定済み判断、採用済み資料を整理する。
 2. repository、runtime、code、testを確認し、UI変更時はclosest live UIも確認する。
-3. 自己完結した最終設計と`## 要件クロージャ`を`plan/<slug>/goal.md`へ書く。
+3. 自己完結した最終設計と`## 要件クロージャ`を`plans/<slug>/goal.md`へ書く。
 4. UI変更時は完成UI、`ui-contract.json`、`parity-spec.json`を作る。
 5. goalを監査し、UI変更時はCSS build、contract/profile validation、revision計算を終えてから、返却直前に影響scopeのsmokeを1回行う。
 6. goal、prototype URL、revision、smoke結果、未確認事項を返す。
@@ -94,7 +94,7 @@ pre-editとaffectedのBrowser phaseは新規runで実行しない。同じBrowse
 
 1. exact diffと必要なcontextを固定し、UI影響と構造化証跡を監査する。
 2. blind diff reviewとgoal適合reviewを独立した履歴なしsubagentで並行実行する。
-3. `plan/<slug>/review/`へHTML reportを作り、desktopと390×844で確認する。
+3. `plans/<slug>/review/`へHTML reportを作り、desktopと390×844で確認する。
 
 HTML reportは実装を変更せず、`採用 / 却下 / 未確定`、comment、Markdown生成、copyを提供する。
 
@@ -110,12 +110,12 @@ HTML reportは実装を変更せず、`採用 / 却下 / 未確定`、comment、
 現行goalへの実装逸脱、test不足、証跡不備だけなら2と3を省略する。focus trap、Tab循環、背景の`inert`化などUI契約を変える指摘は`$plan`後の別メッセージで`$implement`する。
 
 ```text
-$plan plan/<slug>/goal.md
+$plan plans/<slug>/goal.md
 レビューHTMLで採用した指摘を同じplanへ反映してください。
 <生成したMarkdown>
 
 # $plan完了後
-$implement plan/<slug>/goal.md
+$implement plans/<slug>/goal.md
 ```
 
 ### `$git-commit-push-pr`
@@ -128,7 +128,7 @@ $implement plan/<slug>/goal.md
 6. 同じheadのPRを作成するか、必要な箇所だけを更新する。
 7. PRのbase/head OID、draft、mergeability、merge stateをreadbackして報告する。
 
-現在のユーザーが明示した場合だけ実行する。force push、stash、変更破棄、広域stage、自動競合解決、PR merge、CI待機は行わない。競合、remote divergence、複数PR、認証・repository不一致は停止条件とし、plan/review生成物は明示scope外ならstageも削除もしない。
+現在のユーザーが明示した場合だけ実行する。force push、stash、変更破棄、広域stage、自動競合解決、PR merge、CI待機は行わない。競合、remote divergence、複数PR、認証・repository不一致は停止条件とし、plan・review生成物は明示scope外ならstageも削除もしない。
 
 ## 任意の振り返り
 
@@ -136,9 +136,9 @@ $implement plan/<slug>/goal.md
 
 完了または意図的に中断したtaskを振り返る場合は、開発時間と振り返り時間を分離するため、新しいtaskから`$workflow-retrospective codex://threads/<thread-id>`を明示実行する。別taskから参照するsource taskが実行中なら監査しない。同じtaskで使う場合は開発完了後に限り、現在の振り返りturnを除いた完了済みturnだけを対象にする。
 
-初回監査は追跡ファイルを変更せず、同じtaskの再監査で上書きする`plan/workflow-retrospectives/<thread-id>.md`だけを作る。現行contractで解消済みの問題を除外し、改善候補を最大3件へ優先順位付けする。候補IDをユーザーが明示選択した場合だけ、対象skill、本文書、共通runner、関連testの正確なallowlist内で改善する。P1とP2では必須工程、Browser実行、ユーザー確認、required command、skill instruction量を増やさない。
+初回監査は追跡ファイルを変更せず、同じtaskの再監査で上書きする`plans/workflow-retrospectives/<thread-id>.md`だけを作る。現行contractで解消済みの問題を除外し、改善候補を最大3件へ優先順位付けする。候補IDをユーザーが明示選択した場合だけ、対象skill、本文書、共通runner、関連testの正確なallowlist内で改善する。P1とP2では必須工程、Browser実行、ユーザー確認、required command、skill instruction量を増やさない。
 
-この操作を標準フローの末尾へ追加せず、`$plan`、`$implement`、`$review`から自動実行・自動提案・自動通知しない。一時reportは他のplan生成物と同様に`plan:cleanup`の対象になる。
+この操作を標準フローの末尾へ追加せず、`$plan`、`$implement`、`$review`から自動実行・自動提案・自動通知しない。一時reportは他のplan生成物と同様に`plans:cleanup`の対象になる。
 
 ## UI変更の共通契約
 
@@ -147,9 +147,9 @@ $implement plan/<slug>/goal.md
 prototypeは完成UI契約であり、data、persistence、authorization、backend side effectだけをmockにできる。既存shell、component、Tailwind utility、semantic token、light/dark、responsive、interaction、DOM、accessibilityは本番相当にする。
 
 ```sh
-node .agents/skills/plan/scripts/build-prototype-css.mjs plan/<slug>/prototype
-node .agents/skills/plan/scripts/prototype-revision.mjs plan/<slug>/prototype
-node .agents/skills/plan/scripts/parity-runner.mjs validate plan/<slug>/prototype
+node .agents/skills/plan/scripts/build-prototype-css.mjs plans/<slug>/prototype
+node .agents/skills/plan/scripts/prototype-revision.mjs plans/<slug>/prototype
+node .agents/skills/plan/scripts/parity-runner.mjs validate plans/<slug>/prototype
 ./dev-prototype.sh <slug>
 ```
 
@@ -161,7 +161,7 @@ plan中のsmokeは代表desktopと390×844を基本とし、theme/token/native c
 
 ### 承認と証跡
 
-`$implement`はfreshな`plan/<slug>/evidence/<run-id>/`へ次を作る。
+`$implement`はfreshな`plans/<slug>/evidence/<run-id>/`へ次を作る。
 
 - `approval.json`: goal digest、prototype revision、profile digest
 - `implementation-parity.json`: 完了候補の最後に選択rowで実行した結果
@@ -190,4 +190,4 @@ CLI evalはCodexアプリ内Browserを代替しない。runtime所有権、build
 
 goalやskillは追加権限ではない。deploy、外部API書き込み、共有・本番DB変更、secret操作、削除、commit、push、PRには現在のユーザー依頼による権限が必要である。
 
-`npm run plan:cleanup`は`plan/template.md`以外の削除候補をpreviewする。実際に削除する場合だけ、別の明示操作として`npm run plan:cleanup -- --apply`を使う。
+`npm run plans:cleanup`は`plans/template.md`以外の削除候補をpreviewする。実際に削除する場合だけ、別の明示操作として`npm run plans:cleanup -- --apply`を使う。
