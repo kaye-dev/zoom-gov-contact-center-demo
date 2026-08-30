@@ -320,10 +320,38 @@ model ReservationApiKey {
   revokedBy    user?                           @relation("ReservationApiKeyRevokedBy", fields: [revokedByUserId], references: [id], onDelete: SetNull)
   permissions  ReservationApiKeyPermission[]
   monthlyUsage ReservationApiKeyMonthlyUsage[]
+  requestLogs  ReservationApiRequestLog[]
 
   @@index([createdAt, id])
   @@index([revokedAt])
   @@map("reservation_api_keys")
+}
+
+model ReservationApiRequestLog {
+  id             String                   @id @default(cuid())
+  apiKeyId       String?
+  apiKeyName     String
+  apiKeyPreview  String
+  permission     ReservationApiPermission
+  method         String
+  path           String
+  pathParameters Json?
+  query          Json?
+  requestBody    Json?
+  responseBody   Json?
+  statusCode     Int
+  errorCode      String?
+  durationMs     Int
+  requestedAt    DateTime                 @db.Timestamptz(3)
+  completedAt    DateTime                 @db.Timestamptz(3)
+
+  apiKey ReservationApiKey? @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+
+  @@index([requestedAt, id])
+  @@index([apiKeyId, requestedAt])
+  @@index([method, requestedAt])
+  @@index([statusCode, requestedAt])
+  @@map("reservation_api_request_logs")
 }
 
 model ReservationApiKeyMonthlyUsage {

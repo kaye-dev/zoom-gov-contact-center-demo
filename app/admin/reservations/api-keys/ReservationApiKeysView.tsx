@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 
 import { ModalDialog } from "@/app/components/admin/ModalDialog";
 import { Checkbox } from "@/app/components/Checkbox";
 import { ChevronLeftIcon } from "@/app/components/svg/ChevronLeftIcon";
+import { MoreHorizIcon } from "@/app/components/svg/MoreHorizIcon";
 import { useI18n } from "@/app/i18n/LanguageProvider";
 import {
   RESERVATION_API_PERMISSIONS,
@@ -40,6 +42,7 @@ export function ReservationApiKeysView({
   const [issuedRawKey, setIssuedRawKey] = useState<string | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<ReservationApiKeyMetadata | null>(null);
   const [keyUsageTarget, setKeyUsageTarget] = useState<ReservationApiKeyMetadata | null>(null);
+  const [openActionsId, setOpenActionsId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -62,9 +65,15 @@ export function ReservationApiKeysView({
   const keyUsageInputRef = useRef<HTMLInputElement>(null);
   const issuedKeyRef = useRef<HTMLInputElement>(null);
   const copyButtonRef = useRef<HTMLButtonElement>(null);
+  const lastActionTriggerRef = useRef<HTMLButtonElement | null>(null);
+
+  const restoreActionFocus = () => {
+    window.requestAnimationFrame(() => lastActionTriggerRef.current?.focus());
+  };
 
   const closeDialog = () => {
     if (isSubmitting) return;
+    const shouldRestoreActionFocus = dialog === "keyUsage" || dialog === "revoke";
     setDialog(null);
     setError(null);
     setCopied(false);
@@ -73,6 +82,7 @@ export function ReservationApiKeysView({
     setUsageValidationError(false);
     setKeyUsageValidationError(false);
     if (dialog === "issued") setIssuedRawKey(null);
+    if (shouldRestoreActionFocus) restoreActionFocus();
   };
 
   const openIssue = () => {
@@ -135,6 +145,7 @@ export function ReservationApiKeysView({
         : key));
       setDialog(null);
       setRevokeTarget(null);
+      restoreActionFocus();
     } catch (caught) {
       setError(caught instanceof Error && caught.message === "conflict" ? copy.conflictError : copy.genericError);
     } finally {
@@ -184,13 +195,27 @@ export function ReservationApiKeysView({
     }
   };
 
-  const openKeyUsage = (key: ReservationApiKeyMetadata) => {
+  const openKeyUsage = (
+    key: ReservationApiKeyMetadata,
+    trigger?: HTMLButtonElement,
+  ) => {
+    if (trigger) lastActionTriggerRef.current = trigger;
     setKeyUsageTarget(key);
     setKeyUsageMode(key.usage.mode);
     setKeyUsageValue(key.usage.monthlyLimit ?? "10000");
     setKeyUsageValidationError(false);
     setError(null);
     setDialog("keyUsage");
+  };
+
+  const openRevoke = (
+    key: ReservationApiKeyMetadata,
+    trigger: HTMLButtonElement,
+  ) => {
+    lastActionTriggerRef.current = trigger;
+    setRevokeTarget(key);
+    setError(null);
+    setDialog("revoke");
   };
 
   const submitKeyUsage = async (event: FormEvent) => {
@@ -226,6 +251,7 @@ export function ReservationApiKeysView({
         : key));
       setDialog(null);
       setKeyUsageTarget(null);
+      restoreActionFocus();
     } catch (caught) {
       setError(caught instanceof Error && caught.message === "conflict"
         ? copy.conflictError
@@ -244,6 +270,7 @@ export function ReservationApiKeysView({
       issuedKeyRef.current?.select();
     }
   };
+  const firstRevokedIndex = apiKeys.findIndex(({ revokedAt }) => revokedAt !== null);
 
   return (
     <div><section id="reservation-api-key-content" className="min-w-0 space-y-6">
@@ -253,7 +280,10 @@ export function ReservationApiKeysView({
           <h1 className="text-2xl font-bold">{copy.title}</h1>
           <p className="text-sm leading-6 text-fg-muted">{copy.description}</p>
         </div>
-        <button id="open-issue-dialog" type="button" onClick={openIssue} disabled={!canEdit} className="cursor-pointer rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50">{copy.issue}</button>
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          <Link id="api-log-list-link" href="/admin/reservations/api-keys/logs" className="rounded-md border border-line bg-surface px-4 py-2.5 text-center text-sm font-semibold text-fg transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">{copy.logs.entry}</Link>
+          <button id="open-issue-dialog" type="button" onClick={openIssue} disabled={!canEdit} className="cursor-pointer rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50">{copy.issue}</button>
+        </div>
       </div>
 
       <p id="read-only-notice" role="status" hidden={canEdit} className="rounded-md border border-line bg-surface-accent-subtle px-4 py-3 text-sm font-semibold text-accent">{copy.readOnly}</p>
@@ -273,13 +303,63 @@ export function ReservationApiKeysView({
 
       <section id="public-api-reference" aria-labelledby="api-reference-heading" className="overflow-hidden rounded-lg border border-line bg-surface-raised shadow-sm">
         <div className="border-b border-line px-5 py-4"><h2 id="api-reference-heading" className="text-lg font-bold">{copy.api.title}</h2><p className="mt-1 text-sm leading-6 text-fg-muted">{copy.api.description}</p></div>
-        <div className="max-w-full overflow-x-auto"><table className="w-full min-w-[760px] divide-y divide-line-subtle text-sm"><thead className="bg-surface"><tr><th className="px-5 py-3 text-left font-semibold">{copy.api.permission}</th><th className="px-5 py-3 text-left font-semibold">{copy.api.method}</th><th className="px-5 py-3 text-left font-semibold">{copy.api.endpoint}</th><th className="px-5 py-3 text-left font-semibold">{copy.api.operation}</th></tr></thead><tbody className="divide-y divide-line-subtle">{API_ROWS.map((row) => <tr key={row.permission}><td className="px-5 py-3 font-mono text-xs font-semibold">{row.permission}</td><td className={`px-5 py-3 font-mono font-semibold ${apiMethodClassName(row.method)}`}>{row.method}</td><td className="px-5 py-3 font-mono text-xs">{row.endpoint}</td><td className="px-5 py-3">{copy.api.descriptions[row.permission]}</td></tr>)}</tbody></table></div>
+        <div className="max-w-full overflow-x-auto">
+          <table id="public-api-table" className="w-full table-fixed min-w-[960px] divide-y divide-line-subtle text-sm">
+            <colgroup><col className="w-[140px]" /><col className="w-[140px]" /><col className="w-[420px]" /><col className="w-[260px]" /></colgroup>
+            <thead className="bg-surface"><tr><th className="whitespace-nowrap px-5 py-3 text-left font-semibold">{copy.api.permission}</th><th className="whitespace-nowrap px-5 py-3 text-left font-semibold">{copy.api.method}</th><th className="whitespace-nowrap px-5 py-3 text-left font-semibold">{copy.api.endpoint}</th><th className="whitespace-nowrap px-5 py-3 text-left font-semibold">{copy.api.operation}</th></tr></thead>
+            <tbody className="divide-y divide-line-subtle">
+              {API_ROWS.map((row, index) => (
+                <tr key={row.permission}>
+                  <td className="whitespace-nowrap px-5 py-3 font-mono text-xs font-semibold">{row.permission}</td>
+                  <td className={`whitespace-nowrap px-5 py-3 font-mono font-semibold ${apiMethodClassName(row.method)}`}>{row.method}</td>
+                  <td className="px-5 py-3"><span id={index === 0 ? "public-api-endpoint-primary" : undefined} className="whitespace-nowrap font-mono text-sm font-semibold text-fg">{row.endpoint}</span></td>
+                  <td className="whitespace-nowrap px-5 py-3">{copy.api.descriptions[row.permission]}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section id="api-key-list-card" aria-labelledby="api-key-list-heading" className="overflow-hidden rounded-lg border border-line bg-surface-raised shadow-sm">
         <div className="border-b border-line px-5 py-4"><h2 id="api-key-list-heading" className="text-lg font-bold">{copy.keys.title}</h2><p className="mt-1 text-sm text-fg-muted">{copy.keys.description}</p></div>
         {apiKeys.length === 0 ? <div id="api-key-empty" className="px-5 py-12 text-center"><p className="font-semibold">{copy.keys.emptyTitle}</p><p className="mt-2 text-sm text-fg-muted">{copy.keys.emptyDescription}</p></div> : (
-          <div id="api-key-table-wrap" className="max-w-full overflow-x-auto"><table className="w-full min-w-[1280px] divide-y divide-line-subtle text-sm"><thead className="bg-surface"><tr>{[copy.keys.nameKey, copy.keys.permissions, copy.keys.monthlyLimit, copy.keys.monthlyUsage, copy.keys.created, copy.keys.lastUsed, copy.keys.status, copy.keys.actions].map((label) => <th key={label} className="px-5 py-3 text-left font-semibold last:text-center">{label}</th>)}</tr></thead><tbody className="divide-y divide-line-subtle">{apiKeys.map((key, index) => <tr key={key.id} data-key-row={key.revokedAt ? "revoked" : "active"}><td className="px-5 py-4 align-top"><p className="font-semibold">{key.name}</p><code className="mt-1 block text-xs text-fg-muted">{key.keyPreview}</code></td><td className="px-5 py-4 align-top"><div className="flex max-w-md flex-wrap gap-1.5">{key.permissions.map((permission) => <PermissionBadge key={permission} permission={permission} />)}</div></td><td id={index === 0 ? "active-key-limit" : undefined} className="px-5 py-4 align-top whitespace-nowrap"><span className="font-semibold">{key.usage.monthlyLimit === null ? copy.keys.unlimited : `${formatCount(key.usage.monthlyLimit, locale)}${copy.usageDialog.unit}`}</span></td><td id={index === 0 ? "active-key-usage" : undefined} className="px-5 py-4 align-top whitespace-nowrap"><span className="font-semibold">{formatCount(key.usage.requestCount, locale)}{copy.usageDialog.unit}</span><span className="mt-1 block text-xs text-fg-muted">{copy.keys.remaining} {key.usage.remaining === null ? copy.keys.unlimited : `${formatCount(key.usage.remaining, locale)}${copy.usageDialog.unit}`}</span></td><td className="px-5 py-4 align-top whitespace-nowrap">{formatDateTime(key.createdAt, locale)}</td><td className="px-5 py-4 align-top whitespace-nowrap">{key.lastUsedAt ? formatDateTime(key.lastUsedAt, locale) : copy.keys.never}</td><td className="px-5 py-4 text-center align-top"><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${key.revokedAt ? "bg-surface-accent-subtle text-fg-muted" : "bg-green-100 text-green-800 dark:bg-green-950/60 dark:text-green-200"}`}>{key.revokedAt ? copy.keys.revoked : copy.keys.active}</span></td><td className="px-5 py-4 text-center align-top">{key.revokedAt ? "—" : <div className="flex justify-center gap-2"><button id={index === 0 ? "open-key-usage-limit-dialog" : undefined} type="button" onClick={() => openKeyUsage(key)} disabled={!canEdit} className="cursor-pointer whitespace-nowrap rounded-md border border-line bg-surface px-3 py-2 text-xs font-semibold hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50">{copy.keys.changeLimit}</button><button id={index === 0 ? "open-revoke-dialog" : undefined} type="button" onClick={() => { setRevokeTarget(key); setError(null); setDialog("revoke"); }} disabled={!canEdit} className="cursor-pointer rounded-md border border-red-300 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/50">{copy.keys.revoke}</button></div>}</td></tr>)}</tbody></table></div>
+          <div id="api-key-table-wrap" className="max-w-full overflow-x-auto">
+            <table id="api-key-table" className="w-full table-fixed min-w-[1450px] divide-y divide-line-subtle text-sm">
+              <colgroup><col className="w-[260px]" /><col className="w-[390px]" /><col className="w-[140px]" /><col className="w-[120px]" /><col className="w-[170px]" /><col className="w-[170px]" /><col className="w-[90px]" /><col className="w-[110px]" /></colgroup>
+              <thead className="bg-surface"><tr>{[copy.keys.nameKey, copy.keys.permissions, copy.keys.monthlyLimit, copy.keys.monthlyUsage, copy.keys.created, copy.keys.lastUsed, copy.keys.status, copy.keys.actions].map((label) => <th key={label} className="whitespace-nowrap px-5 py-3 text-left font-semibold last:text-center">{label}</th>)}</tr></thead>
+              <tbody className="divide-y divide-line-subtle">
+                {apiKeys.map((key, index) => (
+                  <tr key={key.id} data-key-row={key.revokedAt ? "revoked" : "active"}>
+                    <td className="min-w-0 px-5 py-4 align-top"><p id={index === 0 ? "active-key-name" : undefined} title={key.name} className="truncate whitespace-nowrap font-semibold">{key.name}</p><code id={index === 0 ? "active-key-preview" : undefined} className="mt-1 block whitespace-nowrap text-xs text-fg-muted">{key.keyPreview}</code></td>
+                    <td className="px-5 py-4 align-top"><div id={index === 0 ? "active-key-permissions" : undefined} className="flex flex-nowrap gap-1.5 whitespace-nowrap">{key.permissions.map((permission) => <PermissionBadge key={permission} permission={permission} />)}</div></td>
+                    <td id={index === 0 ? "active-key-limit" : undefined} className="whitespace-nowrap px-5 py-4 align-top"><span className="font-semibold">{key.usage.monthlyLimit === null ? copy.keys.unlimited : `${formatCount(key.usage.monthlyLimit, locale)}${copy.usageDialog.unit}`}</span></td>
+                    <td id={index === 0 ? "active-key-usage" : undefined} className="whitespace-nowrap px-5 py-4 align-top"><span className="font-semibold">{formatCount(key.usage.requestCount, locale)}{copy.usageDialog.unit}</span></td>
+                    <td className="whitespace-nowrap px-5 py-4 align-top">{formatDateTime(key.createdAt, locale)}</td>
+                    <td className="whitespace-nowrap px-5 py-4 align-top">{key.lastUsedAt ? formatDateTime(key.lastUsedAt, locale) : copy.keys.never}</td>
+                    <td className="whitespace-nowrap px-5 py-4 text-center align-top"><span id={key.revokedAt ? (index === firstRevokedIndex ? "revoked-key-status" : undefined) : (index === 0 ? "active-key-status" : undefined)} className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${key.revokedAt ? "bg-surface-accent-subtle text-fg-muted" : "bg-green-100 text-green-800 dark:bg-green-950/60 dark:text-green-200"}`}>{key.revokedAt ? copy.keys.revoked : copy.keys.active}</span></td>
+                    <td className="px-5 py-4 text-center align-top">
+                      {key.revokedAt ? "—" : (
+                        <ApiKeyActionsMenu
+                          keyMetadata={key}
+                          isOpen={openActionsId === key.id}
+                          canEdit={canEdit}
+                          disabledReason={copy.readOnly}
+                          actionsFor={copy.keys.actionsFor}
+                          changeLimit={copy.keys.changeLimit}
+                          revoke={copy.keys.revoke}
+                          isPrimary={index === 0}
+                          onOpenChange={(open) => setOpenActionsId(open ? key.id : null)}
+                          onChangeLimit={openKeyUsage}
+                          onRevoke={openRevoke}
+                        />
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
 
@@ -296,12 +376,164 @@ export function ReservationApiKeysView({
   );
 }
 
+function ApiKeyActionsMenu({
+  keyMetadata,
+  isOpen,
+  canEdit,
+  disabledReason,
+  actionsFor,
+  changeLimit,
+  revoke,
+  isPrimary,
+  onOpenChange,
+  onChangeLimit,
+  onRevoke,
+}: {
+  keyMetadata: ReservationApiKeyMetadata;
+  isOpen: boolean;
+  canEdit: boolean;
+  disabledReason: string;
+  actionsFor: string;
+  changeLimit: string;
+  revoke: string;
+  isPrimary: boolean;
+  onOpenChange: (open: boolean) => void;
+  onChangeLimit: (key: ReservationApiKeyMetadata, trigger?: HTMLButtonElement) => void;
+  onRevoke: (key: ReservationApiKeyMetadata, trigger: HTMLButtonElement) => void;
+}) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLUListElement>(null);
+  const [menuStyle, setMenuStyle] = useState<CSSProperties | null>(null);
+  const menuId = isPrimary ? "api-key-actions-menu" : `api-key-actions-menu-${keyMetadata.id}`;
+  const accessibleName = formatTemplate(actionsFor, { name: keyMetadata.name });
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const focusFirstItem = window.requestAnimationFrame(() => {
+      menuRef.current?.querySelector<HTMLElement>("[role='menuitem']")?.focus();
+    });
+    const close = () => onOpenChange(false);
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!buttonRef.current?.contains(target) && !menuRef.current?.contains(target)) {
+        close();
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      close();
+      buttonRef.current?.focus();
+    };
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      window.cancelAnimationFrame(focusFirstItem);
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [isOpen, onOpenChange]);
+
+  const toggleMenu = () => {
+    if (isOpen) {
+      onOpenChange(false);
+      return;
+    }
+    const trigger = buttonRef.current;
+    if (!trigger) return;
+
+    const rect = trigger.getBoundingClientRect();
+    const menuWidth = 176;
+    const menuHeight = 90;
+    const margin = 8;
+    const openAbove = window.innerHeight - rect.bottom < menuHeight + margin;
+    setMenuStyle({
+      left: Math.min(window.innerWidth - menuWidth - margin, Math.max(margin, rect.right - menuWidth)),
+      top: openAbove ? rect.top - menuHeight - 4 : rect.bottom + 4,
+      width: menuWidth,
+    });
+    onOpenChange(true);
+  };
+
+  const menu = isOpen && menuStyle ? (
+    <ul
+      ref={menuRef}
+      id={menuId}
+      role="menu"
+      aria-label={accessibleName}
+      style={menuStyle}
+      onBlur={(event) => {
+        const next = event.relatedTarget as Node | null;
+        if (!menuRef.current?.contains(next) && !buttonRef.current?.contains(next)) {
+          onOpenChange(false);
+        }
+      }}
+      className="fixed z-[70] w-44 overflow-hidden rounded-lg border border-line bg-surface-raised py-1 text-left shadow-xl"
+    >
+      <li role="none">
+        <button
+          id={isPrimary ? "open-key-usage-limit-dialog" : undefined}
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            onOpenChange(false);
+            if (buttonRef.current) onChangeLimit(keyMetadata, buttonRef.current);
+          }}
+          className="w-full cursor-pointer px-4 py-2 text-left text-sm font-semibold text-fg transition-colors hover:bg-surface-hover hover:text-accent focus:bg-surface-hover focus:outline-none"
+        >
+          {changeLimit}
+        </button>
+      </li>
+      <li role="none" className="border-t border-line-subtle">
+        <button
+          id={isPrimary ? "open-revoke-dialog" : undefined}
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            onOpenChange(false);
+            if (buttonRef.current) onRevoke(keyMetadata, buttonRef.current);
+          }}
+          className="w-full cursor-pointer px-4 py-2 text-left text-sm font-semibold text-red-700 transition-colors hover:bg-red-50 focus:bg-red-50 focus:outline-none dark:text-red-300 dark:hover:bg-red-950/50 dark:focus:bg-red-950/50"
+        >
+          {revoke}
+        </button>
+      </li>
+    </ul>
+  ) : null;
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        id={isPrimary ? "api-key-actions-trigger" : undefined}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        aria-controls={menuId}
+        aria-label={accessibleName}
+        title={canEdit ? undefined : disabledReason}
+        disabled={!canEdit}
+        onClick={toggleMenu}
+        className="inline-flex cursor-pointer items-center justify-center rounded-md p-2 text-fg transition-colors hover:bg-surface-hover hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <MoreHorizIcon className="h-6 w-6" />
+      </button>
+      {menu ? createPortal(menu, document.body) : null}
+    </>
+  );
+}
+
 function UsageValue({ id, label, value }: { id: string; label: string; value: string }) {
   return <div className="bg-surface-raised px-5 py-4"><dt className="text-sm text-fg-muted">{label}</dt><dd id={id} className="mt-1 text-xl font-bold">{value}</dd></div>;
 }
 
 function PermissionBadge({ permission }: { permission: ReservationApiPermission }) {
-  return <span className="rounded-full bg-surface-accent-subtle px-2 py-1 text-xs font-semibold text-accent">{permission}</span>;
+  return <span className="shrink-0 whitespace-nowrap rounded-full bg-surface-accent-subtle px-2 py-1 text-xs font-semibold text-accent">{permission}</span>;
 }
 
 function apiMethodClassName(method: string) {

@@ -11,7 +11,13 @@ import {
   getTokyoCalendarDate,
   utcDateToCalendarDate,
 } from "../../lib/reservations";
+import { generateReservationApiKey } from "../../lib/server/reservation-api-keys";
+import {
+  decodeReservationApiRequestLogCursor,
+  listReservationApiRequestLogs,
+} from "../../lib/server/reservation-api-request-logs";
 import { getReservationApiPeriod } from "../../lib/server/reservation-api-usage";
+import { withPrisma } from "../../lib/server/prisma";
 import { withIsolatedPostgresDatabase } from "../helpers/isolated-postgres";
 
 const AUTH_SECRET = "runtime-reservation-api-test-secret-000000000";
@@ -154,7 +160,15 @@ test("reservation API keys, scopes, CRUD, quota, and revocation work end to end"
       });
       assert.equal(patched.status, 200, await patched.clone().text());
       assert.equal(((await patched.json()) as { reservation: { startMinute: number } }).reservation.startMinute, 570);
-      assert.equal((await invoke(route.DELETE, "DELETE", `/api/public/v1/reservations/${created.reservation.id}`, { bearer: issued.rawKey })).status, 204);
+      assert.equal((await invoke(route.DELETE, "DELETE", `/api/public/v1/reservations/${created.reservation.id}`, {
+        bearer: issued.rawKey,
+        body: { unexpected: true },
+      })).status, 400);
+      assert.equal((await invoke(route.GET, "GET", `/api/public/v1/reservations/${created.reservation.id}`, { bearer: issued.rawKey })).status, 200);
+      assert.equal((await invoke(route.DELETE, "DELETE", `/api/public/v1/reservations/${created.reservation.id}`, {
+        bearer: issued.rawKey,
+        rawBody: "",
+      })).status, 204);
       assert.equal((await invoke(route.DELETE, "DELETE", "/api/public/v1/reservations/hidden-demo", { bearer: issued.rawKey })).status, 404);
 
       const usage = await invoke(route.GET, "GET", "/api/admin/reservation-api-usage-limit", { cookie: fullCookie });
@@ -290,6 +304,657 @@ test("reservation API keys, scopes, CRUD, quota, and revocation work end to end"
   });
 });
 
+test("authenticated reservation API outcomes create bounded request logs without changing responses", { timeout: 180_000 }, async () => {
+  await withIsolatedPostgresDatabase(async (databaseUrl) => {
+    const restore = configureEnvironment(databaseUrl);
+    const client = new Client({ connectionString: databaseUrl });
+    await client.connect();
+    try {
+      await createUser(client, FULL_ADMIN);
+      await createSession(client, FULL_ADMIN, "request-log-full-token");
+      const route = await import("../../app/api/[[...route]]/route");
+      const fullCookie = sessionCookie("request-log-full-token");
+      const fullKey = await issueKey(route, fullCookie, {
+        name: "Request log full access",
+        permissions: ["LIST", "READ", "CREATE", "UPDATE", "DELETE"],
+      });
+      const listOnlyKey = await issueKey(route, fullCookie, {
+        name: "Request log list only",
+        permissions: ["LIST"],
+      });
+      const quotaKey = await issueKey(route, fullCookie, {
+        name: "Request log quota key",
+        permissions: ["LIST"],
+      });
+
+      const date = nextMyNumberDate(new Date());
+      const createPayload = {
+        serviceKey: "my-number-card",
+        reservationDate: date,
+        startMinute: 540,
+      };
+      const createdCall = await invokeExpectingOneLog(
+        client,
+        route.POST,
+        "POST",
+        "/api/public/v1/reservations",
+        { bearer: fullKey.rawKey, body: createPayload },
+      );
+      assert.equal(createdCall.response.status, 201);
+      const createdBody = await createdCall.response.json() as {
+        reservation: { id: string; reservationDate: string; startMinute: number };
+      };
+      assert.equal(createdCall.log.apiKeyId, fullKey.apiKey.id);
+      assert.equal(createdCall.log.apiKeyName, fullKey.apiKey.name);
+      assert.equal(createdCall.log.apiKeyPreview, fullKey.apiKey.keyPreview);
+      assert.equal(createdCall.log.permission, "CREATE");
+      assert.equal(createdCall.log.method, "POST");
+      assert.equal(createdCall.log.path, "/api/public/v1/reservations");
+      assert.deepEqual(createdCall.log.pathParameters, {});
+      assert.deepEqual(createdCall.log.query, {});
+      assert.deepEqual(createdCall.log.requestBody, createPayload);
+      assert.deepEqual(createdCall.log.responseBody, createdBody);
+      assert.equal(createdCall.log.statusCode, 201);
+      assert.equal(createdCall.log.errorCode, null);
+      assert.ok(createdCall.log.durationMs >= 0);
+      assert.ok(createdCall.log.completedAt.getTime() >= createdCall.log.requestedAt.getTime());
+
+      const listCall = await invokeExpectingOneLog(
+        client,
+        route.GET,
+        "GET",
+        `/api/public/v1/reservations?serviceKey=my-number-card&dateFrom=${date}&dateTo=${date}&limit=1`,
+        { bearer: fullKey.rawKey },
+      );
+      assert.equal(listCall.response.status, 200);
+      assert.equal(listCall.log.permission, "LIST");
+      assert.deepEqual(listCall.log.pathParameters, {});
+      assert.deepEqual(listCall.log.query, {
+        serviceKey: "my-number-card",
+        dateFrom: date,
+        dateTo: date,
+        limit: 1,
+      });
+      assert.deepEqual(listCall.log.responseBody, await listCall.response.json());
+
+      const readCall = await invokeExpectingOneLog(
+        client,
+        route.GET,
+        "GET",
+        `/api/public/v1/reservations/${createdBody.reservation.id}`,
+        { bearer: fullKey.rawKey },
+      );
+      assert.equal(readCall.response.status, 200);
+      assert.equal(readCall.log.permission, "READ");
+      assert.deepEqual(readCall.log.pathParameters, { id: createdBody.reservation.id });
+
+      const patchCall = await invokeExpectingOneLog(
+        client,
+        route.PATCH,
+        "PATCH",
+        `/api/public/v1/reservations/${createdBody.reservation.id}`,
+        { bearer: fullKey.rawKey, body: { startMinute: 570 } },
+      );
+      assert.equal(patchCall.response.status, 200);
+      assert.equal(patchCall.log.permission, "UPDATE");
+      assert.deepEqual(patchCall.log.requestBody, { startMinute: 570 });
+
+      const deleteCall = await invokeExpectingOneLog(
+        client,
+        route.DELETE,
+        "DELETE",
+        `/api/public/v1/reservations/${createdBody.reservation.id}`,
+        { bearer: fullKey.rawKey },
+      );
+      assert.equal(deleteCall.response.status, 204);
+      assert.equal(await deleteCall.response.text(), "");
+      assert.equal(deleteCall.log.permission, "DELETE");
+      assert.equal(deleteCall.log.responseBody, null);
+
+      const forbiddenCall = await invokeExpectingOneLog(
+        client,
+        route.POST,
+        "POST",
+        "/api/public/v1/reservations",
+        { bearer: listOnlyKey.rawKey, body: createPayload },
+      );
+      assert.equal(forbiddenCall.response.status, 403);
+      assert.equal(forbiddenCall.log.apiKeyId, listOnlyKey.apiKey.id);
+      assert.equal(forbiddenCall.log.apiKeyName, listOnlyKey.apiKey.name);
+      assert.equal(forbiddenCall.log.permission, "CREATE");
+      assert.equal(forbiddenCall.log.errorCode, "RESERVATION_API_FORBIDDEN");
+      assert.equal(forbiddenCall.log.requestBody, null);
+      assert.deepEqual(forbiddenCall.log.responseBody, {
+        error: "RESERVATION_API_FORBIDDEN",
+      });
+
+      const credentialSentinel = "unparsed-credential-sentinel-must-not-be-stored";
+      const invalidCall = await invokeExpectingOneLog(
+        client,
+        route.POST,
+        "POST",
+        "/api/public/v1/reservations",
+        {
+          bearer: fullKey.rawKey,
+          body: { ...createPayload, unknown: credentialSentinel },
+        },
+      );
+      assert.equal(invalidCall.response.status, 400);
+      assert.equal(invalidCall.log.requestBody, null);
+      assert.equal(invalidCall.log.errorCode, "RESERVATION_API_INVALID_REQUEST");
+
+      const missingCall = await invokeExpectingOneLog(
+        client,
+        route.GET,
+        "GET",
+        "/api/public/v1/reservations/missing-request-log-booking",
+        { bearer: fullKey.rawKey },
+      );
+      assert.equal(missingCall.response.status, 404);
+      assert.equal(missingCall.log.errorCode, "RESERVATION_API_NOT_FOUND");
+      assert.deepEqual(missingCall.log.pathParameters, {
+        id: "missing-request-log-booking",
+      });
+
+      const legalDate = nextServiceDate("legal-consultation", new Date());
+      const capacityPayload = {
+        serviceKey: "legal-consultation",
+        reservationDate: legalDate,
+        startMinute: 780,
+      };
+      assert.equal((await invokeExpectingOneLog(
+        client,
+        route.POST,
+        "POST",
+        "/api/public/v1/reservations",
+        { bearer: fullKey.rawKey, body: capacityPayload },
+      )).response.status, 201);
+      const conflictCall = await invokeExpectingOneLog(
+        client,
+        route.POST,
+        "POST",
+        "/api/public/v1/reservations",
+        { bearer: fullKey.rawKey, body: capacityPayload },
+      );
+      assert.equal(conflictCall.response.status, 409);
+      assert.equal(conflictCall.log.errorCode, "RESERVATION_SLOT_FULL");
+      assert.deepEqual(conflictCall.log.responseBody, {
+        error: "RESERVATION_SLOT_FULL",
+      });
+
+      await client.query(
+        `INSERT INTO reservation_bookings (id, "serviceKey", "reservationDate", "startMinute", "isDemo")
+         VALUES ('request-log-server-error', 'my-number-card', $1::date, 540, false)`,
+        [date],
+      );
+      await installFailingReservationUpdateTrigger(client);
+      let serverErrorCall: Awaited<ReturnType<typeof invokeExpectingOneLog>>;
+      try {
+        serverErrorCall = await invokeExpectingOneLog(
+          client,
+          route.PATCH,
+          "PATCH",
+          "/api/public/v1/reservations/request-log-server-error",
+          { bearer: fullKey.rawKey, body: { startMinute: 570 } },
+        );
+      } finally {
+        await removeFailingReservationUpdateTrigger(client);
+      }
+      assert.equal(serverErrorCall.response.status, 500);
+      assert.equal(serverErrorCall.log.errorCode, "RESERVATION_API_OPERATION_FAILED");
+      assert.deepEqual(serverErrorCall.log.responseBody, {
+        error: "RESERVATION_API_OPERATION_FAILED",
+      });
+
+      const period = getReservationApiPeriod(new Date());
+      await client.query(
+        `UPDATE reservation_api_keys SET "monthlyLimit" = 100 WHERE id = $1`,
+        [quotaKey.apiKey.id],
+      );
+      await client.query(
+        `INSERT INTO reservation_api_key_monthly_usage ("apiKeyId", "periodStart", "requestCount", "updatedAt")
+         VALUES ($1, $2::date, 100, CURRENT_TIMESTAMP)
+         ON CONFLICT ("apiKeyId", "periodStart")
+         DO UPDATE SET "requestCount" = EXCLUDED."requestCount"`,
+        [quotaKey.apiKey.id, period.periodStart],
+      );
+      const limitedCall = await invokeExpectingOneLog(
+        client,
+        route.GET,
+        "GET",
+        "/api/public/v1/reservations",
+        { bearer: quotaKey.rawKey },
+      );
+      assert.equal(limitedCall.response.status, 429);
+      assert.equal(limitedCall.log.apiKeyId, quotaKey.apiKey.id);
+      assert.equal(limitedCall.log.errorCode, "RESERVATION_API_KEY_MONTHLY_LIMIT_EXCEEDED");
+
+      await client.query(`DELETE FROM reservation_api_usage_settings WHERE id = 1`);
+      let quotaFailureCall: Awaited<ReturnType<typeof invokeExpectingOneLog>>;
+      try {
+        quotaFailureCall = await invokeExpectingOneLog(
+          client,
+          route.GET,
+          "GET",
+          "/api/public/v1/reservations",
+          { bearer: fullKey.rawKey },
+        );
+      } finally {
+        await client.query(
+          `INSERT INTO reservation_api_usage_settings
+             (id, "monthlyLimit", revision, "updatedAt", "updatedByUserId")
+           VALUES (1, NULL, 1, CURRENT_TIMESTAMP, NULL)
+           ON CONFLICT (id) DO NOTHING`,
+        );
+      }
+      assert.equal(quotaFailureCall.response.status, 500);
+      assert.equal(quotaFailureCall.log.apiKeyId, fullKey.apiKey.id);
+      assert.equal(quotaFailureCall.log.errorCode, "RESERVATION_API_OPERATION_FAILED");
+      assert.deepEqual(quotaFailureCall.log.responseBody, {
+        error: "RESERVATION_API_OPERATION_FAILED",
+      });
+
+      await invokeExpectingNoLog(client, route.GET, "GET", "/api/public/v1/reservations");
+      await invokeExpectingNoLog(
+        client,
+        route.GET,
+        "GET",
+        "/api/public/v1/reservations",
+        { authorization: "Basic malformed-credential" },
+      );
+      await invokeExpectingNoLog(
+        client,
+        route.GET,
+        "GET",
+        "/api/public/v1/reservations",
+        { bearer: generateReservationApiKey().rawKey },
+      );
+      const revoke = await invoke(
+        route.DELETE,
+        "DELETE",
+        `/api/admin/reservation-api-keys/${listOnlyKey.apiKey.id}`,
+        {
+          cookie: fullCookie,
+          body: { expectedRevision: listOnlyKey.apiKey.revision },
+        },
+      );
+      assert.equal(revoke.status, 204);
+      const revokedResponse = await invokeExpectingNoLog(
+        client,
+        route.GET,
+        "GET",
+        "/api/public/v1/reservations",
+        { bearer: listOnlyKey.rawKey },
+      );
+      assert.equal(revokedResponse.status, 401);
+      assert.equal(revokedResponse.headers.get("www-authenticate"), "Bearer");
+
+      const secret = await client.query<{ secretHash: string }>(
+        `SELECT "secretHash" FROM reservation_api_keys WHERE id = $1`,
+        [fullKey.apiKey.id],
+      );
+      const serializedLogs = JSON.stringify(await readRequestLogs(client));
+      for (const forbidden of [
+        fullKey.rawKey,
+        listOnlyKey.rawKey,
+        quotaKey.rawKey,
+        secret.rows[0]!.secretHash,
+        credentialSentinel,
+        "Authorization",
+        "Cookie",
+        "secretHash",
+        "stack",
+      ]) assert.equal(serializedLogs.includes(forbidden), false, forbidden);
+
+      const retentionNow = new Date();
+      await insertSyntheticRequestLog(client, {
+        id: "request-log-expired",
+        apiKeyId: fullKey.apiKey.id,
+        apiKeyName: fullKey.apiKey.name,
+        apiKeyPreview: fullKey.apiKey.keyPreview,
+        requestedAt: new Date(retentionNow.getTime() - 31 * 24 * 60 * 60 * 1_000),
+      });
+      await insertSyntheticRequestLog(client, {
+        id: "request-log-retained",
+        apiKeyId: fullKey.apiKey.id,
+        apiKeyName: fullKey.apiKey.name,
+        apiKeyPreview: fullKey.apiKey.keyPreview,
+        requestedAt: new Date(retentionNow.getTime() - 29 * 24 * 60 * 60 * 1_000),
+      });
+      await invokeExpectingOneLog(
+        client,
+        route.GET,
+        "GET",
+        "/api/public/v1/reservations",
+        { bearer: fullKey.rawKey },
+      );
+      const retained = await client.query<{ id: string }>(
+        `SELECT id FROM reservation_api_request_logs
+         WHERE id IN ('request-log-expired', 'request-log-retained') ORDER BY id`,
+      );
+      assert.deepEqual(retained.rows.map(({ id }) => id), ["request-log-retained"]);
+
+      const paginationNow = new Date();
+      await insertPaginationLogs(client, fullKey, paginationNow);
+      const directory = await withPrisma(async (prisma) => {
+        const first = await listReservationApiRequestLogs(
+          prisma,
+          { query: "Pagination Fixture" },
+          paginationNow,
+        );
+        assert.ok(first.nextCursor);
+        const second = await listReservationApiRequestLogs(
+          prisma,
+          {
+            query: "Pagination Fixture",
+            cursor: first.nextCursor
+              ? decodeReservationApiRequestLogCursor(first.nextCursor) ?? undefined
+              : undefined,
+          },
+          paginationNow,
+        );
+        const filtered = await listReservationApiRequestLogs(
+          prisma,
+          { query: "PKEY••••LOGS", method: "POST", result: "client-error" },
+          paginationNow,
+        );
+        const byId = await listReservationApiRequestLogs(
+          prisma,
+          { query: "pagination-log-051" },
+          paginationNow,
+        );
+        const byPreview = await listReservationApiRequestLogs(
+          prisma,
+          { query: "PKEY••••LOGS" },
+          paginationNow,
+        );
+        return { first, second, filtered, byId, byPreview };
+      });
+      assert.equal(directory.first.logs.length, 50);
+      assert.equal(directory.second.logs.length, 2);
+      assert.equal(directory.second.nextCursor, null);
+      assert.equal(
+        new Set([...directory.first.logs, ...directory.second.logs].map(({ id }) => id)).size,
+        52,
+      );
+      assert.ok(directory.filtered.logs.length > 0);
+      assert.ok(directory.filtered.logs.every(({ method, statusCode }) =>
+        method === "POST" && statusCode >= 400 && statusCode <= 499));
+      assert.deepEqual(directory.byId.logs.map(({ id }) => id), ["pagination-log-051"]);
+      assert.equal(directory.byPreview.logs.length, 50);
+
+      await client.query(`DELETE FROM reservation_api_keys WHERE id = $1`, [listOnlyKey.apiKey.id]);
+      const snapshot = await client.query<{
+        apiKeyId: string | null;
+        apiKeyName: string;
+        apiKeyPreview: string;
+      }>(
+        `SELECT "apiKeyId", "apiKeyName", "apiKeyPreview"
+         FROM reservation_api_request_logs WHERE id = $1`,
+        [forbiddenCall.log.id],
+      );
+      assert.deepEqual(snapshot.rows[0], {
+        apiKeyId: null,
+        apiKeyName: listOnlyKey.apiKey.name,
+        apiKeyPreview: listOnlyKey.apiKey.keyPreview,
+      });
+
+      const baseline = await invokeExpectingOneLog(
+        client,
+        route.GET,
+        "GET",
+        "/api/public/v1/reservations",
+        { bearer: fullKey.rawKey },
+      );
+      const baselineBody = await baseline.response.text();
+      await installFailingRequestLogTrigger(client);
+      const originalConsoleError = console.error;
+      const serverErrors: string[] = [];
+      console.error = (...values: unknown[]) => {
+        serverErrors.push(values.map(String).join(" "));
+      };
+      let failedLogResponse: Response;
+      try {
+        failedLogResponse = await invokeExpectingNoLog(
+          client,
+          route.GET,
+          "GET",
+          "/api/public/v1/reservations",
+          { bearer: fullKey.rawKey },
+        );
+      } finally {
+        console.error = originalConsoleError;
+        await removeFailingRequestLogTrigger(client);
+      }
+      assert.equal(failedLogResponse.status, baseline.response.status);
+      assert.equal(
+        failedLogResponse.headers.get("cache-control"),
+        baseline.response.headers.get("cache-control"),
+      );
+      assert.equal(await failedLogResponse.text(), baselineBody);
+      assert.deepEqual(serverErrors, [
+        "Failed to record a reservation API request log.",
+      ]);
+    } finally {
+      await client.end();
+      restore();
+    }
+  });
+});
+
+type IssuedKey = {
+  apiKey: {
+    id: string;
+    name: string;
+    keyPreview: string;
+    revision: number;
+  };
+  rawKey: string;
+};
+
+type RequestLogRow = {
+  id: string;
+  apiKeyId: string | null;
+  apiKeyName: string;
+  apiKeyPreview: string;
+  permission: string;
+  method: string;
+  path: string;
+  pathParameters: unknown | null;
+  query: unknown | null;
+  requestBody: unknown | null;
+  responseBody: unknown | null;
+  statusCode: number;
+  errorCode: string | null;
+  durationMs: number;
+  requestedAt: Date;
+  completedAt: Date;
+};
+
+async function issueKey(
+  route: Route,
+  cookie: string,
+  input: { name: string; permissions: string[] },
+): Promise<IssuedKey> {
+  const response = await invoke(
+    route.POST,
+    "POST",
+    "/api/admin/reservation-api-keys",
+    {
+      cookie,
+      body: {
+        ...input,
+        usageLimit: { mode: "UNLIMITED" },
+      },
+    },
+  );
+  assert.equal(response.status, 201, await response.clone().text());
+  return await response.json() as IssuedKey;
+}
+
+async function readRequestLogs(client: Client): Promise<RequestLogRow[]> {
+  const result = await client.query<RequestLogRow>(`
+    SELECT id, "apiKeyId", "apiKeyName", "apiKeyPreview", permission, method,
+           path, "pathParameters", query, "requestBody", "responseBody",
+           "statusCode", "errorCode", "durationMs", "requestedAt", "completedAt"
+    FROM reservation_api_request_logs
+    ORDER BY "requestedAt" DESC, id DESC
+  `);
+  return result.rows;
+}
+
+async function invokeExpectingOneLog(
+  client: Client,
+  handler: Handler,
+  method: string,
+  path: string,
+  options: InvokeOptions = {},
+) {
+  const before = new Set((await readRequestLogs(client)).map(({ id }) => id));
+  const response = await invoke(handler, method, path, options);
+  const created = (await readRequestLogs(client)).filter(({ id }) => !before.has(id));
+  assert.equal(
+    created.length,
+    1,
+    `${method} ${path} must create exactly one request log`,
+  );
+  return { response, log: created[0]! };
+}
+
+async function invokeExpectingNoLog(
+  client: Client,
+  handler: Handler,
+  method: string,
+  path: string,
+  options: InvokeOptions = {},
+) {
+  const before = (await readRequestLogs(client)).map(({ id }) => id).sort();
+  const response = await invoke(handler, method, path, options);
+  const after = (await readRequestLogs(client)).map(({ id }) => id).sort();
+  assert.deepEqual(after, before, `${method} ${path} must not create a request log`);
+  return response;
+}
+
+async function insertSyntheticRequestLog(
+  client: Client,
+  input: {
+    id: string;
+    apiKeyId: string;
+    apiKeyName: string;
+    apiKeyPreview: string;
+    requestedAt: Date;
+  },
+) {
+  await client.query(
+    `INSERT INTO reservation_api_request_logs (
+       id, "apiKeyId", "apiKeyName", "apiKeyPreview", permission, method, path,
+       "pathParameters", query, "requestBody", "responseBody", "statusCode",
+       "errorCode", "durationMs", "requestedAt", "completedAt"
+     ) VALUES (
+       $1, $2, $3, $4, 'LIST', 'GET', '/api/public/v1/reservations',
+       '{}'::jsonb, '{}'::jsonb, NULL, '{"items":[],"nextCursor":null}'::jsonb,
+       200, NULL, 1, $5, $6
+     )`,
+    [
+      input.id,
+      input.apiKeyId,
+      input.apiKeyName,
+      input.apiKeyPreview,
+      input.requestedAt,
+      new Date(input.requestedAt.getTime() + 1),
+    ],
+  );
+}
+
+async function insertPaginationLogs(
+  client: Client,
+  key: IssuedKey,
+  now: Date,
+) {
+  await client.query(
+    `INSERT INTO reservation_api_request_logs (
+       id, "apiKeyId", "apiKeyName", "apiKeyPreview", permission, method, path,
+       "pathParameters", query, "requestBody", "responseBody", "statusCode",
+       "errorCode", "durationMs", "requestedAt", "completedAt"
+     )
+     SELECT
+       'pagination-log-' || lpad(series::text, 3, '0'),
+       $1,
+       'Pagination Fixture',
+       'zgcc_rsv_PKEY••••LOGS',
+       'CREATE'::"ReservationApiPermission",
+       CASE WHEN MOD(series, 2) = 0 THEN 'GET' ELSE 'POST' END,
+       '/api/public/v1/reservations',
+       '{}'::jsonb,
+       '{}'::jsonb,
+       NULL,
+       CASE
+         WHEN MOD(series, 3) = 0 THEN '{"error":"RESERVATION_API_FORBIDDEN"}'::jsonb
+         ELSE '{"reservation":{"id":"pagination"}}'::jsonb
+       END,
+       CASE WHEN MOD(series, 3) = 0 THEN 403 ELSE 201 END,
+       CASE WHEN MOD(series, 3) = 0 THEN 'RESERVATION_API_FORBIDDEN' ELSE NULL END,
+       10,
+       $2::timestamptz - series * INTERVAL '1 second',
+       $2::timestamptz - series * INTERVAL '1 second' + INTERVAL '10 milliseconds'
+     FROM generate_series(0, 51) AS series`,
+    [key.apiKey.id, now],
+  );
+}
+
+async function installFailingRequestLogTrigger(client: Client) {
+  await client.query(`
+    CREATE FUNCTION fail_reservation_api_request_log_insert()
+    RETURNS trigger
+    LANGUAGE plpgsql
+    AS $request_log_failure$
+    BEGIN
+      RAISE EXCEPTION 'synthetic request log persistence failure';
+    END;
+    $request_log_failure$;
+
+    CREATE TRIGGER fail_reservation_api_request_log_insert
+    BEFORE INSERT ON reservation_api_request_logs
+    FOR EACH ROW EXECUTE FUNCTION fail_reservation_api_request_log_insert();
+  `);
+}
+
+async function installFailingReservationUpdateTrigger(client: Client) {
+  await client.query(`
+    CREATE FUNCTION fail_request_log_reservation_update()
+    RETURNS trigger
+    LANGUAGE plpgsql
+    AS $reservation_failure$
+    BEGIN
+      IF OLD.id = 'request-log-server-error' THEN
+        RAISE EXCEPTION 'synthetic reservation update failure';
+      END IF;
+      RETURN NEW;
+    END;
+    $reservation_failure$;
+
+    CREATE TRIGGER fail_request_log_reservation_update
+    BEFORE UPDATE ON reservation_bookings
+    FOR EACH ROW EXECUTE FUNCTION fail_request_log_reservation_update();
+  `);
+}
+
+async function removeFailingReservationUpdateTrigger(client: Client) {
+  await client.query(`
+    DROP TRIGGER IF EXISTS fail_request_log_reservation_update
+      ON reservation_bookings;
+    DROP FUNCTION IF EXISTS fail_request_log_reservation_update();
+  `);
+}
+
+async function removeFailingRequestLogTrigger(client: Client) {
+  await client.query(`
+    DROP TRIGGER IF EXISTS fail_reservation_api_request_log_insert
+      ON reservation_api_request_logs;
+    DROP FUNCTION IF EXISTS fail_reservation_api_request_log_insert();
+  `);
+}
+
 function configureEnvironment(databaseUrl: string) {
   const names = ["NODE_ENV", "DATABASE_URL", "DATABASE_URL_UNPOOLED", "BETTER_AUTH_SECRET", "BETTER_AUTH_URL"] as const;
   const previous = new Map(names.map((name) => [name, process.env[name]]));
@@ -307,15 +972,36 @@ function configureEnvironment(databaseUrl: string) {
   };
 }
 
-async function invoke(handler: Handler, method: string, path: string, options: { cookie?: string; bearer?: string; body?: unknown } = {}) {
+type InvokeOptions = {
+  cookie?: string;
+  bearer?: string;
+  authorization?: string;
+  body?: unknown;
+  rawBody?: string;
+};
+
+async function invoke(
+  handler: Handler,
+  method: string,
+  path: string,
+  options: InvokeOptions = {},
+) {
+  assert.equal(
+    options.body === undefined || options.rawBody === undefined,
+    true,
+    "body and rawBody cannot be used together",
+  );
   const headers = new Headers();
   if (options.cookie) headers.set("cookie", options.cookie);
-  if (options.bearer) headers.set("authorization", `Bearer ${options.bearer}`);
+  if (options.authorization) headers.set("authorization", options.authorization);
+  else if (options.bearer) headers.set("authorization", `Bearer ${options.bearer}`);
   if (options.body !== undefined) headers.set("content-type", "application/json");
   return handler(new Request(`http://localhost:3000${path}`, {
     method,
     headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    body: options.rawBody ?? (
+      options.body === undefined ? undefined : JSON.stringify(options.body)
+    ),
   }));
 }
 

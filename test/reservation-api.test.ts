@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { dictionaries, locales } from "../app/i18n/dictionaries";
+import type { PrismaClient } from "../lib/generated/prisma/client";
 import {
   RESERVATION_API_PERMISSIONS,
   decodeReservationCursor,
@@ -13,6 +14,16 @@ import {
   parseReservationPatch,
   parseReservationWrite,
 } from "../lib/reservation-api";
+import {
+  RESERVATION_API_REQUEST_LOG_PAGE_SIZE,
+  RESERVATION_API_REQUEST_LOG_RETENTION_DAYS,
+  decodeReservationApiRequestLogCursor,
+  encodeReservationApiRequestLogCursor,
+  getReservationApiRequestLog,
+  listReservationApiRequestLogs,
+  parseReservationApiRequestLogListQuery,
+  reservationApiRequestLogCutoff,
+} from "../lib/server/reservation-api-request-logs";
 import { getReservationApiPeriod } from "../lib/server/reservation-api-usage";
 
 test("reservation API permissions and strict issue payload are exact", () => {
@@ -102,6 +113,132 @@ test("reservation writes, patches, list query, and cursor are strict", () => {
   assert.equal(parseReservationList(new URL("https://example.test/api?limit=101")), null);
   assert.equal(parseReservationList(new URL("https://example.test/api?limit=1&limit=2")), null);
   assert.equal(parseReservationList(new URL("https://example.test/api?unknown=1")), null);
+});
+
+test("reservation API log query, cursor, and retention boundary are strict", () => {
+  const cursorInput = {
+    requestedAt: new Date("2026-08-30T07:42:18.240Z"),
+    id: "request-log_1",
+  };
+  const cursor = encodeReservationApiRequestLogCursor(cursorInput);
+  assert.deepEqual(decodeReservationApiRequestLogCursor(cursor), cursorInput);
+  for (const invalid of [
+    `${cursor}=`,
+    Buffer.from(JSON.stringify({ v: 2, requestedAt: cursorInput.requestedAt.toISOString(), id: cursorInput.id })).toString("base64url"),
+    Buffer.from(JSON.stringify({ v: 1, requestedAt: "2026-08-30", id: cursorInput.id })).toString("base64url"),
+    Buffer.from(JSON.stringify({ v: 1, requestedAt: cursorInput.requestedAt.toISOString(), id: "bad/id" })).toString("base64url"),
+  ]) assert.equal(decodeReservationApiRequestLogCursor(invalid), null, invalid);
+
+  assert.deepEqual(parseReservationApiRequestLogListQuery({
+    query: "  Zoom Virtual Agent  ",
+    method: "POST",
+    result: "client-error",
+    cursor,
+  }), {
+    ok: true,
+    value: {
+      query: "Zoom Virtual Agent",
+      method: "POST",
+      result: "client-error",
+      cursor: cursorInput,
+    },
+  });
+  assert.deepEqual(parseReservationApiRequestLogListQuery({
+    query: "   ",
+    method: "",
+    result: "",
+  }), { ok: true, value: {} });
+  for (const invalid of [
+    { unknown: "1" },
+    { query: ["first", "second"] },
+    { query: "x".repeat(101) },
+    { method: "PUT" },
+    { result: "redirect" },
+    { cursor: "" },
+    { cursor: `${cursor}=` },
+  ]) assert.deepEqual(parseReservationApiRequestLogListQuery(invalid), { ok: false });
+
+  const now = new Date("2026-08-30T12:00:00.000Z");
+  assert.equal(RESERVATION_API_REQUEST_LOG_RETENTION_DAYS, 30);
+  assert.equal(RESERVATION_API_REQUEST_LOG_PAGE_SIZE, 50);
+  assert.equal(
+    reservationApiRequestLogCutoff(now).toISOString(),
+    "2026-07-31T12:00:00.000Z",
+  );
+});
+
+test("reservation API log DTOs expose only allowlisted operational fields", async () => {
+  const requestedAt = new Date("2026-08-30T07:42:18.240Z");
+  const completedAt = new Date("2026-08-30T07:42:18.324Z");
+  const databaseRow = {
+    id: "request-log-safe",
+    apiKeyName: "Zoom Virtual Agent",
+    apiKeyPreview: "zgcc_rsv_7H3K••••9Q2M",
+    permission: "CREATE" as const,
+    method: "POST",
+    path: "/api/public/v1/reservations",
+    pathParameters: {},
+    query: {},
+    requestBody: {
+      serviceKey: "bulky-waste",
+      reservationDate: "2026-09-08",
+      startMinute: 600,
+    },
+    responseBody: { reservation: { id: "booking-1" } },
+    statusCode: 201,
+    errorCode: null,
+    durationMs: 84,
+    requestedAt,
+    completedAt,
+    authorization: "Bearer raw-key-must-not-escape",
+    secretHash: "secret-hash-must-not-escape",
+    cookie: "session-cookie-must-not-escape",
+    headers: { "x-internal": "header-must-not-escape" },
+    stack: "stack-must-not-escape",
+  };
+  const prisma = {
+    reservationApiRequestLog: {
+      async findMany() {
+        return [databaseRow];
+      },
+      async findFirst() {
+        return databaseRow;
+      },
+    },
+  } as unknown as PrismaClient;
+
+  const listed = await listReservationApiRequestLogs(
+    prisma,
+    {},
+    new Date("2026-08-30T08:00:00.000Z"),
+  );
+  const detail = await getReservationApiRequestLog(
+    prisma,
+    databaseRow.id,
+    new Date("2026-08-30T08:00:00.000Z"),
+  );
+  assert.deepEqual(Object.keys(listed.logs[0]!).sort(), [
+    "apiKeyName", "apiKeyPreview", "durationMs", "errorCode", "id", "method",
+    "path", "permission", "requestedAt", "statusCode",
+  ]);
+  assert.deepEqual(Object.keys(detail!).sort(), [
+    "apiKeyName", "apiKeyPreview", "completedAt", "durationMs", "errorCode", "id",
+    "method", "path", "pathParameters", "permission", "query", "requestBody",
+    "requestedAt", "responseBody", "statusCode",
+  ]);
+  const serialized = JSON.stringify({ listed, detail });
+  for (const forbidden of [
+    "raw-key-must-not-escape",
+    "secret-hash-must-not-escape",
+    "session-cookie-must-not-escape",
+    "header-must-not-escape",
+    "stack-must-not-escape",
+    "authorization",
+    "secretHash",
+    "headers",
+    "cookie",
+    "stack",
+  ]) assert.equal(serialized.includes(forbidden), false, forbidden);
 });
 
 test("all locales contain complete reservation API key copy", () => {

@@ -185,9 +185,28 @@ export async function authenticateReservationApiRequest(
   input: { authorization: string | null; now?: Date },
 ): Promise<
   | { status: "UNAUTHORIZED" }
-  | { status: "GLOBAL_LIMIT_EXCEEDED"; retryAfterSeconds: number }
-  | { status: "KEY_LIMIT_EXCEEDED"; retryAfterSeconds: number }
-  | { status: "AUTHENTICATED"; keyId: string; permissions: Set<ReservationApiPermission> }
+  | {
+      status: "GLOBAL_LIMIT_EXCEEDED" | "KEY_LIMIT_EXCEEDED";
+      retryAfterSeconds: number;
+      keyId: string;
+      keyName: string;
+      keyPreview: string;
+      permissions: Set<ReservationApiPermission>;
+    }
+  | {
+      status: "AUTHENTICATED";
+      keyId: string;
+      keyName: string;
+      keyPreview: string;
+      permissions: Set<ReservationApiPermission>;
+    }
+  | {
+      status: "INTERNAL_ERROR";
+      keyId: string;
+      keyName: string;
+      keyPreview: string;
+      permissions: Set<ReservationApiPermission>;
+    }
 > {
   const rawKey = parseBearerHeader(input.authorization);
   if (!rawKey) return { status: "UNAUTHORIZED" };
@@ -195,42 +214,70 @@ export async function authenticateReservationApiRequest(
   if (!parsed) return { status: "UNAUTHORIZED" };
   const now = input.now ?? new Date();
 
-  return prisma.$transaction(async (transaction) => {
-    const [locked] = await transaction.$queryRaw<Array<{
-      id: string;
-      secretHash: string;
-      monthlyLimit: bigint | null;
-      revokedAt: Date | null;
-    }>>(Prisma.sql`
-      SELECT "id", "secretHash", "monthlyLimit", "revokedAt"
-      FROM "reservation_api_keys"
-      WHERE "publicId" = ${parsed.publicId}
-      FOR UPDATE
-    `);
-    if (!locked || locked.revokedAt !== null || !verifyReservationApiKey(rawKey, locked.secretHash)) {
-      return { status: "UNAUTHORIZED" as const };
-    }
-    const permissions = await transaction.reservationApiKeyPermission.findMany({
-      where: { apiKeyId: locked.id },
-      select: { permission: true },
-    });
-    const quota = await consumeReservationApiRequest(transaction, {
-      keyId: locked.id,
-      keyMonthlyLimit: locked.monthlyLimit,
-      now,
-    });
-    if (quota.status !== "ALLOWED") {
-      return {
-        status: quota.status,
-        retryAfterSeconds: quota.retryAfterSeconds,
+  type AuthenticatedContext = {
+    keyId: string;
+    keyName: string;
+    keyPreview: string;
+    permissions: Set<ReservationApiPermission>;
+  };
+  const authenticatedContext: { value: AuthenticatedContext | null } = {
+    value: null,
+  };
+  try {
+    return await prisma.$transaction(async (transaction) => {
+      const [locked] = await transaction.$queryRaw<Array<{
+        id: string;
+        name: string;
+        publicId: string;
+        secretHash: string;
+        monthlyLimit: bigint | null;
+        revokedAt: Date | null;
+      }>>(Prisma.sql`
+        SELECT "id", "name", "publicId", "secretHash", "monthlyLimit", "revokedAt"
+        FROM "reservation_api_keys"
+        WHERE "publicId" = ${parsed.publicId}
+        FOR UPDATE
+      `);
+      if (!locked || locked.revokedAt !== null || !verifyReservationApiKey(rawKey, locked.secretHash)) {
+        return { status: "UNAUTHORIZED" as const };
+      }
+      const keyContext: AuthenticatedContext = {
+        keyId: locked.id,
+        keyName: locked.name,
+        keyPreview: previewReservationApiKey(locked.publicId),
+        permissions: new Set<ReservationApiPermission>(),
       };
-    }
-    return {
-      status: "AUTHENTICATED" as const,
-      keyId: locked.id,
-      permissions: new Set(permissions.map(({ permission }) => permission as ReservationApiPermission)),
-    };
-  });
+      authenticatedContext.value = keyContext;
+      const permissions = await transaction.reservationApiKeyPermission.findMany({
+        where: { apiKeyId: locked.id },
+        select: { permission: true },
+      });
+      keyContext.permissions = new Set(
+        permissions.map(({ permission }) => permission as ReservationApiPermission),
+      );
+      const quota = await consumeReservationApiRequest(transaction, {
+        keyId: locked.id,
+        keyMonthlyLimit: locked.monthlyLimit,
+        now,
+      });
+      if (quota.status !== "ALLOWED") {
+        return {
+          status: quota.status,
+          retryAfterSeconds: quota.retryAfterSeconds,
+          ...keyContext,
+        };
+      }
+      return {
+        status: "AUTHENTICATED" as const,
+        ...keyContext,
+      };
+    });
+  } catch (error) {
+    const keyContext = authenticatedContext.value;
+    if (!keyContext) throw error;
+    console.error("Failed to evaluate authenticated reservation API access.");
+    return { status: "INTERNAL_ERROR", ...keyContext };
+  }
 }
 
 function parseBearerHeader(value: string | null): string | null {

@@ -89,6 +89,11 @@ const EXACT_POST_REVIEWED_CHAIN = [
     sha256: "fe3246f27e40d804363e42180085b33f5f36665889cedb42b2062634c3eb9753",
     classification: "expand-compatible",
   },
+  {
+    name: "20260831010000_add_reservation_api_request_logs",
+    sha256: "8f92d235319a63c922924e28bea781c6c91fde06ab0bfa1eab1f077516929e9c",
+    classification: "expand-compatible",
+  },
 ] as const satisfies readonly ExactBatchMigration[];
 
 export type ReviewedMigrationBatchPlan = {
