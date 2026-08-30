@@ -9,7 +9,7 @@
     "dev": "next dev",
     "test": "node --import tsx --test test/*.test.ts scripts/deploy/test/*.test.ts",
     "test:deploy": "node --import tsx --test scripts/deploy/test/*.test.ts",
-    "test:admin-access:db": "node --import tsx --test scripts/deploy/integration-test/admin-access-database.test.ts",
+    "test:admin-access:db": "node --import tsx --test scripts/deploy/integration-test/*.test.ts",
     "eval:plan-skills": "node scripts/eval-plan-skills.mjs",
     "plans:cleanup": "node scripts/cleanup-plan-files.mjs",
     "audit:runtime": "npm audit --omit=dev",
@@ -46,6 +46,8 @@
     "unicode-case-folding": "1.1.1"
   },
   "devDependencies": {
+    "@aws-sdk/client-ssm": "3.1111.0",
+    "@aws-sdk/credential-providers": "3.1111.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/pg": "^8.20.0",
@@ -56,5 +58,10 @@
     "tailwindcss": "^4",
     "tsx": "^4.22.4",
     "typescript": "^5"
+  },
+  "overrides": {
+    "@prisma/config": {
+      "deepmerge-ts": "8.0.2"
+    }
   }
 }

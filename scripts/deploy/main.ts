@@ -1,34 +1,21 @@
-import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
+import {
+  existsSync,
+  lstatSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { validateAdminInput } from "./lib/admin";
 import {
-  assertAdminAccessSessionLockHeld,
-  withAdminAccessSessionLock,
-} from "../../lib/server/admin-access/mutation-lock";
-
-import {
-  assertLegacyRollbackAdminPlanSafe,
-  freezeLegacyRollbackAdminMutations,
-  inspectAdmin,
-  inspectAdminAccessMutationFreeze,
-  inspectLegacyRollbackAdmins,
-  prepareLegacyRollbackAdmins,
-  provisionAdmin,
-  renderAdminChanges,
-  renderLegacyRollbackAdminPlan,
-  unfreezeLegacyRollbackAdminMutations,
-  validateAdminInput,
-} from "./lib/admin";
+  loadDeploymentContextFromStdin,
+  MissingDeploymentParametersError,
+  type DeploymentSecrets,
+  type StoredDeploymentConfig,
+} from "./lib/aws-config";
 import { inspectDatabase } from "./lib/database";
-import {
-  isAffirmative,
-  requireAffirmative,
-  requireExact,
-  type Prompter,
-  TtyPrompter,
-} from "./lib/input";
 import {
   applyMigrationPlan,
   createMigrationPlan,
@@ -41,6 +28,7 @@ import {
   verifyMaintenanceSettingsDatabase,
   type MaintenanceEnvironment,
 } from "./lib/maintenance";
+import { loadNeonConnectionContext } from "./lib/neon-api";
 import {
   assertCommandSucceeded,
   combinedOutput,
@@ -51,25 +39,15 @@ import {
 } from "./lib/process";
 import {
   capturePublicSiteBaseline,
-  resolvePublicSiteBaselineAt,
   runSmokeChecks,
-  verifyIdleRecovery,
   type SmokeCredentials,
 } from "./lib/smoke";
 import {
-  assertDeploymentOutputMatchesCandidate,
   assertMinimumVersion,
-  assertNeonEndpointMatches,
   parseDeploymentOutput,
-  parseNeonProjectApi,
   parseVercelProjectApi,
   parseVersion,
-  readNeonEndpointState,
-  readVercelLink,
-  redactDatabaseHost,
-  stripAnsi,
   validateCanonicalUrl,
-  validateDatabaseUrls,
   type DatabaseTarget,
   type VercelLink,
 } from "./lib/validation";
@@ -77,9 +55,27 @@ import {
 const SCRIPT_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(SCRIPT_DIRECTORY, "../..");
 const VERCEL_MINIMUM = [54, 17, 2] as const;
-const NEON_MINIMUM = [2, 43, 0] as const;
-const NEON_ENDPOINT_STATE_MAX_ATTEMPTS = 31;
-const NEON_ENDPOINT_STATE_POLL_INTERVAL_MS = 10_000;
+const AWS_CREDENTIAL_ENVIRONMENT_NAMES = [
+  "AWS_ACCESS_KEY_ID",
+  "AWS_SECRET_ACCESS_KEY",
+  "AWS_SESSION_TOKEN",
+  "AWS_SECURITY_TOKEN",
+  "AWS_WEB_IDENTITY_TOKEN_FILE",
+  "AWS_ROLE_ARN",
+  "AWS_ROLE_SESSION_NAME",
+  "AWS_PROFILE",
+  "AWS_DEFAULT_PROFILE",
+  "AWS_SHARED_CREDENTIALS_FILE",
+  "AWS_CONFIG_FILE",
+  "AWS_CONTAINER_AUTHORIZATION_TOKEN",
+  "AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE",
+  "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+  "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
+  "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
+  "ACTIONS_ID_TOKEN_REQUEST_URL",
+  "ACTIONS_RUNTIME_TOKEN",
+  "GITHUB_TOKEN",
+] as const;
 const PRODUCTION_ENV_ALLOWLIST = new Set([
   "DATABASE_URL",
   "BETTER_AUTH_SECRET",
@@ -88,832 +84,1082 @@ const PRODUCTION_ENV_ALLOWLIST = new Set([
   "BETTER_AUTH_TRUST_PROXY_HEADERS",
   "APP_CANONICAL_ORIGIN",
 ]);
+const VERCEL_ENVIRONMENT_PAGE_LIMIT = 100;
+const VERCEL_ENVIRONMENT_MAX_PAGES = 32;
+const SYNTHETIC_BUILD_DATABASE_URL =
+  "postgresql://deploy_build:deploy_build@127.0.0.1:5432/deploy_build?sslmode=disable";
 
 class CliUnavailableError extends Error {}
 
-type VercelDeployment = {
-  id: string;
-  url: string;
-  projectId: string;
-  readyState: "READY";
-  target: "production";
-  commitSha: string;
-  readySubstate: "STAGED";
-  regions: ["sin1"];
-};
+class MigrationApprovalRequiredError extends Error {
+  readonly exitCode = 75;
 
-export class PromotionGuard {
-  #migrationVerified = false;
-  #smokeVerified = false;
-
-  markMigrationVerified(): void {
-    this.#migrationVerified = true;
-  }
-
-  markSmokeVerified(): void {
-    this.#smokeVerified = true;
-  }
-
-  promote(
-    runner: CommandRunner,
-    candidateUrl: URL,
-    link: VercelLink,
-  ): void {
-    if (!this.#migrationVerified || !this.#smokeVerified) {
-      throw new Error(
-        "Promotion is blocked until migration revalidation and staged smoke both pass.",
-      );
-    }
-    runChecked(
-      runner,
-      "vercel",
-      [
-        "promote",
-        candidateUrl.origin,
-        "--yes",
-        "--scope",
-        link.orgId,
-      ],
-      "Vercel promotion",
-    );
+  constructor() {
+    super("Pending migrations require Production approval.");
+    this.name = "MigrationApprovalRequiredError";
   }
 }
-
-type LegacyRollbackPreparationDependencies = {
-  inspect: typeof inspectLegacyRollbackAdmins;
-  prepare: typeof prepareLegacyRollbackAdmins;
-  freeze: typeof freezeLegacyRollbackAdminMutations;
-  inspectFreeze: typeof inspectAdminAccessMutationFreeze;
-  unfreeze: typeof unfreezeLegacyRollbackAdminMutations;
-  withLock: typeof withAdminAccessSessionLock;
-  assertLock: typeof assertAdminAccessSessionLockHeld;
-  write: (message: string) => void;
-};
-
-const legacyRollbackPreparationDependencies: LegacyRollbackPreparationDependencies = {
-  inspect: inspectLegacyRollbackAdmins,
-  prepare: prepareLegacyRollbackAdmins,
-  freeze: freezeLegacyRollbackAdminMutations,
-  inspectFreeze: inspectAdminAccessMutationFreeze,
-  unfreeze: unfreezeLegacyRollbackAdminMutations,
-  withLock: withAdminAccessSessionLock,
-  assertLock: assertAdminAccessSessionLockHeld,
-  write: (message) => console.error(message),
-};
-
-export async function prepareLegacyRollbackForDeployment<T>(
-  pooledUrl: string,
-  directUrl: string,
-  previousProductionId: string,
-  prompter: Prompter,
-  operation: () => Promise<T>,
-  dependencies: LegacyRollbackPreparationDependencies =
-    legacyRollbackPreparationDependencies,
-): Promise<T> {
-  const plan = await dependencies.inspect(pooledUrl);
-  dependencies.write(renderLegacyRollbackAdminPlan(plan));
-  const approval = `prepare legacy rollback ${previousProductionId}`;
-  await requireExact(
-    prompter,
-    `旧リリースではロール割り当てとDENYが強制されません。上記の「custom DENYを持たないFULL_ACCESS」以外の管理者を一般ユーザーへ変更し、セッションを失効した後にrollbackする場合は '${approval}' と入力してください。`,
-    approval,
-    "Legacy rollback administrator preparation was refused; no users were changed and no rollback command ran.",
-  );
-  return dependencies.withLock(directUrl, async (lock) => {
-    await dependencies.assertLock(lock);
-    let freezeId: string;
-    try {
-      freezeId = await dependencies.freeze(
-        pooledUrl,
-        lock,
-        `legacy rollback ${previousProductionId}`,
-      );
-    } catch (error) {
-      // The transaction may have committed even when its response was lost.
-      // Re-read the durable fence so the exact freeze remains recoverable.
-      const state = await dependencies.inspectFreeze(pooledUrl);
-      if (state.frozen && state.freezeId) {
-        throw new AdminAccessFreezeRecoveryRequiredError(state.freezeId, error);
-      }
-      throw error;
-    }
-    try {
-      const result = await dependencies.prepare(pooledUrl, plan, lock, freezeId);
-      dependencies.write(
-        `Legacy rollback administrator preparation completed: demoted=${result.demotedCount}, sessions revoked=${result.revokedSessionCount}.`,
-      );
-      await dependencies.assertLock(lock);
-      const value = await operation();
-      // The current binary honors the durable freeze. The legacy binary does
-      // not, so this audit is the explicit hand-off boundary.
-      const postSwitch = await dependencies.inspect(pooledUrl);
-      assertLegacyRollbackAdminPlanSafe(postSwitch);
-      await dependencies.unfreeze(pooledUrl, lock, freezeId);
-      dependencies.write("Legacy rollback administrator post-switch audit passed.");
-      return value;
-    } catch (error) {
-      throw new AdminAccessFreezeRecoveryRequiredError(freezeId, error);
-    }
-  });
-}
-
-export class AdminAccessFreezeRecoveryRequiredError extends Error {
-  constructor(readonly freezeId: string, cause: unknown) {
-    super(
-      `Administrative authority mutations remain frozen with freezeId '${freezeId}'.`,
-      { cause },
-    );
-    this.name = "AdminAccessFreezeRecoveryRequiredError";
-  }
-}
-
-type FreezeRecoveryDependencies = Pick<
-  LegacyRollbackPreparationDependencies,
-  "inspectFreeze" | "unfreeze" | "withLock" | "write"
->;
-
-export async function recoverAdminAccessMutationFreezeForDeployment(
-  pooledUrl: string,
-  directUrl: string,
-  readCanonicalDeploymentId: () => string | undefined,
-  prompter: Prompter,
-  dependencies: FreezeRecoveryDependencies = legacyRollbackPreparationDependencies,
-): Promise<boolean> {
-  const state = await dependencies.inspectFreeze(pooledUrl);
-  if (!state.frozen || !state.freezeId) return false;
-  const canonicalId = readCanonicalDeploymentId();
-  if (!canonicalId) throw new Error("Canonical Production identity is unavailable; freeze recovery was blocked.");
-  const approval = `recover admin access freeze ${state.freezeId} ${canonicalId}`;
-  await requireExact(
-    prompter,
-    `Administrative authority mutations remain frozen. After reviewing canonical Production '${canonicalId}', type '${approval}' to recover.`,
-    approval,
-    "Administrative authority mutation freeze recovery was refused.",
-  );
-  return dependencies.withLock(directUrl, async (lock) => {
-    const rechecked = await dependencies.inspectFreeze(pooledUrl);
-    if (!rechecked.frozen || rechecked.freezeId !== state.freezeId) {
-      throw new Error("The administrative mutation freeze changed after review.");
-    }
-    if (readCanonicalDeploymentId() !== canonicalId) {
-      throw new Error("Canonical Production identity changed; freeze recovery was blocked.");
-    }
-    await dependencies.unfreeze(pooledUrl, lock, state.freezeId!);
-    dependencies.write(`Administrative authority mutation freeze '${state.freezeId}' was recovered.`);
-    return true;
-  });
-}
-
-type WorkflowState = {
-  candidateUrl?: URL;
-  candidateId?: string;
-  canonicalUrl?: URL;
-  vercelLink?: VercelLink;
-  previousProductionId?: string;
-  databasePooledUrl?: string;
-  databaseDirectUrl?: string;
-  smokeCredentials?: SmokeCredentials;
-  rollbackPublicExpectation?: ReturnType<
-    typeof createMaintenancePublicExpectation
-  >;
-  promoted: boolean;
-  promotionAttempted: boolean;
-  productionAcceptanceComplete: boolean;
-  migrationApplied: boolean;
-  migrationAttempted: boolean;
-};
 
 export type ProductionEnvironmentAudit = {
   names: Set<string>;
   types: Map<string, string>;
 };
 
+type DeploymentPhase = "validate" | "migrate" | "release" | "smoke";
+
+type DeploymentGitSnapshot = {
+  branch: string;
+  commitSha: string;
+  githubRunId?: string;
+};
+
+export type VerifiedDeploymentTarget = {
+  link: VercelLink;
+  canonicalUrl: URL;
+  projectName: string;
+  database: DatabaseTarget;
+  adminCredentials: SmokeCredentials;
+  targetFingerprint: string;
+  vercelEnvironment: NodeJS.ProcessEnv;
+};
+
+type DirectDeploymentState = {
+  target?: VerifiedDeploymentTarget;
+  previousProductionId?: string;
+  attemptedDeploymentId?: string;
+  migrationAttempted: boolean;
+  productionDeploymentAttempted: boolean;
+};
+
+export type ProductionDeploymentEvidence = {
+  id: string;
+  url: string;
+  projectId: string;
+  readyState: "READY";
+  target: "production";
+  commitSha: string;
+  githubRunId?: string;
+  regions: ["sin1"];
+};
+
 export async function runDeploymentWorkflow(
   runner: CommandRunner,
-  prompter: Prompter,
   secrets: SecretRegistry,
   projectRoot = PROJECT_ROOT,
 ): Promise<void> {
-  const state: WorkflowState = {
-    promoted: false,
-    promotionAttempted: false,
-    productionAcceptanceComplete: false,
-    migrationApplied: false,
+  const phase = readDeploymentPhase(process.env.DEPLOY_PHASE);
+  const git = readDeploymentGitSnapshot(process.env);
+  assertPhaseExecutionContext(phase, git, process.env);
+  const state: DirectDeploymentState = {
     migrationAttempted: false,
+    productionDeploymentAttempted: false,
   };
 
   try {
-    assertInteractiveTerminal();
-    console.log("[1/7] Local and CLI preflight");
-    const git = inspectGit(runner, projectRoot);
+    const expectedTargetFingerprint =
+      phase === "validate" &&
+      process.env.DEPLOY_EXPECTED_TARGET_FINGERPRINT === undefined
+        ? undefined
+        : readExpectedTargetFingerprint(
+            process.env.DEPLOY_EXPECTED_TARGET_FINGERPRINT,
+          );
+    if (phase === "smoke") {
+      state.attemptedDeploymentId = readExpectedDeploymentId(
+        process.env.DEPLOY_EXPECTED_DEPLOYMENT_ID,
+      );
+      state.previousProductionId = readExpectedPreviousDeploymentId(
+        process.env.DEPLOY_EXPECTED_PREVIOUS_DEPLOYMENT_ID,
+      );
+    }
+    console.log("[1/5] Deployment target validation");
     validateLocalDeploymentConfig(projectRoot);
-    ensureCliTools(runner);
-    const vercelUser = await authenticateVercel(runner, prompter);
-    const neonUser = await authenticateNeon(runner, prompter);
-    const link = await ensureVercelLink(runner, prompter, projectRoot);
-    state.vercelLink = link;
-    assertAmbientVercelTarget(link);
-    const project = inspectVercelProject(runner, link);
-
-    console.log(`Git branch: ${git.branch}`);
+    const target = await loadVerifiedDeploymentTarget(
+      runner,
+      secrets,
+      process.env.DEPLOY_AWS_PROFILE,
+      expectedTargetFingerprint,
+    );
+    state.target = target;
     console.log(`Git commit: ${git.commitSha}`);
-    console.log(`Vercel user: ${vercelUser}`);
-    console.log(`Vercel project: ${project.name} (${project.id})`);
-    console.log(`Vercel scope: ${project.accountId}`);
-    console.log(`Neon user: ${neonUser}`);
-    await requireExact(
-      prompter,
-      "Vercel APIでHobby planを確認しました。このscopeが個人・非商用用途で、本番データを扱わず、日本国内のデータ所在要件がない場合に限り 'hobby' と入力してください。",
-      "hobby",
-      "Personal Hobby scope confirmation was refused.",
-    );
-
-    const canonicalUrl = validateCanonicalUrl(
-      await prompter.ask("Canonical Production URL (https://...): "),
-    );
-    state.canonicalUrl = canonicalUrl;
-    assertCanonicalDomain(runner, link, canonicalUrl);
-
-    console.log("[2/7] Neon target and secret input");
-    const neonProjectId = validateNeonProjectId(
-      await prompter.ask("Neon project ID: "),
-    );
-    assertAmbientNeonTarget(neonProjectId);
-    const neonProjectName = validateIdentifier(
-      await prompter.ask("Neon project name: "),
-      "Neon project name",
-    );
-    const neonProject = inspectNeonProject(
-      runner,
-      neonProjectId,
-      neonProjectName,
-    );
     console.log(
-      `Neon project: ${neonProject.name} (${neonProject.id}), ${neonProject.regionId}`,
+      `Vercel target: ${redactIdentifier(target.link.projectId)} @ ${redactHostname(target.canonicalUrl.hostname)}`,
     );
-    await verifyNeonFreePlan(runner, prompter, neonProject.orgId);
+    console.log(`Neon target: ${redactIdentifier(target.database.endpointId)}`);
 
-    const pooledRaw = await prompter.hidden("DATABASE_URL (pooled): ");
-    secrets.add(pooledRaw);
-    const directRaw = await prompter.hidden(
-      "DATABASE_URL_UNPOOLED (migration only): ",
-    );
-    secrets.add(directRaw);
-    const database = validateDatabaseUrls(pooledRaw, directRaw);
-    state.databasePooledUrl = database.pooledUrl;
-    state.databaseDirectUrl = database.directUrl;
-    const pooledPassword = new URL(database.pooledUrl).password;
-    const directPassword = new URL(database.directUrl).password;
-    secrets.add(
-      database.pooledUrl,
-      database.directUrl,
-      pooledPassword,
-      directPassword,
-      decodeURIComponent(pooledPassword),
-      decodeURIComponent(directPassword),
-    );
-    const endpoints = runChecked(
-      runner,
-      "neon",
-      [
-        "api",
-        `/projects/${neonProject.id}/endpoints`,
-        "--output",
-        "json",
-      ],
-      "Neon endpoints API",
-      { ...process.env, CI: "1" },
-    );
-    assertNeonEndpointMatches(endpoints.stdout, database, neonProject.id);
-
-    const currentEnvironment = listProductionEnvironment(runner, link);
-    assertAllowedProductionEnvironment(currentEnvironment);
-    assertNoLinkedProductionSharedEnvironment(runner, link);
-    console.log("Deployment target review:");
-    console.log(`  Project: ${project.name} (${project.id})`);
-    console.log(`  Domain: ${canonicalUrl.origin}`);
-    console.log(`  Neon: ${neonProject.name} (${neonProject.id})`);
-    console.log(`  Pooled host: ${redactDatabaseHost(database.pooledHost)}`);
-    console.log(`  Direct host: ${redactDatabaseHost(database.directHost)} (not saved)`);
-    console.log(
-      `  Production env: ${[...PRODUCTION_ENV_ALLOWLIST].sort().join(", ")}`,
-    );
-    await requireAffirmative(
-      prompter,
-      "Update only the reviewed Vercel Production environment variables?",
-      "Vercel environment update was cancelled.",
-    );
-
-    const generatedAuthSecret = shouldCreateAuthSecret(currentEnvironment)
-      ? randomBytes(48).toString("base64url")
-      : undefined;
-    secrets.add(generatedAuthSecret);
-    setVercelEnvironment(
-      runner,
-      link,
-      "DATABASE_URL",
-      database.pooledUrl,
-      true,
-    );
-    if (generatedAuthSecret) {
-      setVercelEnvironment(
+    if (phase === "smoke") {
+      console.log("[5/5] Canonical smoke");
+      if (state.attemptedDeploymentId === undefined) {
+        throw new Error("The expected smoke deployment ID is unavailable.");
+      }
+      await runCanonicalSmoke(
         runner,
-        link,
-        "BETTER_AUTH_SECRET",
-        generatedAuthSecret,
-        true,
-        false,
+        target,
+        state.attemptedDeploymentId,
       );
-      console.log("Created BETTER_AUTH_SECRET for the first deployment.");
-    } else {
-      console.log("Preserved the existing BETTER_AUTH_SECRET.");
-    }
-    setVercelEnvironment(
-      runner,
-      link,
-      "BETTER_AUTH_URL",
-      canonicalUrl.origin,
-      false,
-    );
-    setVercelEnvironment(
-      runner,
-      link,
-      "BETTER_AUTH_TRUSTED_ORIGINS",
-      canonicalUrl.origin,
-      false,
-    );
-    setVercelEnvironment(
-      runner,
-      link,
-      "BETTER_AUTH_TRUST_PROXY_HEADERS",
-      "true",
-      false,
-    );
-    setVercelEnvironment(
-      runner,
-      link,
-      "APP_CANONICAL_ORIGIN",
-      canonicalUrl.origin,
-      false,
-    );
-    const resultingEnvironment = listProductionEnvironment(runner, link);
-    assertExactProductionEnvironment(resultingEnvironment);
-    assertNoLinkedProductionSharedEnvironment(runner, link);
-
-    console.log("[3/7] Quality gates");
-    const buildAuthSecret =
-      generatedAuthSecret ?? randomBytes(48).toString("base64url");
-    secrets.add(buildAuthSecret);
-    const buildEnvironment = createBuildEnvironment(
-      process.env,
-      database.pooledUrl,
-      buildAuthSecret,
-      canonicalUrl.origin,
-    );
-    runQualityGates(runner, projectRoot, buildEnvironment);
-    assertGitClean(runner, projectRoot, "after quality gates");
-
-    console.log("[4/7] Migration preflight");
-    const promotionGuard = new PromotionGuard();
-    let migrationPlan = await createMigrationPlan({
-      projectRoot,
-      directUrl: database.directUrl,
-      runner,
-      inspect: inspectDatabase,
-    });
-    console.log(renderMigrationPlan(migrationPlan));
-    if (migrationPlan.state === "pending") {
-      await requireAffirmative(
-        prompter,
-        "Create this migration plan as the only candidate for this deployment?",
-        "Pending migration was not approved; deployment stopped before candidate creation.",
-      );
-    }
-
-    console.log("[5/7] Staged Production candidate");
-    const deploymentGit = inspectGit(runner, projectRoot);
-    if (
-      deploymentGit.branch !== git.branch ||
-      deploymentGit.commitSha !== git.commitSha
-    ) {
-      throw new Error(
-        "Git branch or commit changed after preflight. Candidate creation was blocked.",
-      );
-    }
-    const previousProduction = readCanonicalDeployment(
-      runner,
-      link,
-      canonicalUrl,
-    );
-    state.previousProductionId = previousProduction?.id;
-    console.log(
-      `Canonical deployment before staging: ${previousProduction?.id ?? "none"}`,
-    );
-    if (previousProduction) {
-      state.rollbackPublicExpectation = await capturePublicSiteBaseline(
-        canonicalUrl,
-        globalThis.fetch,
-      );
+      console.log(`Canonical smoke passed: ${state.attemptedDeploymentId}`);
       console.log(
-        `Existing canonical public baseline verified: HTTP ${state.rollbackPublicExpectation.status}${state.rollbackPublicExpectation.retryAfter ? " with Retry-After" : ""}.`,
+        `Deployment completed: ${state.attemptedDeploymentId} (${git.commitSha})`,
       );
-    }
-    assertCandidateProductionEnvironmentReady(runner, link);
-    const deployment = runner.run(
-      "vercel",
-      [
-        "deploy",
-        "--prod",
-        "--skip-domain",
-        "--yes",
-        "--json",
-        "--meta",
-        `deployCommitSha=${git.commitSha}`,
-        "--scope",
-        link.orgId,
-        "--project",
-        link.projectId,
-      ],
-      { env: { ...process.env, NO_COLOR: "1" } },
-    );
-    assertCommandSucceeded(deployment, "Vercel staged Production deployment");
-    const deploymentOutput = parseDeploymentOutput(deployment.stdout);
-    const candidateUrl = deploymentOutput.url;
-    state.candidateUrl = candidateUrl;
-    const candidate = inspectCandidateDeployment(
-      runner,
-      link,
-      project.name,
-      candidateUrl,
-      git.commitSha,
-    );
-    assertDeploymentOutputMatchesCandidate(deploymentOutput, candidate.id);
-    state.candidateId = candidate.id;
-    console.log(`Staged URL: ${candidateUrl.origin}`);
-    console.log(`Deployment ID: ${candidate.id}`);
-    const canonicalAfterStaging = readCanonicalDeployment(
-      runner,
-      link,
-      canonicalUrl,
-    );
-    if (canonicalAfterStaging?.id !== previousProduction?.id) {
-      throw new Error(
-        "Canonical Production changed during --skip-domain staging. Migration and promotion were blocked.",
-      );
+      return;
     }
 
-    const recheckedPlan = await createMigrationPlan({
+    if (phase === "validate") {
+      console.log("[2/5] Quality gates");
+      const buildAuthSecret = randomBytes(48).toString("base64url");
+      secrets.add(buildAuthSecret);
+      const buildEnvironment = createBuildEnvironment(
+        createSecretFreeBuildEnvironment(process.env),
+        buildAuthSecret,
+        target.canonicalUrl.origin,
+      );
+      runQualityGates(runner, projectRoot, buildEnvironment);
+      assertDeploymentGitSnapshotUnchanged(git, process.env);
+    }
+
+    console.log("[3/5] Migration verification");
+    const migrationPlan = await createMigrationPlan({
       projectRoot,
-      directUrl: database.directUrl,
+      directUrl: target.database.directUrl,
       runner,
       inspect: inspectDatabase,
     });
-    assertSameMigrationPlan(migrationPlan, recheckedPlan);
-    migrationPlan = recheckedPlan;
-    if (migrationPlan.state === "pending") {
-      console.log(renderMigrationPlan(migrationPlan));
-      await requireExact(
-        prompter,
-        "上記と同一のmigration計画を実行する場合は 'migrate' と入力してください。",
-        "migrate",
-        "Migration execution was refused. The staged candidate will not be promoted.",
+
+    if (phase === "validate") {
+      if (migrationPlan.state === "pending") {
+        console.log(renderMigrationPlan(migrationPlan));
+      } else {
+        console.log("Migration state: up to date");
+      }
+      writeDeploymentOutputs({
+        "migration-required":
+          migrationPlan.state === "pending" ? "true" : "false",
+        "plan-digest": migrationPlan.planHash,
+        "target-fingerprint": target.targetFingerprint,
+      });
+      console.log("Validation completed without Production mutation.");
+      if (shouldRequireLocalMigrationApproval(migrationPlan.state, process.env)) {
+        throw new MigrationApprovalRequiredError();
+      }
+      return;
+    }
+
+    if (phase === "migrate") {
+      const expectedPlanDigest = readExpectedPlanDigest(
+        process.env.DEPLOY_EXPECTED_PLAN_DIGEST,
       );
-      const migrationGit = inspectGit(runner, projectRoot);
-      if (
-        migrationGit.branch !== git.branch ||
-        migrationGit.commitSha !== git.commitSha
-      ) {
+      if (migrationPlan.planHash !== expectedPlanDigest) {
         throw new Error(
-          "Git branch or commit changed while migration approval was pending. Migration was not executed.",
+          "The migration plan digest changed after validation. No migration was applied.",
         );
       }
+      if (migrationPlan.state !== "pending") {
+        throw new Error(
+          "The approved migration plan is no longer pending. No migration was applied.",
+        );
+      }
+      console.log(renderMigrationPlan(migrationPlan));
+      assertDeploymentGitSnapshotUnchanged(git, process.env);
       const executionPlan = await createMigrationPlan({
         projectRoot,
-        directUrl: database.directUrl,
+        directUrl: target.database.directUrl,
         runner,
         inspect: inspectDatabase,
       });
       assertSameMigrationPlan(migrationPlan, executionPlan);
-      migrationPlan = executionPlan;
       state.migrationAttempted = true;
-      try {
-        applyMigrationPlan(runner, database.directUrl);
-      } catch (migrationError) {
-        try {
-          const failurePlan = await createMigrationPlan({
-            projectRoot,
-            directUrl: database.directUrl,
-            runner,
-            inspect: inspectDatabase,
-          });
-          console.error(
-            secrets.redact(
-              `Post-failure migration audit:\n${renderMigrationPlan(failurePlan)}`,
-            ),
-          );
-        } catch (auditError) {
-          console.error(
-            secrets.redact(
-              `Post-failure migration state could not be proven automatically: ${auditError instanceof Error ? auditError.message : "unknown audit error"}`,
-            ),
-          );
-        }
-        throw migrationError;
+      applyMigrationPlan(runner, target.database.directUrl);
+      await assertMigrationUpToDate(runner, target.database.directUrl, projectRoot);
+      await verifyMaintenanceSettingsDatabase(target.database.directUrl);
+      console.log("Migration applied and verified.");
+      return;
+    }
+
+    if (migrationPlan.state === "up-to-date") {
+      console.log("Migration state: up to date");
+    }
+
+    if (phase === "release" && migrationPlan.state !== "up-to-date") {
+      throw new Error(
+        "Production release is blocked until the reviewed migration plan is up to date.",
+      );
+    }
+    if (phase === "release") {
+      await verifyMaintenanceSettingsDatabase(target.database.directUrl);
+      assertDeploymentGitSnapshotUnchanged(git, process.env);
+
+      console.log("[4/5] Direct Production deployment");
+      const previousProduction = readCanonicalDeployment(
+        runner,
+        target.link,
+        target.canonicalUrl,
+        target.vercelEnvironment,
+      );
+      state.previousProductionId = previousProduction?.id;
+      if (previousProduction) {
+        const publicBaseline = await capturePublicSiteBaseline(
+          target.canonicalUrl,
+          globalThis.fetch,
+        );
+        console.log(
+          `Canonical before deployment: ${previousProduction.id} (HTTP ${publicBaseline.status})`,
+        );
+      } else {
+        console.log("Canonical before deployment: none");
       }
-      state.migrationApplied = true;
-      const afterMigration = await createMigrationPlan({
+
+      state.productionDeploymentAttempted = true;
+      syncProductionEnvironment(runner, target);
+      const productionDeployment = deployDirectlyToProduction(
+        runner,
+        target,
+        git,
         projectRoot,
-        directUrl: database.directUrl,
+        (deploymentId) => {
+          state.attemptedDeploymentId = deploymentId;
+        },
+      );
+      state.attemptedDeploymentId = productionDeployment.id;
+      await waitForCanonicalDeployment(
         runner,
-        inspect: inspectDatabase,
+        target.link,
+        target.canonicalUrl,
+        productionDeployment.id,
+        true,
+        target.vercelEnvironment,
+      );
+      const current = readCanonicalDeployment(
+        runner,
+        target.link,
+        target.canonicalUrl,
+        target.vercelEnvironment,
+      );
+      if (current?.id !== productionDeployment.id) {
+        throw new Error(
+          "The canonical domain does not resolve to the exact direct Production deployment.",
+        );
+      }
+      console.log(`Production deployment verified: ${productionDeployment.id}`);
+      writeDeploymentOutputs({
+        "deployment-id": productionDeployment.id,
+        "previous-deployment-id": previousProduction?.id ?? "none",
       });
-      if (afterMigration.state !== "up-to-date") {
-        throw new Error("Migration deploy completed but verification is not up to date.");
-      }
-      console.log(renderMigrationPlan(afterMigration));
+      return;
     }
-    await verifyMaintenanceSettingsDatabase(database.directUrl);
-    console.log(
-      "Maintenance settings table, constraints, and three version-1 environment rows verified.",
-    );
-    promotionGuard.markMigrationVerified();
-
-    await recoverAdminAccessMutationFreezeForDeployment(
-      database.pooledUrl,
-      database.directUrl,
-      () => readCanonicalDeployment(runner, link, canonicalUrl)?.id,
-      prompter,
-    );
-
-    console.log("[6/7] Administrator and staged smoke tests");
-    const credentials = await prepareAdminCredentials(
-      prompter,
-      secrets,
-      database.pooledUrl,
-    );
-    state.smokeCredentials = credentials;
-    const stagedExpectation = await readMaintenancePublicExpectation(
-      database.directUrl,
-      "PREVIEW",
-    );
-    const stagedSmoke = await runSmokeChecks(
-      candidateUrl,
-      credentials,
-      globalThis.fetch,
-      {
-        canonicalOrigin: canonicalUrl,
-        publicSiteExpectation: stagedExpectation,
-      },
-    );
-    console.log(`Staged smoke passed: ${stagedSmoke.checks.join(", ")}`);
-    console.log(
-      "Waiting at least 5 minutes without polling, then allowing up to 5 minutes for the Neon management API to report idle before one health wake-up check...",
-    );
-    await verifyIdleRecovery(
-      candidateUrl,
-      5 * 60_000,
-      globalThis.fetch,
-      (expected) =>
-        waitForNeonEndpointState(
-          runner,
-          neonProject.id,
-          database,
-          expected,
-        ),
-    );
-    console.log("Staged five-minute idle recovery health check passed.");
-    promotionGuard.markSmokeVerified();
-
-    console.log("[7/7] Promotion");
-    console.log(`Commit: ${git.commitSha}`);
-    console.log(`Candidate: ${candidateUrl.origin}`);
-    console.log(`Canonical: ${canonicalUrl.origin}`);
-    console.log(
-      `Migration: ${state.migrationApplied ? "applied and verified" : "already up to date"}`,
-    );
-    await requireAffirmative(
-      prompter,
-      "Promote this exact staged deployment to canonical Production?",
-      "Promotion was refused. Canonical traffic was not changed.",
-    );
-    const finalCandidate = inspectCandidateDeployment(
-      runner,
-      link,
-      project.name,
-      candidateUrl,
-      git.commitSha,
-    );
-    if (finalCandidate.id !== candidate.id) {
-      throw new Error(
-        "The staged candidate identity changed before promotion. No promotion was attempted.",
-      );
-    }
-    const canonicalBeforePromotion = readCanonicalDeployment(
-      runner,
-      link,
-      canonicalUrl,
-    );
-    if (canonicalBeforePromotion?.id !== previousProduction?.id) {
-      throw new Error(
-        "Canonical Production changed while staged checks were running. No promotion was attempted; review the new baseline first.",
-      );
-    }
-    state.promotionAttempted = true;
-    try {
-      promotionGuard.promote(runner, candidateUrl, link);
-      state.promoted = true;
-    } catch (error) {
-      const resolved = await waitForCanonicalDeployment(
-        runner,
-        link,
-        canonicalUrl,
-        candidate.id,
-        false,
-      );
-      if (!resolved) {
-        throw error;
-      }
-      state.promoted = true;
-      console.warn(
-        "The promote command did not report success, but the canonical deployment API confirms the exact candidate; promotion was not retried.",
-      );
-    }
-    await waitForCanonicalDeployment(
-      runner,
-      link,
-      canonicalUrl,
-      candidate.id,
-      true,
-    );
-    const canonicalExpectation = await readMaintenancePublicExpectation(
-      database.directUrl,
-      "PRODUCTION",
-    );
-    const canonicalSmoke = await runSmokeChecks(
-      canonicalUrl,
-      credentials,
-      globalThis.fetch,
-      {
-        canonicalOrigin: canonicalUrl,
-        publicSiteExpectation: canonicalExpectation,
-      },
-    );
-    console.log(`Canonical smoke passed: ${canonicalSmoke.checks.join(", ")}`);
-    state.productionAcceptanceComplete = true;
-    console.log(
-      `Deployment completed: ${canonicalUrl.origin} (${git.commitSha})`,
-    );
   } catch (error) {
-    if (state.candidateUrl && !state.promoted) {
-      console.error(
-        `Staged candidate remains unpromoted: ${state.candidateUrl.origin}`,
-      );
-    }
     if (state.migrationAttempted) {
       console.error(
         "Database migration execution was attempted and may be partially applied; it is never reverted automatically.",
       );
     }
-    if (state.promoted) {
+    if (state.productionDeploymentAttempted && state.target) {
+      let currentProductionId = "unknown";
+      try {
+        currentProductionId =
+          readCanonicalDeployment(
+            runner,
+            state.target.link,
+            state.target.canonicalUrl,
+            state.target.vercelEnvironment,
+          )?.id ?? "none";
+      } catch {
+        // The primary error remains authoritative when the failure audit cannot run.
+      }
       console.error(
-        "Production was promoted. No automatic Vercel rollback was attempted; rollback requires a separate explicit approval and does not revert database migrations.",
+        "Production environment synchronization or a direct Production deployment was attempted. No automatic rollback was performed, and database migrations were not reverted.",
       );
       console.error(
-        `Rollback path: inspect previous Production deployment '${state.previousProductionId ?? "unknown"}', obtain explicit approval, then run 'vercel rollback <previous-deployment-url-or-id>' and repeat canonical smoke checks.`,
+        `Previous deployment ID: ${state.previousProductionId ?? "none"}`,
       );
-      if (
-        !state.productionAcceptanceComplete &&
-        state.previousProductionId &&
-        state.candidateId &&
-        state.vercelLink &&
-        state.canonicalUrl &&
-        state.databasePooledUrl &&
-        state.databaseDirectUrl &&
-        state.rollbackPublicExpectation
-      ) {
-        const expected = `rollback ${state.previousProductionId}`;
+      console.error(
+        `Attempted deployment ID: ${state.attemptedDeploymentId ?? "unknown"}`,
+      );
+      console.error(`Current canonical deployment ID: ${currentProductionId}`);
+      console.error(
+        "Recovery runbook: docs/deploy/vercel-neon/redeploy.md",
+      );
+    } else if (phase === "smoke" && state.attemptedDeploymentId) {
+      let currentProductionId = "unknown";
+      if (state.target) {
         try {
-          const answer = await prompter.ask(
-            `Canonical acceptance failed. Database migrations will NOT be reverted. To roll Vercel traffic back, type '${expected}'.\n> `,
-          );
-          if (answer.trim() === expected) {
-            const currentProduction = readCanonicalDeployment(
+          currentProductionId =
+            readCanonicalDeployment(
               runner,
-              state.vercelLink,
-              state.canonicalUrl,
-            );
-            if (currentProduction?.id !== state.candidateId) {
-              throw new Error(
-                "Canonical Production is no longer this workflow's candidate; rollback was blocked to avoid overwriting another actor's recovery.",
-              );
-            }
-            const rollbackTarget = readReadyProductionDeployment(
-              runner,
-              state.vercelLink,
-              state.previousProductionId,
-            );
-            if (rollbackTarget.id !== state.previousProductionId) {
-              throw new Error(
-                "The previous Production deployment identity changed; rollback was blocked.",
-              );
-            }
-            await prepareLegacyRollbackForDeployment(
-              state.databasePooledUrl,
-              state.databaseDirectUrl,
-              state.previousProductionId,
-              prompter,
-              async () => {
-                recheckRollbackDeploymentIdentities(
-                  runner,
-                  state.vercelLink!,
-                  state.canonicalUrl!,
-                  state.candidateId!,
-                  state.previousProductionId!,
-                );
-                const rollback = runner.run(
-                  "vercel",
-                  [
-                    "rollback",
-                    state.previousProductionId!,
-                    "--yes",
-                    "--scope",
-                    state.vercelLink!.orgId,
-                  ],
-                  { env: { ...process.env, NO_COLOR: "1" } },
-                );
-                assertCommandSucceeded(rollback, "Explicit Vercel rollback");
-                await waitForCanonicalDeployment(
-                  runner,
-                  state.vercelLink!,
-                  state.canonicalUrl!,
-                  state.previousProductionId!,
-                  true,
-                );
-                if (state.smokeCredentials) {
-                  const rollbackSmoke = await runSmokeChecks(
-                    state.canonicalUrl!,
-                    state.smokeCredentials,
-                    globalThis.fetch,
-                    {
-                      canonicalOrigin: state.canonicalUrl!,
-                      publicSiteExpectation: resolvePublicSiteBaselineAt(
-                        state.rollbackPublicExpectation!,
-                      ),
-                      adminAccessExpectation: "legacy-compatible",
-                      searchIndexingExpectation: "legacy-compatible",
-                    },
-                  );
-                  console.error(
-                    `Rolled-back canonical smoke passed: ${rollbackSmoke.checks.join(", ")}`,
-                  );
-                  console.error(
-                    "Rollback search-index checks used legacy-compatible mode; the restored release may predate noindex, robots.txt, and sitemap.xml support.",
-                  );
-                }
-              },
-            );
-            console.error(
-              `Vercel traffic rollback to '${state.previousProductionId}' was verified. Database migrations remain applied.`,
-            );
-          } else {
-            console.error("Vercel rollback was not approved; no rollback command ran.");
-          }
-        } catch (rollbackError) {
-          console.error(
-            secrets.redact(
-              `Explicit rollback failed or could not be verified: ${rollbackError instanceof Error ? rollbackError.message : "unknown error"}`,
-            ),
-          );
-          if (rollbackError instanceof AdminAccessFreezeRecoveryRequiredError) {
-            try {
-              await recoverAdminAccessMutationFreezeForDeployment(
-                state.databasePooledUrl,
-                state.databaseDirectUrl,
-                () =>
-                  readCanonicalDeployment(
-                    runner,
-                    state.vercelLink!,
-                    state.canonicalUrl!,
-                  )?.id,
-                prompter,
-              );
-            } catch (recoveryError) {
-              console.error(
-                secrets.redact(
-                  `Administrative authority mutations remain frozen: ${recoveryError instanceof Error ? recoveryError.message : "unknown recovery error"}`,
-                ),
-              );
-            }
-          }
+              state.target.link,
+              state.target.canonicalUrl,
+              state.target.vercelEnvironment,
+            )?.id ?? "none";
+        } catch {
+          // The smoke error remains authoritative when the failure audit cannot run.
         }
       }
-    } else if (state.promotionAttempted) {
       console.error(
-        "Promotion was attempted but its outcome could not be confirmed. Inspect the canonical deployment API before any retry or rollback.",
+        "Canonical smoke failed. No automatic rollback was performed, and database migrations were not reverted.",
       );
+      console.error(
+        `Previous deployment ID: ${state.previousProductionId ?? "none"}`,
+      );
+      console.error(`Attempted deployment ID: ${state.attemptedDeploymentId}`);
+      console.error(`Current canonical deployment ID: ${currentProductionId}`);
+      console.error("Recovery runbook: docs/deploy/vercel-neon/redeploy.md");
     }
     throw error;
   }
+}
+
+async function loadVerifiedDeploymentTarget(
+  runner: CommandRunner,
+  secrets: SecretRegistry,
+  profile: string | undefined,
+  expectedTargetFingerprint: string | undefined,
+): Promise<VerifiedDeploymentTarget> {
+  const contextSource = process.env.DEPLOY_CONTEXT_SOURCE;
+  let loaded;
+  try {
+    if (contextSource !== "stdin") {
+      throw new Error("DEPLOY_CONTEXT_SOURCE must be 'stdin'.");
+    }
+    loaded = loadDeploymentContextFromStdin(
+      readDeploymentContextInput(),
+      process.env.DEPLOY_AWS_ACCOUNT_ID ?? "",
+      profile,
+    );
+  } finally {
+    clearAwsCredentialEnvironment(process.env);
+  }
+  return verifyStoredDeploymentTarget(
+    runner,
+    secrets,
+    loaded.config,
+    loaded.secrets,
+    expectedTargetFingerprint,
+  );
+}
+
+/**
+ * Revalidates every stored provider target without reading credentials from
+ * ambient environment variables and without mutating Neon, Vercel, or the DB.
+ */
+export async function verifyStoredDeploymentTarget(
+  runner: CommandRunner,
+  secrets: SecretRegistry,
+  config: StoredDeploymentConfig,
+  deploymentSecrets: DeploymentSecrets,
+  expectedTargetFingerprint?: string,
+): Promise<VerifiedDeploymentTarget> {
+  const targetFingerprint = createDeploymentTargetFingerprint(config);
+  if (
+    expectedTargetFingerprint !== undefined &&
+    targetFingerprint !== expectedTargetFingerprint
+  ) {
+    throw new Error(
+      "The deployment target fingerprint changed after validation. No provider or database mutation was started.",
+    );
+  }
+  secrets.add(
+    deploymentSecrets.vercelToken,
+    deploymentSecrets.neonApiKey,
+    deploymentSecrets.adminPassword,
+  );
+  if (
+    config.vercel.expectedPlan !== "hobby" ||
+    config.neon.expectedPlan !== "free"
+  ) {
+    throw new Error("The stored deployment provider policy is unsupported.");
+  }
+
+  const link = {
+    orgId: config.vercel.orgId,
+    projectId: config.vercel.projectId,
+  };
+  const canonicalUrl = validateCanonicalUrl(config.vercel.canonicalOrigin);
+  const vercelEnvironment = createVercelCommandEnvironment(
+    process.env,
+    link,
+    deploymentSecrets.vercelToken,
+  );
+  ensureDirectProductionCli(runner, vercelEnvironment);
+  runChecked(
+    runner,
+    "vercel",
+    ["whoami"],
+    "Vercel authentication check",
+    vercelEnvironment,
+  );
+  const project = inspectVercelProject(runner, link, vercelEnvironment);
+  if (project.name !== config.vercel.projectName) {
+    throw new Error("The Vercel project does not match the stored deployment target.");
+  }
+  assertCanonicalDomain(runner, link, canonicalUrl, vercelEnvironment);
+
+  const neon = await loadNeonConnectionContext(
+    config.neon,
+    deploymentSecrets.neonApiKey,
+  );
+  const pooledPassword = new URL(neon.database.pooledUrl).password;
+  const directPassword = new URL(neon.database.directUrl).password;
+  secrets.add(
+    neon.database.pooledUrl,
+    neon.database.directUrl,
+    pooledPassword,
+    directPassword,
+    decodeURIComponent(pooledPassword),
+    decodeURIComponent(directPassword),
+  );
+
+  const environmentAudit = listProductionEnvironment(
+    runner,
+    link,
+    vercelEnvironment,
+  );
+  assertAllowedProductionEnvironment(environmentAudit);
+  assertExistingProductionAuthSecret(environmentAudit);
+  assertNoLinkedProductionSharedEnvironment(runner, link, vercelEnvironment);
+  const validatedAdmin = validateAdminInput({
+    email: config.admin.email,
+    name: "existing",
+    password: deploymentSecrets.adminPassword,
+  });
+
+  return {
+    link,
+    canonicalUrl,
+    projectName: project.name,
+    database: neon.database,
+    adminCredentials: {
+      email: validatedAdmin.email,
+      password: validatedAdmin.password,
+    },
+    targetFingerprint,
+    vercelEnvironment,
+  };
+}
+
+function syncProductionEnvironment(
+  runner: CommandRunner,
+  target: VerifiedDeploymentTarget,
+): void {
+  const before = listProductionEnvironment(
+    runner,
+    target.link,
+    target.vercelEnvironment,
+  );
+  assertAllowedProductionEnvironment(before);
+  assertExistingProductionAuthSecret(before);
+  assertNoLinkedProductionSharedEnvironment(
+    runner,
+    target.link,
+    target.vercelEnvironment,
+  );
+
+  setVercelEnvironment(
+    runner,
+    target.link,
+    "DATABASE_URL",
+    target.database.pooledUrl,
+    true,
+    true,
+    target.vercelEnvironment,
+  );
+  for (const [name, value] of [
+    ["BETTER_AUTH_URL", target.canonicalUrl.origin],
+    ["BETTER_AUTH_TRUSTED_ORIGINS", target.canonicalUrl.origin],
+    ["BETTER_AUTH_TRUST_PROXY_HEADERS", "true"],
+    ["APP_CANONICAL_ORIGIN", target.canonicalUrl.origin],
+  ] as const) {
+    setVercelEnvironment(
+      runner,
+      target.link,
+      name,
+      value,
+      false,
+      true,
+      target.vercelEnvironment,
+    );
+  }
+
+  const after = listProductionEnvironment(
+    runner,
+    target.link,
+    target.vercelEnvironment,
+  );
+  assertExactProductionEnvironment(after);
+  assertNoLinkedProductionSharedEnvironment(
+    runner,
+    target.link,
+    target.vercelEnvironment,
+  );
+}
+
+function deployDirectlyToProduction(
+  runner: CommandRunner,
+  target: VerifiedDeploymentTarget,
+  git: DeploymentGitSnapshot,
+  projectRoot: string,
+  recordDeploymentId: (deploymentId: string) => void,
+): ProductionDeploymentEvidence {
+  assertProductionEnvironmentReady(
+    runner,
+    target.link,
+    target.vercelEnvironment,
+  );
+  const arguments_ = createDirectProductionDeployArguments(
+    target.link,
+    git.commitSha,
+    git.githubRunId,
+  );
+  const deployment = runner.run("vercel", arguments_, {
+    cwd: projectRoot,
+    env: target.vercelEnvironment,
+  });
+  assertCommandSucceeded(deployment, "Vercel direct Production deployment");
+  const output = parseDeploymentOutput(deployment.stdout);
+  if (output.id === undefined) {
+    throw new Error(
+      "Vercel direct Production deployment did not return a deployment ID.",
+    );
+  }
+  recordDeploymentId(output.id);
+  const evidence = inspectProductionDeployment(
+    runner,
+    target,
+    output.url,
+    git,
+  );
+  if (output.id !== evidence.id) {
+    throw new Error(
+      "The Vercel deploy output ID does not match the verified Production deployment.",
+    );
+  }
+  return evidence;
+}
+
+export function createDirectProductionDeployArguments(
+  link: VercelLink,
+  commitSha: string,
+  githubRunId?: string,
+): string[] {
+  if (!/^[0-9a-f]{40}$/u.test(commitSha)) {
+    throw new Error("The Production deployment commit SHA is invalid.");
+  }
+  if (githubRunId !== undefined && !/^\d+$/u.test(githubRunId)) {
+    throw new Error("The Production deployment GitHub run ID is invalid.");
+  }
+  return [
+    "deploy",
+    "--prod",
+    "--yes",
+    "--json",
+    "--meta",
+    `deployCommitSha=${commitSha}`,
+    ...(githubRunId
+      ? ["--meta", `githubRunId=${githubRunId}`]
+      : []),
+    "--scope",
+    link.orgId,
+    "--project",
+    link.projectId,
+  ];
+}
+
+function inspectProductionDeployment(
+  runner: CommandRunner,
+  target: VerifiedDeploymentTarget,
+  deploymentUrl: URL,
+  git: DeploymentGitSnapshot,
+): ProductionDeploymentEvidence {
+  const inspect = runChecked(
+    runner,
+    "vercel",
+    [
+      "inspect",
+      deploymentUrl.origin,
+      "--wait",
+      "--timeout=10m",
+      "--json",
+      "--scope",
+      target.link.orgId,
+    ],
+    "Vercel Production deployment inspect",
+    target.vercelEnvironment,
+  );
+  const api = vercelApi(
+    runner,
+    target.link,
+    `/v13/deployments/${encodeURIComponent(deploymentUrl.hostname)}?withGitRepoInfo=true&teamId=${target.link.orgId}`,
+    target.vercelEnvironment,
+  );
+  return validateProductionDeploymentEvidence(
+    inspect.stdout,
+    api.stdout,
+    target.link,
+    target.projectName,
+    deploymentUrl,
+    git.commitSha,
+    git.githubRunId,
+  );
+}
+
+export function validateProductionDeploymentEvidence(
+  inspectOutput: string,
+  apiOutput: string,
+  link: VercelLink,
+  projectName: string,
+  deploymentUrl: URL,
+  commitSha: string,
+  githubRunId?: string,
+): ProductionDeploymentEvidence {
+  const inspected = parseJsonObject(
+    inspectOutput,
+    "Vercel inspect Production deployment",
+  );
+  if (
+    typeof inspected.id !== "string" ||
+    !/^dpl_[A-Za-z0-9]+$/u.test(inspected.id) ||
+    inspected.url !== deploymentUrl.hostname ||
+    inspected.name !== projectName ||
+    inspected.target !== "production" ||
+    inspected.readyState !== "READY"
+  ) {
+    throw new Error(
+      "Vercel inspect JSON did not verify deployment ID, URL, project name, READY state, and Production target.",
+    );
+  }
+  const api = parseJsonObject(apiOutput, "Vercel Production deployment");
+  const meta = isRecord(api.meta) ? api.meta : undefined;
+  const regions = Array.isArray(api.regions) ? api.regions : [];
+  if (
+    api.id !== inspected.id ||
+    api.url !== deploymentUrl.hostname ||
+    api.projectId !== link.projectId ||
+    api.readyState !== "READY" ||
+    api.target !== "production" ||
+    regions.length !== 1 ||
+    regions[0] !== "sin1" ||
+    meta?.deployCommitSha !== commitSha ||
+    (githubRunId !== undefined && meta?.githubRunId !== githubRunId)
+  ) {
+    throw new Error(
+      "Vercel deployment API did not verify project, URL, READY state, Production target, sin1 region, commit SHA, and run metadata.",
+    );
+  }
+  return {
+    id: inspected.id,
+    url: deploymentUrl.hostname,
+    projectId: link.projectId,
+    readyState: "READY",
+    target: "production",
+    commitSha,
+    ...(githubRunId === undefined ? {} : { githubRunId }),
+    regions: ["sin1"],
+  };
+}
+
+async function runCanonicalSmoke(
+  runner: CommandRunner,
+  target: VerifiedDeploymentTarget,
+  expectedDeploymentId: string,
+): Promise<void> {
+  await runCanonicalDeploymentBoundSmoke(
+    expectedDeploymentId,
+    () =>
+      readCanonicalDeployment(
+        runner,
+        target.link,
+        target.canonicalUrl,
+        target.vercelEnvironment,
+      ),
+    async () => {
+      readReadyProductionDeployment(
+        runner,
+        target.link,
+        expectedDeploymentId,
+        target.vercelEnvironment,
+      );
+      const expectation = await readMaintenancePublicExpectation(
+        target.database.directUrl,
+        "PRODUCTION",
+      );
+      await runSmokeChecks(
+        target.canonicalUrl,
+        target.adminCredentials,
+        globalThis.fetch,
+        {
+          canonicalOrigin: target.canonicalUrl,
+          publicSiteExpectation: expectation,
+        },
+      );
+    },
+  );
+}
+
+export async function runCanonicalDeploymentBoundSmoke(
+  expectedDeploymentId: string,
+  readCurrent: () => { id: string } | undefined,
+  smoke: () => Promise<void>,
+): Promise<void> {
+  const before = readCurrent();
+  if (before?.id !== expectedDeploymentId) {
+    throw new Error(
+      `Canonical Production is '${before?.id ?? "none"}', expected '${expectedDeploymentId}'. No smoke requests were sent.`,
+    );
+  }
+  await smoke();
+  const after = readCurrent();
+  if (after?.id !== expectedDeploymentId) {
+    throw new Error(
+      `Canonical Production changed to '${after?.id ?? "none"}' after smoke, expected '${expectedDeploymentId}'.`,
+    );
+  }
+}
+
+async function assertMigrationUpToDate(
+  runner: CommandRunner,
+  directUrl: string,
+  projectRoot: string,
+): Promise<void> {
+  const afterMigration = await createMigrationPlan({
+    projectRoot,
+    directUrl,
+    runner,
+    inspect: inspectDatabase,
+  });
+  if (afterMigration.state !== "up-to-date") {
+    throw new Error("Migration deploy completed but verification is not up to date.");
+  }
+}
+
+function createVercelCommandEnvironment(
+  ambient: Readonly<NodeJS.ProcessEnv>,
+  link: VercelLink,
+  token: string,
+): NodeJS.ProcessEnv {
+  const environment = createSecretFreeBuildEnvironment(ambient);
+  environment.VERCEL_TOKEN = token;
+  environment.VERCEL_ORG_ID = link.orgId;
+  environment.VERCEL_PROJECT_ID = link.projectId;
+  environment.VERCEL_TEAM_ID = link.orgId;
+  environment.NO_COLOR = "1";
+  environment.CI = "1";
+  return environment;
+}
+
+export function createSecretFreeBuildEnvironment(
+  ambient: Readonly<NodeJS.ProcessEnv>,
+): NodeJS.ProcessEnv {
+  const environment: NodeJS.ProcessEnv = { ...ambient };
+  clearAwsCredentialEnvironment(environment);
+  for (const name of [
+    "VERCEL_TOKEN",
+    "NEON_API_KEY",
+    "DATABASE_URL",
+    "DATABASE_URL_UNPOOLED",
+    "BETTER_AUTH_SECRET",
+    "BETTER_AUTH_URL",
+    "BETTER_AUTH_TRUSTED_ORIGINS",
+    "BETTER_AUTH_TRUST_PROXY_HEADERS",
+    "APP_CANONICAL_ORIGIN",
+  ]) {
+    delete environment[name];
+  }
+  return environment;
+}
+
+export function clearAwsCredentialEnvironment(
+  environment: NodeJS.ProcessEnv,
+): void {
+  for (const name of AWS_CREDENTIAL_ENVIRONMENT_NAMES) {
+    delete environment[name];
+  }
+}
+
+function ensureDirectProductionCli(
+  runner: CommandRunner,
+  environment: NodeJS.ProcessEnv,
+): void {
+  let version: CommandResult;
+  try {
+    version = runner.run("vercel", ["--version"], { env: environment });
+  } catch {
+    throw new CliUnavailableError("The Vercel deployment CLI is unavailable.");
+  }
+  if (version.status !== 0) {
+    throw new CliUnavailableError("The Vercel deployment CLI is unavailable.");
+  }
+  try {
+    assertMinimumVersion(
+      parseVersion(combinedOutput(version)),
+      VERCEL_MINIMUM,
+      "Vercel CLI",
+    );
+  } catch (error) {
+    throw new CliUnavailableError(
+      error instanceof Error ? error.message : "The Vercel CLI is too old.",
+    );
+  }
+  const probes: Array<[string[], RegExp, string]> = [
+    [["--help"], /--scope/u, "vercel global --scope"],
+    [
+      ["deploy", "--help"],
+      /(?=[\s\S]*--prod)(?=[\s\S]*--yes)(?=[\s\S]*--json)(?=[\s\S]*--meta)(?=[\s\S]*--project)/u,
+      "vercel deploy prod/yes/json/meta/project",
+    ],
+    [["api", "--help"], /--raw/u, "vercel api --raw"],
+    [
+      ["env", "add", "--help"],
+      /(?=[\s\S]*--sensitive)(?=[\s\S]*--no-sensitive)(?=[\s\S]*--force)(?=[\s\S]*--project)/u,
+      "vercel env add sensitive/no-sensitive/force/project",
+    ],
+    [
+      ["inspect", "--help"],
+      /(?=[\s\S]*--wait)(?=[\s\S]*--timeout)(?=[\s\S]*--json)/u,
+      "vercel inspect wait/timeout/json",
+    ],
+    [["project", "inspect", "--help"], /inspect/iu, "vercel project inspect"],
+  ];
+  for (const [arguments_, expected, description] of probes) {
+    const result = runner.run("vercel", arguments_, { env: environment });
+    if (
+      (result.status !== 0 && result.status !== 2) ||
+      !expected.test(combinedOutput(result))
+    ) {
+      throw new CliUnavailableError(
+        `Required CLI capability is unavailable: ${description}.`,
+      );
+    }
+  }
+}
+
+function readDeploymentPhase(value: string | undefined): DeploymentPhase {
+  const normalized = value?.trim() ?? "";
+  if (
+    normalized !== "validate" &&
+    normalized !== "migrate" &&
+    normalized !== "release" &&
+    normalized !== "smoke"
+  ) {
+    throw new Error("DEPLOY_PHASE is invalid.");
+  }
+  return normalized;
+}
+
+function readDeploymentGitSnapshot(
+  environment: Readonly<NodeJS.ProcessEnv>,
+): DeploymentGitSnapshot {
+  const commitSha = environment.DEPLOY_GIT_SHA?.trim() ?? "";
+  const branch = environment.DEPLOY_GIT_BRANCH?.trim() ?? "";
+  if (!/^[0-9a-f]{40}$/u.test(commitSha)) {
+    throw new Error("DEPLOY_GIT_SHA must identify the immutable Git snapshot.");
+  }
+  if (!branch || branch.length > 255 || /[\r\n\0]/u.test(branch)) {
+    throw new Error("DEPLOY_GIT_BRANCH is invalid.");
+  }
+  const githubRunId = environment.GITHUB_RUN_ID?.trim();
+  if (githubRunId !== undefined && !/^\d+$/u.test(githubRunId)) {
+    throw new Error("GITHUB_RUN_ID is invalid.");
+  }
+  return {
+    branch,
+    commitSha,
+    ...(githubRunId === undefined ? {} : { githubRunId }),
+  };
+}
+
+function assertDeploymentGitSnapshotUnchanged(
+  expected: DeploymentGitSnapshot,
+  environment: Readonly<NodeJS.ProcessEnv>,
+): void {
+  const actual = readDeploymentGitSnapshot(environment);
+  if (
+    actual.commitSha !== expected.commitSha ||
+    actual.branch !== expected.branch ||
+    actual.githubRunId !== expected.githubRunId
+  ) {
+    throw new Error("The immutable Git deployment identity changed during execution.");
+  }
+}
+
+function assertPhaseExecutionContext(
+  phase: DeploymentPhase,
+  git: DeploymentGitSnapshot,
+  environment: Readonly<NodeJS.ProcessEnv>,
+): void {
+  const contextSource = environment.DEPLOY_CONTEXT_SOURCE;
+  if (environment.GITHUB_ACTIONS !== "true") {
+    if (
+      contextSource !== "stdin" ||
+      git.githubRunId !== undefined ||
+      environment.DEPLOY_OUTPUT_PATH !== "/deploy-output/result"
+    ) {
+      throw new Error(
+        `The local '${phase}' phase requires the stdin deployment context and protected phase output contract.`,
+      );
+    }
+    return;
+  }
+  const expectedEnvironment =
+    phase === "migrate" ? "production-migration" : "production-deploy";
+  if (
+    contextSource !== "stdin" ||
+    environment.DEPLOY_OUTPUT_PATH !== "/deploy-output/result" ||
+    environment.GITHUB_EVENT_NAME !== "workflow_dispatch" ||
+    environment.GITHUB_REF !== "refs/heads/main" ||
+    environment.GITHUB_SHA !== git.commitSha ||
+    environment.DEPLOY_GITHUB_ENVIRONMENT !== expectedEnvironment ||
+    git.branch !== "main" ||
+    git.githubRunId === undefined
+  ) {
+    throw new Error(
+      `The '${phase}' phase is restricted to workflow_dispatch on protected main in ${expectedEnvironment}.`,
+    );
+  }
+}
+
+function readExpectedPlanDigest(value: string | undefined): string {
+  const digest = value?.trim() ?? "";
+  if (!/^[0-9a-f]{64}$/u.test(digest)) {
+    throw new Error("DEPLOY_EXPECTED_PLAN_DIGEST is invalid.");
+  }
+  return digest;
+}
+
+export function shouldRequireLocalMigrationApproval(
+  migrationState: MigrationPlan["state"],
+  environment: Readonly<Record<string, string | undefined>>,
+): boolean {
+  return (
+    migrationState === "pending" &&
+    environment.DEPLOY_CONTEXT_SOURCE === "stdin" &&
+    environment.GITHUB_ACTIONS !== "true"
+  );
+}
+
+function readExpectedTargetFingerprint(value: string | undefined): string {
+  const fingerprint = value?.trim() ?? "";
+  if (!/^[0-9a-f]{64}$/u.test(fingerprint)) {
+    throw new Error("DEPLOY_EXPECTED_TARGET_FINGERPRINT is invalid.");
+  }
+  return fingerprint;
+}
+
+function readExpectedDeploymentId(value: string | undefined): string {
+  const deploymentId = value?.trim() ?? "";
+  if (!/^dpl_[A-Za-z0-9]+$/u.test(deploymentId)) {
+    throw new Error("DEPLOY_EXPECTED_DEPLOYMENT_ID is invalid.");
+  }
+  return deploymentId;
+}
+
+export function readExpectedPreviousDeploymentId(
+  value: string | undefined,
+): string | undefined {
+  const deploymentId = value?.trim() ?? "";
+  if (deploymentId === "none") {
+    return undefined;
+  }
+  if (!/^dpl_[A-Za-z0-9]+$/u.test(deploymentId)) {
+    throw new Error("DEPLOY_EXPECTED_PREVIOUS_DEPLOYMENT_ID is invalid.");
+  }
+  return deploymentId;
+}
+
+function writeDeploymentOutputs(outputs: Readonly<Record<string, string>>): void {
+  const contents = Object.entries(outputs)
+    .map(([name, value]) => {
+      if (!/^[a-z][a-z0-9-]*$/u.test(name) || /[\r\n\0]/u.test(value)) {
+        throw new Error("A deployment phase output is invalid.");
+      }
+      return `${name}=${value}\n`;
+    })
+    .join("");
+  if (contents.length === 0) {
+    throw new Error("A deployment phase output cannot be empty.");
+  }
+
+  const outputPath = process.env.DEPLOY_OUTPUT_PATH;
+  if (outputPath !== "/deploy-output/result") {
+    throw new Error("DEPLOY_OUTPUT_PATH must be /deploy-output/result.");
+  }
+  const directory = lstatSync(dirname(outputPath));
+  if (
+    !directory.isDirectory() ||
+    directory.isSymbolicLink() ||
+    (directory.mode & 0o077) !== 0
+  ) {
+    throw new Error("The deployment output directory must be a private directory.");
+  }
+  writeFileSync(outputPath, contents, {
+    encoding: "utf8",
+    flag: "wx",
+    mode: 0o600,
+  });
+}
+
+export function createDeploymentTargetFingerprint(
+  config: StoredDeploymentConfig,
+): string {
+  return createHash("sha256").update(canonicalJson(config)).digest("hex");
+}
+
+function canonicalJson(value: unknown): string {
+  if (value === null) {
+    return "null";
+  }
+  if (typeof value === "string" || typeof value === "boolean") {
+    return JSON.stringify(value);
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      throw new Error("Deployment target config contains a non-finite number.");
+    }
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => canonicalJson(item)).join(",")}]`;
+  }
+  if (isRecord(value)) {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(",")}}`;
+  }
+  throw new Error("Deployment target config contains an unsupported JSON value.");
+}
+
+export function assertExistingProductionAuthSecret(
+  audit: ProductionEnvironmentAudit,
+): void {
+  if (
+    !audit.names.has("BETTER_AUTH_SECRET") ||
+    audit.types.get("BETTER_AUTH_SECRET") !== "sensitive"
+  ) {
+    throw new Error(
+      "Vercel Production must already contain one Sensitive BETTER_AUTH_SECRET; deploy.sh never creates or reads it.",
+    );
+  }
+}
+
+function redactIdentifier(value: string): string {
+  const separator = value.search(/[-_]/u);
+  const prefix = (separator > 0 ? value.slice(0, separator) : value.slice(0, 3)) ||
+    "target";
+  return `${prefix}…`;
+}
+
+function redactHostname(hostname: string): string {
+  const [firstLabel = "target", ...remainingLabels] = hostname.split(".");
+  const redactedFirstLabel = `${firstLabel.slice(0, 1) || "t"}…`;
+  return [redactedFirstLabel, ...remainingLabels].join(".");
+}
+
+function readDeploymentContextInput(): string {
+  const input = readFileSync(0, "utf8");
+  if (Buffer.byteLength(input, "utf8") > 1024 * 1024) {
+    throw new Error("The deployment context input exceeds the size limit.");
+  }
+  if (!input.trim()) {
+    throw new Error("The deployment context input is empty.");
+  }
+  return input;
 }
 
 async function readMaintenancePublicExpectation(
@@ -924,259 +1170,11 @@ async function readMaintenancePublicExpectation(
   return createMaintenancePublicExpectation(snapshot, environment);
 }
 
-export function ensureCliTools(runner: CommandRunner): void {
-  let vercelVersion: CommandResult;
-  let neonVersion: CommandResult;
-  try {
-    vercelVersion = runner.run("vercel", ["--version"]);
-    neonVersion = runner.run("neon", ["--version"]);
-  } catch {
-    throw new CliUnavailableError("A required deployment CLI is unavailable.");
-  }
-  if (vercelVersion.status !== 0 || neonVersion.status !== 0) {
-    throw new CliUnavailableError("Vercel or Neon CLI is unavailable.");
-  }
-  try {
-    assertMinimumVersion(
-      parseVersion(combinedOutput(vercelVersion)),
-      VERCEL_MINIMUM,
-      "Vercel CLI",
-    );
-    assertMinimumVersion(
-      parseVersion(combinedOutput(neonVersion)),
-      NEON_MINIMUM,
-      "Neon CLI",
-    );
-  } catch (error) {
-    throw new CliUnavailableError(
-      error instanceof Error ? error.message : "A deployment CLI is too old.",
-    );
-  }
-
-  const probes: Array<[string, string[], RegExp, string]> = [
-    ["vercel", ["--help"], /--scope/, "vercel global --scope"],
-    ["vercel", ["deploy", "--help"], /(?=[\s\S]*--prod)(?=[\s\S]*--skip-domain)(?=[\s\S]*--yes)(?=[\s\S]*--json)(?=[\s\S]*--meta)(?=[\s\S]*--project)/, "vercel deploy prod/skip-domain/yes/json/meta/project"],
-    ["vercel", ["api", "--help"], /--raw/, "vercel api --raw"],
-    ["vercel", ["env", "add", "--help"], /(?=[\s\S]*--sensitive)(?=[\s\S]*--no-sensitive)(?=[\s\S]*--force)(?=[\s\S]*--project)/, "vercel env add sensitive/no-sensitive/force/project"],
-    ["vercel", ["inspect", "--help"], /(?=[\s\S]*--wait)(?=[\s\S]*--timeout)(?=[\s\S]*--json)/, "vercel inspect wait/timeout/json"],
-    ["vercel", ["promote", "--help"], /--yes/, "vercel promote --yes"],
-    ["vercel", ["rollback", "--help"], /--yes/, "vercel rollback --yes"],
-    ["vercel", ["project", "inspect", "--help"], /inspect/i, "vercel project inspect"],
-    ["neon", ["me", "--help"], /me|current user/i, "neon me"],
-    ["neon", ["api", "--help"], /api|endpoint/i, "neon api"],
-    ["neon", ["auth", "--help"], /auth/i, "neon auth"],
-  ];
-  for (const [command, arguments_, expected, description] of probes) {
-    const result = runner.run(command, arguments_);
-    const validHelpStatus =
-      command === "vercel"
-        ? result.status === 0 || result.status === 2
-        : result.status === 0;
-    if (!validHelpStatus || !expected.test(combinedOutput(result))) {
-      throw new CliUnavailableError(
-        `Required CLI capability is unavailable: ${description}.`,
-      );
-    }
-  }
-}
-
-export async function authenticateVercel(
+function inspectVercelProject(
   runner: CommandRunner,
-  prompter: Prompter,
-): Promise<string> {
-  let result = runner.run("vercel", ["whoami"], {
-    env: { ...process.env, NO_COLOR: "1" },
-  });
-  if (result.status !== 0) {
-    await requireAffirmative(
-      prompter,
-      "Vercel authentication is unavailable. Run 'vercel login' now?",
-      "Vercel authentication was refused.",
-    );
-    result = runner.run("vercel", ["login"], { interactive: true });
-    assertCommandSucceeded(result, "Vercel login");
-    result = runner.run("vercel", ["whoami"], {
-      env: { ...process.env, NO_COLOR: "1" },
-    });
-  }
-  assertCommandSucceeded(result, "Vercel authentication check");
-  const lines = stripAnsi(result.stdout)
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .filter((line) => !/^vercel cli/i.test(line));
-  const username = lines.at(-1);
-  if (!username || !/^[A-Za-z0-9_.-]+$/.test(username)) {
-    throw new Error("Could not parse the authenticated Vercel username.");
-  }
-  return username;
-}
-
-export async function authenticateNeon(
-  runner: CommandRunner,
-  prompter: Prompter,
-): Promise<string> {
-  const check = () =>
-    runner.run("neon", ["me", "--output", "json"], {
-      env: { ...process.env, CI: "1" },
-    });
-  let result = check();
-  if (result.status !== 0) {
-    await requireAffirmative(
-      prompter,
-      "Neon authentication is unavailable. Run 'neon auth' now?",
-      "Neon authentication was refused before any browser auth.",
-    );
-    result = runner.run("neon", ["auth"], { interactive: true });
-    assertCommandSucceeded(result, "Neon authentication");
-    result = check();
-  }
-  assertCommandSucceeded(result, "Neon non-interactive authentication check");
-  const value = parseJsonObject(result.stdout, "Neon account");
-  const identity = value.email ?? value.name ?? value.id;
-  if (typeof identity !== "string" || !identity) {
-    throw new Error("Could not parse the authenticated Neon account.");
-  }
-  return identity;
-}
-
-async function verifyNeonFreePlan(
-  runner: CommandRunner,
-  prompter: Prompter,
-  organizationId: string,
-): Promise<void> {
-  const result = runner.run(
-    "neon",
-    ["api", `/organizations/${organizationId}`, "--output", "json"],
-    { env: { ...process.env, CI: "1" } },
-  );
-  if (result.status !== 0) {
-    const detail = combinedOutput(result);
-    if (!/\b403\b|forbidden|permission|not authorized|not allowed/i.test(detail)) {
-      assertCommandSucceeded(result, "Neon organization plan API");
-    }
-    await requireExact(
-      prompter,
-      "Neon API権限ではplanを証明できませんでした。Consoleで対象organizationがFreeであることを確認し、'free' と入力してください。",
-      "free",
-      "Neon Free plan could not be verified.",
-    );
-    return;
-  }
-  const raw = parseJsonObject(result.stdout, "Neon organization");
-  const organization = isRecord(raw.organization) ? raw.organization : raw;
-  if (organization.id !== organizationId || organization.plan !== "free") {
-    throw new Error(
-      "The selected Neon project's organization is not proven to be on the Free plan.",
-    );
-  }
-}
-
-export function inspectNeonProject(
-  runner: CommandRunner,
-  projectId: string,
-  expectedName: string,
-): ReturnType<typeof parseNeonProjectApi> {
-  const result = runChecked(
-    runner,
-    "neon",
-    ["api", `/projects/${projectId}`, "--output", "json"],
-    "Neon project API",
-    { ...process.env, CI: "1" },
-  );
-  return parseNeonProjectApi(result.stdout, projectId, expectedName);
-}
-
-export async function waitForNeonEndpointState(
-  runner: CommandRunner,
-  projectId: string,
-  target: DatabaseTarget,
-  expected: "idle" | "active",
-  options: {
-    attempts?: number;
-    intervalMs?: number;
-    wait?: (delayMs: number) => Promise<void>;
-  } = {},
-): Promise<void> {
-  const attempts =
-    options.attempts ?? NEON_ENDPOINT_STATE_MAX_ATTEMPTS;
-  const intervalMs =
-    options.intervalMs ?? NEON_ENDPOINT_STATE_POLL_INTERVAL_MS;
-  const wait =
-    options.wait ??
-    ((delayMs: number) =>
-      new Promise<void>((resolveDelay) => setTimeout(resolveDelay, delayMs)));
-  if (!Number.isInteger(attempts) || attempts < 1 || intervalMs < 0) {
-    throw new Error("Neon endpoint state polling options are invalid.");
-  }
-  let lastState = "unknown";
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    const result = runChecked(
-      runner,
-      "neon",
-      ["api", `/projects/${projectId}/endpoints`, "--output", "json"],
-      `Neon endpoint ${expected} state check`,
-      { ...process.env, CI: "1" },
-    );
-    lastState = readNeonEndpointState(result.stdout, target, projectId);
-    if (lastState === expected) {
-      return;
-    }
-    if (attempt < attempts) {
-      await wait(intervalMs);
-    }
-  }
-  throw new Error(
-    `Neon endpoint did not reach '${expected}' during the bounded management-API check (last state: '${lastState}').`,
-  );
-}
-
-export async function ensureVercelLink(
-  runner: CommandRunner,
-  prompter: Prompter,
-  projectRoot: string,
-): Promise<VercelLink> {
-  const linkPath = join(projectRoot, ".vercel", "project.json");
-  if (!existsSync(linkPath)) {
-    await requireAffirmative(
-      prompter,
-      "No .vercel/project.json exists. Run interactive 'vercel link' now?",
-      "Vercel project linking was refused.",
-    );
-    const result = runner.run("vercel", ["link"], { interactive: true });
-    assertCommandSucceeded(result, "Vercel project link");
-  }
-  return readVercelLink(linkPath);
-}
-
-function assertAmbientVercelTarget(link: VercelLink): void {
-  const ambient = [
-    ["VERCEL_ORG_ID", process.env.VERCEL_ORG_ID, link.orgId],
-    ["VERCEL_PROJECT_ID", process.env.VERCEL_PROJECT_ID, link.projectId],
-    ["VERCEL_TEAM_ID", process.env.VERCEL_TEAM_ID, link.orgId],
-  ] as const;
-  for (const [name, actual, expected] of ambient) {
-    if (actual !== undefined && actual !== expected) {
-      throw new Error(
-        `${name} conflicts with .vercel/project.json. Unset it or make it exactly '${expected}'.`,
-      );
-    }
-  }
-}
-
-function assertAmbientNeonTarget(projectId: string): void {
-  const ambientProjectId = process.env.NEON_PROJECT_ID;
-  if (
-    ambientProjectId !== undefined &&
-    ambientProjectId !== projectId
-  ) {
-    throw new Error(
-      `NEON_PROJECT_ID conflicts with the reviewed project '${projectId}'. Unset it or make it exactly equal.`,
-    );
-  }
-}
-
-function inspectVercelProject(runner: CommandRunner, link: VercelLink) {
+  link: VercelLink,
+  environment: NodeJS.ProcessEnv = process.env,
+) {
   runChecked(
     runner,
     "vercel",
@@ -1188,11 +1186,13 @@ function inspectVercelProject(runner: CommandRunner, link: VercelLink) {
       link.orgId,
     ],
     "Vercel project inspect",
+    environment,
   );
   const raw = vercelApi(
     runner,
     link,
     `/v9/projects/${link.projectId}?teamId=${link.orgId}`,
+    environment,
   );
   const project = parseVercelProjectApi(raw.stdout, link);
   const rawValue = parseJsonObject(raw.stdout, "Vercel project");
@@ -1202,7 +1202,12 @@ function inspectVercelProject(runner: CommandRunner, link: VercelLink) {
     );
   }
   const team = parseJsonObject(
-    vercelApi(runner, link, `/v2/teams/${link.orgId}?teamId=${link.orgId}`).stdout,
+    vercelApi(
+      runner,
+      link,
+      `/v2/teams/${link.orgId}?teamId=${link.orgId}`,
+      environment,
+    ).stdout,
     "Vercel scope",
   );
   const billing = isRecord(team.billing) ? team.billing : undefined;
@@ -1216,21 +1221,21 @@ function assertCanonicalDomain(
   runner: CommandRunner,
   link: VercelLink,
   canonicalUrl: URL,
+  environment: NodeJS.ProcessEnv = process.env,
 ): void {
-  const value = parseJsonObject(
+  const domain = parseJsonObject(
     vercelApi(
       runner,
       link,
-      `/v9/projects/${link.projectId}/domains?teamId=${link.orgId}`,
+      `/v9/projects/${encodeURIComponent(link.projectId)}/domains/${encodeURIComponent(canonicalUrl.hostname)}?teamId=${encodeURIComponent(link.orgId)}`,
+      environment,
     ).stdout,
-    "Vercel project domains",
+    "Vercel canonical project domain",
   );
-  const domains = Array.isArray(value.domains) ? value.domains : [];
-  const domain = domains.find(
-    (candidate) =>
-      isRecord(candidate) && candidate.name === canonicalUrl.hostname,
-  );
-  if (!isRecord(domain)) {
+  if (
+    domain.name !== canonicalUrl.hostname ||
+    domain.projectId !== link.projectId
+  ) {
     throw new Error(
       `Canonical domain '${canonicalUrl.hostname}' is not assigned to the linked Vercel project.`,
     );
@@ -1257,21 +1262,151 @@ function assertCanonicalDomain(
 function listProductionEnvironment(
   runner: CommandRunner,
   link: VercelLink,
+  environment: NodeJS.ProcessEnv = process.env,
 ): ProductionEnvironmentAudit {
-  const result = vercelApi(
-    runner,
-    link,
-    `/v10/projects/${link.projectId}/env?decrypt=false&teamId=${link.orgId}`,
+  const combined: ProductionEnvironmentAudit = {
+    names: new Set<string>(),
+    types: new Map<string, string>(),
+  };
+  const seenCursors = new Set<number>();
+  let cursor: number | undefined;
+
+  for (
+    let pageNumber = 1;
+    pageNumber <= VERCEL_ENVIRONMENT_MAX_PAGES;
+    pageNumber += 1
+  ) {
+    const search = new URLSearchParams({
+      decrypt: "false",
+      limit: String(VERCEL_ENVIRONMENT_PAGE_LIMIT),
+      teamId: link.orgId,
+    });
+    if (cursor !== undefined) {
+      search.set("until", String(cursor));
+    }
+    const result = vercelApi(
+      runner,
+      link,
+      `/v10/projects/${encodeURIComponent(link.projectId)}/env?${search.toString()}`,
+      environment,
+    );
+    const page = parseProductionEnvironmentPage(result.stdout);
+    mergeProductionEnvironmentAudit(combined, page.audit);
+    if (page.next === null) {
+      return combined;
+    }
+    if (
+      page.count === 0 ||
+      seenCursors.has(page.next) ||
+      (cursor !== undefined && page.next >= cursor)
+    ) {
+      throw new Error(
+        "Vercel Production environment pagination did not make forward progress.",
+      );
+    }
+    seenCursors.add(page.next);
+    cursor = page.next;
+  }
+
+  throw new Error(
+    "Vercel Production environment pagination exceeded the reviewed page limit.",
   );
-  return parseProductionEnvironmentAudit(result.stdout);
 }
 
-export function assertCandidateProductionEnvironmentReady(
+function parseProductionEnvironmentPage(output: string): {
+  audit: ProductionEnvironmentAudit;
+  count: number;
+  next: number | null;
+} {
+  const parsed = parseJsonObject(output, "Vercel Production environment API");
+  if (!Array.isArray(parsed.envs)) {
+    throw new Error(
+      "Vercel Production environment API returned invalid pagination.",
+    );
+  }
+  const pagination = parsed.pagination;
+  const hiddenProductionEnvCount = parsed.hiddenProductionEnvCount;
+  const hasPagination = pagination !== undefined;
+  const hasHiddenProductionEnvCount = hiddenProductionEnvCount !== undefined;
+  if (hasPagination === hasHiddenProductionEnvCount) {
+    throw new Error(
+      "Vercel Production environment API returned invalid pagination.",
+    );
+  }
+  if (hasHiddenProductionEnvCount) {
+    if (
+      !Number.isSafeInteger(hiddenProductionEnvCount) ||
+      (hiddenProductionEnvCount as number) < 0
+    ) {
+      throw new Error(
+        "Vercel Production environment API returned invalid pagination.",
+      );
+    }
+    if ((hiddenProductionEnvCount as number) > 0) {
+      throw new Error(
+        "Vercel Production environment API hid one or more Production variables; the allowlist audit cannot continue.",
+      );
+    }
+    return {
+      audit: parseProductionEnvironmentAudit(output),
+      count: parsed.envs.length,
+      next: null,
+    };
+  }
+  if (
+    !isRecord(pagination) ||
+    !Number.isSafeInteger(pagination.count) ||
+    (pagination.count as number) < 0 ||
+    (pagination.count as number) > VERCEL_ENVIRONMENT_PAGE_LIMIT ||
+    pagination.count !== parsed.envs.length ||
+    !isPaginationCursor(pagination.next) ||
+    !isPaginationCursor(pagination.prev)
+  ) {
+    throw new Error(
+      "Vercel Production environment API returned invalid pagination.",
+    );
+  }
+  return {
+    audit: parseProductionEnvironmentAudit(output),
+    count: pagination.count as number,
+    next: pagination.next,
+  };
+}
+
+function isPaginationCursor(value: unknown): value is number | null {
+  return value === null || (Number.isSafeInteger(value) && (value as number) >= 0);
+}
+
+function mergeProductionEnvironmentAudit(
+  combined: ProductionEnvironmentAudit,
+  page: ProductionEnvironmentAudit,
+): void {
+  for (const name of page.names) {
+    if (combined.names.has(name)) {
+      throw new Error(
+        `Vercel Production contains duplicate environment entries for ${name}.`,
+      );
+    }
+    const type = page.types.get(name);
+    if (type === undefined) {
+      throw new Error(
+        "Vercel Production environment audit lost an environment type.",
+      );
+    }
+    combined.names.add(name);
+    combined.types.set(name, type);
+  }
+}
+
+export function assertProductionEnvironmentReady(
   runner: CommandRunner,
   link: VercelLink,
+  environment: NodeJS.ProcessEnv = process.env,
 ): void {
-  assertExactProductionEnvironment(listProductionEnvironment(runner, link));
-  assertNoLinkedProductionSharedEnvironment(runner, link);
+  assertExactProductionEnvironment(
+    listProductionEnvironment(runner, link, environment),
+  );
+  assertNoLinkedProductionSharedEnvironment(runner, link, environment);
 }
 
 export function parseProductionEnvironmentAudit(
@@ -1347,6 +1482,7 @@ const PRODUCTION_SHARED_ENVIRONMENT_FAILURE =
 export function assertNoLinkedProductionSharedEnvironment(
   runner: CommandRunner,
   link: VercelLink,
+  environment: NodeJS.ProcessEnv = process.env,
 ): void {
   let result: CommandResult;
   try {
@@ -1359,7 +1495,7 @@ export function assertNoLinkedProductionSharedEnvironment(
         "--scope",
         link.orgId,
       ],
-      { env: { ...process.env, NO_COLOR: "1" } },
+      { env: { ...environment, NO_COLOR: "1" } },
     );
   } catch {
     throw new Error(SHARED_ENVIRONMENT_AUDIT_FAILURE);
@@ -1467,13 +1603,6 @@ export function assertAllowedProductionEnvironment(
   }
 }
 
-export function shouldCreateAuthSecret(
-  audit: ProductionEnvironmentAudit,
-): boolean {
-  assertAllowedProductionEnvironment(audit);
-  return !audit.names.has("BETTER_AUTH_SECRET");
-}
-
 export function assertExactProductionEnvironment(
   audit: ProductionEnvironmentAudit,
 ): void {
@@ -1498,6 +1627,7 @@ export function setVercelEnvironment(
   value: string,
   sensitive: boolean,
   forceOverwrite = true,
+  environment: NodeJS.ProcessEnv = process.env,
 ): void {
   const result = runner.run(
     "vercel",
@@ -1513,7 +1643,7 @@ export function setVercelEnvironment(
       "--project",
       link.projectId,
     ],
-    { input: `${value}\n`, env: { ...process.env, NO_COLOR: "1" } },
+    { input: `${value}\n`, env: { ...environment, NO_COLOR: "1" } },
   );
   assertCommandSucceeded(result, `Vercel env update for ${name}`);
   console.log(`Updated Vercel Production env: ${name}`);
@@ -1524,117 +1654,29 @@ function runQualityGates(
   projectRoot: string,
   buildEnvironment: NodeJS.ProcessEnv,
 ): void {
+  const qualityEnvironment = createSecretFreeBuildEnvironment(process.env);
   const commands: Array<[string, string[], NodeJS.ProcessEnv | undefined]> = [
     ...(process.env.DEPLOY_BOOTSTRAP_NPM_CI === "1"
       ? []
-      : ([["npm", ["ci"], undefined]] as Array<[
+      : ([["npm", ["ci"], qualityEnvironment]] as Array<[
           string,
           string[],
           NodeJS.ProcessEnv | undefined,
         ]>)),
-    ["npm", ["test"], undefined],
-    ["npm", ["run", "lint"], undefined],
-    ["npm", ["run", "typecheck"], undefined],
-    ["npm", ["run", "audit:runtime"], undefined],
+    ["npm", ["test"], qualityEnvironment],
+    ["npm", ["run", "lint"], qualityEnvironment],
+    ["npm", ["run", "typecheck"], qualityEnvironment],
+    ["npm", ["run", "audit:runtime"], qualityEnvironment],
     ["npm", ["run", "build"], buildEnvironment],
   ];
   for (const [command, arguments_, env] of commands) {
     console.log(`Running: ${command} ${arguments_.join(" ")}`);
     const result = runner.run(command, arguments_, {
       cwd: projectRoot,
-      env: env ?? process.env,
+      env: env ?? qualityEnvironment,
     });
     assertCommandSucceeded(result, `${command} ${arguments_.join(" ")}`);
   }
-}
-
-function inspectCandidateDeployment(
-  runner: CommandRunner,
-  link: VercelLink,
-  projectName: string,
-  candidateUrl: URL,
-  commitSha: string,
-): VercelDeployment {
-  const inspect = runChecked(
-    runner,
-    "vercel",
-    [
-      "inspect",
-      candidateUrl.origin,
-      "--wait",
-      "--timeout=10m",
-      "--json",
-      "--scope",
-      link.orgId,
-    ],
-    "Vercel candidate inspect",
-  );
-  const apiResult = vercelApi(
-    runner,
-    link,
-    `/v13/deployments/${encodeURIComponent(candidateUrl.hostname)}?withGitRepoInfo=true&teamId=${link.orgId}`,
-  );
-  return validateCandidateDeploymentEvidence(
-    inspect.stdout,
-    apiResult.stdout,
-    link,
-    projectName,
-    candidateUrl,
-    commitSha,
-  );
-}
-
-export function validateCandidateDeploymentEvidence(
-  inspectOutput: string,
-  apiOutput: string,
-  link: VercelLink,
-  projectName: string,
-  candidateUrl: URL,
-  commitSha: string,
-): VercelDeployment {
-  const inspected = parseJsonObject(
-    inspectOutput,
-    "Vercel inspect deployment",
-  );
-  if (
-    typeof inspected.id !== "string" ||
-    inspected.url !== candidateUrl.hostname ||
-    inspected.name !== projectName ||
-    inspected.target !== "production" ||
-    inspected.readyState !== "READY"
-  ) {
-    throw new Error(
-      "Vercel inspect JSON did not verify deployment ID, URL, project name, READY state, and Production target.",
-    );
-  }
-  const value = parseJsonObject(apiOutput, "Vercel deployment");
-  const meta = isRecord(value.meta) ? value.meta : undefined;
-  const regions = Array.isArray(value.regions) ? value.regions : [];
-  if (
-    value.id !== inspected.id ||
-    value.url !== candidateUrl.hostname ||
-    value.projectId !== link.projectId ||
-    value.readyState !== "READY" ||
-    value.target !== "production" ||
-    value.readySubstate !== "STAGED" ||
-    regions.length !== 1 ||
-    regions[0] !== "sin1" ||
-    meta?.deployCommitSha !== commitSha
-  ) {
-    throw new Error(
-      "Vercel deployment API did not verify project, URL, READY/STAGED state, Production target, sin1 region, and commit SHA.",
-    );
-  }
-  return {
-    id: value.id,
-    url: value.url,
-    projectId: value.projectId,
-    readyState: "READY",
-    target: "production",
-    commitSha,
-    readySubstate: "STAGED",
-    regions: ["sin1"],
-  };
 }
 
 async function waitForCanonicalDeployment(
@@ -1643,11 +1685,17 @@ async function waitForCanonicalDeployment(
   canonicalUrl: URL,
   expectedId: string,
   throwOnFailure: boolean,
+  environment: NodeJS.ProcessEnv = process.env,
 ): Promise<boolean> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= 12; attempt += 1) {
     try {
-      const deployment = readCanonicalDeployment(runner, link, canonicalUrl);
+      const deployment = readCanonicalDeployment(
+        runner,
+        link,
+        canonicalUrl,
+        environment,
+      );
       if (deployment?.id === expectedId) {
         return true;
       }
@@ -1663,7 +1711,7 @@ async function waitForCanonicalDeployment(
   }
   if (throwOnFailure) {
     throw new Error(
-      `Canonical alias did not converge to the promoted candidate: ${lastError instanceof Error ? lastError.message : "unknown API result"}`,
+      `Canonical alias did not converge to the direct Production deployment: ${lastError instanceof Error ? lastError.message : "unknown API result"}`,
     );
   }
   return false;
@@ -1671,7 +1719,6 @@ async function waitForCanonicalDeployment(
 
 export function createBuildEnvironment(
   ambient: Readonly<NodeJS.ProcessEnv>,
-  pooledUrl: string,
   authSecret: string,
   canonicalOrigin: string,
 ): NodeJS.ProcessEnv {
@@ -1679,7 +1726,7 @@ export function createBuildEnvironment(
   const environment: NodeJS.ProcessEnv = {
     ...ambient,
     NODE_ENV: "production",
-    DATABASE_URL: pooledUrl,
+    DATABASE_URL: SYNTHETIC_BUILD_DATABASE_URL,
     BETTER_AUTH_SECRET: authSecret,
     BETTER_AUTH_URL: normalizedCanonicalOrigin,
     BETTER_AUTH_TRUSTED_ORIGINS: normalizedCanonicalOrigin,
@@ -1690,10 +1737,11 @@ export function createBuildEnvironment(
   return environment;
 }
 
-function readCanonicalDeployment(
+export function readCanonicalDeployment(
   runner: CommandRunner,
   link: VercelLink,
   canonicalUrl: URL,
+  environment: NodeJS.ProcessEnv = process.env,
 ): { id: string; url: string } | undefined {
   const endpoint = `/v13/deployments/${encodeURIComponent(canonicalUrl.hostname)}?teamId=${link.orgId}`;
   const result = runner.run(
@@ -1705,17 +1753,20 @@ function readCanonicalDeployment(
       "--scope",
       link.orgId,
     ],
-    { env: { ...process.env, NO_COLOR: "1" } },
+    { env: { ...environment, NO_COLOR: "1" } },
   );
-  if (result.status !== 0) {
-    if (/\b404\b|not found|does not exist/i.test(combinedOutput(result))) {
-      return undefined;
-    }
-    assertCommandSucceeded(result, "Vercel canonical deployment API");
-  }
+  return validateCanonicalDeploymentResult(result, link);
+}
+
+export function validateCanonicalDeploymentResult(
+  result: CommandResult,
+  link: VercelLink,
+): { id: string; url: string } {
+  assertCommandSucceeded(result, "Vercel canonical deployment API");
   const value = parseJsonObject(result.stdout, "Vercel canonical deployment");
   if (
     typeof value.id !== "string" ||
+    !/^dpl_[A-Za-z0-9]+$/u.test(value.id) ||
     typeof value.url !== "string" ||
     value.projectId !== link.projectId ||
     value.readyState !== "READY" ||
@@ -1732,14 +1783,16 @@ function readReadyProductionDeployment(
   runner: CommandRunner,
   link: VercelLink,
   deploymentId: string,
+  environment: NodeJS.ProcessEnv = process.env,
 ): { id: string; url: string } {
   const value = parseJsonObject(
     vercelApi(
       runner,
       link,
       `/v13/deployments/${encodeURIComponent(deploymentId)}?teamId=${link.orgId}`,
+      environment,
     ).stdout,
-    "Vercel rollback target deployment",
+    "Vercel Production deployment",
   );
   if (
     value.id !== deploymentId ||
@@ -1749,81 +1802,10 @@ function readReadyProductionDeployment(
     value.target !== "production"
   ) {
     throw new Error(
-      "The rollback target API did not prove the exact READY Production deployment for the linked project.",
+      "The deployment API did not prove the exact READY Production deployment for the linked project.",
     );
   }
   return { id: deploymentId, url: value.url };
-}
-
-export function recheckRollbackDeploymentIdentities(
-  runner: CommandRunner,
-  link: VercelLink,
-  canonicalUrl: URL,
-  candidateId: string,
-  previousProductionId: string,
-): void {
-  const canonical = readCanonicalDeployment(runner, link, canonicalUrl);
-  if (canonical?.id !== candidateId) {
-    throw new Error(
-      "Canonical Production changed after rollback preparation; rollback was blocked and administrative mutations remain frozen.",
-    );
-  }
-  const target = readReadyProductionDeployment(
-    runner,
-    link,
-    previousProductionId,
-  );
-  if (target.id !== previousProductionId) {
-    throw new Error(
-      "The previous Production deployment changed after rollback preparation; rollback was blocked and administrative mutations remain frozen.",
-    );
-  }
-}
-
-async function prepareAdminCredentials(
-  prompter: Prompter,
-  secrets: SecretRegistry,
-  pooledUrl: string,
-): Promise<SmokeCredentials> {
-  const initialize = isAffirmative(
-    await prompter.ask(
-      "Create or transactionally update an administrator before smoke tests? [y/N] ",
-    ),
-  );
-  if (!initialize) {
-    const email = (await prompter.ask("Existing administrator email: "))
-      .trim()
-      .toLowerCase();
-    const password = await prompter.hidden("Existing administrator password: ");
-    secrets.add(password);
-    validateAdminInput({ email, name: "existing", password });
-    return { email, password };
-  }
-
-  const email = (await prompter.ask("Administrator email: ")).trim().toLowerCase();
-  const name = await prompter.ask("Administrator name: ");
-  const password = await prompter.hidden("Administrator password: ");
-  secrets.add(password);
-  const passwordConfirmation = await prompter.hidden(
-    "Confirm administrator password: ",
-  );
-  secrets.add(passwordConfirmation);
-  if (password !== passwordConfirmation) {
-    throw new Error("Administrator passwords did not match.");
-  }
-  const input = validateAdminInput({ email, name, password });
-  const snapshot = await inspectAdmin(pooledUrl, input.email);
-  console.log(renderAdminChanges(snapshot, input.name));
-  await requireAffirmative(
-    prompter,
-    snapshot.exists
-      ? "Apply exactly these existing-user changes in one transaction?"
-      : "Create this new administrator?",
-    "Administrator provisioning was refused; promotion cannot proceed without authenticated CRUD smoke tests.",
-  );
-  const result = await provisionAdmin(pooledUrl, input, snapshot);
-  console.log(`Administrator ${result}: ${input.email}`);
-  return { email: input.email, password };
 }
 
 export function assertSameMigrationPlan(
@@ -1832,53 +1814,8 @@ export function assertSameMigrationPlan(
 ): void {
   if (before.planHash !== after.planHash || before.state !== after.state) {
     throw new Error(
-      "Migration status, SQL hashes, or schema diff changed after staged deployment. No migration or promotion was performed.",
+      "Migration status, SQL hashes, classification, or schema diff changed after validation. No migration was performed.",
     );
-  }
-}
-
-function inspectGit(
-  runner: CommandRunner,
-  projectRoot: string,
-): { branch: string; commitSha: string } {
-  assertGitClean(runner, projectRoot, "at preflight");
-  const branch = runChecked(
-    runner,
-    "git",
-    ["symbolic-ref", "--quiet", "--short", "HEAD"],
-    "Git branch inspection",
-    undefined,
-    projectRoot,
-  ).stdout.trim();
-  const commitSha = runChecked(
-    runner,
-    "git",
-    ["rev-parse", "HEAD"],
-    "Git commit inspection",
-    undefined,
-    projectRoot,
-  ).stdout.trim();
-  if (!branch || !/^[0-9a-f]{40}$/.test(commitSha)) {
-    throw new Error("Git branch or commit SHA is invalid.");
-  }
-  return { branch, commitSha };
-}
-
-function assertGitClean(
-  runner: CommandRunner,
-  projectRoot: string,
-  phase: string,
-): void {
-  const status = runChecked(
-    runner,
-    "git",
-    ["status", "--porcelain=v1", "--untracked-files=normal"],
-    `Git status ${phase}`,
-    undefined,
-    projectRoot,
-  );
-  if (status.stdout.trim()) {
-    throw new Error(`Git worktree must be clean ${phase}.`);
   }
 }
 
@@ -1915,16 +1852,11 @@ function validateLocalDeploymentConfig(projectRoot: string): void {
   }
 }
 
-function assertInteractiveTerminal(): void {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    throw new Error("deploy.sh requires an interactive stdin and stdout TTY.");
-  }
-}
-
 function vercelApi(
   runner: CommandRunner,
   link: VercelLink,
   endpoint: string,
+  environment: NodeJS.ProcessEnv = process.env,
 ): CommandResult {
   return runChecked(
     runner,
@@ -1937,6 +1869,7 @@ function vercelApi(
       link.orgId,
     ],
     `Vercel API GET ${endpoint.split("?", 1)[0]}`,
+    environment,
   );
 }
 
@@ -1956,22 +1889,6 @@ function runChecked(
   return result;
 }
 
-function validateIdentifier(value: string, description: string): string {
-  const normalized = value.trim();
-  if (!normalized || /[\s\0]/.test(normalized) || normalized.length > 128) {
-    throw new Error(`${description} is invalid.`);
-  }
-  return normalized;
-}
-
-function validateNeonProjectId(value: string): string {
-  const normalized = value.trim();
-  if (!/^[a-z0-9-]{1,60}$/.test(normalized)) {
-    throw new Error("Neon project ID is invalid.");
-  }
-  return normalized;
-}
-
 function parseJsonObject(value: string, description: string): Record<string, unknown> {
   try {
     const parsed = JSON.parse(value) as unknown;
@@ -1988,19 +1905,61 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+export function missingDeploymentParametersMutationMessage(
+  phase: string | undefined,
+): string {
+  switch (phase) {
+    case "validate":
+      return "Production環境変数更新、DB migration、Production deployは開始されていません。";
+    case "migrate":
+      return "このmigrate phaseのDB migrationは開始されていません。先行phaseの変更有無はこのメッセージでは断定しません。";
+    case "release":
+      return "このrelease phaseのVercel環境変数更新とProduction deployは開始されていません。先行phaseのDB migration適用有無はこのメッセージでは断定しません。";
+    case "smoke":
+      return "このsmoke phaseのcanonical smokeは開始されていません。先行phaseのDB migration、Vercel環境変数更新、Production deployの変更有無はこのメッセージでは断定しません。";
+    default:
+      return "現在のdeploy phaseは開始されていません。先行phaseの変更有無はこのメッセージでは断定しません。";
+  }
+}
+
 async function main(): Promise<void> {
   const secrets = new SecretRegistry();
   const runner = new SystemCommandRunner(secrets, PROJECT_ROOT);
   try {
-    await runDeploymentWorkflow(runner, new TtyPrompter(), secrets);
+    await runDeploymentWorkflow(runner, secrets);
   } catch (error) {
+    if (error instanceof MigrationApprovalRequiredError) {
+      process.exitCode = error.exitCode;
+      return;
+    }
+    if (error instanceof MissingDeploymentParametersError) {
+      const profileDescription = error.profile
+        ? `AWS profile '${error.profile}'`
+        : "AWS OIDC role";
+      console.error(`${profileDescription} のデプロイ設定が不足しています。`);
+      console.error("不足している SSM parameter:");
+      for (const name of error.missingParameterNames) {
+        console.error(`  ${name}`);
+      }
+      console.error("");
+      console.error("次を実行して初期設定してください:");
+      console.error(
+        error.profile
+          ? `  ./setup-deploy-aws.sh --profile ${error.profile}`
+          : "  ./setup-deploy-aws.sh --profile <setup-profile>",
+      );
+      console.error("");
+      console.error(
+        missingDeploymentParametersMutationMessage(process.env.DEPLOY_PHASE),
+      );
+      process.exitCode = error.exitCode;
+      return;
+    }
     if (error instanceof CliUnavailableError) {
       console.error(error.message);
-      console.error("Install or update the CLIs, then retry:");
-      console.error("npm install -g vercel@latest");
-      console.error("npm install -g neon@latest");
-      console.error("# NeonはmacOSなら次も選択可");
-      console.error("brew install neonctl");
+      console.error(
+        "Verify the pinned deployment runner image build and its Vercel CLI version.",
+      );
     } else {
       console.error(
         secrets.redact(error instanceof Error ? error.message : "Deployment failed."),

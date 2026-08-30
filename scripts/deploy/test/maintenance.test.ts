@@ -549,7 +549,7 @@ function sitemapXml(origin: URL, additionalPaths: string[] = []): string {
   const paths = [
     ...requiredPaths,
     ...Array.from(
-      { length: 275 - requiredPaths.length },
+      { length: 276 - requiredPaths.length },
       (_, index) => `/life/maintenance-smoke-${index}`,
     ),
   ];

@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "migrations": [
+    {
+      "name": "20260623105657_init",
+      "sha256": "b9390d2923e3109951e5699d0112ebcf3461cee2b4a8632018b871c1ebe5e052",
+      "classification": "bootstrap-only"
+    },
+    {
+      "name": "20260804090000_add_site_settings",
+      "sha256": "cee50868ab0fa97ddef94f0e2f4c301dffd44ac0a3d7933ce1ff2b496d33e611",
+      "classification": "expand-compatible"
+    },
+    {
+      "name": "20260804150000_add_zoom_virtual_agent_web_tag",
+      "sha256": "bcfba7754e324bcf58e99dafdd9db9739d31bf7c8d0f885e6e08349da52bd5e9",
+      "classification": "expand-compatible"
+    },
+    {
+      "name": "20260805040000_split_phone_and_chat_settings",
+      "sha256": "0f92c69d08b1b2df29b2e6a22de78513ae83bbcad781367a2134539acca722e8",
+      "classification": "destructive-reviewed"
+    },
+    {
+      "name": "20260816090000_add_site_maintenance_settings",
+      "sha256": "bbdbed98ed1b8e1bca9624d51a9fd85287f31f28b3ef5bd658b04f9d1bc41f45",
+      "classification": "expand-compatible"
+    },
+    {
+      "name": "20260827150000_add_admin_access_roles",
+      "sha256": "39d1305a7ecb85a261142b610f323273fa956be5cc5cd3309d8ab4f32fbe054b",
+      "classification": "destructive-reviewed"
+    },
+    {
+      "name": "20260828120000_separate_admin_access_cas_revisions",
+      "sha256": "1c6be2aaf76e7f185eb8605b16263484aa9de9ec827374f7d58a205349236e27",
+      "classification": "destructive-reviewed"
+    },
+    {
+      "name": "20260828180000_add_admin_access_mutation_freeze",
+      "sha256": "d124fa6a5bf164afaaf6ec7d57d1261d87b65ddb06c32e636e62f33c3faa9dc7",
+      "classification": "expand-compatible"
+    },
+    {
+      "name": "20260828210000_enforce_single_admin_access_role",
+      "sha256": "ab3399e4fcf00a061bc35b8afad3ec56b9a3b35b393f2a3e4742186c4b7af62d",
+      "classification": "destructive-reviewed"
+    }
+  ]
+}

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { EventEmitter } from "node:events";
 import {
   existsSync,
   mkdirSync,
@@ -15,28 +14,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import type { Client } from "pg";
-
 import {
   captureAwsCleanupPlan,
   executeAwsCleanup,
   inspectLocalAwsArtifacts,
   removeLocalAwsArtifacts,
 } from "../lib/aws-cleanup";
-import type { LegacyRollbackAdminPlan } from "../lib/admin";
-import {
-  assertAdminAccessSessionLockHeld,
-  type AdminAccessSessionLock,
-  withAdminAccessSessionLock,
-} from "../../../lib/server/admin-access/mutation-lock";
-import { requireAffirmative, type Prompter } from "../lib/input";
 import {
   classifyPrismaStatus,
   createMigrationPlan,
   findDestructiveStatements,
   normalizePrismaDiff,
   readLocalMigrations,
-  renderMigrationPlan,
   validateMigrationHistory,
   type MigrationPlan,
 } from "../lib/migrations";
@@ -49,34 +38,19 @@ import {
 } from "../lib/process";
 import { runSmokeChecks, verifyIdleRecovery } from "../lib/smoke";
 import {
-  assertDeploymentOutputMatchesCandidate,
   assertNeonEndpointMatches,
-  parseDeploymentOutput,
   parseVercelProjectApi,
   validateDatabaseUrls,
 } from "../lib/validation";
 import {
   assertAllowedProductionEnvironment,
-  assertCandidateProductionEnvironmentReady,
+  assertExistingProductionAuthSecret,
   assertNoLinkedProductionSharedEnvironment,
   assertNoProductionSharedEnvironment,
+  assertProductionEnvironmentReady,
   assertSameMigrationPlan,
-  authenticateNeon,
-  authenticateVercel,
   createBuildEnvironment,
-  ensureCliTools,
-  ensureVercelLink,
-  inspectNeonProject,
   parseProductionEnvironmentAudit,
-  AdminAccessFreezeRecoveryRequiredError,
-  prepareLegacyRollbackForDeployment,
-  recoverAdminAccessMutationFreezeForDeployment,
-  recheckRollbackDeploymentIdentities,
-  PromotionGuard,
-  setVercelEnvironment,
-  shouldCreateAuthSecret,
-  validateCandidateDeploymentEvidence,
-  waitForNeonEndpointState,
 } from "../main";
 
 class RecordingRunner implements CommandRunner {
@@ -299,60 +273,6 @@ for (const scenario of [
   );
 }
 
-test("deploy.sh rejects non-TTY execution and missing CLIs with install guidance", () => {
-  const deployScript = new URL("../../../deploy.sh", import.meta.url).pathname;
-  const nonTty = spawnSync("bash", [deployScript], {
-    cwd: process.cwd(),
-    encoding: "utf8",
-  });
-  assert.equal(nonTty.status, 1);
-  assert.match(nonTty.stderr, /interactive terminal/);
-
-  const missing = spawnSync(
-    "bash",
-    [
-      "-c",
-      'source "$1"; PATH=/definitely-missing; require_deployment_clis',
-      "deploy-test",
-      deployScript,
-    ],
-    { encoding: "utf8" },
-  );
-  assert.equal(missing.status, 1);
-  assert.match(missing.stderr, /Required CLI is missing: vercel/);
-  assert.match(missing.stderr, /Required CLI is missing: neon/);
-  assert.match(missing.stderr, /npm install -g vercel@latest/);
-  assert.match(missing.stderr, /npm install -g neon@latest/);
-  assert.match(missing.stderr, /brew install neonctl/);
-});
-
-test("deploy.sh rejects a dirty Git worktree before deployment", () => {
-  const deployScript = new URL("../../../deploy.sh", import.meta.url).pathname;
-  const fixtureRoot = mkdtempSync(join(tmpdir(), "zoom-deploy-dirty-"));
-  try {
-    const initialized = spawnSync("git", ["init", "--quiet", fixtureRoot], {
-      encoding: "utf8",
-    });
-    assert.equal(initialized.status, 0, initialized.stderr);
-    writeFileSync(join(fixtureRoot, "untracked.txt"), "dirty", "utf8");
-    const result = spawnSync(
-      "bash",
-      [
-        "-c",
-        'source "$1"; require_clean_worktree "$2"',
-        "deploy-test",
-        deployScript,
-        fixtureRoot,
-      ],
-      { encoding: "utf8" },
-    );
-    assert.equal(result.status, 1);
-    assert.match(result.stderr, /Git worktree must be clean/);
-  } finally {
-    rmSync(fixtureRoot, { recursive: true, force: true });
-  }
-});
-
 test("database URLs require one sslmode=require and the exact Neon endpoint", () => {
   const pooled =
     "postgresql://demo:p%40ss@ep-safe-pooler.c-2.ap-southeast-1.aws.neon.tech/app?sslmode=require&channel_binding=require";
@@ -484,229 +404,6 @@ test("database URLs accept matching legacy hosts and reject proxy mismatches", (
 
 });
 
-test("Neon project inspection uses the project ID API without an organization list", () => {
-  const projectId = "green-star-22081727";
-  const runner = new RecordingRunner((command, arguments_, options) => {
-    assert.equal(command, "neon");
-    assert.deepEqual(arguments_, [
-      "api",
-      `/projects/${projectId}`,
-      "--output",
-      "json",
-    ]);
-    assert.equal(options?.env?.CI, "1");
-    return success(
-      JSON.stringify({
-        project: {
-          id: projectId,
-          name: "zoom-gov-contact-center-demo",
-          region_id: "aws-ap-southeast-1",
-          org_id: "org-polished-bonus-27326276",
-        },
-      }),
-    );
-  });
-
-  assert.deepEqual(
-    inspectNeonProject(runner, projectId, "zoom-gov-contact-center-demo"),
-    {
-      id: projectId,
-      name: "zoom-gov-contact-center-demo",
-      regionId: "aws-ap-southeast-1",
-      orgId: "org-polished-bonus-27326276",
-    },
-  );
-  assert.equal(runner.calls.length, 1);
-  assert.equal(
-    runner.calls.some((call) => call.arguments_.includes("projects")),
-    false,
-  );
-});
-
-test("staged URL parser supports legacy URL and non-interactive JSON output", () => {
-  assert.equal(
-    parseDeploymentOutput("https://candidate.vercel.app\n").url.origin,
-    "https://candidate.vercel.app",
-  );
-  assert.throws(
-    () =>
-      parseDeploymentOutput(
-        "https://candidate.vercel.app\nhttps://other.vercel.app",
-      ),
-    /one URL/,
-  );
-  const wrapped = parseDeploymentOutput(
-    JSON.stringify({
-      status: "ok",
-      deployment: {
-        id: "dpl_candidate123",
-        url: "https://candidate.vercel.app",
-        readyState: "READY",
-        target: "production",
-      },
-    }),
-  );
-  assert.equal(wrapped.url.origin, "https://candidate.vercel.app");
-  assert.equal(wrapped.id, "dpl_candidate123");
-  assert.equal(
-    parseDeploymentOutput(
-      JSON.stringify({
-        id: "dpl_candidate123",
-        url: "https://candidate.vercel.app",
-        readyState: "READY",
-        target: "production",
-      }),
-    ).id,
-    "dpl_candidate123",
-  );
-  for (const [field, value] of [
-    ["status", "error"],
-    ["readyState", "BUILDING"],
-    ["target", "preview"],
-  ] as const) {
-    const output = {
-      status: "ok",
-      deployment: {
-        id: "dpl_candidate123",
-        url: "https://candidate.vercel.app",
-        readyState: "READY",
-        target: "production",
-      },
-    };
-    if (field === "status") {
-      output.status = value;
-    } else {
-      output.deployment[field] = value;
-    }
-    assert.throws(
-      () => parseDeploymentOutput(JSON.stringify(output)),
-      /READY Production/,
-    );
-  }
-  for (const output of [
-    "[]",
-    "{not-json}",
-    JSON.stringify({
-      url: "https://candidate.vercel.app",
-      readyState: "READY",
-      target: "production",
-    }),
-    JSON.stringify({
-      id: "dpl_candidate123",
-      readyState: "READY",
-      target: "production",
-    }),
-    JSON.stringify({
-      id: "invalid",
-      url: "https://candidate.vercel.app",
-      readyState: "READY",
-      target: "production",
-    }),
-    JSON.stringify({
-      id: "dpl_candidate123",
-      url: "https://candidate.vercel.app/path",
-      readyState: "READY",
-      target: "production",
-    }),
-    JSON.stringify({
-      id: "dpl_candidate123",
-      url: "https://candidate.vercel.app",
-      readyState: "READY",
-      target: "production",
-      error: "build failed",
-    }),
-    JSON.stringify({
-      status: "ok",
-      error: "build failed",
-      deployment: {
-        id: "dpl_candidate123",
-        url: "https://candidate.vercel.app",
-        readyState: "READY",
-        target: "production",
-      },
-    }),
-  ]) {
-    assert.throws(() => parseDeploymentOutput(output));
-  }
-
-  const legacy = parseDeploymentOutput("https://candidate.vercel.app");
-  assert.doesNotThrow(() =>
-    assertDeploymentOutputMatchesCandidate(legacy, "dpl_candidate123"),
-  );
-  assert.throws(
-    () =>
-      assertDeploymentOutputMatchesCandidate(
-        parseDeploymentOutput(
-          JSON.stringify({
-            id: "dpl_other",
-            url: "https://candidate.vercel.app",
-            readyState: "READY",
-            target: "production",
-          }),
-        ),
-        "dpl_candidate123",
-      ),
-    /does not match/,
-  );
-});
-
-test("candidate evidence rejects every identity, state, region, and SHA mismatch", () => {
-  const candidateUrl = new URL("https://candidate.vercel.app");
-  const commitSha = "a".repeat(40);
-  const inspected = {
-    id: "dpl_candidate",
-    url: candidateUrl.hostname,
-    name: "demo",
-    target: "production",
-    readyState: "READY",
-  };
-  const api = {
-    id: inspected.id,
-    url: candidateUrl.hostname,
-    projectId: link.projectId,
-    target: "production",
-    readyState: "READY",
-    readySubstate: "STAGED",
-    regions: ["sin1"],
-    meta: { deployCommitSha: commitSha },
-  };
-  assert.equal(
-    validateCandidateDeploymentEvidence(
-      JSON.stringify(inspected),
-      JSON.stringify(api),
-      link,
-      "demo",
-      candidateUrl,
-      commitSha,
-    ).id,
-    inspected.id,
-  );
-
-  const mismatches: Array<[string, unknown]> = [
-    ["projectId", "prj_other"],
-    ["readyState", "ERROR"],
-    ["readySubstate", "PROMOTED"],
-    ["target", "preview"],
-    ["regions", ["iad1"]],
-    ["regions", ["sin1", "iad1"]],
-    ["meta", { deployCommitSha: "b".repeat(40) }],
-  ];
-  for (const [key, value] of mismatches) {
-    assert.throws(
-      () =>
-        validateCandidateDeploymentEvidence(
-          JSON.stringify(inspected),
-          JSON.stringify({ ...api, [key]: value }),
-          link,
-          "demo",
-          candidateUrl,
-          commitSha,
-        ),
-      /did not verify/,
-    );
-  }
-});
-
 test("Vercel project API requires an unprotected, Git-unlinked target", () => {
   const base = {
     id: link.projectId,
@@ -781,24 +478,6 @@ test("Vercel project API requires an unprotected, Git-unlinked target", () => {
   );
 });
 
-test("missing Vercel link is never created after refusal", async () => {
-  const fixtureRoot = mkdtempSync(join(tmpdir(), "zoom-deploy-link-"));
-  try {
-    const runner = new RecordingRunner(() => success());
-    const prompter: Prompter = {
-      ask: async () => "no",
-      hidden: async () => "",
-    };
-    await assert.rejects(
-      ensureVercelLink(runner, prompter, fixtureRoot),
-      /linking was refused/,
-    );
-    assert.equal(runner.calls.length, 0);
-  } finally {
-    rmSync(fixtureRoot, { recursive: true, force: true });
-  }
-});
-
 test("Vercel environment API audits every target and never stores direct URL", () => {
   const valid = {
     envs: [
@@ -833,13 +512,16 @@ test("Vercel environment API audits every target and never stores direct URL", (
   };
   const validAudit = parseProductionEnvironmentAudit(JSON.stringify(valid));
   assert.equal(validAudit.names.size, 6);
-  assert.equal(shouldCreateAuthSecret(validAudit), false);
+  assert.doesNotThrow(() => assertExistingProductionAuthSecret(validAudit));
   const withoutSecret = parseProductionEnvironmentAudit(
     JSON.stringify({
       envs: valid.envs.filter((entry) => entry.key !== "BETTER_AUTH_SECRET"),
     }),
   );
-  assert.equal(shouldCreateAuthSecret(withoutSecret), true);
+  assert.throws(
+    () => assertExistingProductionAuthSecret(withoutSecret),
+    /must already contain one Sensitive BETTER_AUTH_SECRET/,
+  );
   assert.throws(
     () =>
       parseProductionEnvironmentAudit(
@@ -1032,7 +714,7 @@ test("shared environment audit fails closed without exposing keys or values", ()
   ]);
 });
 
-test("candidate environment preflight repeats exact project and shared audits", () => {
+test("Production environment preflight repeats exact project and shared audits", () => {
   const runner = new RecordingRunner((_command, arguments_) => {
     const endpoint = arguments_[1];
     if (endpoint?.startsWith(`/v10/projects/${link.projectId}/env?`)) {
@@ -1066,6 +748,7 @@ test("candidate environment preflight repeats exact project and shared audits", 
               target: ["production"],
             },
           ],
+          pagination: { count: 6, next: null, prev: null },
         }),
       );
     }
@@ -1074,38 +757,19 @@ test("candidate environment preflight repeats exact project and shared audits", 
         JSON.stringify({ data: [], pagination: { count: 0 } }),
       );
     }
-    throw new Error("Unexpected candidate environment audit command.");
+    throw new Error("Unexpected Production environment audit command.");
   });
 
-  assert.doesNotThrow(() =>
-    assertCandidateProductionEnvironmentReady(runner, link),
-  );
+  assert.doesNotThrow(() => assertProductionEnvironmentReady(runner, link));
   assert.equal(runner.calls.length, 2);
   assert.match(
     runner.calls[0]?.arguments_[1] ?? "",
-    /\/v10\/projects\/prj_abc123\/env\?decrypt=false&teamId=team_abc123/,
+    /\/v10\/projects\/prj_abc123\/env\?decrypt=false&limit=100&teamId=team_abc123/,
   );
   assert.equal(
     runner.calls[1]?.arguments_[1],
     "/v1/env?projectId=prj_abc123&teamId=team_abc123",
   );
-});
-
-test("first BETTER_AUTH_SECRET creation never uses force overwrite", () => {
-  const runner = new RecordingRunner(() => success("updated"));
-  setVercelEnvironment(
-    runner,
-    link,
-    "BETTER_AUTH_SECRET",
-    "new-secret",
-    true,
-    false,
-  );
-  assert.equal(runner.calls.length, 1);
-  assert.equal(runner.calls[0]?.arguments_.includes("--force"), false);
-  assert.equal(runner.calls[0]?.arguments_.includes("--sensitive"), true);
-  assert.equal(runner.calls[0]?.arguments_.includes("--scope"), true);
-  assert.equal(runner.calls[0]?.options?.input, "new-secret\n");
 });
 
 test("registered secrets are redacted from child output and refused in argv", () => {
@@ -1126,155 +790,21 @@ test("registered secrets are redacted from child output and refused in argv", ()
   );
 });
 
-test("Neon refusal never starts browser authentication", async () => {
-  const runner = new RecordingRunner((_command, arguments_, options) => {
-    assert.deepEqual(arguments_, ["me", "--output", "json"]);
-    assert.equal(options?.env?.CI, "1");
-    return { status: 1, stdout: "", stderr: "not authenticated" };
-  });
-  const prompter: Prompter = {
-    ask: async () => "no",
-    hidden: async () => "",
-  };
-  await assert.rejects(
-    authenticateNeon(runner, prompter),
-    /refused before any browser auth/,
-  );
-  assert.equal(
-    runner.calls.some((call) => call.arguments_[0] === "auth"),
-    false,
-  );
-});
-
-test("Neon approval authenticates exactly once and repeats the CI probe", async () => {
-  let meCalls = 0;
-  const runner = new RecordingRunner((_command, arguments_, options) => {
-    if (arguments_[0] === "me") {
-      meCalls += 1;
-      assert.equal(options?.env?.CI, "1");
-      return meCalls === 1
-        ? { status: 1, stdout: "", stderr: "not authenticated" }
-        : success(JSON.stringify({ email: "operator@example.test" }));
-    }
-    assert.deepEqual(arguments_, ["auth"]);
-    assert.equal(options?.interactive, true);
-    return success();
-  });
-  const prompter: Prompter = {
-    ask: async () => "yes",
-    hidden: async () => "",
-  };
-  assert.equal(
-    await authenticateNeon(runner, prompter),
-    "operator@example.test",
-  );
-  assert.equal(meCalls, 2);
-  assert.equal(
-    runner.calls.filter((call) => call.arguments_[0] === "auth").length,
-    1,
-  );
-});
-
-test("Vercel login runs only after approval and is re-probed", async () => {
-  const refusalRunner = new RecordingRunner(() => ({
-    status: 1,
-    stdout: "",
-    stderr: "not authenticated",
-  }));
-  const refusalPrompter: Prompter = {
-    ask: async () => "no",
-    hidden: async () => "",
-  };
-  await assert.rejects(
-    authenticateVercel(refusalRunner, refusalPrompter),
-    /authentication was refused/,
-  );
-  assert.equal(
-    refusalRunner.calls.some((call) => call.arguments_[0] === "login"),
-    false,
-  );
-
-  let whoamiCalls = 0;
-  const approvalRunner = new RecordingRunner((_command, arguments_, options) => {
-    if (arguments_[0] === "whoami") {
-      whoamiCalls += 1;
-      return whoamiCalls === 1
-        ? { status: 1, stdout: "", stderr: "not authenticated" }
-        : success("operator-name\n");
-    }
-    assert.deepEqual(arguments_, ["login"]);
-    assert.equal(options?.interactive, true);
-    return success();
-  });
-  const approvalPrompter: Prompter = {
-    ask: async () => "yes",
-    hidden: async () => "",
-  };
-  assert.equal(
-    await authenticateVercel(approvalRunner, approvalPrompter),
-    "operator-name",
-  );
-  assert.equal(whoamiCalls, 2);
-  assert.equal(
-    approvalRunner.calls.filter((call) => call.arguments_[0] === "login")
-      .length,
-    1,
-  );
-});
-
-test("old CLI versions fail before capability probes", () => {
-  const runner = new RecordingRunner((command) =>
-    success(command === "vercel" ? "54.0.0" : "2.43.0"),
-  );
-  assert.throws(() => ensureCliTools(runner), /too old/);
-  assert.equal(runner.calls.length, 2);
-});
-
-test("Vercel help exit code 2 is accepted only with every required flag", () => {
-  let versionCalls = 0;
-  const runner = new RecordingRunner((command, arguments_) => {
-    if (arguments_[0] === "--version") {
-      versionCalls += 1;
-      return success(command === "vercel" ? "58.8.0" : "2.43.0");
-    }
-    if (command === "vercel") {
-      const helpByCommand = new Map<string, string>([
-        ["--help", "--scope"],
-        ["deploy --help", "--prod --skip-domain --yes --json --meta --project"],
-        ["api --help", "--raw"],
-        [
-          "env add --help",
-          "--sensitive --no-sensitive --force --project",
-        ],
-        ["inspect --help", "--wait --timeout --json"],
-        ["promote --help", "--yes"],
-        ["rollback --help", "--yes"],
-        ["project inspect --help", "inspect"],
-      ]);
-      return {
-        status: 2,
-        stdout: helpByCommand.get(arguments_.join(" ")) ?? "",
-        stderr: "",
-      };
-    }
-    return success("me current user --output api endpoint auth");
-  });
-  assert.doesNotThrow(() => ensureCliTools(runner));
-  assert.equal(versionCalls, 2);
-});
-
-test("production build env removes every ambient unpooled database URL", () => {
+test("production build env replaces every real database URL with a fixed synthetic URL", () => {
   const environment = createBuildEnvironment(
     {
       NODE_ENV: "development",
       DATABASE_URL: "postgresql://ambient.invalid/runtime",
       DATABASE_URL_UNPOOLED: "postgresql://ambient.invalid/direct",
     },
-    "postgresql://pooled.invalid/runtime",
     "auth-secret",
     "https://example.test",
   );
-  assert.equal(environment.DATABASE_URL, "postgresql://pooled.invalid/runtime");
+  assert.equal(
+    environment.DATABASE_URL,
+    "postgresql://deploy_build:deploy_build@127.0.0.1:5432/deploy_build?sslmode=disable",
+  );
+  assert.equal(environment.DATABASE_URL?.includes("ambient.invalid"), false);
   assert.equal(environment.DATABASE_URL_UNPOOLED, undefined);
   assert.equal(environment.BETTER_AUTH_URL, "https://example.test");
   assert.equal(environment.APP_CANONICAL_ORIGIN, "https://example.test");
@@ -1282,7 +812,6 @@ test("production build env removes every ambient unpooled database URL", () => {
     () =>
       createBuildEnvironment(
         { NODE_ENV: "production" },
-        "postgresql://pooled.invalid/runtime",
         "auth-secret",
         "http://example.test",
       ),
@@ -1313,7 +842,7 @@ test("migration TOCTOU changes block execution", () => {
   );
   assert.throws(
     () => assertSameMigrationPlan(migrationPlan("before"), migrationPlan("after")),
-    /changed after staged deployment/,
+    /changed after validation/,
   );
 });
 
@@ -1403,35 +932,40 @@ test("resolved migration attempts participate in the migration plan hash", async
   const local = readLocalMigrations(
     new URL("../../../prisma/migrations/", import.meta.url).pathname,
   );
-  const firstMigration = local[0];
-  assert.ok(firstMigration);
+  const retryMigration = local.at(-1);
+  assert.ok(retryMigration);
+  const appliedPrefix = local.slice(0, -1).map((migration) => ({
+    name: migration.name,
+    checksum: migration.hash,
+    finished: true,
+    rolledBack: false,
+    logs: null,
+  }));
   const rolledBackAttempt = {
-    name: firstMigration.name,
-    checksum: firstMigration.hash,
+    name: retryMigration.name,
+    checksum: retryMigration.hash,
     finished: false,
     rolledBack: true,
     logs: "simulated resolved failure",
   };
+  const successfulRetry = {
+    ...rolledBackAttempt,
+    finished: true,
+    rolledBack: false,
+    logs: null,
+  };
   const runner = new RecordingRunner((_command, arguments_) =>
     arguments_.includes("status")
-      ? {
-          status: 1,
-          stdout: "The following migrations have not yet been applied",
-          stderr: "",
-        }
-      : {
-          status: 2,
-          stdout: 'CREATE TABLE "example" ("id" TEXT);',
-          stderr: "",
-        },
+      ? success("Database schema is up to date")
+      : success("-- This is an empty migration."),
   );
-  const inspect = (migrations: typeof rolledBackAttempt[]) => async () => ({
+  const inspect = (attempts: typeof rolledBackAttempt[]) => async () => ({
     migrationsTableExists: true,
-    migrations,
-    userTables: [],
-    userObjects: [],
+    migrations: [...appliedPrefix, ...attempts, successfulRetry],
+    userTables: ["user"],
+    userObjects: ["table:user"],
     tablesWithData: [],
-    adminAccessRoleCardinalityViolations: null,
+    adminAccessRoleCardinalityViolations: 0,
   });
   const firstPlan = await createMigrationPlan({
     projectRoot: process.cwd(),
@@ -1454,7 +988,7 @@ test("resolved migration attempts participate in the migration plan hash", async
     ]),
   });
 
-  assert.equal(firstPlan.state, "pending");
+  assert.equal(firstPlan.state, "up-to-date");
   assert.notEqual(firstPlan.planHash, changedPlan.planHash);
   assert.equal(firstPlan.planHash, changedLogsPlan.planHash);
 });
@@ -1598,59 +1132,6 @@ test("Prisma empty migration sentinel is not reported as schema drift", () => {
   );
 });
 
-test("reviewed CAS cleanup remains safe with the additive authority migrations", async () => {
-  const local = readLocalMigrations(
-    new URL("../../../prisma/migrations/", import.meta.url).pathname,
-  );
-  const applied = local.slice(0, -3).map((migration) => ({
-    name: migration.name,
-    checksum: migration.hash,
-    finished: true,
-    rolledBack: false,
-    logs: null,
-  }));
-  const runner = new RecordingRunner((_command, arguments_) =>
-    arguments_.includes("status")
-      ? success("The following migrations have not yet been applied")
-      : {
-          ...success('CREATE TABLE "admin_access_mutation_state" ("id" TEXT);'),
-          status: 2,
-        },
-  );
-
-  const plan = await createMigrationPlan({
-    projectRoot: process.cwd(),
-    directUrl: "postgresql://redacted.invalid/database",
-    runner,
-    inspect: async () => ({
-      migrationsTableExists: true,
-      migrations: applied,
-      userTables: ["admin_access_role_assignments", "admin_access_roles", "user"],
-      userObjects: [
-        "function:bump_admin_access_role_revision",
-        "table:admin_access_role_assignments",
-        "table:admin_access_roles",
-        "trigger:admin_access_role_assignment_revision",
-        "table:user",
-      ],
-      tablesWithData: ["admin_access_role_assignments", "admin_access_roles", "user"],
-      adminAccessRoleCardinalityViolations: 0,
-    }),
-  });
-  assert.equal(plan.state, "pending");
-  assert.equal(plan.freshDatabase, false);
-  assert.match(plan.predictedDiff, /admin_access_mutation_state/);
-  assert.deepEqual(
-    plan.pending.map(({ name }) => name),
-    [
-      "20260828120000_separate_admin_access_cas_revisions",
-      "20260828180000_add_admin_access_mutation_freeze",
-      "20260828210000_enforce_single_admin_access_role",
-    ],
-  );
-  assert.equal(plan.pending[0]?.destructiveStatements.length, 2);
-});
-
 test("destructive SQL detection is conservative beyond table drops", () => {
   const destructive = findDestructiveStatements(`
     -- DROP TABLE ignored_comment;
@@ -1705,24 +1186,9 @@ test("affected-table detection ignores trigger event grammar", () => {
   ]);
 });
 
-test("destructive migration is eligible only for an object-empty fresh database", async () => {
-  const runner = new RecordingRunner((_command, arguments_, options) => {
-    assert.equal(
-      options?.env?.DATABASE_URL,
-      "postgresql://redacted.invalid/database",
-    );
-    assert.equal(
-      options?.env?.DATABASE_URL_UNPOOLED,
-      "postgresql://redacted.invalid/database",
-    );
-    if (arguments_.includes("status")) {
-      return success("The following migrations have not yet been applied");
-    }
-    return {
-      status: 2,
-      stdout: "CREATE TABLE example (id text);",
-      stderr: "",
-    };
+test("an object-empty database requires a separately reviewed bootstrap path", async () => {
+  const runner = new RecordingRunner(() => {
+    throw new Error("Prisma must not run for an unsupported empty database.");
   });
   const inspection = {
     migrationsTableExists: false,
@@ -1732,483 +1198,16 @@ test("destructive migration is eligible only for an object-empty fresh database"
     tablesWithData: [],
     adminAccessRoleCardinalityViolations: null,
   };
-  const fresh = await createMigrationPlan({
-    projectRoot: process.cwd(),
-    directUrl: "postgresql://redacted.invalid/database",
-    runner,
-    inspect: async () => inspection,
-  });
-  assert.equal(fresh.freshDatabase, true);
-  assert.match(renderMigrationPlan(fresh), /only destructive-DDL exception/);
   await assert.rejects(
     createMigrationPlan({
       projectRoot: process.cwd(),
       directUrl: "postgresql://redacted.invalid/database",
       runner,
-      inspect: async () => ({
-        ...inspection,
-        userObjects: ["enum:Role"],
-      }),
+      inspect: async () => inspection,
     }),
-    /Destructive DDL is only eligible/,
-  );
-});
-
-test("promotion guard never invokes promote before both gates pass", () => {
-  const runner = new RecordingRunner(() => success());
-  const guard = new PromotionGuard();
-  assert.throws(
-    () => guard.promote(runner, new URL("https://candidate.vercel.app"), link),
-    /blocked/,
-  );
-  guard.markMigrationVerified();
-  assert.throws(
-    () => guard.promote(runner, new URL("https://candidate.vercel.app"), link),
-    /blocked/,
+    /Automatic bootstrap is outside this deployment interface/u,
   );
   assert.equal(runner.calls.length, 0);
-  guard.markSmokeVerified();
-  guard.promote(runner, new URL("https://candidate.vercel.app"), link);
-  assert.equal(runner.calls.length, 1);
-  assert.deepEqual(runner.calls[0]?.arguments_.slice(0, 2), [
-    "promote",
-    "https://candidate.vercel.app",
-  ]);
-});
-
-test("promotion refusal leaves the promote runner untouched", async () => {
-  const runner = new RecordingRunner(() => success());
-  const prompter: Prompter = {
-    ask: async () => "no",
-    hidden: async () => "",
-  };
-  await assert.rejects(
-    requireAffirmative(
-      prompter,
-      "Promote?",
-      "Promotion was refused. Canonical traffic was not changed.",
-    ),
-    /Promotion was refused/,
-  );
-  assert.equal(runner.calls.length, 0);
-});
-
-test("legacy rollback preparation requires its own reviewed exact approval", async () => {
-  const plan: LegacyRollbackAdminPlan = {
-    admins: [
-      {
-        id: "recovery-admin",
-        email: "recovery@example.test",
-        name: "Recovery",
-        banned: false,
-        mustChangePassword: false,
-        hasCredential: true,
-        adminAccessRoleRevision: 1,
-        accessRoleIds: ["system-full-access"],
-        hasFullAccess: true,
-        customDenyPermissions: [],
-      },
-      {
-        id: "limited-admin",
-        email: "limited@example.test",
-        name: "Limited",
-        banned: false,
-        mustChangePassword: false,
-        hasCredential: true,
-        adminAccessRoleRevision: 4,
-        accessRoleIds: ["custom-limited"],
-        hasFullAccess: false,
-        customDenyPermissions: [],
-      },
-      {
-        id: "denied-full-admin",
-        email: "denied-full@example.test",
-        name: "Denied Full",
-        banned: false,
-        mustChangePassword: false,
-        hasCredential: true,
-        adminAccessRoleRevision: 2,
-        accessRoleIds: ["custom-deny", "system-full-access"],
-        hasFullAccess: true,
-        customDenyPermissions: [
-          {
-            roleId: "custom-deny",
-            resourceKey: "phone-settings",
-            action: "UPDATE",
-          },
-        ],
-      },
-    ],
-  };
-  let preparationCalls = 0;
-  let inspectCalls = 0;
-  let operationCalls = 0;
-  const writes: string[] = [];
-  const safePlan: LegacyRollbackAdminPlan = { admins: [plan.admins[0]!] };
-  const dependencies = {
-    inspect: async (pooledUrl: string) => {
-      assert.equal(pooledUrl, "postgresql://pooled.invalid/runtime");
-      inspectCalls += 1;
-      return inspectCalls === 1 ? plan : safePlan;
-    },
-    prepare: async (
-      pooledUrl: string,
-      expected: typeof plan,
-      lock: AdminAccessSessionLock,
-      freezeId: string,
-    ) => {
-      assert.equal(pooledUrl, "postgresql://pooled.invalid/runtime");
-      assert.equal(expected, plan);
-      assert.ok(lock);
-      assert.equal(freezeId, "freeze-reviewed");
-      preparationCalls += 1;
-      return { demotedCount: 1, revokedSessionCount: 2 };
-    },
-    withLock: async <T>(
-      directUrl: string,
-      operation: (lock: AdminAccessSessionLock) => Promise<T>,
-    ) => {
-      assert.equal(directUrl, "postgresql://direct.invalid/runtime");
-      return operation({} as AdminAccessSessionLock);
-    },
-    assertLock: async () => undefined,
-    freeze: async () => "freeze-reviewed",
-    inspectFreeze: async () => ({
-      frozen: false,
-      freezeId: null,
-      frozenAt: null,
-      reason: null,
-    }),
-    unfreeze: async (
-      pooledUrl: string,
-      lock: AdminAccessSessionLock,
-      freezeId: string,
-    ) => {
-      assert.equal(pooledUrl, "postgresql://pooled.invalid/runtime");
-      assert.ok(lock);
-      assert.equal(freezeId, "freeze-reviewed");
-    },
-    write: (message: string) => writes.push(message),
-  };
-
-  await assert.rejects(
-    prepareLegacyRollbackForDeployment(
-      "postgresql://pooled.invalid/runtime",
-      "postgresql://direct.invalid/runtime",
-      "dpl_previous",
-      { ask: async () => "no", hidden: async () => "" },
-      async () => {
-        operationCalls += 1;
-      },
-      dependencies,
-    ),
-    /preparation was refused/,
-  );
-  assert.equal(preparationCalls, 0);
-  assert.equal(operationCalls, 0);
-  assert.equal(writes.length, 1);
-  assert.match(writes[0]!, /limited@example\.test/);
-  assert.match(writes[0]!, /denied-full@example\.test/);
-  assert.match(
-    writes[0]!,
-    /custom-deny:phone-settings:UPDATE/,
-  );
-
-  writes.length = 0;
-  inspectCalls = 0;
-  assert.deepEqual(
-    await prepareLegacyRollbackForDeployment(
-      "postgresql://pooled.invalid/runtime",
-      "postgresql://direct.invalid/runtime",
-      "dpl_previous",
-      {
-        ask: async () => "prepare legacy rollback dpl_previous",
-        hidden: async () => "",
-      },
-      async () => {
-        operationCalls += 1;
-        return "rollback-complete" as const;
-      },
-      dependencies,
-    ),
-    "rollback-complete",
-  );
-  assert.equal(preparationCalls, 1);
-  assert.equal(operationCalls, 1);
-  assert.equal(writes.length, 3);
-  assert.match(writes[1]!, /demoted=1, sessions revoked=2/);
-  assert.match(writes[2]!, /post-switch audit passed/);
-});
-
-test("ambiguous freeze commit is classified with the persisted fencing id", async () => {
-  const plan: LegacyRollbackAdminPlan = { admins: [] };
-  let operationCalled = false;
-  await assert.rejects(
-    prepareLegacyRollbackForDeployment(
-      "postgresql://pooled.invalid/runtime",
-      "postgresql://direct.invalid/runtime",
-      "dpl_previous",
-      {
-        ask: async () => "prepare legacy rollback dpl_previous",
-        hidden: async () => "",
-      },
-      async () => {
-        operationCalled = true;
-      },
-      {
-        inspect: async () => plan,
-        prepare: async () => ({ demotedCount: 0, revokedSessionCount: 0 }),
-        freeze: async () => {
-          throw new Error("response lost after commit");
-        },
-        inspectFreeze: async () => ({
-          frozen: true,
-          freezeId: "freeze-committed",
-          frozenAt: new Date("2026-08-28T00:00:00Z"),
-          reason: "rollback",
-        }),
-        unfreeze: async () => undefined,
-        withLock: async <T>(
-          _directUrl: string,
-          operation: (lock: AdminAccessSessionLock) => Promise<T>,
-        ) => operation({} as AdminAccessSessionLock),
-        assertLock: async () => undefined,
-        write: () => undefined,
-      },
-    ),
-    (error: unknown) => {
-      assert.ok(error instanceof AdminAccessFreezeRecoveryRequiredError);
-      assert.equal(error.freezeId, "freeze-committed");
-      assert.match(String(error.cause), /response lost after commit/);
-      return true;
-    },
-  );
-  assert.equal(operationCalled, false);
-});
-
-test("rollback deployment identities are rechecked immediately before execution", () => {
-  const calls: string[] = [];
-  const runner = new RecordingRunner((_command, arguments_) => {
-    const endpoint = arguments_[1] ?? "";
-    calls.push(endpoint);
-    if (endpoint.includes("canonical.example.test")) {
-      return success(JSON.stringify({
-        id: "dpl_changed",
-        url: "changed.example.test",
-        projectId: link.projectId,
-        readyState: "READY",
-        target: "production",
-      }));
-    }
-    throw new Error("rollback target must not be read after canonical drift");
-  });
-
-  assert.throws(
-    () => recheckRollbackDeploymentIdentities(
-      runner,
-      link,
-      new URL("https://canonical.example.test"),
-      "dpl_candidate",
-      "dpl_previous",
-    ),
-    /Canonical Production changed after rollback preparation/,
-  );
-  assert.equal(calls.length, 1);
-  assert.equal(
-    runner.calls.some(({ arguments_ }) => arguments_.includes("rollback")),
-    false,
-  );
-});
-
-test("rollback target drift is rejected after the canonical recheck", () => {
-  const runner = new RecordingRunner((_command, arguments_) => {
-    const endpoint = arguments_[1] ?? "";
-    return success(JSON.stringify(endpoint.includes("canonical.example.test")
-      ? {
-          id: "dpl_candidate",
-          url: "candidate.example.test",
-          projectId: link.projectId,
-          readyState: "READY",
-          target: "production",
-        }
-      : {
-          id: "dpl_changed_previous",
-          url: "previous.example.test",
-          projectId: link.projectId,
-          readyState: "READY",
-          target: "production",
-        }));
-  });
-
-  assert.throws(
-    () => recheckRollbackDeploymentIdentities(
-      runner,
-      link,
-      new URL("https://canonical.example.test"),
-      "dpl_candidate",
-      "dpl_previous",
-    ),
-    /did not prove the exact READY Production deployment/,
-  );
-  assert.equal(runner.calls.length, 2);
-  assert.equal(
-    runner.calls.some(({ arguments_ }) => arguments_.includes("rollback")),
-    false,
-  );
-});
-
-test("session lock client errors are covered before connect and through cleanup", async () => {
-  let cleanupTokenCheck: Promise<void> | undefined;
-  let protectedLock: AdminAccessSessionLock | undefined;
-  class FakeClient extends EventEmitter {
-    queryCalls = 0;
-    async connect() {}
-    async query() {
-      this.queryCalls += 1;
-      if (this.queryCalls === 3) return { rows: [{ held: true }] };
-      if (this.queryCalls === 4) {
-        cleanupTokenCheck = assertAdminAccessSessionLockHeld(protectedLock!);
-        this.emit("error", new Error("first cleanup loss"));
-        this.emit("error", new Error("second cleanup loss"));
-        return { rows: [{ unlocked: true }] };
-      }
-      return { rows: [] };
-    }
-    async end() {
-      this.emit("error", new Error("end loss"));
-    }
-  }
-  const client = new FakeClient();
-
-  await assert.rejects(
-    withAdminAccessSessionLock(
-      "postgresql://direct.invalid/runtime",
-      async (lock) => {
-        protectedLock = lock;
-        return "completed";
-      },
-      client as unknown as Client,
-    ),
-    (error: unknown) => {
-      assert.ok(error instanceof Error);
-      assert.match(error.message, /session lock connection was lost/);
-      assert.equal((error.cause as Error).message, "first cleanup loss");
-      return true;
-    },
-  );
-  await assert.rejects(cleanupTokenCheck!, /session lock is no longer active/);
-  assert.equal(client.listenerCount("error"), 0);
-
-  class ConnectFailureClient extends FakeClient {
-    override async connect() {
-      this.emit("error", new Error("pre-connect event"));
-      throw new Error("connect rejected");
-    }
-  }
-  const connectFailure = new ConnectFailureClient();
-  await assert.rejects(
-    withAdminAccessSessionLock(
-      "postgresql://direct.invalid/runtime",
-      async () => undefined,
-      connectFailure as unknown as Client,
-    ),
-    /connect rejected/,
-  );
-  assert.equal(connectFailure.listenerCount("error"), 0);
-});
-
-test("admin access freeze recovery rechecks canonical identity and freeze fencing", async () => {
-  let canonicalReads = 0;
-  let freezeReads = 0;
-  let unfrozen = false;
-  const dependencies = {
-    inspectFreeze: async () => {
-      freezeReads += 1;
-      return {
-        frozen: true,
-        freezeId: "freeze-123",
-        frozenAt: new Date("2026-08-28T00:00:00Z"),
-        reason: "rollback",
-      };
-    },
-    withLock: async <T>(
-      directUrl: string,
-      operation: (lock: AdminAccessSessionLock) => Promise<T>,
-    ) => {
-      assert.equal(directUrl, "postgresql://direct.invalid/runtime");
-      return operation({} as AdminAccessSessionLock);
-    },
-    unfreeze: async (
-      pooledUrl: string,
-      lock: AdminAccessSessionLock,
-      freezeId: string,
-    ) => {
-      assert.equal(pooledUrl, "postgresql://pooled.invalid/runtime");
-      assert.ok(lock);
-      assert.equal(freezeId, "freeze-123");
-      unfrozen = true;
-    },
-    write: () => undefined,
-  };
-
-  assert.equal(
-    await recoverAdminAccessMutationFreezeForDeployment(
-      "postgresql://pooled.invalid/runtime",
-      "postgresql://direct.invalid/runtime",
-      () => {
-        canonicalReads += 1;
-        return "dpl_canonical";
-      },
-      {
-        ask: async () =>
-          "recover admin access freeze freeze-123 dpl_canonical",
-        hidden: async () => "",
-      },
-      dependencies,
-    ),
-    true,
-  );
-  assert.equal(canonicalReads, 2);
-  assert.equal(freezeReads, 2);
-  assert.equal(unfrozen, true);
-});
-
-test("admin access freeze recovery refuses a changed canonical identity", async () => {
-  let canonicalReads = 0;
-  let unfrozen = false;
-  const dependencies = {
-    inspectFreeze: async () => ({
-      frozen: true,
-      freezeId: "freeze-changed-canonical",
-      frozenAt: new Date("2026-08-28T00:00:00Z"),
-      reason: "rollback",
-    }),
-    withLock: async <T>(
-      _directUrl: string,
-      operation: (lock: AdminAccessSessionLock) => Promise<T>,
-    ) => operation({} as AdminAccessSessionLock),
-    unfreeze: async () => {
-      unfrozen = true;
-    },
-    write: () => undefined,
-  };
-
-  await assert.rejects(
-    recoverAdminAccessMutationFreezeForDeployment(
-      "postgresql://pooled.invalid/runtime",
-      "postgresql://direct.invalid/runtime",
-      () => (++canonicalReads === 1 ? "dpl_before" : "dpl_after"),
-      {
-        ask: async () =>
-          "recover admin access freeze freeze-changed-canonical dpl_before",
-        hidden: async () => "",
-      },
-      dependencies,
-    ),
-    /Canonical Production identity changed/,
-  );
-  assert.equal(canonicalReads, 2);
-  assert.equal(unfrozen, false);
 });
 
 function bootstrapResources(includeUnknown = false): unknown[] {
@@ -2565,7 +1564,7 @@ function deploymentSitemapXml(origin: URL): string {
   const paths = [
     ...representativePaths,
     ...Array.from(
-      { length: 275 - representativePaths.length },
+      { length: 276 - representativePaths.length },
       (_, index) => `/life/deployment-smoke-${index}`,
     ),
   ];
@@ -2842,7 +1841,7 @@ test("idle recovery observes idle, wakes once, then proves active", async () => 
   const states: string[] = [];
   let healthCalls = 0;
   await verifyIdleRecovery(
-    new URL("https://candidate.vercel.app"),
+    new URL("https://canonical.example.test"),
     0,
     async (input) => {
       healthCalls += 1;
@@ -2861,80 +1860,4 @@ test("idle recovery observes idle, wakes once, then proves active", async () => 
   );
   assert.deepEqual(states, ["idle", "active"]);
   assert.equal(healthCalls, 1);
-});
-
-test("Neon state polling allows management API grace beyond the first minute", async () => {
-  const target = validateDatabaseUrls(
-    "postgresql://demo:secret@ep-safe-pooler.c-2.ap-southeast-1.aws.neon.tech/app?sslmode=require",
-    "postgresql://demo:secret@ep-safe.c-2.ap-southeast-1.aws.neon.tech/app?sslmode=require",
-  );
-  let calls = 0;
-  const waits: number[] = [];
-  const runner = new RecordingRunner(() => {
-    calls += 1;
-    return success(
-      JSON.stringify({
-        endpoints: [
-          {
-            id: "ep-safe",
-            project_id: "project-safe",
-            branch_id: "br-safe",
-            host: "ep-safe.c-2.ap-southeast-1.aws.neon.tech",
-            region_id: "aws-ap-southeast-1",
-            type: "read_write",
-            current_state: calls < 7 ? "active" : "idle",
-          },
-        ],
-      }),
-    );
-  });
-
-  await waitForNeonEndpointState(
-    runner,
-    "project-safe",
-    target,
-    "idle",
-    {
-      wait: async (delayMs) => {
-        waits.push(delayMs);
-      },
-    },
-  );
-
-  assert.equal(calls, 7);
-  assert.deepEqual(waits, Array(6).fill(10_000));
-});
-
-test("Neon state polling remains bounded and fail-closed", async () => {
-  const target = validateDatabaseUrls(
-    "postgresql://demo:secret@ep-safe-pooler.c-2.ap-southeast-1.aws.neon.tech/app?sslmode=require",
-    "postgresql://demo:secret@ep-safe.c-2.ap-southeast-1.aws.neon.tech/app?sslmode=require",
-  );
-  const runner = new RecordingRunner(() =>
-    success(
-      JSON.stringify({
-        endpoints: [
-          {
-            id: "ep-safe",
-            project_id: "project-safe",
-            branch_id: "br-safe",
-            host: "ep-safe.c-2.ap-southeast-1.aws.neon.tech",
-            region_id: "aws-ap-southeast-1",
-            type: "read_write",
-            current_state: "active",
-          },
-        ],
-      }),
-    ),
-  );
-
-  await assert.rejects(
-    waitForNeonEndpointState(runner, "project-safe", target, "idle", {
-      attempts: 2,
-      intervalMs: 0,
-      wait: async () => undefined,
-    }),
-    /did not reach 'idle'.*last state: 'active'/,
-  );
-  assert.equal(runner.calls.length, 2);
 });
