@@ -35,6 +35,8 @@ const ADMIN_ACCESS_FREEZE_MIGRATION =
   "20260828180000_add_admin_access_mutation_freeze";
 const ADMIN_ACCESS_SINGLE_ROLE_MIGRATION =
   "20260828210000_enforce_single_admin_access_role";
+const DEVELOPER_API_SETTINGS_MIGRATION =
+  "20260829231500_add_developer_api_settings";
 const MIGRATIONS_BEFORE_ADMIN_ACCESS = [
   "20260623105657_init",
   "20260804090000_add_site_settings",
@@ -57,10 +59,22 @@ test("fresh database applies and reapplies the complete migration chain", async 
          WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL
          ORDER BY started_at`,
       );
-      assert.equal(migrations.rowCount, 9);
+      assert.equal(migrations.rowCount, 10);
       assert.equal(
         migrations.rows.at(-1)?.migration_name,
-        ADMIN_ACCESS_SINGLE_ROLE_MIGRATION,
+        DEVELOPER_API_SETTINGS_MIGRATION,
+      );
+      const developerApiColumns = await client.query<{ column_name: string }>(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'site_developer_api_settings'
+          AND column_name IN ('clientSecretEncrypted', 'secretTokenEncrypted')
+        ORDER BY column_name
+      `);
+      assert.deepEqual(
+        developerApiColumns.rows.map(({ column_name }) => column_name),
+        ["clientSecretEncrypted", "secretTokenEncrypted"],
       );
       await assertSystemRoles(client);
       await assertAssignmentRevisionTriggerState(client, false);

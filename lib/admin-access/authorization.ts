@@ -182,6 +182,7 @@ export function getAllowedAdminPermissionSet(actor: AdminAccessActor) {
     "chat-settings",
     "language-settings",
     "maintenance-settings",
+    "developer-api",
   ] as const) {
     for (const action of ["VIEW", "CREATE", "UPDATE", "DELETE"] as const) {
       if (canAdminAccess(actor, resourceKey, action)) {

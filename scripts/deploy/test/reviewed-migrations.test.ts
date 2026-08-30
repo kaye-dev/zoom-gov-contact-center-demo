@@ -58,7 +58,7 @@ test("one-time admin access plan accepts only the exact base-five and pending-fo
   );
   assert.deepEqual(
     plan.pending.map(({ name, sha256 }) => ({ name, sha256 })),
-    currentChain.slice(baseLength).map(({ name, hash }) => ({
+    currentChain.slice(baseLength, baseLength + 4).map(({ name, hash }) => ({
       name,
       sha256: hash,
     })),
@@ -113,7 +113,7 @@ test("future, missing, reordered, or SHA-mismatched local chains are rejected", 
 
   for (const chain of [
     [...currentChain, future],
-    currentChain.slice(0, -1),
+    currentChain.slice(0, 8),
     reordered,
     checksumMismatch,
   ]) {

@@ -121,12 +121,12 @@ export async function createAdminAccessReviewedMigrationPlan(
     migration.appliedNames.some(
       (name, index) => name !== batch.appliedPrefix[index]?.name,
     ) ||
-    migration.pending.length !== batch.pending.length ||
-    migration.pending.some(
+    migration.pending.length < batch.pending.length ||
+    batch.pending.some(
       (item, index) =>
-        item.name !== batch.pending[index]?.name ||
-        item.hash !== batch.pending[index]?.sha256 ||
-        item.classification !== batch.pending[index]?.classification,
+        migration.pending[index]?.name !== item.name ||
+        migration.pending[index]?.hash !== item.sha256 ||
+        migration.pending[index]?.classification !== item.classification,
     )
   ) {
     throw new Error(
@@ -234,9 +234,9 @@ export function createAdminAccessReviewedMigrationBatchPlanFromSnapshot(
 function assertExactLocalMigrationChain(
   migrations: readonly LocalMigration[],
 ): void {
-  if (migrations.length !== EXACT_MIGRATION_CHAIN.length) {
+  if (migrations.length < EXACT_MIGRATION_CHAIN.length) {
     throw new Error(
-      `The '${ADMIN_ACCESS_REVIEWED_BATCH_ID}' batch requires the exact reviewed ${EXACT_MIGRATION_CHAIN.length}-migration local chain; found ${migrations.length}.`,
+      `The '${ADMIN_ACCESS_REVIEWED_BATCH_ID}' batch requires the exact reviewed ${EXACT_MIGRATION_CHAIN.length}-migration local chain prefix; found ${migrations.length}.`,
     );
   }
 
@@ -250,6 +250,19 @@ function assertExactLocalMigrationChain(
     ) {
       throw new Error(
         `Local migration position ${index + 1} does not match the exact name, SHA-256, and classification reviewed for '${ADMIN_ACCESS_REVIEWED_BATCH_ID}'.`,
+      );
+    }
+  }
+
+  for (const migration of migrations.slice(EXACT_MIGRATION_CHAIN.length)) {
+    if (
+      migration.name !== "20260829231500_add_developer_api_settings" ||
+      migration.hash !==
+        "73fdf3fb7c5d101b9a0abce16c7ae29b825e1e1560d68dad02f0e530e0ac430a" ||
+      migration.classification !== "expand-compatible"
+    ) {
+      throw new Error(
+        `Local migration '${migration.name}' does not match the exact reviewed post-'${ADMIN_ACCESS_REVIEWED_BATCH_ID}' chain.`,
       );
     }
   }
