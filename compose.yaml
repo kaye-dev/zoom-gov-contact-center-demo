@@ -1,6 +1,14 @@
+x-runtime-labels: &runtime-labels
+  dev.zoomgov.runtime.id: "${RUNTIME_ID:-local}"
+  dev.zoomgov.runtime.checkout: "${RUNTIME_CHECKOUT_PATH:-unknown}"
+  dev.zoomgov.runtime.mode: "${RUNTIME_MODE:-local}"
+  dev.zoomgov.runtime.config-digest: "${RUNTIME_CONFIG_DIGEST:-unknown}"
+  dev.zoomgov.runtime.session-id: "${CODEX_RUNTIME_SESSION_ID:-local-unmanaged}"
+
 services:
   db:
     image: postgres:17-bookworm
+    labels: *runtime-labels
     environment:
       POSTGRES_DB: zoom_demo
       POSTGRES_USER: postgres
@@ -19,6 +27,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    labels: *runtime-labels
     # Colima の bind mount では Turbopack の polling が変更を取りこぼすため、
     # watchOptions の polling を確実に利用できる webpack で開発サーバーを動かす。
     command: sh -c "npm ci && npm run db:generate && npm run dev -- --webpack --hostname 0.0.0.0"
@@ -52,6 +61,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    labels: *runtime-labels
     command: npm run db:studio:docker
     depends_on:
       db:
@@ -65,3 +75,7 @@ services:
 volumes:
   node_modules:
   postgres-data:
+
+networks:
+  default:
+    labels: *runtime-labels

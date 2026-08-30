@@ -37,10 +37,18 @@ Zoom 製品のデモ用に作成した、架空の市区町村ホームページ
 緊急解除は管理画面で対象環境を`DISABLED`にするのが第一手段です。認証だけが故障し、DB接続が正常な場合に限り、Neon SQL Editorで[メンテナンスモード緊急解除](docs/deploy/vercel-neon/maintenance-recovery.md)のtransaction SQLを実行します。DB停止中はfail-closedの503を維持し、DBを復旧してから解除を確認します。コードrollbackは設定解除やDB復旧とは別操作です。
 
 ```bash
-./dev-compose.sh
+./dev-compose.sh prepare
+./dev-compose.sh status
+./dev-compose.sh ensure
 ```
 
-Web を起動する場合は、起動時にアクセス範囲を選択します。Enter のみ、または `1` を入力すると、この Mac だけでアクセスできる [http://localhost:3000](http://localhost:3000) を使用します。`2` を入力すると、Mac の LAN 内 IPv4 アドレスを自動検出し、同じネットワーク上のスマートフォンなどから開ける `http://192.168.x.x:3000` 形式の URL を表示します。`3` を入力すると、Cloudflare Tunnel 用の [https://demo.keien.dev](https://demo.keien.dev) で起動します。
+`prepare`はcheckout固有のruntime identityを解決するだけで、Dockerやアプリを起動しません。`status`は現在のCompose project、port、URL、runtime owner、healthを表示します。`ensure`は正しい既存serverがあれば再利用し、存在しない場合だけ起動します。検証に使うURLだけを取得する場合は`./dev-compose.sh status --url`を使います。
+
+Local checkoutは従来どおり[http://localhost:3000](http://localhost:3000)、PostgreSQL `5432`、Prisma Studio `5555`を使用します。同じcheckoutのhealthyなnative Next.js processまたは正しいCompose `web`が起動済みなら、PIDまたはcontainer IDを変えずに再利用します。別checkoutや所有権不明のprocessが`3000`を使っている場合は、そのprocessを停止せずエラーにします。
+
+Codex worktreeはcanonical checkout pathから固有Compose projectとweb・PostgreSQL・Studio portを割り当てます。webは`3100-3899`、PostgreSQLは`15432-16231`、Studioは`25555-26354`のloopback portを使い、DB、volume、network、originもworktreeごとに分離します。割当値は追跡対象外の`.codex/runtime.local.env`に保存されるため、`HOST_PORT`や`COMPOSE_PROJECT_NAME`を手作業で指定しません。wrapperはworktreeだけ`compose.worktree.yaml`を自動適用し、保持するvolumeのcreation identityをsession間で固定するため、次回起動でdatabase再作成を要求しません。
+
+LocalでWebを新規起動する場合だけ、起動時にアクセス範囲を選択します。Enterのみ、または`1`を入力するとこのMacだけ、`2`は同一LAN、`3`はCloudflare Tunnelです。worktreeは常にloopback限定であり、LANとCloudflareには公開しません。
 
 ```text
 Web access:
@@ -56,25 +64,16 @@ LAN 内 IPv4 アドレスは起動のたびに検出されるため、接続先�
 
 LAN 向けの起動は、開発サーバーを平文 HTTP で同じネットワークへ公開します。信頼できるネットワーク上で開発用データだけを使用し、確認後は Compose を停止してください。PostgreSQL と Prisma Studio はアクセス方式にかかわらず、この Mac からだけ接続できます。
 
-Prisma Studio は [http://localhost:5555](http://localhost:5555) で開けます。ブラウザ上で各テーブルのレコードを確認し、作成・更新・削除できます。
-既に `3000` 番ポートを使っている場合は、外側のポートを変えて起動できます。
+LocalのPrisma Studioは[http://localhost:5555](http://localhost:5555)です。worktreeのStudio portは`./dev-compose.sh status`で確認します。
 
-```bash
-HOST_PORT=3001 ./dev-compose.sh
-```
+`./dev-compose.sh`は変更操作のときだけ、必要に応じてColimaを起動します。`prepare`と`status`はColimaを起動しません。WebまたはStudioを起動する前に現在のCompose projectのPrisma migration状態を確認し、未適用migrationがある場合だけ`db:deploy`の承認を求めます。通常のソース変更はHMRを使い、自動的な`web`再起動はmigration適用後に必要な場合だけです。package、Docker、Next.js設定などの変更では暗黙に再起動せず、明示的な`./dev-compose.sh restart web`を案内します。
 
-Prisma Studio の外側ポートを変える場合は、`STUDIO_PORT` を指定します。
-
-```bash
-STUDIO_PORT=5556 ./dev-compose.sh
-```
-
-`./dev-compose.sh` は Colima が停止している場合に自動起動します。Web を含む `up` の場合だけアクセス範囲を確認し、`up db`、`up studio`、`down`、`logs`、`ps` などでは確認しません。`web` または `studio` を起動する前に Prisma migration の状態を確認し、未適用 migration がある場合だけ `db:deploy` を実行するか確認します。直接 `docker compose` を実行する場合は localhost 限定で起動するため、事前に `colima start` を実行してください。
+日常操作でraw `docker compose`は使いません。wrapperが`--project-directory`、project名、runtime envを必ず注入し、別worktreeへの誤操作を防ぎます。
 
 初回起動後、別ターミナルで初期管理者 seed を実行します。
 
 ```bash
-docker compose exec web npm run db:seed-admin
+./dev-compose.sh exec web npm run db:seed-admin
 ```
 
 初期管理者は compose の既定値では以下です。必要に応じて `.env` または環境変数で上書きしてください。
@@ -85,21 +84,18 @@ SEED_ADMIN_PASSWORD=ChangeMe12345!
 SEED_ADMIN_NAME=Demo Admin
 ```
 
-PostgreSQL のデータは Docker volume `postgres-data` に保存されます。DB を初期化し直す場合や、依存関係更新後に Docker 側の `node_modules` volume が古くなった場合は、以下を実行します。
-
-```bash
-docker compose down -v
-```
+PostgreSQLのデータはcheckout固有のDocker named volumeに保存されます。`./dev-compose.sh stop web studio db`は現在のprojectの明示serviceだけを停止します。Codex worktreeの`./dev-compose.sh cleanup`はsession開始後に作成したことを証明できるcontainerとnetworkだけを削除し、databaseと`node_modules`のvolumeは保持します。DB初期化やvolume削除は自動開発フローに含めません。
 
 API の動作確認は以下で実行できます。
 
 ```bash
-curl http://localhost:3000/api/health
-curl -X POST http://localhost:3000/api/demo-records \
+runtime_url="$(./dev-compose.sh status --url)"
+curl "$runtime_url/api/health"
+curl -X POST "$runtime_url/api/demo-records" \
   -H 'Content-Type: application/json' \
   -d '{"message":"hello"}'
-curl http://localhost:3000/api/demo-records
-curl http://localhost:3000/docs/privacy-policy.md
+curl "$runtime_url/api/demo-records"
+curl "$runtime_url/docs/privacy-policy.md"
 ```
 
 この構成では `app/api/[[...route]]/route.ts` の Route Handler 上で Hono を動かし、アプリ固有 API は Prisma Client 経由で PostgreSQL に書き込みます。Better Auth は `app/api/auth/[...all]/route.ts` に専用 mount しています。
@@ -161,9 +157,13 @@ node .agents/skills/plan/scripts/prototype-revision.mjs plans/<slug>/prototype
 
 | コマンド | 説明 |
 | --- | --- |
-| `./dev-compose.sh` | Web のアクセス範囲、Colima、Prisma migration 状態を確認して Docker で開発サーバーを起動 |
+| `./dev-compose.sh prepare` | checkout固有のproject、port、originを解決し、serviceを起動せずruntime manifestを用意 |
+| `./dev-compose.sh status [--url]` | runtime owner、project、mount、health、検証用URLをread-only確認 |
+| `./dev-compose.sh ensure` | 正しい既存serverを再利用し、存在しない場合だけ現在のcheckoutで起動 |
+| `./dev-compose.sh restart web` | 明示操作としてverified `web`だけを再起動 |
+| `./dev-compose.sh stop <services>` | 現在のprojectの明示serviceだけを停止 |
+| `./dev-compose.sh cleanup` | worktree sessionが作成したcontainerとnetworkだけを削除しvolumeを保持 |
 | `./dev-prototype.sh [slug]` | 最終更新または指定したUI prototypeを空きlocalhost portで配信 |
-| `docker compose down -v` | Docker volume を含めて停止・削除 |
 | `./dev-compose.sh up studio` | Prisma Studio を Docker 上で起動 |
 | `npm run dev` | 開発サーバーを起動 |
 | `npm run build` | 本番ビルドを作成 |

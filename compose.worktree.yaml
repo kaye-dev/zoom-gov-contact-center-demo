@@ -1,0 +1,17 @@
+# Worktree volumes outlive one Codex runtime session. Their creation labels stay
+# stable so a later session can reuse data without Compose proposing recreation.
+volumes:
+  node_modules:
+    labels:
+      dev.zoomgov.runtime.id: "${RUNTIME_ID}"
+      dev.zoomgov.runtime.checkout: "${RUNTIME_CHECKOUT_PATH}"
+      dev.zoomgov.runtime.mode: "worktree"
+      dev.zoomgov.runtime.config-digest: "${RUNTIME_VOLUME_CONFIG_DIGEST}"
+      dev.zoomgov.runtime.session-id: "${RUNTIME_VOLUME_OWNER_SESSION_ID}"
+  postgres-data:
+    labels:
+      dev.zoomgov.runtime.id: "${RUNTIME_ID}"
+      dev.zoomgov.runtime.checkout: "${RUNTIME_CHECKOUT_PATH}"
+      dev.zoomgov.runtime.mode: "worktree"
+      dev.zoomgov.runtime.config-digest: "${RUNTIME_VOLUME_CONFIG_DIGEST}"
+      dev.zoomgov.runtime.session-id: "${RUNTIME_VOLUME_OWNER_SESSION_ID}"
