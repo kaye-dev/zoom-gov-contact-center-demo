@@ -99,7 +99,7 @@ const VERCEL_ENVIRONMENT_PAGE_LIMIT = 100;
 const VERCEL_ENVIRONMENT_MAX_PAGES = 32;
 const SYNTHETIC_BUILD_DATABASE_URL =
   "postgresql://deploy_build:deploy_build@127.0.0.1:5432/deploy_build?sslmode=disable";
-const CANONICAL_PUBLIC_STATUS_ATTEMPTS = 12;
+const CANONICAL_PUBLIC_STATUS_ATTEMPTS = 6;
 const CANONICAL_PUBLIC_STATUS_DELAY_MS = 5_000;
 const DEPLOYMENT_LOG_STYLE = resolveDeploymentLogStyle(
   process.env.DEPLOY_LOG_STYLE,
@@ -958,7 +958,7 @@ export async function waitForCanonicalPublicStatus(
           "user-agent": "zoom-gov-demo-deployment-smoke/1.0",
         },
         redirect: "manual",
-        signal: AbortSignal.timeout(15_000),
+        signal: AbortSignal.timeout(30_000),
       });
       const responseUrl = response.url ? new URL(response.url) : canonicalUrl;
       await response.arrayBuffer();

@@ -17,9 +17,14 @@ const LOCAL_DATABASE_URL =
   "postgresql://postgres:postgres@localhost:5432/zoom_demo";
 
 export const MAINTENANCE_POSTGRES_POOL_MAX = 2;
-export const MAINTENANCE_POSTGRES_CONNECTION_TIMEOUT_MS = 1_000;
-export const MAINTENANCE_POSTGRES_QUERY_TIMEOUT_MS = 750;
-export const MAINTENANCE_POSTGRES_READ_TIMEOUT_MS = 2_000;
+// Vercel Routing Middleware executes globally, so a request can establish its
+// first pooled connection across regions before it reaches the Singapore DB.
+// Keep the read bounded and fail closed, but allow that cold connection to
+// complete instead of classifying ordinary cross-region latency as downtime.
+export const MAINTENANCE_POSTGRES_CONNECTION_TIMEOUT_MS = 10_000;
+export const MAINTENANCE_POSTGRES_QUERY_TIMEOUT_MS = 2_000;
+export const MAINTENANCE_POSTGRES_READ_TIMEOUT_MS = 15_000;
+export const MAINTENANCE_POSTGRES_IDLE_TIMEOUT_MS = 10_000;
 
 export const MAINTENANCE_POSTGRES_READ_QUERY = `
 SELECT
@@ -169,7 +174,7 @@ export function resolveMaintenancePostgresPoolConfig(
     application_name: "zoom-gov-demo-maintenance-proxy",
     connectionTimeoutMillis: MAINTENANCE_POSTGRES_CONNECTION_TIMEOUT_MS,
     query_timeout: MAINTENANCE_POSTGRES_QUERY_TIMEOUT_MS,
-    idleTimeoutMillis: 1_000,
+    idleTimeoutMillis: MAINTENANCE_POSTGRES_IDLE_TIMEOUT_MS,
     allowExitOnIdle: true,
   };
 }

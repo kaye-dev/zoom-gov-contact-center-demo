@@ -9,6 +9,7 @@ import {
 } from "../lib/maintenance-config";
 import {
   MAINTENANCE_POSTGRES_CONNECTION_TIMEOUT_MS,
+  MAINTENANCE_POSTGRES_IDLE_TIMEOUT_MS,
   MAINTENANCE_POSTGRES_POOL_MAX,
   MAINTENANCE_POSTGRES_QUERY_TIMEOUT_MS,
   MAINTENANCE_POSTGRES_READ_QUERY,
@@ -58,13 +59,14 @@ test("maintenance pool uses one bounded no-retry profile", () => {
     application_name: "zoom-gov-demo-maintenance-proxy",
     connectionTimeoutMillis: MAINTENANCE_POSTGRES_CONNECTION_TIMEOUT_MS,
     query_timeout: MAINTENANCE_POSTGRES_QUERY_TIMEOUT_MS,
-    idleTimeoutMillis: 1_000,
+    idleTimeoutMillis: MAINTENANCE_POSTGRES_IDLE_TIMEOUT_MS,
     allowExitOnIdle: true,
   });
   assert.equal(MAINTENANCE_POSTGRES_POOL_MAX, 2);
-  assert.equal(MAINTENANCE_POSTGRES_CONNECTION_TIMEOUT_MS, 1_000);
-  assert.equal(MAINTENANCE_POSTGRES_QUERY_TIMEOUT_MS, 750);
-  assert.equal(MAINTENANCE_POSTGRES_READ_TIMEOUT_MS, 2_000);
+  assert.equal(MAINTENANCE_POSTGRES_CONNECTION_TIMEOUT_MS, 10_000);
+  assert.equal(MAINTENANCE_POSTGRES_QUERY_TIMEOUT_MS, 2_000);
+  assert.equal(MAINTENANCE_POSTGRES_READ_TIMEOUT_MS, 15_000);
+  assert.equal(MAINTENANCE_POSTGRES_IDLE_TIMEOUT_MS, 10_000);
   assert.throws(
     () =>
       resolveMaintenancePostgresPoolConfig({ NODE_ENV: "production" }),
