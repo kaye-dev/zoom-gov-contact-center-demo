@@ -259,50 +259,36 @@ async function assertPrototypeSurface(url: string, files: Map<string, Buffer | s
   assert.equal(await head.text(), "");
 }
 
-test("canonicalとlegacy prototypeは複数HTML・nested asset・query・HEADを配信する", async (context) => {
+test("canonical prototypeは複数HTML・nested asset・query・HEADを配信する", async (context) => {
   const repository = await createTestRepository(context);
   const slug = uniqueSlug("prototype-server-test");
-  const surfaces = [`plans/${slug}/prototype`, `plans/tmp/${slug}/prototype`];
-
-  for (const relativeArtifact of surfaces) {
-    await context.test(relativeArtifact, async (surfaceContext) => {
-      const { files } = await createPrototypeFixture(repository, relativeArtifact);
-      const { url } = await startServer(surfaceContext, repository, relativeArtifact);
-      await assertPrototypeSurface(url, files);
-    });
-  }
+  const relativeArtifact = `plans/${slug}/prototype`;
+  const { files } = await createPrototypeFixture(repository, relativeArtifact);
+  const { url } = await startServer(context, repository, relativeArtifact);
+  await assertPrototypeSurface(url, files);
 });
 
-test("canonicalと2種類のlegacy reviewは固定5ファイルだけを配信する", async (context) => {
+test("canonical reviewは固定5ファイルだけを配信する", async (context) => {
   const repository = await createTestRepository(context);
   const slug = uniqueSlug("review-server-test");
-  const surfaces = [
-    `plans/${slug}/review`,
-    `plans/reviews/${slug}`,
-    `plans/tmp/${slug}/implementation-review`,
-  ];
+  const relativeArtifact = `plans/${slug}/review`;
+  await createReviewFixture(repository, relativeArtifact);
+  const { url } = await startServer(context, repository, relativeArtifact);
 
-  for (const relativeArtifact of surfaces) {
-    await context.test(relativeArtifact, async (surfaceContext) => {
-      await createReviewFixture(repository, relativeArtifact);
-      const { url } = await startServer(surfaceContext, repository, relativeArtifact);
+  const rootResponse = await fetchArtifact(url, "/");
+  assert.equal(rootResponse.status, 200);
+  assert.equal(await rootResponse.text(), reviewFiles.get("index.html")!.body);
 
-      const rootResponse = await fetchArtifact(url, "/");
-      assert.equal(rootResponse.status, 200);
-      assert.equal(await rootResponse.text(), reviewFiles.get("index.html")!.body);
-
-      for (const [relative, file] of reviewFiles) {
-        const response = await fetchArtifact(url, `/${relative}`);
-        assert.equal(response.status, 200, relative);
-        assert.equal(response.headers.get("content-type"), file.contentType, relative);
-        assert.equal(await response.text(), file.body, relative);
-      }
-
-      const extra = await fetchArtifact(url, "/extra.json");
-      assert.equal(extra.status, 404);
-      assert.equal(await extra.text(), "Not Found");
-    });
+  for (const [relative, file] of reviewFiles) {
+    const response = await fetchArtifact(url, `/${relative}`);
+    assert.equal(response.status, 200, relative);
+    assert.equal(response.headers.get("content-type"), file.contentType, relative);
+    assert.equal(await response.text(), file.body, relative);
   }
+
+  const extra = await fetchArtifact(url, "/extra.json");
+  assert.equal(extra.status, 404);
+  assert.equal(await extra.text(), "Not Found");
 });
 
 test("HTTP境界はHost・method・encoded path・symlink・未対応対象を拒否する", async (context) => {
@@ -422,9 +408,8 @@ test("artifact root/index symlinkと不正なCLI引数を起動前に拒否す�
     { args: [`plans/${symlinkSlug}/prototype`], label: "root symlink" },
     { args: [`plans/${internalIndexSlug}/prototype`], label: "internal index symlink" },
     { args: [`plans/${externalIndexSlug}/prototype`], label: "external index symlink" },
-    { args: ["plans/tmp/prototype"], label: "reserved tmp prototype collision" },
-    { args: ["plans/tmp/review"], label: "reserved tmp review collision" },
-    { args: ["plans/reviews"], label: "incomplete reviews legacy path" },
+    { args: ["plans/tmp/prototype"], label: "legacy prototype path" },
+    { args: ["plans/reviews"], label: "legacy review path" },
   ];
 
   for (const cliCase of cases) {

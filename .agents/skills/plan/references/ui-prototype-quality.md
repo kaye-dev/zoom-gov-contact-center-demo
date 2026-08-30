@@ -41,7 +41,7 @@ This application uses Tailwind CSS v4 and semantic tokens from `app/globals.css`
    @source ".";
    ```
 
-   Keep this file byte-for-byte identical to the two lines above, including its final newline. The builder rejects custom `@import`, `@source`, `@plugin`, `@config`, and all other additions so an ignored artifact cannot load code or read outside its prototype directory. The legacy `plans/tmp/<slug>/prototype/` contract differs only in using `../../../../app/globals.css`.
+   Keep this file byte-for-byte identical to the two lines above, including its final newline. The builder rejects custom `@import`, `@source`, `@plugin`, `@config`, and all other additions so an ignored artifact cannot load code or read outside its prototype directory.
 
 3. Compile the local stylesheet:
 

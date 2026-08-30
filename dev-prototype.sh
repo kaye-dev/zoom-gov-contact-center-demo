@@ -27,7 +27,6 @@ fi
 
 typeset slug="${1:-}"
 typeset artifact_path=""
-typeset legacy="false"
 
 is_valid_slug() {
   local candidate_slug="$1"
@@ -42,7 +41,6 @@ has_entry_point() {
 }
 
 select_latest_prototype() {
-  local search_kind="$1"
   local prototype_directory
   local candidate_slug
   local candidate_file
@@ -55,11 +53,7 @@ select_latest_prototype() {
   integer latest_mtime=-1
   integer matching_directory_count=0
 
-  if [[ "${search_kind}" == "canonical" ]]; then
-    prototype_directories=("${DEV_PROTOTYPE_SCRIPT_DIR}"/plans/*/prototype(N/))
-  else
-    prototype_directories=("${DEV_PROTOTYPE_SCRIPT_DIR}"/plans/tmp/*/prototype(N/))
-  fi
+  prototype_directories=("${DEV_PROTOTYPE_SCRIPT_DIR}"/plans/*/prototype(N/))
 
   for prototype_directory in "${prototype_directories[@]}"; do
     candidate_slug="${prototype_directory:h:t}"
@@ -106,42 +100,25 @@ if [[ -n "${slug}" ]]; then
   fi
 
   typeset canonical_directory="${DEV_PROTOTYPE_SCRIPT_DIR}/plans/${slug}/prototype"
-  typeset legacy_directory="${DEV_PROTOTYPE_SCRIPT_DIR}/plans/tmp/${slug}/prototype"
   if [[ -e "${canonical_directory}" || -L "${canonical_directory}" ]]; then
     if ! has_entry_point "${canonical_directory}"; then
       print -u2 "Canonical prototype entry point must be a regular file: plans/${slug}/prototype/index.html"
       exit 1
     fi
     artifact_path="plans/${slug}/prototype"
-  elif [[ -e "${legacy_directory}" || -L "${legacy_directory}" ]]; then
-    if ! has_entry_point "${legacy_directory}"; then
-      print -u2 "Legacy prototype entry point must be a regular file: plans/tmp/${slug}/prototype/index.html"
-      exit 1
-    fi
-    artifact_path="plans/tmp/${slug}/prototype"
-    legacy="true"
   else
     print -u2 "Prototype entry point is unavailable: plans/${slug}/prototype/index.html"
     exit 1
   fi
 else
   zmodload zsh/stat
-  if select_latest_prototype canonical; then
+  if select_latest_prototype; then
     :
   else
     integer canonical_result=$?
     if (( canonical_result == 2 )); then
       print -u2 "Canonical prototype directories exist, but none has a regular index.html entry point."
       exit 1
-    fi
-    if select_latest_prototype legacy; then
-      legacy="true"
-    else
-      integer legacy_result=$?
-      if (( legacy_result == 2 )); then
-        print -u2 "Legacy prototype directories exist, but none has a regular index.html entry point."
-        exit 1
-      fi
     fi
   fi
 
@@ -152,8 +129,5 @@ else
   fi
 fi
 
-if [[ "${legacy}" == "true" ]]; then
-  print -u2 -r -- "Warning: using legacy prototype path: ${artifact_path}"
-fi
 print -r -- "Prototype: ${artifact_path}"
 exec node "${DEV_PROTOTYPE_SCRIPT_DIR}/scripts/serve-plan-artifact.mjs" "${artifact_path}"

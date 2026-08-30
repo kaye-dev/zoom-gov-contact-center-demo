@@ -19,8 +19,7 @@ if (!requestedDirectory || process.argv.length !== 3) {
 }
 
 const slug = "[a-z0-9][a-z0-9-]*";
-const canonicalPattern = new RegExp(`^plans/(?!tmp/|reviews/)${slug}/prototype$`);
-const legacyPattern = new RegExp(`^plans/tmp/${slug}/prototype$`);
+const canonicalPattern = new RegExp(`^plans/${slug}/prototype$`);
 const rawSegments = requestedDirectory.split(/[\\/]/u);
 if (
   requestedDirectory.includes("\\")
@@ -34,9 +33,9 @@ const lexicalTarget = (
     ? path.relative(repositoryRoot, requestedDirectory)
     : requestedDirectory
 ).split(path.sep).join("/");
-if (!canonicalPattern.test(lexicalTarget) && !legacyPattern.test(lexicalTarget)) {
+if (!canonicalPattern.test(lexicalTarget)) {
   throw new Error(
-    "target must be plans/<slug>/prototype or legacy plans/tmp/<slug>/prototype in this repository",
+    "target must be plans/<slug>/prototype in this repository",
   );
 }
 
@@ -53,9 +52,9 @@ const relativeTarget = path
   .relative(repositoryRoot, prototypeDirectory)
   .split(path.sep)
   .join("/");
-if (!canonicalPattern.test(relativeTarget) && !legacyPattern.test(relativeTarget)) {
+if (!canonicalPattern.test(relativeTarget)) {
   throw new Error(
-    "target must be plans/<slug>/prototype or legacy plans/tmp/<slug>/prototype in this repository",
+    "target must be plans/<slug>/prototype in this repository",
   );
 }
 
@@ -90,9 +89,7 @@ while (pendingDirectories.length > 0) {
 }
 
 const input = await readFile(inputPath, "utf8");
-const expectedInput = canonicalPattern.test(relativeTarget)
-  ? '@import "../../../app/globals.css";\n@source ".";\n'
-  : '@import "../../../../app/globals.css";\n@source ".";\n';
+const expectedInput = '@import "../../../app/globals.css";\n@source ".";\n';
 if (input !== expectedInput) {
   throw new Error(
     "tailwind.css must exactly match the documented import and @source contract; custom directives are unavailable",

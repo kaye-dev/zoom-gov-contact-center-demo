@@ -61,25 +61,10 @@ if (
   && segments[1] !== "tmp"
   && segments[1] !== "reviews"
   && (segments[2] === "prototype" || segments[2] === "review")
-) {
+ ) {
   artifactType = segments[2];
-} else if (
-  segments.length === 4
-  && segments[0] === "plans"
-  && segments[1] === "tmp"
-  && slugPattern.test(segments[2])
-  && (segments[3] === "prototype" || segments[3] === "implementation-review")
-) {
-  artifactType = segments[3] === "prototype" ? "prototype" : "review";
-} else if (
-  segments.length === 3
-  && segments[0] === "plans"
-  && segments[1] === "reviews"
-  && slugPattern.test(segments[2])
-) {
-  artifactType = "review";
 } else {
-  fail("artifact path must be plans/<slug>/<prototype|review> or a supported legacy plan artifact path");
+  fail("artifact path must be plans/<slug>/<prototype|review>");
 }
 const reviewAllowlist = new Set(["index.html", "styles.css", "app.js", "review-data-schema.js", "review-data.json"]);
 

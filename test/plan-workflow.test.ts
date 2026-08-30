@@ -283,9 +283,9 @@ test("plan生成物はignoredでshipping skillと自動結合しない", async (
     read(".gitignore"),
     read(".agents/skills/git-commit-push-pr/SKILL.md"),
   ]);
-  assert.match(gitignore, /^\/plans\/\*\.md$/m);
+  assert.match(gitignore, /^\/plans\/\*$/m);
   assert.match(gitignore, /^!\/plans\/template\.md$/m);
-  assert.match(gitignore, /^\/plans\/\*\/$/m);
+  assert.match(gitignore, /^\/plan\/$/m);
   assert.match(shipping, /Generate the commit message only from the staged diff/);
   assert.match(shipping, /cleanup is a separate user-authorized operation/);
 });

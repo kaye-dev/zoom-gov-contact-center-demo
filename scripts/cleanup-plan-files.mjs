@@ -77,17 +77,17 @@ export async function cleanupPlanFiles({ repositoryRoot, apply = false, remove =
   if (!repositoryRoot) throw new Error("repositoryRoot is required");
 
   const root = path.resolve(repositoryRoot);
-  const plansDirectory = path.join(root, "plans");
-  const templatePath = path.join(plansDirectory, TEMPLATE_NAME);
-  await requireDirectory(plansDirectory, "plans directory");
+  const planDirectory = path.join(root, "plans");
+  const templatePath = path.join(planDirectory, TEMPLATE_NAME);
+  await requireDirectory(planDirectory, "plans directory");
   await requireRegularFile(templatePath, "plans/template.md");
 
-  const topLevelEntries = (await readdir(plansDirectory, { withFileTypes: true }))
+  const topLevelEntries = (await readdir(planDirectory, { withFileTypes: true }))
     .filter((entry) => entry.name !== TEMPLATE_NAME)
     .sort(sortByName);
   const candidates = [];
   for (const entry of topLevelEntries) {
-    candidates.push(...await listEntry(root, path.join(plansDirectory, entry.name)));
+    candidates.push(...await listEntry(root, path.join(planDirectory, entry.name)));
   }
 
   onCandidates?.(candidates);
@@ -95,7 +95,7 @@ export async function cleanupPlanFiles({ repositoryRoot, apply = false, remove =
 
   const removed = [];
   for (const entry of topLevelEntries) {
-    const absolutePath = path.join(plansDirectory, entry.name);
+    const absolutePath = path.join(planDirectory, entry.name);
     const relative = relativePath(root, absolutePath, entry.isDirectory() && !entry.isSymbolicLink());
     try {
       await remove(absolutePath, { recursive: true, force: false, maxRetries: 2, retryDelay: 100 });

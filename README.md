@@ -135,7 +135,7 @@ npm run dev
 
 ### UIプロトタイプを確認
 
-`plans/<slug>/prototype/`のモックは、Composeやデータベースを起動せずにlocalhostで確認できます。引数なしではcanonical prototypeから最終更新されたものを選び、canonicalが1件もない場合だけ`plans/tmp/<slug>/prototype/`へフォールバックします。この後方互換pathは閲覧とCSS buildのみです。machine parity、UI承認、`$implement`、`$review`の前に`plans/<slug>/prototype/`へ移行し、version 1 manifestとrevision-bound evidenceを作り直してください。OSが空きポートを自動で割り当てます。
+`plans/<slug>/prototype/`のモックは、Composeやデータベースを起動せずにlocalhostで確認できます。引数なしではcanonical prototypeから最終更新されたものを選びます。OSが空きポートを自動で割り当てます。
 
 ```bash
 ./dev-prototype.sh

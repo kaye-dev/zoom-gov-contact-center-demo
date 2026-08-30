@@ -20,8 +20,6 @@ const builderScript = path.join(
   ".agents/skills/plan/scripts/build-prototype-css.mjs",
 );
 
-type PrototypeLocation = "canonical" | "legacy";
-
 interface PrototypeFixture {
   absolute: string;
   relative: string;
@@ -37,15 +35,10 @@ function runBuilder(args: string[], cwd = repositoryRoot) {
 
 async function createPrototype(
   context: test.TestContext,
-  location: PrototypeLocation = "canonical",
 ): Promise<PrototypeFixture> {
   const slug = `css-builder-${randomUUID()}`;
-  const planRoot = location === "canonical"
-    ? path.join(repositoryRoot, "plans", slug)
-    : path.join(repositoryRoot, "plans", "tmp", slug);
-  const relative = location === "canonical"
-    ? `plans/${slug}/prototype`
-    : `plans/tmp/${slug}/prototype`;
+  const planRoot = path.join(repositoryRoot, "plans", slug);
+  const relative = `plans/${slug}/prototype`;
   const absolute = path.join(repositoryRoot, relative);
   const styles = path.join(absolute, "styles.css");
   context.after(() => rm(planRoot, { recursive: true, force: true }));
@@ -55,9 +48,7 @@ async function createPrototype(
     writeFile(path.join(absolute, "index.html"), '<div class="text-red-500">prototype</div>\n'),
     writeFile(
       path.join(absolute, "tailwind.css"),
-      location === "canonical"
-        ? '@import "../../../app/globals.css";\n@source ".";\n'
-        : '@import "../../../../app/globals.css";\n@source ".";\n',
+      '@import "../../../app/globals.css";\n@source ".";\n',
     ),
   ]);
   return { absolute, relative, styles };
@@ -75,14 +66,12 @@ async function assertStylesUnavailable(styles: string) {
   await assert.rejects(access(styles), { code: "ENOENT" });
 }
 
-test("canonicalとlegacyのprototype directoryでTailwind CSSを生成する", async (context) => {
-  for (const location of ["canonical", "legacy"] as const) {
-    const fixture = await createPrototype(context, location);
-    const result = runBuilder([fixture.relative]);
+test("canonical prototype directoryでTailwind CSSを生成する", async (context) => {
+  const fixture = await createPrototype(context);
+  const result = runBuilder([fixture.relative]);
 
-    assertBuildSucceeded(result, fixture);
-    assert.match(await readFile(fixture.styles, "utf8"), /\.text-red-500/);
-  }
+  assertBuildSucceeded(result, fixture);
+  assert.match(await readFile(fixture.styles, "utf8"), /\.text-red-500/);
 });
 
 test("repository外のcwdでも同じrepository-relative pathを同じ対象として扱う", async (context) => {

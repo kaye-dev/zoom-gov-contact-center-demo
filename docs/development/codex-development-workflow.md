@@ -8,7 +8,7 @@
 
 ## 成果物
 
-`plans/template.md`だけを追跡し、生成物はplan単位で同じdirectoryへ置く。
+`plans/template.md`だけを追跡し、生成物はplan単位で同じdirectoryへ置く。1つのbranchで複数のplanを作成・実装できるよう、各planを固有のslugで`plans/`配下へ並列に保持する。
 
 ```text
 plans/<slug>/
@@ -18,7 +18,7 @@ plans/<slug>/
 └── review/     # $review時
 ```
 
-生成directoryはGitへ追加しない。`plans/tmp/<slug>/prototype/`は閲覧とCSS buildだけに使える後方互換pathであり、parity、承認、実装、reviewの前にcanonical directoryへ移行する。
+生成directoryはGitへ追加しない。
 
 ## モデル選択
 
@@ -128,7 +128,7 @@ $implement plans/<slug>/goal.md
 6. 同じheadのPRを作成するか、必要な箇所だけを更新する。
 7. PRのbase/head OID、draft、mergeability、merge stateをreadbackして報告する。
 
-現在のユーザーが明示した場合だけ実行する。force push、stash、変更破棄、広域stage、自動競合解決、PR merge、CI待機は行わない。競合、remote divergence、複数PR、認証・repository不一致は停止条件とし、plan/review生成物は明示scope外ならstageも削除もしない。
+現在のユーザーが明示した場合だけ実行する。force push、stash、変更破棄、広域stage、自動競合解決、PR merge、CI待機は行わない。競合、remote divergence、複数PR、認証・repository不一致は停止条件とし、plan・review生成物は明示scope外ならstageも削除もしない。
 
 ## 任意の振り返り
 

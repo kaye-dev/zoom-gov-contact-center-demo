@@ -114,7 +114,7 @@ GitHub Secretsは作成しません。Vercel token、Neon API key、管理者pas
 
 ## 6. 保護設定と権限を検証する
 
-1. `main`をbranch protectionまたはrulesetで保護し、Pull Request reviewと必須CIを設定する。
+1. `main`をbranch protectionまたはrulesetで保護し、Pull Request reviewと必須CIを設定する。`Plan artifact guard / Verify plan artifacts`をrequired status checkに登録し、`plans/template.md`以外のplan生成物をmergeできないようにする。
 2. deploy関連ファイルの変更にCODEOWNERS reviewを設定する。
 3. IAM Roleが2件のexact OIDC subject以外からAssumeRoleできないことを確認する。
 4. Roleが4 parameterだけを読め、SSM経由の3件だけをdecryptできることを確認する。

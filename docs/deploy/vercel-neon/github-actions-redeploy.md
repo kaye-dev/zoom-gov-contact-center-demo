@@ -37,7 +37,7 @@ workflowは同じ`GITHUB_SHA`に対して次の順で動きます。
 
 | Job | Environment | 処理 | Productionへの変更 |
 | --- | --- | --- | --- |
-| `Validate and plan migration` | `production-deploy` | AWS OIDC、Parameter Store再取得、対象/plan/品質検査、migration plan | なし |
+| `Validate and plan migration` | `production-deploy` | AWS OIDC、Parameter Store再取得、対象・plan・品質検査、migration plan | なし |
 | `Approve and apply production migration` | `production-migration` | plan digestを照合し、Neon状態を再取得してmigrationを適用・検証 | pendingの場合だけDBを変更 |
 | `Deploy directly to Production` | `production-deploy` | Parameter Storeを再取得し、Vercel環境変数同期後に対象SHAをProductionへ直接deploy | Vercel Productionを変更 |
 | `Verify the canonical Production deployment` | `production-deploy` | deployment IDを照合し、canonical URLの200 / 503、認証、robots、sitemapをsmoke検証 | なし |

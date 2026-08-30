@@ -12,6 +12,7 @@
     "test:admin-access:db": "node --import tsx --test scripts/deploy/integration-test/*.test.ts",
     "eval:plan-skills": "node scripts/eval-plan-skills.mjs",
     "plans:cleanup": "node scripts/cleanup-plan-files.mjs",
+    "plans:guard": "node scripts/verify-plan-artifacts.mjs",
     "audit:runtime": "npm audit --omit=dev",
     "typecheck": "tsc --noEmit",
     "build": "next build --webpack",

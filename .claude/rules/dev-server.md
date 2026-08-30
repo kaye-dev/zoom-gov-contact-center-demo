@@ -11,7 +11,7 @@
 
 ## plan prototypeとHTMLレビュー
 
-`plans/<slug>/prototype/`は次の軽量なloopback serverで配信する。引数なしではcanonical prototypeから最終更新されたものを自動選択し、canonicalが1件もない場合だけ`plans/tmp/<slug>/prototype/`へフォールバックする。このpathは閲覧とCSS buildの後方互換だけであり、parity、実装、reviewには使わない。それらの前にcanonical `plans/<slug>/prototype/`へ移行し、version 1 manifestとvalidation profileを作成する。対象を指定する場合だけslugを渡す。
+`plans/<slug>/prototype/`は次の軽量なloopback serverで配信する。引数なしではcanonical prototypeから最終更新されたものを自動選択する。対象を指定する場合だけslugを渡す。
 
 ```sh
 ./dev-prototype.sh
