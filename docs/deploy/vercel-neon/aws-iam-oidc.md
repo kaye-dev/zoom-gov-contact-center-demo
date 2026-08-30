@@ -1,6 +1,6 @@
 # AWS IAM / GitHub OIDC設定
 
-この手順は、初回setup用profile、ローカルdeploy用profile、手動起動する[`production-deploy.yml`](../../../.github/workflows/production-deploy.yml)の権限境界を分離するための管理者設定です。VercelのGit自動デプロイへ切り替える手順ではありません。
+この手順は、初回setup用profile、ローカルdeploy用profile、手動起動する[`production-deploy.yml`](../../../.github/workflows/production-deploy.yml)の権限境界を分離するための管理者設定です。VercelのGit自動デプロイへ切り替える手順ではありません。フォーク先を上から設定する場合は、先に[フォーク先のGitHub Actions初回設定](github-actions-setup.md)を参照してください。
 
 このファイルにあるAWSとGitHubの操作はリポジトリへcommitされません。設定前に、AWS account、GitHub repository、IAM Role ARN、KMS key ARNが対象環境と一致することを別の管理者と確認してください。
 
@@ -48,20 +48,22 @@ Audience:     sts.amazonaws.com
 
 ## 2. exact subjectを確認する
 
-このrepositoryは2026-08-17時点でGitHubのdefault subjectを使用し、immutable subjectは無効です。2つのGitHub Environmentに対応するsubjectは次の完全一致です。
+GitHubのdefault subjectを使用するrepositoryでは、GitHub APIが返す`sub_claim_prefix`にEnvironment名を付けた2件が完全一致subjectです。
 
 ```text
-repo:kaye-dev/zoom-gov-contact-center-demo:environment:production-deploy
-repo:kaye-dev/zoom-gov-contact-center-demo:environment:production-migration
+<OIDC_SUB_PREFIX>:environment:production-deploy
+<OIDC_SUB_PREFIX>:environment:production-migration
 ```
 
 設定直前にrepository administratorが次のread-only APIで現在値を再確認します。
 
 ```bash
-gh api repos/kaye-dev/zoom-gov-contact-center-demo/actions/oidc/customization/sub
+gh api 'repos/{owner}/{repo}/actions/oidc/customization/sub'
 ```
 
-`use_default`が`true`、`use_immutable_subject`が`false`、`sub_claim_prefix`が`repo:kaye-dev/zoom-gov-contact-center-demo`でない場合は、上記subjectをそのまま使用しません。[GitHub OIDC reference](https://docs.github.com/en/actions/reference/security/oidc)に従い、実際のimmutable owner ID、repository ID、custom subjectを完全一致で指定します。部分一致や`*`へ緩和しません。
+`use_default`が`true`であることを確認し、responseの`sub_claim_prefix`を`<OIDC_SUB_PREFIX>`として使用します。2026年7月15日以降に作成されたrepositoryやimmutable subjectを有効にしたrepositoryでは、prefixにowner IDとrepository IDが含まれます。元repositoryの名前固定prefixをフォーク先へコピーしません。
+
+`use_default`が`false`の場合は、上記形式を使用しません。[GitHub OIDC reference](https://docs.github.com/en/actions/reference/security/oidc)とrepositoryのcustom subject設定に従い、2 Environmentが実際に発行するsubjectを完全一致で指定します。custom subjectを推測したり、部分一致や`*`へ緩和したりしません。
 
 ## 3. Actions専用IAM Roleを作成する
 
@@ -81,8 +83,8 @@ gh api repos/kaye-dev/zoom-gov-contact-center-demo/actions/oidc/customization/su
         "StringEquals": {
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
           "token.actions.githubusercontent.com:sub": [
-            "repo:kaye-dev/zoom-gov-contact-center-demo:environment:production-deploy",
-            "repo:kaye-dev/zoom-gov-contact-center-demo:environment:production-migration"
+            "<OIDC_SUB_PREFIX>:environment:production-deploy",
+            "<OIDC_SUB_PREFIX>:environment:production-migration"
           ]
         }
       }
@@ -91,7 +93,7 @@ gh api repos/kaye-dev/zoom-gov-contact-center-demo/actions/oidc/customization/su
 }
 ```
 
-`repo:kaye-dev/*`、`repo:kaye-dev/zoom-gov-contact-center-demo:*`、任意branchを許すwildcardは使用しません。Role maximum session durationは既定の1時間を維持します。
+`repo:*`、`<OIDC_SUB_PREFIX>:*`、任意branchやEnvironmentを許すwildcardは使用しません。Role maximum session durationは既定の1時間を維持します。
 
 ### Parameter Store/KMSのread policy
 
