@@ -61,7 +61,8 @@ if (page) {
   const issuedDialog = document.getElementById("issued-dialog");
   const revokeDialog = document.getElementById("revoke-dialog");
   const usageLimitDialog = document.getElementById("usage-limit-dialog");
-  const dialogs = [usageLimitDialog, issueDialog, issuedDialog, revokeDialog];
+  const keyUsageLimitDialog = document.getElementById("key-usage-limit-dialog");
+  const dialogs = [usageLimitDialog, keyUsageLimitDialog, issueDialog, issuedDialog, revokeDialog];
   let returnFocus = null;
 
   function focusable(dialog) {
@@ -80,6 +81,8 @@ if (page) {
         ? document.getElementById("cancel-revoke")
         : dialog === usageLimitDialog
           ? document.getElementById("usage-limit-input")
+          : dialog === keyUsageLimitDialog
+            ? document.getElementById("key-usage-limit-input")
         : focusable(dialog)[0] ?? dialog.querySelector("[role='dialog']");
     window.requestAnimationFrame(() => first?.focus());
   }
@@ -96,9 +99,35 @@ if (page) {
   const usageLimitError = document.getElementById("usage-limit-error");
   const limitedMode = document.getElementById("usage-mode-limited");
   const unlimitedMode = document.getElementById("usage-mode-unlimited");
+  const keyUsageLimitInput = document.getElementById("key-usage-limit-input");
+  const keyUsageLimitError = document.getElementById("key-usage-limit-error");
+  const keyLimitedMode = document.getElementById("key-usage-mode-limited");
+  const keyUnlimitedMode = document.getElementById("key-usage-mode-unlimited");
+  const issueKeyLimitInput = document.getElementById("issue-key-limit-input");
+  const issueKeyLimitError = document.getElementById("issue-key-limit-error");
+  const issueKeyLimitedMode = document.getElementById("issue-key-mode-limited");
+  const issueKeyUnlimitedMode = document.getElementById("issue-key-mode-unlimited");
+  function parseMonthlyLimit(input) {
+    const rawValue = input.value.trim();
+    let valid = /^\d+$/.test(rawValue);
+    let value = 0n;
+    if (valid) {
+      value = BigInt(rawValue);
+      valid = value >= 100n && value <= 9223372036854775800n && (value <= 10000n || value % 100n === 0n);
+    }
+    return { valid, value };
+  }
   function syncUsageLimitMode() {
     usageLimitInput.disabled = unlimitedMode.checked;
     usageLimitError.hidden = true;
+  }
+  function syncKeyUsageLimitMode() {
+    keyUsageLimitInput.disabled = keyUnlimitedMode.checked;
+    keyUsageLimitError.hidden = true;
+  }
+  function syncIssueKeyLimitMode() {
+    issueKeyLimitInput.disabled = issueKeyUnlimitedMode.checked;
+    issueKeyLimitError.hidden = true;
   }
   function setUnlimitedSummary() {
     document.getElementById("usage-limit-value").textContent = "上限なし";
@@ -106,10 +135,16 @@ if (page) {
   }
   limitedMode.addEventListener("change", syncUsageLimitMode);
   unlimitedMode.addEventListener("change", syncUsageLimitMode);
+  keyLimitedMode.addEventListener("change", syncKeyUsageLimitMode);
+  keyUnlimitedMode.addEventListener("change", syncKeyUsageLimitMode);
+  issueKeyLimitedMode.addEventListener("change", syncIssueKeyLimitMode);
+  issueKeyUnlimitedMode.addEventListener("change", syncIssueKeyLimitMode);
   document.getElementById("open-usage-limit-dialog").addEventListener("click", (event) => openDialog(usageLimitDialog, event.currentTarget));
+  document.getElementById("open-key-usage-limit-dialog").addEventListener("click", (event) => openDialog(keyUsageLimitDialog, event.currentTarget));
   document.getElementById("open-issue-dialog").addEventListener("click", (event) => openDialog(issueDialog, event.currentTarget));
   document.getElementById("open-revoke-dialog").addEventListener("click", (event) => openDialog(revokeDialog, event.currentTarget));
   document.getElementById("cancel-usage-limit").addEventListener("click", () => closeDialog(true));
+  document.getElementById("cancel-key-usage-limit").addEventListener("click", () => closeDialog(true));
   document.getElementById("cancel-issue").addEventListener("click", () => closeDialog(true));
   document.getElementById("cancel-revoke").addEventListener("click", () => closeDialog(true));
   document.getElementById("close-issued").addEventListener("click", () => closeDialog(true));
@@ -124,13 +159,7 @@ if (page) {
       closeDialog(true);
       return;
     }
-    const rawValue = usageLimitInput.value.trim();
-    let valid = /^\d+$/.test(rawValue);
-    let value = 0n;
-    if (valid) {
-      value = BigInt(rawValue);
-      valid = value >= 100n && value <= 9223372036854775800n && (value <= 10000n || value % 100n === 0n);
-    }
+    const { valid, value } = parseMonthlyLimit(usageLimitInput);
     usageLimitError.hidden = valid;
     if (!valid) {
       usageLimitInput.focus();
@@ -142,12 +171,38 @@ if (page) {
     document.getElementById("usage-remaining-value").textContent = `${new Intl.NumberFormat("ja-JP").format(remaining)}件`;
     closeDialog(true);
   });
+  document.getElementById("key-usage-limit-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (keyUnlimitedMode.checked) {
+      document.getElementById("active-key-limit").innerHTML = '<span class="font-semibold">上限なし</span>';
+      document.getElementById("active-key-usage").innerHTML = '<span class="font-semibold">780件</span><span class="mt-1 block text-xs text-fg-muted">残り 上限なし</span>';
+      closeDialog(true);
+      return;
+    }
+    const { valid, value } = parseMonthlyLimit(keyUsageLimitInput);
+    keyUsageLimitError.hidden = valid;
+    if (!valid) {
+      keyUsageLimitInput.focus();
+      return;
+    }
+    const formatted = new Intl.NumberFormat("ja-JP").format(value);
+    const remaining = value > 780n ? value - 780n : 0n;
+    document.getElementById("active-key-limit").innerHTML = `<span class="font-semibold">${formatted}件</span>`;
+    document.getElementById("active-key-usage").innerHTML = `<span class="font-semibold">780件</span><span class="mt-1 block text-xs text-fg-muted">残り ${new Intl.NumberFormat("ja-JP").format(remaining)}件</span>`;
+    closeDialog(true);
+  });
   document.getElementById("issue-form").addEventListener("submit", (event) => {
     event.preventDefault();
     const checked = document.querySelectorAll("input[name='permissions']:checked");
     const error = document.getElementById("permission-error");
     error.hidden = checked.length > 0;
-    if (checked.length === 0) return;
+    const limit = parseMonthlyLimit(issueKeyLimitInput);
+    const validLimit = issueKeyUnlimitedMode.checked || limit.valid;
+    issueKeyLimitError.hidden = validLimit;
+    if (checked.length === 0 || !validLimit) {
+      if (!validLimit) issueKeyLimitInput.focus();
+      return;
+    }
     openDialog(issuedDialog, document.getElementById("open-issue-dialog"));
   });
   document.getElementById("copy-api-key").addEventListener("click", async () => {
@@ -180,6 +235,7 @@ if (page) {
     document.getElementById("open-issue-dialog").disabled = true;
     document.getElementById("open-revoke-dialog").disabled = true;
     document.getElementById("open-usage-limit-dialog").disabled = true;
+    document.getElementById("open-key-usage-limit-dialog").disabled = true;
   } else if (state === "empty") {
     document.getElementById("api-key-table-wrap").hidden = true;
     document.getElementById("api-key-empty").hidden = false;
@@ -191,6 +247,8 @@ if (page) {
     openDialog(revokeDialog, document.getElementById("open-revoke-dialog"));
   } else if (state === "usage-limit-dialog") {
     openDialog(usageLimitDialog, document.getElementById("open-usage-limit-dialog"));
+  } else if (state === "key-usage-limit-dialog") {
+    openDialog(keyUsageLimitDialog, document.getElementById("open-key-usage-limit-dialog"));
   } else if (state === "unlimited") {
     unlimitedMode.checked = true;
     syncUsageLimitMode();

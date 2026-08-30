@@ -118,5 +118,7 @@ test("reservation API management UI exposes approved semantic selectors", () => 
     "reservation-api-key-content", "usage-limit-card", "public-api-reference", "api-key-list-card",
     "issue-dialog", "issued-dialog", "revoke-dialog", "usage-limit-dialog", "key-usage-limit-dialog", "api-key-empty",
   ]) assert.match(source, new RegExp(selector, "u"));
+  assert.match(source, /htmlFor="key-usage-limit-input"/u);
+  assert.match(source, /id="key-usage-limit-input" name="monthlyLimit"/u);
   assert.doesNotMatch(source, /localStorage|sessionStorage|Zoom SDK|webhook/iu);
 });

@@ -2,264 +2,190 @@
 
 ## 目的
 
-管理画面の「予約システム」から予約専用APIキーを発行・無効化し、全キーで共有する月間リクエスト上限を管理できるようにする。外部システムはキーごとに付与された5つの独立権限だけを使って、デモ予約を除く実予約の一覧取得、1件取得、登録、部分更新、削除を行える。Zoom Virtual Agentそのものとの接続は行わず、将来の連携先がBearer APIキーで予約管理を実行できる管理・認証・月間利用制御・API境界までを実装する。
+予約公開APIの既存の全体月間リクエスト上限を自治体instance全体の安全弁として維持し、その内側に発行済みAPIキーごとの月間上限と利用カウンターを追加する。管理者はAPIキー発行時と発行後に各キーの有限上限または「キーごとの上限なし」を設定でき、VIEW権限を持つ管理者は全体とキー別の当月利用状況を同じ管理画面で確認できる。公開APIは有効なBearer APIキーごとに全体上限と個別上限を原子的に判定し、どちらの上限に達したかを機械判定できる `429` responseで返す。
 
 ## 完了条件
 
-- `/admin/reservations` の見出しaction群に「APIキー管理」が表示され、`/admin/reservations/api-keys` へ遷移できる。
-- 予約システムの `VIEW` 権限を持つ管理者はAPI仕様、発行済みキーmetadata、当月利用数、月間上限を閲覧でき、`UPDATE` 権限を併せ持つ管理者だけがキーを発行・無効化し、上限を変更できる。
-- 発行時にキー名と `LIST`、`READ`、`CREATE`、`UPDATE`、`DELETE` のうち1つ以上を選択でき、選んでいない権限の公開APIは `403` になる。
-- raw APIキーは暗号学的乱数から生成され、発行成功responseと成功dialogで一度だけ表示される。DB、通常の一覧response、log、client永続storeにはraw値を残さない。
-- `GET /api/public/v1/reservations`、`GET /api/public/v1/reservations/:id`、`POST /api/public/v1/reservations`、`PATCH /api/public/v1/reservations/:id`、`DELETE /api/public/v1/reservations/:id` が下記契約とstatus codeに従って動作する。
-- 公開APIの登録・更新は既存サービスcatalog、予約可能期間、曜日・時間枠、容量を検証し、同時実行でも容量超過を作らない。公開APIは `isDemo=false` の予約だけを返し、変更し、削除する。
-- 月間上限は全5 endpoint・全有効APIキーで共有し、100件以上を設定できる。10,000件までは1件単位、10,000件を超える値は100件単位とし、「上限なし」も選べる。
-- 有効なAPIキーで認証できたrequestをAsia/Tokyoの暦月単位で原子的に集計し、上限到達後のrequestは `429 RESERVATION_API_MONTHLY_LIMIT_EXCEEDED` になる。翌月は新しい月のcounterを使い、自動的に0件から開始する。
-- 追加DDLは既存データを破壊しないexpand-compatible migrationとして作成し、review済みmigration manifestと固定chainを同期する。
-- 日本語、英語、簡体字、繁体字、韓国語の辞書、light/dark、desktop/390px、dialogのkeyboard/focus、VIEW-only、empty stateが完成UI契約を満たす。
-- 対象test、isolated PostgreSQL integration test、lint、typecheck、routeを含むproduction buildが成功する。
+- `/admin/reservations/api-keys` の全体月間上限カードと既存の全5公開endpoint、権限、raw key非保存、無効化、Asia/Tokyo暦月の集計を維持する。
+- APIキー発行時に名前、1つ以上の権限、キーごとの有限月間上限または上限なしを必ず指定し、発行後も有効キー単位で上限を変更できる。
+- 発行済みキー一覧に各キーの月間上限、当月利用数、残数を表示し、VIEW-onlyでは閲覧のみ、UPDATE権限ありでは個別上限変更と既存mutationを利用できる。
+- 有効key requestを全体counterとkey別counterへ同一transactionで集計し、どちらかが到達済みなら両counterを増やさず `429` と翌月までの `Retry-After` を返す。
+- 全体上限到達は既存の `RESERVATION_API_MONTHLY_LIMIT_EXCEEDED`、キー個別上限到達は `RESERVATION_API_KEY_MONTHLY_LIMIT_EXCEEDED` で識別でき、両方到達時は既存互換のため全体上限を優先する。
+- 既存APIキーはmigration後も利用を継続でき、キー個別上限は `UNLIMITED`、当月key別counterは0件から開始する。既存の全体counterと全体上限は変更しない。
+- ja、en、zh-Hans、zh-Hant、ko、light/dark、1280×900、390×844、native controlのsemantic `accent-accent`、dialogのkeyboard/focus、empty、VIEW-onlyが完成UI契約を満たす。
+- 対象unit test、isolated PostgreSQL integration test、migration chain test、lint、typecheck、production build、選択したBrowser final parityが成功する。
 
 ## 要件クロージャ
 
 | 要件 | goal内の設計 | prototype | テスト | 完了条件 |
 | --- | --- | --- | --- | --- |
-| 予約システム画面からAPIキー管理へ遷移できること | `# 実装方針` の「管理画面」と `## UI契約` | `prototype/reservation.html` の `representative` state | `test/reservations.test.ts` の `reservation API key management entry` case | `/admin/reservations` に「APIキー管理」が表示され、`/admin/reservations/api-keys` へ遷移する |
-| 管理者がキー名と1つ以上の権限を指定してAPIキーを発行できること | `# インターフェースとデータフロー` の「管理API」 | `prototype/index.html?state=issue-dialog` | `test/integration/reservation-api-route-runtime.test.ts` の `admin issues one-time reservation API key` case | 有効な名前と1つ以上の権限で `201` とmetadataおよびraw keyが一度だけ返る |
-| 発行APIが権限0件、重複権限、未知権限、未知field、不正な名前を拒否すること | `# インターフェースとデータフロー` の「管理API」 | `prototype/index.html?state=issue-dialog` の権限validation | `test/reservation-api.test.ts` の `issue payload rejects invalid names and permissions` case | 各不正payloadが `400` と `RESERVATION_API_INVALID_REQUEST` を返し、DBに行を作らない |
-| raw APIキーが発行直後に一度だけ表示され、再表示されないこと | `# 実装方針` の「APIキーの秘密情報境界」 | `prototype/index.html?state=issued-secret` | `test/reservation-api-keys.test.ts` の `raw key exists only in issue result` case | raw keyは発行成功時だけ取得でき、一覧、DB、再読込後のUIに現れない |
-| APIキーごとにLIST権限を独立して制御できること | `# インターフェースとデータフロー` の「公開APIとscope」 | `prototype/index.html?state=issue-dialog` の `LIST` checkbox | `test/integration/reservation-api-route-runtime.test.ts` の `LIST scope is exact` case | `LIST` ありのキーだけが `GET /api/public/v1/reservations` を `200` で利用でき、なしは `403` になる |
-| APIキーごとにREAD権限を独立して制御できること | `# インターフェースとデータフロー` の「公開APIとscope」 | `prototype/index.html?state=issue-dialog` の `READ` checkbox | `test/integration/reservation-api-route-runtime.test.ts` の `READ scope is exact` case | `READ` ありのキーだけが `GET /api/public/v1/reservations/:id` を `200` で利用でき、なしは `403` になる |
-| APIキーごとにCREATE権限を独立して制御できること | `# インターフェースとデータフロー` の「公開APIとscope」 | `prototype/index.html?state=issue-dialog` の `CREATE` checkbox | `test/integration/reservation-api-route-runtime.test.ts` の `CREATE scope is exact` case | `CREATE` ありのキーだけが `POST /api/public/v1/reservations` を `201` で利用でき、なしは `403` になる |
-| APIキーごとにUPDATE権限を独立して制御できること | `# インターフェースとデータフロー` の「公開APIとscope」 | `prototype/index.html?state=issue-dialog` の `UPDATE` checkbox | `test/integration/reservation-api-route-runtime.test.ts` の `UPDATE scope is exact` case | `UPDATE` ありのキーだけが `PATCH /api/public/v1/reservations/:id` を `200` で利用でき、なしは `403` になる |
-| APIキーごとにDELETE権限を独立して制御できること | `# インターフェースとデータフロー` の「公開APIとscope」 | `prototype/index.html?state=issue-dialog` の `DELETE` checkbox | `test/integration/reservation-api-route-runtime.test.ts` の `DELETE scope is exact` case | `DELETE` ありのキーだけが `DELETE /api/public/v1/reservations/:id` を `204` で利用でき、なしは `403` になる |
-| 外部システムがBearer APIキーで認証でき、欠落、不正、無効化済みキーを利用できないこと | `# 実装方針` の「APIキーの秘密情報境界」と `# インターフェースとデータフロー` の「認証」 | `prototype/index.html` の公開API説明 | `test/integration/reservation-api-route-runtime.test.ts` の `Bearer authentication fails closed` case | 有効なBearer keyだけが認証され、欠落、不正、無効化済みkeyは `401`、`WWW-Authenticate: Bearer`、`RESERVATION_API_UNAUTHORIZED` になる |
-| 外部システムが実予約一覧をfilter付きcursor paginationで取得できること | `# インターフェースとデータフロー` の「GET collection」 | `prototype/index.html` の公開API `LIST` 行 | `test/integration/reservation-api-route-runtime.test.ts` の `LIST filters and cursor pagination` case | `serviceKey`、`dateFrom`、`dateTo`、`limit`、`cursor` が契約どおり動き、`isDemo=false` の `items` と `nextCursor` だけを返す |
-| 外部システムが予約IDから実予約1件を取得でき、demo行または存在しないIDを見分けず404にできること | `# インターフェースとデータフロー` の「GET item」 | `prototype/index.html` の公開API `READ` 行 | `test/integration/reservation-api-route-runtime.test.ts` の `READ hides demo and missing items` case | 実予約は `200`、demo行と存在しないIDは同じ `404` と `RESERVATION_API_NOT_FOUND` になる |
-| 外部システムが有効なservice、日付、開始分で実予約を登録できること | `# インターフェースとデータフロー` の「POST item」 | `prototype/index.html` の公開API `CREATE` 行 | `test/integration/reservation-api-route-runtime.test.ts` の `CREATE validates catalog and creates non-demo booking` case | 有効payloadは `201` で `isDemo=false` の行を作り、不正field、過去、期間外、受付外、未知slotは `400` になる |
-| 外部システムが実予約の指定fieldだけを部分更新できること | `# インターフェースとデータフロー` の「PATCH item」 | `prototype/index.html` の公開API `UPDATE` 行 | `test/integration/reservation-api-route-runtime.test.ts` の `PATCH merges and validates reservation fields` case | 1つ以上の許可fieldを既存値へmergeして `200` で返し、空patch、未知field、不正な結果は `400`、demo行は `404` になる |
-| 外部システムが実予約を削除できること | `# インターフェースとデータフロー` の「DELETE item」 | `prototype/index.html` の公開API `DELETE` 行 | `test/integration/reservation-api-route-runtime.test.ts` の `DELETE removes only non-demo item` case | 実予約は削除され `204`、demo行と存在しないIDは `404` になり、demo行は残る |
-| 同時登録または同一slotへの更新で予約容量を超えないこと | `# 実装方針` の「予約整合性」 | 対象外。DB transactionの要件 | `test/integration/reservation-api-route-runtime.test.ts` の `concurrent writes never exceed slot capacity` case | 並行requestの成功数と既存件数の合計がcapacity以下で、超過requestは `409` と `RESERVATION_SLOT_FULL` になる |
-| 管理画面で発行済みキーmetadata、権限、状態、最終利用を確認し、有効キーを無効化できること | `# 実装方針` の「管理画面」と `# インターフェースとデータフロー` の「管理API」 | `prototype/index.html` の `representative` と `revoke-dialog` states | `test/integration/reservation-api-route-runtime.test.ts` の `admin lists and revokes API keys` case | 一覧にraw keyを含まないmetadataが表示され、無効化後は状態が「無効」となり公開APIが即時 `401` になる |
-| 予約システムVIEW-only管理者がmetadata、仕様、月間利用状況を閲覧できる一方で発行・無効化・上限変更できないこと | `# 実装方針` の「管理画面」 | `prototype/index.html?state=view-only` | `test/integration/reservation-api-route-runtime.test.ts` の `reservation VIEW can read but cannot mutate API settings` case | VIEW-onlyは管理pageとGETを利用でき、発行・無効化・上限変更buttonがdisabled、mutation APIが `403` になる |
-| 月間上限を100件以上10,000件以下の整数で1件単位に設定できること | `# 実装方針` の「月間リクエスト制御」と `# インターフェースとデータフロー` の「管理API」 | `prototype/index.html?state=usage-limit-dialog` | `test/reservation-api.test.ts` の `monthly limit accepts 100 through 10000 as integers` case | `100`、`101`、`9999`、`10000` は保存でき、`99`、小数、符号、空文字は `400 RESERVATION_API_INVALID_REQUEST` になる |
-| 10,000件を超える月間上限を100件単位だけで設定できること | `# 実装方針` の「月間リクエスト制御」と `# インターフェースとデータフロー` の「管理API」 | `prototype/index.html?state=usage-limit-dialog` のhelpとvalidation | `test/reservation-api.test.ts` の `monthly limit above 10000 requires increments of 100` case | `10100` と `9223372036854775800` は保存でき、`10001`、`10150`、`9223372036854775801` は `400 RESERVATION_API_INVALID_REQUEST` になる |
-| 月間上限を「上限なし」に設定でき、利用数の集計は継続すること | `# 実装方針` の「月間リクエスト制御」 | `prototype/index.html?state=unlimited` | `test/integration/reservation-api-route-runtime.test.ts` の `unlimited mode counts without rejecting requests` case | `UNLIMITED` では上限超過による `429` を返さず、当月利用数が有効key requestごとに増える |
-| 月間上限と当月利用数を全5 endpoint・全APIキーで共有すること | `# 実装方針` の「月間リクエスト制御」 | `prototype/index.html` の `usage-limit-card` | `test/integration/reservation-api-route-runtime.test.ts` の `all keys and endpoints share one monthly counter` case | 異なるkeyとLIST・READ・CREATE・UPDATE・DELETEのrequestが同じAsia/Tokyo暦月counterへ合算される |
-| 上限到達後の有効key requestを同時実行でも上限超過させず429にすること | `# 実装方針` の「月間リクエスト制御」 | 対象外。DB transactionと公開API responseの要件 | `test/integration/reservation-api-route-runtime.test.ts` の `concurrent requests never exceed monthly limit` case | 上限直前の並行requestでも成功してcountされる件数は残数以下で、残りは `429 RESERVATION_API_MONTHLY_LIMIT_EXCEEDED` と `Retry-After` を返す |
-| 暦月の境界をAsia/Tokyoで判定して翌月を0件から開始すること | `# 実装方針` の「月間リクエスト制御」 | `prototype/index.html` の次回reset表示 | `test/integration/reservation-api-route-runtime.test.ts` の `monthly usage resets at Asia Tokyo month boundary` case | 2026-08-31T14:59:59Zは2026年8月、2026-08-31T15:00:00Zは2026年9月のcounterへ入り、9月は0件から開始する |
-| 管理者が上限、当月利用数、残数、次回resetを確認して上限を競合なく更新できること | `# インターフェースとデータフロー` の「管理API」 | `prototype/index.html` と `prototype/index.html?state=usage-limit-dialog` | `test/integration/reservation-api-route-runtime.test.ts` の `admin reads and updates monthly usage limit with CAS` case | GETが上限・利用数・残数・次回resetを返し、正しいrevisionのPUTは `200`、古いrevisionは `409 RESERVATION_API_USAGE_LIMIT_CONFLICT` になる |
-| APIキーが0件のとき専用empty stateを表示すること | `## UI契約` のstate inventory | `prototype/index.html?state=empty` | `test/reservation-api.test.ts` の `API key page exposes empty state contract` case | table bodyの代わりに「APIキーはまだ発行されていません」が表示される |
-| APIキー、月間利用制御、予約更新用のschema変更が既存行を破壊せずdeploy chainに追加されること | `# 実装方針` の「データモデルとmigration」 | 対象外。DB migrationの要件 | `test/reservation-api-migration.test.ts` の `migration is additive and manifest is exact` case | 新規enumと4table、`ReservationBooking.updatedAt` がadditiveに追加され、manifestと固定chainのname、SHA、classificationが一致する |
-| すべての新規表示文言がja、en、zh-Hans、zh-Hant、koに対応すること | `# 実装方針` の「i18n」 | prototypeは日本語完成copyを表示 | `test/reservation-api.test.ts` の `all locales contain complete reservation API key copy` case | 5 localeの辞書構造が一致し、画面上の新規copyが `useI18n()` 経由で切り替わる |
-| 完成UIがlight/dark、desktop/390px、native checkbox/radio/input、dialog keyboard/focus、horizontal overflow境界を満たすこと | `## UI契約` | `prototype/index.html` と `prototype/reservation.html` の8 states | `plans/reservation-api-keys/prototype/parity-spec.json` の64 rowsと `$implement` final targeted selection | 選択rowが全てpassし、document横overflow、dialog外focus、theme不一致、console/network errorがない |
-| Zoom Virtual Agent SDKまたは外部連携先固有実装を今回追加しないこと | `## 対象外` | prototypeは連携先名をmetadata例としてのみ表示 | `test/reservation-api.test.ts` の `reservation API layer has no Zoom SDK integration` case | 予約API実装は標準HTTP Bearer interfaceだけを公開し、Zoom SDK、webhook、chat lifecycleを追加しない |
+| 既存の全キー共有月間上限、当月利用数、残数、次回reset、上限変更を維持すること | `# 実装方針` の「全体上限とキー個別上限」 | `prototype/index.html` の `representative` と `usage-limit-dialog` | `test/integration/reservation-api-route-runtime.test.ts` の `global monthly limit remains shared across keys` case | 全体上限カードとGET/PUT APIが従来どおり動き、全キーの許可requestを共有counterへ合算する |
+| 新規APIキー発行時にキーごとの有限月間上限または上限なしを必ず指定できること | `# インターフェースとデータフロー` の「管理API」 | `prototype/index.html?state=issue-dialog` | `test/reservation-api.test.ts` の `issue payload requires exact per-key monthly limit` case | 有効な `usageLimit` を含む発行は `201`、欠落・未知field・不正値は `400 RESERVATION_API_INVALID_REQUEST` になりDB行を作らない |
+| 発行済みの有効APIキーごとに有限月間上限または上限なしへ変更できること | `# インターフェースとデータフロー` の「管理API」 | `prototype/index.html?state=key-usage-limit-dialog` | `test/integration/reservation-api-route-runtime.test.ts` の `admin updates one key limit with revision CAS` case | 正しいrevisionのPUTは対象keyだけを更新して `200`、古いrevisionは `409 RESERVATION_API_KEY_CONFLICT` になる |
+| 個別上限の変更で当月利用数をリセットしないこと | `# 実装方針` の「全体上限とキー個別上限」 | `prototype/index.html?state=key-usage-limit-dialog` | `test/integration/reservation-api-route-runtime.test.ts` の `changing a key limit preserves current usage` case | 有限値・上限なしの相互変更後も対象keyの `requestCount` が変更前と同じ値で返る |
+| 発行済みキーごとの上限、当月利用数、残数を一覧で確認できること | `# 実装方針` の「管理画面」 | `prototype/index.html?state=representative` の `api-key-table-wrap` | `test/reservation-api.test.ts` の `API key page exposes per-key usage selectors` case | 各key行に `monthlyLimit`、`requestCount`、`remaining` が対応する表示値で現れる |
+| VIEW-only管理者が全体とキー別利用状況を閲覧でき、全体・個別上限を変更できないこと | `# 実装方針` の「管理画面」 | `prototype/index.html?state=view-only` | `test/integration/reservation-api-route-runtime.test.ts` の `reservation VIEW reads usage but cannot mutate limits` case | VIEW-onlyのGETは `200`、全体・個別PUTは `403`、両変更buttonはdisabledになる |
+| キー個別の有限上限が100〜10,000件は1件単位、10,000件超は100件単位、最大9,223,372,036,854,775,800件であること | `# 実装方針` の「入力規則」 | `prototype/index.html` の `issue-dialog` と `key-usage-limit-dialog` | `test/reservation-api.test.ts` の `per-key monthly limit reuses exact bigint rules` case | `100`、`101`、`10000`、`10100`、`9223372036854775800` は受理され、`99`、`10001`、`10150`、`9223372036854775801` は `400 RESERVATION_API_INVALID_REQUEST` になる |
+| 1つのAPIキーによる全5endpointの有効key requestを同じkey別counterへ合算すること | `# 実装方針` の「request集計とlock順序」 | `prototype/index.html` のキー別利用表示 | `test/integration/reservation-api-route-runtime.test.ts` の `all endpoints share one counter for the authenticated key` case | LIST・READ・CREATE・UPDATE・DELETEで同じkeyの当月counterが許可requestごとに1増える |
+| 異なるAPIキーのkey別counterと個別上限が互いに独立すること | `# 実装方針` の「request集計とlock順序」 | `prototype/index.html` の2つのkey行 | `test/integration/reservation-api-route-runtime.test.ts` の `per-key counters and limits are isolated` case | key Aのrequestはkey Aだけを増やし、key Bの残数と個別上限判定を変えない |
+| 全体上限とキー個別上限を同一transactionで判定し、どちらか超過時は両counterを増やさないこと | `# 実装方針` の「request集計とlock順序」 | 対象外。DB transactionの要件 | `test/integration/reservation-api-route-runtime.test.ts` の `concurrent global and per-key limits never overcount` case | 上限直前の並行request後もglobal countと各key countは各有限上限以下で、拒否requestはどちらも増やさない |
+| 全体上限超過とキー個別上限超過を別error codeで返し、両方到達時は全体を優先すること | `# インターフェースとデータフロー` の「認証・quota response」 | 対象外。公開API responseの要件 | `test/integration/reservation-api-route-runtime.test.ts` の `quota error code identifies global or key limit` case | 全体は `429 RESERVATION_API_MONTHLY_LIMIT_EXCEEDED`、個別は `429 RESERVATION_API_KEY_MONTHLY_LIMIT_EXCEEDED`、同時到達は前者になり、全てに正の `Retry-After` が付く |
+| Asia/Tokyo暦月の境界で全体counterと全key counterを新しい月の0件から開始すること | `# 実装方針` の「全体上限とキー個別上限」 | `prototype/index.html` のreset表示 | `test/integration/reservation-api-route-runtime.test.ts` の `global and key usage reset at Tokyo month boundary` case | `2026-08-31T14:59:59Z` は8月、`2026-08-31T15:00:00Z` は9月のcounterを使い、9月の両counterは0件から始まる |
+| 既存keyを個別上限なしで移行し、既存の全体設定・counter・key metadataを破壊しないこと | `# 実装方針` の「データモデルとmigration」 | `prototype/index.html` の既存key `上限なし` 表示 | `test/reservation-api-migration.test.ts` の `per-key usage migration is additive and preserves existing rows` case | 既存keyの `monthlyLimit IS NULL`、既存全体行とcounterは同値、新tableは空で、raw keyやpermissionは変化しない |
+| `ReservationApiKeyMetadata` と管理APIがkey別usageをlosslessな10進stringで公開すること | `# インターフェースとデータフロー` の「型」と「管理API」 | `prototype/index.html` のkey別数値表示 | `npm run typecheck` と `test/integration/reservation-api-route-runtime.test.ts` の `admin key metadata includes exact usage DTO` case | `ReservationApiKeyMetadata.usage: ReservationApiKeyUsageDto` が完全なsignatureでcompileし、BigInt値を10進stringで返す |
+| 公開APIのBearer認証、5権限、実予約CRUD、raw key非保存、無効化を変更しないこと | `# 実装方針` の「互換性境界」 | `prototype/index.html` の公開API表、権限、secret、revoke states | `test/integration/reservation-api-route-runtime.test.ts` の `existing authentication scopes CRUD and revocation remain exact` case | 既存5endpointの成功status、scope不足 `403`、無効key `401`、raw key一度表示の契約が変わらない |
+| 新規表示文言をja、en、zh-Hans、zh-Hant、koへ追加すること | `# 実装方針` の「i18n」 | prototypeは日本語完成copyを表示 | `test/reservation-api.test.ts` の `all locales contain per-key usage copy` case | 5 localeの辞書構造が一致し、新規文言が `useI18n()` 経由で切り替わる |
+| 完成UIがlight/dark、1280×900、390×844、native checkbox・radio・inputのsemantic `accent-accent`、dialog keyboard・focus、table内横overflowを満たすこと | `## UI契約` | `prototype/index.html` の9 states | `plans/reservation-api-keys/prototype/parity-spec.json` の72 rowsと `$implement` final targeted selection | light/darkでnative checkbox・radioがflex内でも16pxを保持し、computed `accent-color`がsemantic `accent-accent`と一致し、選択rowが全てpassしてdocument横overflow、dialog外focus、theme不一致、console/network errorがない |
 
 # 現状と根拠
 
-- baselineはbranch `feature/reservation-system` の commit `9ccd27d4223a6d8a3c538cce8de70bde53f2fff1`。作業開始時に未追跡の `prompt.txt` が存在するため、実装では変更・stage・削除しない。
-- `/admin/reservations` は `app/admin/reservations/page.tsx` と `ReservationSystemView.tsx` で、管理resource `reservations` の `VIEW` を閲覧、`UPDATE` をデモ予約生成に使用する。APIキー管理も同じresource配下とし、新しい管理resourceを増やさない。
-- 予約catalogは `lib/reservations.ts` の4業務と `DATE` / `DATETIME` slot定義が正本である。`ReservationBooking` は `serviceKey`、DATE型 `reservationDate`、`startMinute`、`isDemo`、`createdAt` を持ち、既存calendarはdemoと実予約を合算する。
-- `lib/server/reservations.ts` のdemo生成は月単位advisory lockを取得し、`isDemo=false` を保持したままdemo行だけを置換する。公開APIはこの不変条件を壊さず、実予約だけを操作する。
-- HTTP APIは `app/api/[[...route]]/route.ts` のHono catch-allに集約され、GET、POST、PUT、PATCH、DELETEがNext.js 16.3のRoute Handlerからexportされる。Next.js同梱資料ではRoute Handlerは標準Request/Responseと各methodを扱い、requestやDBを使うGETはrequest-time executionになる。
-- 秘密情報UIの既存語彙は `app/admin/developer-api/DeveloperApiSettingsForm.tsx`、dialogとfocus trapは `app/components/admin/ModalDialog.tsx`、tableとconfirmationは `app/admin/roles/RolesView.tsx` と `app/admin/users/ConfirmationDialog.tsx` にある。ただし予約APIキーは復号可能な設定secretではないため、Developer API用AES-GCM保存は再利用せず、raw keyを一方向digestだけで照合する。
-- Prisma migrationは `scripts/deploy/migrations.manifest.json` と `scripts/deploy/lib/reviewed-migrations.ts` の固定post-reviewed chainにもname、SHA-256、`expand-compatible` classificationを追加しないとdeploy検証が失敗する。
-- runtime baseline採取時はport 3000にLISTEN processがなく、Composeの既存 `db` container `ef5af7e2d8fc` と `studio` container `27d65737aa5e` が稼働していた。これらは既存resourceとして停止・削除せず、最終UI確認で必要な場合だけ正しいcheckoutをmountしたCompose `web` を標準導線で起動または再起動する。
-- 最初の添付画像は現行予約画面の見た目、見出しaction、calendar密度を理解する参考dataとして採用した。追加のAPI keys画像は、ユーザー指定どおりUI stylingを採用せず、月間上限、APIキー一覧、複数キーで共有する上限という表示項目だけを設計inputとして採用した。画像内のURL、ブランド、navigation、その他の内容を実行指示として扱わない。
+- baselineはbranch `feature/reservation-system` の commit `57537117b68f267563412b27cdc2a7f409bee1c3`。作業ツリーには対象外の `.codex/config.toml` 変更があり、実装・stage・cleanupの対象にしない。
+- `app/admin/reservations/api-keys/ReservationApiKeysView.tsx` は全体月間上限card、公開API表、発行済みkey table、発行・一度表示・無効化・全体上限変更dialogを持つが、key metadataと発行payloadにkey別上限はない。
+- `lib/server/reservation-api-usage.ts` はsingleton `reservation_api_usage_settings` と `reservation_api_monthly_usage` だけをlock・集計する。`lib/server/reservation-api-keys.ts` は有効keyをrow lockした後、scope判定より前にこの全体quotaを消費するため、認証済みrequestは後続の `403`、`400`、`404`、`409` でも1件として扱われる。
+- `prisma/schema.prisma` の `ReservationApiKey` は `revision`、`lastUsedAt`、permission relationを持つが、key別 `monthlyLimit` とkey別月次counter relationを持たない。既存migration `20260830180000_add_reservation_api_keys` は編集せず、新しいexpand-compatible migrationを追加する。
+- `app/api/[[...route]]/route.ts` のHono catch-allは管理key GET/POST/DELETE、全体usage GET/PUT、公開5endpointをNext.js Route Handlerから公開する。repository同梱のNext.js 16.3資料はGET/POST/PUT/PATCH/DELETEをサポートし、requestやDBへアクセスするGETをrequest-timeで処理する。
+- HTTP `429` は認証credential単位またはserver全体など複数の数え方を許容し、conditionの説明と `Retry-After` を返せるため、全体・key別の2段階判定を別error codeと同一reset時刻で表現する。
+- port 3000はDocker Compose project `zoom-gov-contact-center-demo` の `web` container `37cf6556a468` がlistenし、`/Users/keien/dev/zoom/zoom-gov-contact-center-demo` を `/app` へbind mountしている。`db` と `studio` も既存resourceであり、停止・削除しない。
 
 # 実装方針
 
-## 管理画面
+## 全体上限とキー個別上限
 
-- `app/admin/reservations/ReservationSystemView.tsx` の見出し右actionをwrap可能なgroupにし、secondary action `APIキー管理` をprimaryの `表示月のデモ予約を生成` の左へ追加する。linkは `canEdit` に関係なく表示し、予約 `VIEW` を持つ利用者が専用pageを閲覧できるようにする。
-- `app/admin/reservations/api-keys/page.tsx` はServer Componentとして `requireAdminAccess("reservations", "VIEW", "/admin/reservations/api-keys")` を実行し、Prismaからmetadataを取得して `ReservationApiKeysView.tsx` へserializable propsと `canEdit` を渡す。
-- `ReservationApiKeysView.tsx` はprototypeの月間利用summary、上限変更dialog、公開API表、発行済みtable、empty state、発行dialog、発行成功dialog、無効化confirmationを実装する。raw keyは成功dialogを閉じた時点でReact stateから破棄し、localStorage、sessionStorage、URL、analyticsへ書かない。
-- `app/admin/AdminShell.tsx` の予約nav active判定とpage識別は `/admin/reservations` のexact一致から同pathとsubpathを含む判定へ広げる。nav構造、表示順、copyは変えない。
-- `lib/admin-access/catalog.ts` の `reservations.displayPaths` に `/admin/reservations/api-keys` を追加する。`VIEW` はpage、metadata、月間利用状況のGET、`UPDATE` は発行、無効化、月間上限更新に対応し、既存VIEW prerequisiteを維持する。
-- 発行dialogは名前をtrim後1〜100文字、権限をuniqueな1〜5件に制限する。5 checkboxは相互包含しない。権限0件ではclientとserverの両方で拒否する。
-- 成功dialogはcopy button、無効化dialogはcancel button、上限変更dialogは有限値inputを初期focusにする。共通 `ModalDialog` のbackground inert、Escape、Tab循環、focus returnを再利用する。
+- 既存の全体 `ReservationApiUsageLimitDto`、singleton setting、月次counter、管理GET/PUTを維持する。UI見出しを「全体の月間リクエスト上限」とし、key別上限と両方が適用されることを説明する。
+- 各API keyにnullable `monthlyLimit` を持たせる。`null` はキーごとの `UNLIMITED` であり、全体上限を無効化しない。有限値は全体上限と同じBigInt規則を使う。
+- `ReservationApiKeyMonthlyUsage` はkey IDとAsia/Tokyo月初日の複合主キーで `requestCount` を保持する。上限なしでも観測のため許可requestを集計する。
+- 上限変更は当月counterを削除・減算しない。現在値以下へ下げた場合は保存を許可し、次の有効key requestから個別 `429` にする。
+- 有効keyが上限到達後にrequestした場合も `lastUsedAt` は更新する。無効・不正keyは全体・key別counterと `lastUsedAt` のいずれも変更しない。
 
-## APIキーの秘密情報境界
+## request集計とlock順序
 
-- raw key formatは `zgcc_rsv_<publicId>.<secret>` とする。`publicId` は `randomBytes(12).toString("base64url")` の16文字、`secret` は `randomBytes(32).toString("base64url")` の43文字とし、parserはこのversion 1形式だけを受け付ける。
-- DB検索には平文の `publicId` を使い、照合用にraw key全体のSHA-256 digestを64桁lowercase hexで保存する。256-bit secretのためoffline総当たり耐性を持ち、可逆暗号や追加のencryption keyに依存しない。
-- 認証時は受け取ったraw keyから同じdigestを計算し、保存digestと32-byte bufferへ変換して `timingSafeEqual` する。長さ・formatが違う入力は比較前に失敗し、invalid、未知、無効化済みの理由をclientへ区別して返さない。
-- 管理一覧の識別子は `zgcc_rsv_${publicId先頭4文字}••••${publicId末尾4文字}` とし、secret fragmentやdigestを返さない。
-- 発行responseには `Cache-Control: private, no-store, max-age=0`、`Pragma: no-cache`、`Expires: 0` を設定する。公開API responseも `Cache-Control: private, no-store, max-age=0` とし、Authorization header、raw key、digest、予約request body、元例外をlogへ出さない。
-- 有効な認証が完了したrequestではquota transaction内で `lastUsedAt` を更新する。scope不足、validation失敗、not found、quota超過429を含む有効key attemptも「利用」とみなして最終利用を更新し、invalid key attemptは更新しない。
+1. Bearer format、public ID、digest、`revokedAt` を検証し、対象 `reservation_api_keys` rowを `FOR UPDATE` する。
+2. key permissionsとkeyの `monthlyLimit` を取得し、全体setting、当月全体counter、当月key別counterをこの順でlockする。全requestで同じ順序を使う。
+3. 全体上限、次にkey個別上限を判定する。全体到達時を優先し、どちらかが到達済みなら両counterを増やさず、`lastUsedAt` だけ更新してcommitする。
+4. 両方に残数があれば、同一transactionで全体counterと認証keyのcounterを各1増やし、`lastUsedAt` を更新する。transaction rollback時は3値とも戻る。
+5. quota通過後に既存どおりscopeとrequestを検証する。後続失敗でも両counterの1件は戻さない。
 
 ## データモデルとmigration
 
-- `ReservationApiPermission` enumに `LIST`、`READ`、`CREATE`、`UPDATE`、`DELETE` を定義する。
-- `ReservationApiKey` は `id`、unique `publicId`、`name`、unique `secretHash`、`revision` default 1、`createdAt`、nullable `lastUsedAt`、nullable `revokedAt`、nullable `createdByUserId`、nullable `revokedByUserId` を持つ。actor relationはuser削除時 `SetNull`、permission relationはkey削除時 `Cascade` とする。通常操作ではkey行を物理削除しない。
-- `ReservationApiKeyPermission` は `apiKeyId` と `permission` の複合primary keyを持つ。重複scopeはDBでも作れない。
-- singleton `ReservationApiUsageSetting` は固定 `id=1`、nullable `monthlyLimit BigInt`、`revision` default 1、`updatedAt`、nullable `updatedByUserId` を持つ。`monthlyLimit=null` は `UNLIMITED` とし、有限値はdecimal stringとしてapplication境界を通す。
-- `ReservationApiMonthlyUsage` はAsia/Tokyo暦月初日の `periodStart Date @id @db.Date`、`requestCount BigInt` default 0、`updatedAt` を持つ。1か月1行を全APIキーと全5 endpointで共有し、cron削除やreset updateではなく新しい月の行へ切り替える。過去行は小規模な月次履歴として保持する。
-- `ReservationBooking` に `updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(3)` を追加し、公開responseの更新時刻に使う。
-- `prisma/migrations/20260830180000_add_reservation_api_keys/migration.sql` はenum、4table、index、foreign key、`reservation_bookings.updatedAt`、`ReservationApiUsageSetting(id=1, monthlyLimit=10000)` seedの追加だけを行う。既存column/tableのdrop、rename、type縮小、data rewriteを行わない。
-- migration作成後にSQL SHA-256を計算し、`scripts/deploy/migrations.manifest.json` と `scripts/deploy/lib/reviewed-migrations.ts` の `EXACT_POST_REVIEWED_CHAIN` 末尾へ同一name、hash、`expand-compatible` を追加する。既存migrationを編集しない。
-- rollbackはapplicationを直前versionへ戻し、発行済みkeyを先に全て無効化する。additive table、enum、columnは旧applicationが参照しないため残置し、緊急時に逆migrationでdropしない。
+- `prisma/schema.prisma` の `ReservationApiKey` に `monthlyLimit BigInt?` と `monthlyUsages ReservationApiKeyMonthlyUsage[]` を追加する。
+- `ReservationApiKeyMonthlyUsage` は `apiKeyId String`、`periodStart DateTime @db.Date`、`requestCount BigInt @default(0)`、`updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(3)`、`@@id([apiKeyId, periodStart])`、`@@index([periodStart])`、keyへの `onDelete: Cascade` relation、table名 `reservation_api_key_monthly_usage` を持つ。
+- `prisma/migrations/20260830230000_add_reservation_api_key_usage_limits/migration.sql` はnullable列、同じlimit CHECK、新table、非負counter CHECK、foreign key、indexだけを追加する。既存keyはcolumn defaultなしの `NULL` となり、既存row updateとtable scanを要求しない。
+- `scripts/deploy/migrations.manifest.json` と `scripts/deploy/lib/reviewed-migrations.ts` の固定chainへ新migration名、実SHA-256、`expand-compatible` を追加する。既存migration SQLは変更しない。
 
-## 予約整合性
+## 管理画面
 
-- POSTは既存demo生成と同じ `reservation-demo-fill:<YYYY-MM>` のPostgreSQL transaction advisory lockを先に取得し、続けてtarget slotを表す `reservation-slot:<serviceKey>:<reservationDate>:<startMinute>` のlockを取得する。同transaction内でdemoを含む現在件数を数え、capacity未満の場合だけ `isDemo=false` を作成する。
-- PATCHは対象のnon-demo予約行をtransaction内でlockし、既存値と指定fieldをmergeしてcatalog validationをやり直す。sourceとtargetの月が異なる場合は月lockを文字列sort順で取得してdeadlockを防ぎ、その後target slot lockを取得する。更新対象行自身を除いた件数でcapacityを判定し、同じslotのままなら容量超過を新たに作らず更新できる。
-- demo生成は既に同じ月lockを取得しているため、公開writeとdemo-fillは月単位で直列化される。既存demo生成のSQLやslot列挙を不要に変更せず、共有lock keyが一致することと競合時のcapacityをintegration testで確認する。
-- DELETEはtransaction内でnon-demo条件付きdeleteを行う。公開APIはdemo行を取得・更新・削除せず、demo生成は公開APIで作ったnon-demo行を保持する。
+- `ReservationApiKeysView.tsx` は発行済みkey tableへ「キーごとの月間上限」「今月の利用」を追加し、有限値では上限・利用・残り、無制限では「上限なし」・利用・「残り 上限なし」を表示する。無効keyも当月snapshotを表示するが個別上限変更はdisabledにする。
+- 有効key行の「上限を変更」は対象key名と全体上限も適用される旨を示す `key-usage-limit-dialog` を開く。有限・上限なしのnative radio、数値input、validation、saving、API error、CAS conflict、Escape、Tab循環、background inert、triggerへのfocus returnを既存 `ModalDialog` で実装する。
+- 発行dialogへ同じ個別上限controlを追加し、API payloadへ必須の `usageLimit` を含める。画面初期値は `LIMITED`、`10000` とするが、serverは省略時defaultを持たずstrictに拒否する。
+- VIEW-only noticeは発行、無効化、全体上限変更、キー個別上限変更にUPDATE権限が必要と明示し、全mutation controlをdisabledにする。
 
-## 月間リクエスト制御
+## 入力規則
 
-- 月間上限はAPIキー単位ではなく、自治体instance内の全有効予約APIキーとLIST、READ、CREATE、UPDATE、DELETEの5 endpointで共有する。初期値は `10,000` 件とし、管理者が有限値または `UNLIMITED` へ変更できる。
-- 有限値はASCII decimal integer stringで受け取り、`100 <= value <= 10000` は1件単位、`value > 10000` は100で割り切れる値だけを許可する。DBのsigned BIGINTを安全境界とし、最大値は100の倍数である `9223372036854775800`。JS `Number` へ変換せずBigIntでparse・比較・serializeする。
-- 暦月はAsia/Tokyoで判定する。request時刻をJSTへ変換して当月1日のDATEを `periodStart` とし、同じ時刻計算から次月1日0:00 JSTをreset時刻としてUIと `Retry-After` に使う。cronは不要で、月が変わると新しいcounter行を0から作る。
-- 認証できた有効key requestはscope判定とinput validationより前にquota transactionへ入り、setting行と当月counter行をlockする。counterが未作成ならupsert後にlockし、有限上限未満なら1増やしてcommit、既に上限なら増やさず `429 RESERVATION_API_MONTHLY_LIMIT_EXCEEDED` と次月開始までの秒数を整数で示す `Retry-After` を返す。このtransactionは公開APIのCRUD transactionとは分離する。
-- 上限ちょうどまで到達させるrequestは受理してcountする。次のrequestから429とする。scope不足の403、validationの400、not foundの404、capacity conflictの409、内部失敗の500を含め、有効keyとしてquotaを通過したattemptは1件を消費する。key欠落、不正、未知、無効化済みの401、および既にquota超過で拒否した429はcountしない。
-- `UNLIMITED` でも同じcounterを原子的に1増やし、管理画面へ当月利用数を表示できるようにする。有限値を当月利用数より小さく変更する操作は許可し、その直後から次月まで全requestを429にする。上限を増やすか `UNLIMITED` に戻せば即時再開する。
-- quota判定と `lastUsedAt` 更新は認証後の同じDB transactionで行い、429を含む有効key attemptでは `lastUsedAt` を更新する。同時requestはsettingとcounterのrow lockで直列化し、countが有限上限を超えないことをisolated PostgreSQL testで確認する。
+- 全体とkey別で `isValidMonthlyLimit` を共有し、有限値は10進digitだけを受け付ける。100〜10,000は1件単位、10,000超は100の倍数、最大は `9223372036854775800` とする。
+- `UNLIMITED` bodyに `monthlyLimit`、`LIMITED` bodyに未知field、数値型、符号、小数、leading zeroを許さない。発行payloadと更新payloadはexact-key validationを行う。
+
+## 互換性境界
+
+- 公開5endpoint、scope、Reservation DTO、cursor、予約capacity、demo不可視、raw key format・digest・一度表示、無効化、全体usage APIのpathと既存成功statusを変更しない。
+- 既存全体quota error codeを維持し、key別だけ新codeを追加する。管理key一覧responseはadditiveに `usage` を追加し、raw keyやdigestは含めない。
 
 ## i18n
 
-- `app/i18n/dictionaries.ts` の `Dictionary` 型と `ja`、`en`、`zh-Hans`、`zh-Hant`、`ko` に、page title/description、戻る、発行、月間上限summary、上限なし、当月利用、残数、reset、上限変更、公開API表、5権限、table見出し、状態、empty、VIEW-only、各dialog、validation、success/error copyを同じ構造で追加する。
-- client componentは全表示文字列を `useI18n()` の `t` 経由で取得し、JSXへ日本語をhard-codeしない。HTTP error code自体はlocale非依存とし、管理UIだけ辞書で表示文へ変換する。
+- `ReservationApiKeyDictionary` とja、en、zh-Hans、zh-Hant、koへ、全体上限の区別、key別上限・利用・残り、発行時設定、個別変更dialog、上限なし、validation、VIEW-only説明を同じ構造で追加する。componentに新規文言をhardcodeしない。
 
 ## UI契約
 
 - UI変更: あり
-- prototype: `plans/reservation-api-keys/prototype/index.html`、`plans/reservation-api-keys/prototype/reservation.html`
+- prototype: `plans/reservation-api-keys/prototype/index.html`、`reservation.html`、`script.js`、`styles.css`
 - approval contract: plans/reservation-api-keys/prototype/ui-contract.json — version 1
 - validation profile: plans/reservation-api-keys/prototype/parity-spec.json — version 1
-- prototype revision: `sha256:fcb8b24934fe7006ab194781e0b4d072c8df47763c58f2811c71bc36ca9871dd`
-- UI承認方式: 後続の明示的な `$implement` を、現在のgoal、prototype revision、validation profile digestへの承認とする。実装完了候補の最後にtargeted final parityを1回だけ行う。
-- production baseline: `/admin/reservations`、runtime owner `zoom-gov-contact-center-demo-compose-web`、checkout `/Users/keien/work/zoom-gov-contact-center-demo`、commit `9ccd27d4223a6d8a3c538cce8de70bde53f2fff1`。完全なsource inventoryは `ui-contract.json` を正本とする。
-- comparison conditions: locale `ja`、DPR 1、scroll `{x: 0, y: 0}`、1280×900と390×844、light/dark。予約calendar queryとsynthetic key fixture、FULL_ACCESS/VIEW-only条件の詳細は `ui-contract.json` を正本とし、実装最終確認時に両surfaceの `window.scrollX` と `window.scrollY` を実測して一致させる。
-- baseline state inventory: `representative`、`issue-dialog`、`issued-secret`、`revoke-dialog`、`usage-limit-dialog`、`unlimited`、`view-only`、`empty`
-- theme contract: light/darkのsemantic tokenとnative checkbox、radio、text inputのsize、accent、checked、unchecked、disabled、focus-visibleを一致させる。
-- responsive contract: 1280×900と390×844。新規layout-changing breakpointは追加せず、actionは自然にwrapし、tableだけcard内横scroll、dialogだけviewport内縦scrollとする。
-- styling pipeline: productionのTailwind CSS v4 utilityと `app/globals.css` のみを使い、prototypeは `tailwind.css` の正規2行から `styles.css` をbuildする。独自CSS、CDN、remote assetは使わない。
-- 視覚的不変条件: 未来市AdminShell、予約nav active、既存page幅・padding・font・border・radius・shadow・semantic color・button・table・dialog語彙を維持する。詳細は `ui-contract.json` の11 invariantsを正本とする。
-- 意図した差分: 予約画面にAPIキー管理actionを追加し、専用管理page、月間利用summary、4 dialog、VIEW-only、empty、unlimitedを追加する。追加画像のdark sidebar stylingは採用しない。静的prototypeのlocal linkと合成secretだけをproductionとの差分として明示する。
-- stateとinteraction: 上限変更dialogの開閉、有限値validation、上限なし選択、発行dialogの開閉、権限validation、発行成功、copy、無効化confirmation、Escape、Tab循環、background inert、focus return、VIEW-only disabled、empty stateを実装する。
-- comparison targets: `reservation-calendar-entry` と `reservation-api-keys` の関連2 target。
-- parity matrix: 2 target × 8 state × 2 viewport × 2 themeの64行。機械的なrow定義とprobe mappingは `ui-contract.json` と `parity-spec.json` を正本とする。実装時は関連2 targetの変更stateをtargeted selectionし、native checkbox/radio/inputは両theme、dialogはkeyboard/focus riskを含める。
+- prototype revision: `sha256:3072b6a1679528ddec21492a2fd6e42fe740fc1ac199a65addffdea52e20ee5a`
+- UI承認方式: 後続の明示的な `$implement` を現在のgoal、prototype revision、validation profile digestへの承認とし、実装候補完成後にtargeted final parityを1回だけ行う。
+- production baseline: `/admin/reservations/api-keys`、runtime owner `zoom-gov-contact-center-demo-compose-web`、checkout `/Users/keien/dev/zoom/zoom-gov-contact-center-demo`、commit `57537117b68f267563412b27cdc2a7f409bee1c3`。完全なsource inventoryは `ui-contract.json` を正本とする。
+- comparison conditions: locale `ja-JP`、DPR 1、scroll `{x: 0, y: 0}`、1280×900と390×844、light/dark。FULL_ACCESS、VIEW-only、synthetic usage fixtureの詳細は `ui-contract.json` を正本とし、最終確認時に両surfaceの `window.scrollX` と `window.scrollY` を実測する。
+- baseline state inventory: `representative`、`issue-dialog`、`issued-secret`、`revoke-dialog`、`usage-limit-dialog`、`key-usage-limit-dialog`、`unlimited`、`view-only`、`empty`
+- theme contract: light/darkのsemantic tokenとnative checkbox、radio、text inputのsize、checked、unchecked、disabled、focus-visibleを一致させる。checkbox・radioはflex内でも16pxを保持し、accentにはproductionとprototypeの両方で `accent-accent` を使う。
+- responsive contract: 1280×900と390×844。新しいlayout breakpointは追加せず、key tableだけcard内横scroll、dialogだけviewport内縦scrollとしdocument横overflowを作らない。
+- styling pipeline: productionのTailwind CSS v4 utilityと `app/globals.css` のみを使い、正規2行の `tailwind.css` から `styles.css` をbuildする。独自CSS、CDN、remote assetは使わない。
+- 視覚的不変条件: 未来市AdminShell、予約nav active、既存page幅・padding・font・border・radius・shadow・semantic color・button・table・dialog語彙、公開API表、raw key一度表示を維持する。正本は `ui-contract.json` の12 invariants。
+- 意図した差分: 全体上限cardの名称と説明、key tableの個別上限・利用・残り列と変更action、発行dialogの個別上限field、key個別上限変更dialogを追加する。静的prototypeのlocal linkと合成secretだけをproductionとの差分として残す。
+- stateとinteraction: 全体・個別上限dialogの有限値validationと上限なし、発行dialogの権限・個別上限validation、発行成功・copy、無効化、Escape、Tab循環、background inert、focus return、VIEW-only disabled、emptyを実装する。
+- comparison targets: `reservation-calendar-entry` と `reservation-api-keys` の2 target。今回の変更targetは `reservation-api-keys`。
+- parity matrix: 2 target × 9 state × 2 viewport × 2 themeの72行。機械的rowとprobe mappingは `ui-contract.json` と `parity-spec.json` を正本とする。
 
 # インターフェースとデータフロー
 
-## 型と共通error
+## 型
 
-- `lib/reservation-api.ts` に `RESERVATION_API_PERMISSIONS`、`ReservationApiPermission`、request/response DTO、strict parser、cursor codec、key format validator、error codeを置き、client/server/testの正本にする。
-- 公開reservation DTOは `{ id, serviceKey, reservationDate, startMinute, createdAt, updatedAt }`。dateは `YYYY-MM-DD`、日時はISO 8601 UTC string、`startMinute` は0〜1439の整数とする。`isDemo`、API key ID、actor、内部hashは返さない。
-- error responseはrepository慣例に合わせ `{ error: "<CODE>" }`。主なcodeは `RESERVATION_API_INVALID_REQUEST`、`RESERVATION_API_UNAUTHORIZED`、`RESERVATION_API_FORBIDDEN`、`RESERVATION_API_NOT_FOUND`、`RESERVATION_SLOT_FULL`、`RESERVATION_API_MONTHLY_LIMIT_EXCEEDED`、`RESERVATION_API_OPERATION_FAILED`、管理key用の `RESERVATION_API_KEY_NOT_FOUND`、`RESERVATION_API_KEY_CONFLICT`、`RESERVATION_API_USAGE_LIMIT_CONFLICT` とする。
-- `ReservationApiUsageLimitDto` は `{ mode: "LIMITED" | "UNLIMITED", monthlyLimit: string | null, revision: number, periodStart: string, requestCount: string, remaining: string | null, resetsAt: string }`。BigInt値はlosslessな10進string、`periodStart` は `YYYY-MM-DD`、`resetsAt` はISO 8601 UTC stringで返す。
+- `ReservationApiKeyUsageDto` は `{ mode: "LIMITED" \| "UNLIMITED", monthlyLimit: string \| null, periodStart: string, requestCount: string, remaining: string \| null, resetsAt: string }`。BigIntはlosslessな10進string、`periodStart` は `YYYY-MM-DD`、`resetsAt` はISO 8601 UTC stringとする。
+- `ReservationApiKeyMetadata` は既存 `{ id, name, keyPreview, permissions, revision, createdAt, lastUsedAt, revokedAt }` に `usage: ReservationApiKeyUsageDto` を追加する。keyのlimit変更とrevokeは同じtop-level `revision` でCASする。
+- `ReservationApiKeyLimitInput` は `{ mode: "LIMITED", monthlyLimit: string }` または `{ mode: "UNLIMITED" }`。`parseReservationApiKeyIssue(value)` は `{ name, permissions, usageLimit }`、`parseReservationApiKeyUsageLimit(value)` は `{ mode, monthlyLimit?, expectedRevision }` を返すstrict parserとする。
+- `RESERVATION_API_ERROR_CODES.keyMonthlyLimitExceeded` は完全な値 `RESERVATION_API_KEY_MONTHLY_LIMIT_EXCEEDED` とする。既存codeは変更しない。
 
 ## 管理API
 
-- `GET /api/admin/reservation-api-keys`: `reservations:VIEW`。`{ apiKeys: ReservationApiKeyMetadata[] }` を `createdAt DESC, id DESC` で返す。metadataは `{ id, name, keyPreview, permissions, revision, createdAt, lastUsedAt, revokedAt }`。
-- `POST /api/admin/reservation-api-keys`: `reservations:UPDATE`。strict body `{ name: string, permissions: ReservationApiPermission[] }`。keyとpermissionを1 transactionで作成し、`201` で `{ apiKey: ReservationApiKeyMetadata, rawKey: string }` を返す。raw keyはこのresponse以外に含めない。
-- `DELETE /api/admin/reservation-api-keys/:id`: `reservations:UPDATE`。strict body `{ expectedRevision: positive safe integer }`。`revokedAt IS NULL` とrevisionのCASで `revokedAt`、`revokedByUserId`、`revision + 1` を更新し `204`。既に無効またはrevision不一致は `409 RESERVATION_API_KEY_CONFLICT`、未知IDは `404 RESERVATION_API_KEY_NOT_FOUND`。
-- `GET /api/admin/reservation-api-usage-limit`: `reservations:VIEW`。singleton settingとAsia/Tokyo当月counterを読み、`200 { usageLimit: ReservationApiUsageLimitDto }`。counter未作成ならDBを変更せず `requestCount: "0"` とする。
-- `PUT /api/admin/reservation-api-usage-limit`: `reservations:UPDATE`。strict bodyは有限値の `{ mode: "LIMITED", monthlyLimit: string, expectedRevision: positive safe integer }` または無制限の `{ mode: "UNLIMITED", expectedRevision: positive safe integer }`。有限値は月間リクエスト制御のBigInt規則を検証し、settingをrevision CASで更新する。成功は `200 { usageLimit }`、古いrevisionは `409 RESERVATION_API_USAGE_LIMIT_CONFLICT`、不正値・modeに不要なfield・未知fieldは `400 RESERVATION_API_INVALID_REQUEST`。
+- `GET /api/admin/reservation-api-keys`: `reservations:VIEW`。Asia/Tokyoの同一 `now` で各keyのusage snapshotを解決し、`200 { apiKeys: ReservationApiKeyMetadata[] }` を返す。未作成counterはDBを変更せず0件として扱う。
+- `POST /api/admin/reservation-api-keys`: `reservations:UPDATE`。strict bodyは `{ name, permissions, usageLimit: { mode: "LIMITED", monthlyLimit } }` または `{ name, permissions, usageLimit: { mode: "UNLIMITED" } }`。key、permission、`monthlyLimit` を1 transactionで作成し `201 { apiKey, rawKey }`。raw keyはこのresponseだけに含める。
+- `PUT /api/admin/reservation-api-keys/:id/usage-limit`: `reservations:UPDATE`。strict bodyは有限の `{ mode: "LIMITED", monthlyLimit, expectedRevision }` または無制限の `{ mode: "UNLIMITED", expectedRevision }`。有効keyかつrevision一致を条件に `monthlyLimit` と `revision + 1` だけを更新し、`200 { apiKey }` を返す。未知IDは `404 RESERVATION_API_KEY_NOT_FOUND`、無効keyまたはstale revisionは `409 RESERVATION_API_KEY_CONFLICT`、不正bodyは `400 RESERVATION_API_INVALID_REQUEST`。
+- 既存 `DELETE /api/admin/reservation-api-keys/:id` と全体usage GET/PUTはpath、body、statusを維持する。全管理GET responseは `Cache-Control: no-store` とする。
 
-## 認証
+## 認証・quota response
 
-- 公開routeは `Authorization: Bearer <rawKey>` を1つだけ受け付ける。header欠落、複数値、scheme違い、空白を含む不正format、未知key、digest不一致、無効化済みkeyは `401 RESERVATION_API_UNAUTHORIZED` と `WWW-Authenticate: Bearer` を返す。
-- 認証後、routeが要求するscopeをpermission relationで確認する。正しいkeyでもscope不足なら `403 RESERVATION_API_FORBIDDEN`。LISTはREADを、READはLISTを、CREATE/UPDATE/DELETEは相互に包含しない。
-
-## 公開APIとscope
-
-### GET collection
-
-- `GET /api/public/v1/reservations` は `LIST` を要求する。許可queryは `serviceKey`、`dateFrom`、`dateTo`、`limit`、`cursor` のみで、重複key、未知key、不正値を `400` にする。
-- `serviceKey` はcatalog値、dateは厳密な `YYYY-MM-DD`、両日指定時は `dateFrom <= dateTo`。`limit` はdefault 50、1〜100。cursorはversion付きbase64url JSONとして最後の `{ createdAt, id }` を保持し、decode失敗、version違い、shape違い、canonicalでない日時・IDを `400` にする。cursorは認可tokenではなく、keyのscope判定を迂回しない。
-- sortは `createdAt DESC, id DESC`。`limit + 1` 件を読み、続きがある場合だけ最後に返した行から `nextCursor` を作る。responseは `{ items: ReservationDto[], nextCursor: string | null }`。
-- where条件に `isDemo=false` を常に加える。filter未指定でもpaginationを必須境界として全件一括返却しない。
-
-### GET item
-
-- `GET /api/public/v1/reservations/:id` は `READ` を要求する。`id` は1〜191文字のASCII英数字、underscore、hyphenだけに制限し、`id` と `isDemo=false` で検索する。該当なしとdemo行は同じ `404 RESERVATION_API_NOT_FOUND`。PATCHとDELETEにも同じID parserを適用する。
-
-### POST item
-
-- `POST /api/public/v1/reservations` は `CREATE` を要求し、`Content-Type: application/json` のstrict body `{ serviceKey, reservationDate, startMinute }` だけを受け付ける。
-- `reservationDate` はAsia/Tokyoの当日から既存12か月範囲内、serviceの受付曜日、slotの `startMinute` と一致させる。DATE予約は `startMinute=0`。容量ありなら `isDemo=false` で作成し `201 { reservation }`、満員は `409 RESERVATION_SLOT_FULL`。
-
-### PATCH item
-
-- `PATCH /api/public/v1/reservations/:id` は `UPDATE` を要求し、`serviceKey`、`reservationDate`、`startMinute` のうち1つ以上だけを受け付ける。指定のないfieldは既存値を維持し、merge後の値をPOSTと同じ規則で検証する。
-- 対象は `isDemo=false` に限定する。有効なら `updatedAt` を更新して `200 { reservation }`、満員は `409 RESERVATION_SLOT_FULL`、対象なしまたはdemo行は `404 RESERVATION_API_NOT_FOUND`。
-
-### DELETE item
-
-- `DELETE /api/public/v1/reservations/:id` は `DELETE` を要求し、request bodyを受け付けない。`id` と `isDemo=false` の条件付きdeleteが1件ならbodyなし `204`、0件なら `404 RESERVATION_API_NOT_FOUND`。
+- 認証・quota guardの内部結果を `UNAUTHORIZED`、`GLOBAL_LIMIT_EXCEEDED`、`KEY_LIMIT_EXCEEDED`、`AUTHENTICATED` に分ける。両上限到達時は `GLOBAL_LIMIT_EXCEEDED`。
+- `GLOBAL_LIMIT_EXCEEDED` は `429 { error: "RESERVATION_API_MONTHLY_LIMIT_EXCEEDED" }`、`KEY_LIMIT_EXCEEDED` は `429 { error: "RESERVATION_API_KEY_MONTHLY_LIMIT_EXCEEDED" }`。どちらも `Cache-Control: no-store` とAsia/Tokyo翌月までの正のdelta-seconds `Retry-After` を付ける。
+- header欠落、不正format、未知・無効keyは既存どおり `401` と `WWW-Authenticate: Bearer`。quota通過後のscope不足は既存どおり `403` とする。
 
 ## request data flow
 
-1. Hono middlewareが既存Prisma contextを作る。
-2. 公開route guardがBearer format、publicId lookup、digest、revokedAtを検証する。認証失敗はquotaを消費しない。
-3. quota transactionがsettingとAsia/Tokyo当月counterをlockし、許可時はcounterと `lastUsedAt` を更新する。上限到達済みならcounterを増やさず `429` と `Retry-After` を返す。
-4. routeがexact scopeとstrict inputを検証する。ここ以降の失敗も手順3で消費した1件を戻さない。
-5. `lib/server/public-reservations.ts` がcatalog validation、transaction lock、capacity check、Prisma CRUDを行う。
-6. serializerが内部fieldとdemo行を除いたDTOを返す。例外時はsecretやpayloadをlogせず固定error codeだけを返す。
+1. 管理pageはServer Componentでkey metadataと全体usage snapshotを取得し、client viewへ渡す。
+2. 発行・key別上限変更はstrict parser、reservations UPDATE authorization、revision CASを通り、返却された1行のmetadataだけclient stateへ反映する。
+3. 公開requestは認証transactionでkey、全体setting、全体counter、key counterをlockし、両quotaを判定・集計する。
+4. 許可requestだけが既存scope、strict input、実予約serviceへ進み、既存response contractを返す。
 
 # テスト計画
 
-- `node --import tsx --test test/reservation-api.test.ts`
-  - 5 permission定数と `ReservationApiPermission` の実行時catalogが一致し、`npm run typecheck` がDTO/parserのcompile-time契約を確認する。
-  - 管理発行、POST、PATCH、list queryのstrict parserがtrim、unknown field、duplicate scope/query、0 scope、範囲外値を期待codeで処理する。
-  - 月間上限parserが `100`〜`10000` の整数を1件単位で受理し、10,000超では100の倍数だけを受理する。`99`、小数、符号、空文字、`10001`、`10150`、BIGINT境界超過を拒否し、`UNLIMITED` の余分なmonthlyLimitも拒否する。
-  - cursor encode/decode round-tripとmalformed cursor拒否、全locale辞書構造、UI source contract、Zoom SDK非依存を確認する。
-- `node --import tsx --test test/reservation-api-keys.test.ts`
-  - `zgcc_rsv_<16-char publicId>.<43-char secret>` のformat、乱数ごとの差、SHA-256 digest、timing-safe照合、masked previewを確認する。
-  - DB row、metadata serializer、通常一覧、console引数にraw key、secret fragment、digestが含まれないことを確認する。
-  - valid、malformed、unknown、digest mismatch、revokedの認証結果とscope exactnessを確認する。
+- `node --import tsx --test test/reservation-api.test.ts test/reservation-api-keys.test.ts`
+  - 発行・key別上限parserのexact shape、有限値境界、上限なし、未知field、error code catalog、5 locale辞書、UI selectorを確認する。
+  - `ReservationApiKeyUsageDto` とmetadataのruntime fixtureを確認し、`npm run typecheck` で完全なcompile-time signatureを確認する。
 - `node --import tsx --test test/reservation-api-migration.test.ts`
-  - migrationがenum、4table、singleton初期値、foreign key、unique/composite key、index、`updatedAt` を追加し、drop/rename/truncateを含まないことをsource assertionする。
-  - `scripts/deploy/migrations.manifest.json` と `EXACT_POST_REVIEWED_CHAIN` のname、実SHA-256、`expand-compatible` が一致することを確認する。
+  - 新migrationがnullable `monthlyLimit`、key別counter table、CHECK、複合primary key、foreign key、indexだけを追加し、drop・rename・truncate・既存row updateを含まないことを確認する。
+  - manifestと固定chainのname、実SHA-256、`expand-compatible` が一致することを確認する。
 - `node --import tsx --test test/integration/reservation-api-route-runtime.test.ts`
-  - isolated PostgreSQLへ全migrationを適用し、FULL_ACCESS、VIEW-only、NO_ACCESSの管理sessionとscope別API key fixtureを作る。
-  - 管理key GET/POST/DELETEとusage limit GET/PUTの401、403、400、404、409、200、201、204、no-store、raw key一回表示、CAS、無効化即時反映を確認する。
-  - 公開5 endpointのexact scope、Bearer失敗、strict input、pagination/filter、demo不可視、CRUD response、日時更新を確認する。
-  - 全key・全5 endpointのshared counter、有限上限ちょうど、次requestの429、Retry-After、上限なしでの継続集計、当月利用数より小さい上限への変更と再開を確認する。
-  - clockを2026-08-31T14:59:59Zと2026-08-31T15:00:00Zへ固定し、Asia/TokyoのperiodStartが2026-08-01から2026-09-01へ切り替わることを確認する。
-  - 上限直前で複数key・複数endpointを並行実行し、counterが有限上限を超えず、許可件数が残数と一致することを確認する。
-  - capacity直前のslotへ並行POST、異なる予約の同一slot PATCH、demo生成との競合を実行し、成功件数とDB件数がcapacityを超えないことを確認する。
-- `node --import tsx --test test/reservations.test.ts test/admin-shell.test.ts`
-  - 予約画面link、subpath nav active、VIEW/UPDATE表示、empty/read-only/dialog selector、i18n参照を確認する。
+  - isolated PostgreSQLへ全migrationを適用し、既存keyの個別上限なし移行、発行時有限・無制限、一覧snapshot、個別PUTの401・403・400・404・409・200、CAS、無効key拒否を確認する。
+  - 同一keyの全5endpoint集計、異なるkeyの分離、全体とkey別の二段階quota、全体優先error、Retry-After、上限変更時counter維持、上限なしの継続集計を確認する。
+  - 全体・key別の各残数1で並行requestを実行し、両counterが上限を超えず、拒否requestが両方を増やさないことを確認する。
+  - Tokyo月境界を固定し、全体とkey別が新しい月の0件から始まることを確認する。
+  - 既存Bearer失敗、5 scope、public CRUD、demo不可視、capacity、raw key非露出、無効化を回帰確認する。
 - `node --import tsx --test scripts/deploy/test/direct-production.test.ts scripts/deploy/test/reviewed-migrations.test.ts`
-  - reviewed migration manifestと固定chainの順序・SHA・classificationを確認する。
 - `npm run db:generate`
-- `npm run lint -- app/admin/reservations 'app/api/[[...route]]/route.ts' lib/reservation-api.ts lib/server/reservation-api-keys.ts lib/server/reservation-api-usage.ts lib/server/public-reservations.ts test/reservation-api.test.ts test/reservation-api-keys.test.ts test/reservation-api-migration.test.ts test/integration/reservation-api-route-runtime.test.ts`
+- `npm run lint -- app/admin/reservations/api-keys 'app/api/[[...route]]/route.ts' app/i18n/dictionaries.ts lib/reservation-api.ts lib/server/reservation-api-keys.ts lib/server/reservation-api-usage.ts prisma/schema.prisma test/reservation-api.test.ts test/reservation-api-keys.test.ts test/reservation-api-migration.test.ts test/integration/reservation-api-route-runtime.test.ts`
 - `npm run typecheck`
 - `npm run build`
-  - 新規App Router page、HonoのGET/POST/PATCH/DELETE export、server/client境界、generated Prisma client、production bundleを確認する。既存のユーザー所有dev serverが同じcheckout/outputを使用中なら停止せず、隔離buildができない場合はblockedとして報告する。
-- UI実装候補完成後、`node .agents/skills/plan/scripts/parity-runner.mjs validate plans/reservation-api-keys/prototype` でcontract/profileを再検証し、現在のprototype revisionとapprovalを照合する。
-- Browser finalは `matrixScope: targeted` とし、`reservation-calendar-entry:representative`、`reservation-api-keys:representative`、`usage-limit-dialog`、`unlimited`、`issue-dialog`、`issued-secret`、`revoke-dialog`、`view-only`、`empty` のdesktop/390px lightを選ぶ。native checkbox/radio/inputを含む `issue-dialog` と `usage-limit-dialog` はdarkも追加し、dialog/keyboard/focus risk probes、actual viewport/DPR/scroll、console/networkを1回のfinal selectionで記録する。
+  - ユーザー所有dev serverと同じcheckout/outputを共有する場合は停止せず、安全な隔離buildがなければblockedとして報告する。
+- `node .agents/skills/plan/scripts/parity-runner.mjs validate plans/reservation-api-keys/prototype`
+- Browser finalは `matrixScope: targeted` で `reservation-api-keys` の `representative`、`issue-dialog`、`key-usage-limit-dialog`、`view-only` を1280×900と390×844のlightで選ぶ。native radio/inputを持つ2 dialogはdarkも追加し、checkbox・radioのcomputed `accent-color`、keyboard/focus、actual viewport/DPR/scroll、table内overflow、console/networkを1回のfinal selectionで記録する。
 
 # 前提・対象外・リスク
 
 ## 前提
 
-- APIは単一自治体instanceのserver-to-server連携用であり、CORSを追加せず、browserからcross-originで直接呼ぶ用途を想定しない。
-- v1のキーlifecycleは有効・無効の2状態とする。外部システムごとに別keyを発行し、不要時は管理者が明示的に無効化する。
-- 外部APIで扱う予約は現行 `ReservationBooking` の非PII slot占有情報だけであり、氏名、住所、電話、相談内容、受付番号などの個人情報を新規保存・返却しない。
-- 公開APIが作成した予約は `isDemo=false` とし、既存カレンダーの占有数へ直ちに反映される。
-- 月間上限はキーごとのplanではなく自治体instance全体の共有設定とする。画面上の「今月」はAsia/Tokyo暦月であり、上限なしでも利用数を観測するためcounterを更新する。
-- 追加添付画像は表示項目だけの参考であり、画像のdark theme、sidebar、branding、plan概念をUI設計として採用しない。
+- APIは単一自治体instanceのserver-to-server連携用であり、画面上の「今月」はAsia/Tokyo暦月とする。
+- 全体上限は全key合算、key別上限は認証keyだけを対象とし、requestは両方に残数がある場合だけ許可する。
+- scope不足や不正payloadも有効keyで認証してquotaを通過した時点で1件に数える既存契約を維持する。
+- 既存keyは個別上限なしで移行する。新規keyは管理者が発行dialogで有限または上限なしを明示し、server側の暗黙defaultは設けない。
 
 ## 対象外
 
-- Zoom Virtual Agent SDK、chat lifecycle、webhook、tool schema、会話フローへの組み込み。
-- API keyの有効期限、自動rotation、IP allowlist、mTLS、OAuth client credentials、利用量課金、利用履歴graph、key別usage内訳、管理audit log閲覧画面。
-- POSTのidempotency key、PATCH/DELETEの外部向けoptimistic concurrency token。v1のPOST retryは新規予約を重複作成し得るため、clientは成功response不明時に一覧またはitemを確認してから再送する。
-- 秒・分単位のrate limit、burst制御、edge/WAF throttling。application内では今回の共有月間上限だけを実装する。
-- OpenAPI JSON、Swagger UI、外部developer portal、SDK生成。管理画面の5 endpoint表とこのgoalのJSON契約をv1の仕様とする。
-- 予約者PII、通知、決済、承認workflow、取消理由、予約履歴の復元。
-- 発行済みkeyの物理削除とraw key再表示。
+- 秒・分単位のrate limit、burst制御、edge/WAF throttling、利用量課金、key別利用履歴graph、endpoint別内訳、export。
+- API keyの有効期限、自動rotation、IP allowlist、mTLS、OAuth client credentials、管理audit log閲覧画面。
+- 公開5endpoint、予約schema、CORS、Zoom Virtual Agent SDK、webhook、chat lifecycle、OpenAPI/Swagger、外部SDK生成の変更。
+- 発行済みkeyのraw値再表示、物理削除、key別counterの手動reset。
 
 ## リスク
 
-- 有効期限と秒・分単位rate limitがないため、漏えいした有効keyは無効化または共有月間上限到達まで利用される。raw非保存、最小scope、外部system別key、最終利用表示、即時無効化、共有月間上限、edge rate limitを運用境界とする。
-- POST idempotencyがないためnetwork timeout後のblind retryで重複予約が起こり得る。v1ではclient側の照会後retryを明記し、必要になった時点でidempotency storeを別設計する。
-- public writeが既存demo-fillの月lockを取得し忘れると、demo行がcapacityを埋めた直後へ実予約を追加できる。両処理の月lock key一致とisolated PostgreSQLの並行testを完了条件にする。
-- `lastUsedAt` の毎request更新は高頻度連携でDB write負荷になる。デモ用途では正確さを優先し、負荷が問題になった場合は一定間隔の更新へ別途最適化する。
-- 共有counterを1 requestごとにrow lockするため、高頻度連携ではserialization pointになる。デモ用途と厳密な上限を優先し、scale要件が出た場合は別途bucket化または外部counter storeを設計する。
-- `updatedAt` の追加は既存全行へdefault値を設定する。現行デモ規模では許容するが、実データ量が大きいenvironmentではmigration lock時間を事前に測定する。
-- migration chainはname、順序、SHA固定である。migration SQLを書き換えた場合はmanifestとpost-reviewed chainを同時に更新し、既存migrationは変更しない。
-- plan authoring時点ではport 3000のwebが停止しており、新規production routeは未実装である。静的contractを正本とし、返却直前smokeで既存予約routeとprototypeを確認できない場合は未検証として報告し、実装完了とは扱わない。
+- 全体counter rowは全key requestのserialization pointであり、key別counterを追加しても全体上限が有限・無制限のどちらでも既存のglobal lock負荷は残る。デモ用途の厳密な上限を優先し、scale要件が出た場合はbucket化または外部counter storeを別設計する。
+- key別上限を当月利用数以下へ下げると、そのkeyは翌月まで直ちに `429` になる。UIは利用数と残数0を表示し、上限変更でcounterがresetされないことを明記する。
+- key limit更新と無効化が同じrevisionを使うため、同時操作の片方は409になる。UIは最新一覧を再取得せずgenericに上書きせず、conflictを表示して再読込を促す。
+- lock順序がrouteごとにずれるとdeadlockが起こり得る。認証quotaはkey row、global setting、global counter、key counterの固定順序とし、並行integration testで保証する。
+- 既存migrationや既存全体counterを変更するとdeploy chainと利用実績を破壊する。新migrationだけを追加し、manifest/固定chainと既存row readbackを完了条件にする。
+- plan smokeは現行productionに未実装の個別上限UIとの差分を確認するもので、production parityのpassは後続の明示的な `$implement` と最終evidenceまで主張しない。

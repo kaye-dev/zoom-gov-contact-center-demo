@@ -9,10 +9,11 @@
       "app/admin/layout.tsx",
       "app/admin/reservations/page.tsx",
       "app/admin/reservations/ReservationSystemView.tsx",
-      "app/admin/developer-api/DeveloperApiSettingsForm.tsx",
-      "app/admin/roles/RolesView.tsx",
+      "app/admin/reservations/api-keys/page.tsx",
+      "app/admin/reservations/api-keys/ReservationApiKeysView.tsx",
+      "app/api/[[...route]]/route.ts",
+      "app/components/Checkbox.tsx",
       "app/components/admin/ModalDialog.tsx",
-      "app/admin/users/ConfirmationDialog.tsx",
       "app/components/svg/ArrowDropDownIcon.tsx",
       "app/components/svg/ChevronLeftIcon.tsx",
       "app/components/svg/ChevronRightIcon.tsx",
@@ -20,30 +21,36 @@
       "app/i18n/language-store.ts",
       "app/i18n/dictionaries.ts",
       "app/globals.css",
+      "lib/reservation-api.ts",
       "lib/reservations.ts",
+      "lib/server/reservation-api-keys.ts",
+      "lib/server/reservation-api-usage.ts",
       "lib/server/reservations.ts",
       "lib/admin-access/types.ts",
       "lib/admin-access/catalog.ts",
       "lib/admin-access/authorization.ts",
-      "prisma/schema.prisma"
+      "prisma/schema.prisma",
+      "prisma/migrations/20260830180000_add_reservation_api_keys/migration.sql",
+      "scripts/deploy/migrations.manifest.json",
+      "scripts/deploy/lib/reviewed-migrations.ts"
     ],
     "runtimeOwner": "zoom-gov-contact-center-demo-compose-web",
-    "checkout": "/Users/keien/work/zoom-gov-contact-center-demo",
-    "commit": "9ccd27d4223a6d8a3c538cce8de70bde53f2fff1",
-    "route": "/admin/reservations",
-    "url": "http://localhost:3000/admin/reservations"
+    "checkout": "/Users/keien/dev/zoom/zoom-gov-contact-center-demo",
+    "commit": "57537117b68f267563412b27cdc2a7f409bee1c3",
+    "route": "/admin/reservations/api-keys",
+    "url": "http://localhost:3000/admin/reservations/api-keys"
   },
   "comparisonConditions": {
     "viewports": ["1280x900", "390x844"],
     "dpr": 1,
     "scroll": { "x": 0, "y": 0 },
-    "locale": "ja",
+    "locale": "ja-JP",
     "themes": ["light", "dark"],
-    "fixture": "2026-09 reservation calendar plus two synthetic reservation API key metadata rows and shared monthly usage of 2,480 requests; empty, one-time-secret, usage-limit-dialog, and unlimited states use agent-owned local fixture data only",
-    "authorization": "FULL_ACCESS for representative, dialog, and unlimited states; VIEW-only reservations role for view-only state",
+    "fixture": "2026-09 reservation calendar plus two synthetic reservation API key metadata rows, shared monthly usage of 2,480 requests, active-key monthly usage of 780/3,000 requests, and revoked-key unlimited usage of 0 requests; empty, one-time-secret, global usage-limit-dialog, key-usage-limit-dialog, and unlimited states use agent-owned local fixture data only",
+    "authorization": "FULL_ACCESS for representative, dialog, and unlimited states; VIEW-only reservations role for view-only state; mutation states use a disposable parity API key fixture",
     "query": "reservation calendar uses service=bulky-waste, month=2026-09, date=2026-09-08; API key page has no product query parameters"
   },
-  "baselineStateInventory": ["representative", "issue-dialog", "issued-secret", "revoke-dialog", "usage-limit-dialog", "unlimited", "view-only", "empty"],
+  "baselineStateInventory": ["representative", "issue-dialog", "issued-secret", "revoke-dialog", "usage-limit-dialog", "key-usage-limit-dialog", "unlimited", "view-only", "empty"],
   "themeContract": ["light", "dark"],
   "responsiveContract": [
     { "id": "desktop", "viewport": "1280x900" },
@@ -53,13 +60,14 @@
     { "id": "admin-shell", "description": "未来市のsticky管理ヘッダー、2つの既存menu、予約システムのactive表示、最大幅、余白、semantic tokenを現行AdminShellと一致させる" },
     { "id": "reservation-entry", "description": "予約システム見出しの右側action群に既存secondary button語彙のAPIキー管理リンクを置き、デモ予約生成buttonを維持する" },
     { "id": "api-key-reference", "description": "公開APIの5権限をLIST・READ・CREATE・UPDATE・DELETEと対応するHTTP method・versioned endpoint・操作説明で一覧表示する" },
-    { "id": "api-key-table", "description": "発行済みキーは名前、masked識別子、権限chip、発行日時、最終利用、状態、無効化操作を既存table密度で表示し、raw secretは含めない" },
-    { "id": "usage-limit-summary", "description": "全予約APIキーで共有する月間上限、今月の利用、残り、Asia/Tokyoの次回リセットを表示し、上限なしでも利用件数を表示する" },
-    { "id": "usage-limit-dialog", "description": "上限変更dialogは100件以上の整数、10,000件超は100件単位、上限なしをnative radioとtext inputで選べ、背景inert、focus trap、Escape、focus returnを備える" },
-    { "id": "permission-dialog", "description": "発行dialogはAPIキー名と独立した5権限のnative checkboxを持ち、少なくとも1権限を要求し、背景をinert化してfocusをdialog内へ閉じ込める" },
+    { "id": "api-key-table", "description": "発行済みキーは名前、masked識別子、権限chip、キーごとの月間上限・今月の利用・残り、発行日時、最終利用、状態、個別上限変更、無効化操作を既存table密度で表示し、raw secretは含めない" },
+    { "id": "usage-limit-summary", "description": "全予約APIキーで共有する全体の月間上限、今月の利用、残り、Asia/Tokyoの次回リセットを表示し、キーごとの上限と両方適用されることを明示する" },
+    { "id": "usage-limit-dialog", "description": "全体上限変更dialogは100件以上の整数、10,000件超は100件単位、上限なしをnative radioとtext inputで選べ、背景inert、focus trap、Escape、focus returnを備える" },
+    { "id": "key-usage-limit-dialog", "description": "発行済みキーの個別上限変更dialogは対象キー名と全体上限も適用されることを示し、有限値または上限なしをnative radioとtext inputで編集できる" },
+    { "id": "permission-dialog", "description": "発行dialogはAPIキー名、独立した5権限、キーごとの有限または無制限の月間上限を持ち、少なくとも1権限と有効な上限を要求してfocusをdialog内へ閉じ込める" },
     { "id": "one-time-secret", "description": "発行成功dialogはraw APIキーを一度だけreadonly入力で表示し、copy操作と再表示不可の警告を明示する" },
     { "id": "revoke-dialog", "description": "無効化dialogは対象名、即時失効、取消不能を明示し、cancelを初期focusにしてdanger actionを分離する" },
-    { "id": "restricted-states", "description": "VIEW-onlyでは発行・無効化・上限変更をdisabledにして理由を表示し、0件ではtableの代わりに専用empty stateを表示する" },
+    { "id": "restricted-states", "description": "VIEW-onlyでは発行・無効化・全体上限変更・キー個別上限変更をdisabledにして理由を表示し、0件ではtableの代わりに専用empty stateを表示する" },
     { "id": "responsive-overflow", "description": "390pxではactionを自然に折り返し、API referenceとkey tableだけをカード内横scrollに限定し、dialogはviewport内で縦scrollしdocument横overflowを発生させない" }
   ],
   "intentionalDifferences": [
@@ -67,7 +75,7 @@
     { "id": "prototype-api-back-link", "description": "productionの戻るlinkは/admin/reservations、静的prototypeは./reservation.htmlを使う" },
     { "id": "prototype-synthetic-secret", "description": "発行成功stateではproductionが毎回生成するraw keyの代わりにprototype専用の合成値を表示する" }
   ],
-  "stateAndInteraction": ["calendar-to-api-key-navigation", "usage-limit-dialog-open-close", "usage-limit-validation", "unlimited-selection", "issue-dialog-open-close", "permission-checkbox-validation", "one-time-secret-copy", "revoke-confirmation", "view-only-disabled-actions", "empty-state", "escape", "keyboard", "focus"],
+  "stateAndInteraction": ["calendar-to-api-key-navigation", "global-usage-limit-dialog-open-close", "global-usage-limit-validation", "key-usage-limit-dialog-open-close", "key-usage-limit-validation", "unlimited-selection", "issue-dialog-open-close", "permission-checkbox-validation", "issue-key-limit-validation", "one-time-secret-copy", "revoke-confirmation", "view-only-disabled-actions", "empty-state", "escape", "keyboard", "focus"],
   "comparisonTargets": [
     { "id": "reservation-calendar-entry", "entry": "reservation.html", "route": "/admin/reservations", "surface": "reservation calendar with API key management entry" },
     { "id": "reservation-api-keys", "entry": "index.html", "route": "/admin/reservations/api-keys", "surface": "reservation API key management page and dialogs" }
@@ -136,6 +144,14 @@
     { "id": "keys-unlimited-desktop-light", "targetId": "reservation-api-keys", "entry": "index.html", "route": "/admin/reservations/api-keys", "surface": "reservation API key management page and dialogs", "state": "unlimited", "viewport": "1280x900", "theme": "light", "breakpoint": "desktop", "expectedInvariantIds": ["admin-shell", "usage-limit-summary", "api-key-reference", "api-key-table", "responsive-overflow"], "intentionalDifferenceIds": ["prototype-api-back-link"] },
     { "id": "keys-unlimited-desktop-dark", "targetId": "reservation-api-keys", "entry": "index.html", "route": "/admin/reservations/api-keys", "surface": "reservation API key management page and dialogs", "state": "unlimited", "viewport": "1280x900", "theme": "dark", "breakpoint": "desktop", "expectedInvariantIds": ["admin-shell", "usage-limit-summary", "api-key-reference", "api-key-table", "responsive-overflow"], "intentionalDifferenceIds": ["prototype-api-back-link"] },
     { "id": "keys-unlimited-mobile-light", "targetId": "reservation-api-keys", "entry": "index.html", "route": "/admin/reservations/api-keys", "surface": "reservation API key management page and dialogs", "state": "unlimited", "viewport": "390x844", "theme": "light", "breakpoint": "mobile", "expectedInvariantIds": ["admin-shell", "usage-limit-summary", "api-key-reference", "api-key-table", "responsive-overflow"], "intentionalDifferenceIds": ["prototype-api-back-link"] },
-    { "id": "keys-unlimited-mobile-dark", "targetId": "reservation-api-keys", "entry": "index.html", "route": "/admin/reservations/api-keys", "surface": "reservation API key management page and dialogs", "state": "unlimited", "viewport": "390x844", "theme": "dark", "breakpoint": "mobile", "expectedInvariantIds": ["admin-shell", "usage-limit-summary", "api-key-reference", "api-key-table", "responsive-overflow"], "intentionalDifferenceIds": ["prototype-api-back-link"] }
+    { "id": "keys-unlimited-mobile-dark", "targetId": "reservation-api-keys", "entry": "index.html", "route": "/admin/reservations/api-keys", "surface": "reservation API key management page and dialogs", "state": "unlimited", "viewport": "390x844", "theme": "dark", "breakpoint": "mobile", "expectedInvariantIds": ["admin-shell", "usage-limit-summary", "api-key-reference", "api-key-table", "responsive-overflow"], "intentionalDifferenceIds": ["prototype-api-back-link"] },
+    { "id": "calendar-key-usage-limit-dialog-desktop-light", "targetId": "reservation-calendar-entry", "entry": "reservation.html", "route": "/admin/reservations", "surface": "reservation calendar with API key management entry", "state": "key-usage-limit-dialog", "viewport": "1280x900", "theme": "light", "breakpoint": "desktop", "expectedInvariantIds": ["admin-shell", "reservation-entry", "responsive-overflow"], "intentionalDifferenceIds": ["prototype-calendar-forward-link"] },
+    { "id": "calendar-key-usage-limit-dialog-desktop-dark", "targetId": "reservation-calendar-entry", "entry": "reservation.html", "route": "/admin/reservations", "surface": "reservation calendar with API key management entry", "state": "key-usage-limit-dialog", "viewport": "1280x900", "theme": "dark", "breakpoint": "desktop", "expectedInvariantIds": ["admin-shell", "reservation-entry", "responsive-overflow"], "intentionalDifferenceIds": ["prototype-calendar-forward-link"] },
+    { "id": "calendar-key-usage-limit-dialog-mobile-light", "targetId": "reservation-calendar-entry", "entry": "reservation.html", "route": "/admin/reservations", "surface": "reservation calendar with API key management entry", "state": "key-usage-limit-dialog", "viewport": "390x844", "theme": "light", "breakpoint": "mobile", "expectedInvariantIds": ["admin-shell", "reservation-entry", "responsive-overflow"], "intentionalDifferenceIds": ["prototype-calendar-forward-link"] },
+    { "id": "calendar-key-usage-limit-dialog-mobile-dark", "targetId": "reservation-calendar-entry", "entry": "reservation.html", "route": "/admin/reservations", "surface": "reservation calendar with API key management entry", "state": "key-usage-limit-dialog", "viewport": "390x844", "theme": "dark", "breakpoint": "mobile", "expectedInvariantIds": ["admin-shell", "reservation-entry", "responsive-overflow"], "intentionalDifferenceIds": ["prototype-calendar-forward-link"] },
+    { "id": "keys-key-usage-limit-dialog-desktop-light", "targetId": "reservation-api-keys", "entry": "index.html", "route": "/admin/reservations/api-keys", "surface": "reservation API key management page and dialogs", "state": "key-usage-limit-dialog", "viewport": "1280x900", "theme": "light", "breakpoint": "desktop", "expectedInvariantIds": ["admin-shell", "api-key-table", "key-usage-limit-dialog", "responsive-overflow"], "intentionalDifferenceIds": ["prototype-api-back-link"] },
+    { "id": "keys-key-usage-limit-dialog-desktop-dark", "targetId": "reservation-api-keys", "entry": "index.html", "route": "/admin/reservations/api-keys", "surface": "reservation API key management page and dialogs", "state": "key-usage-limit-dialog", "viewport": "1280x900", "theme": "dark", "breakpoint": "desktop", "expectedInvariantIds": ["admin-shell", "api-key-table", "key-usage-limit-dialog", "responsive-overflow"], "intentionalDifferenceIds": ["prototype-api-back-link"] },
+    { "id": "keys-key-usage-limit-dialog-mobile-light", "targetId": "reservation-api-keys", "entry": "index.html", "route": "/admin/reservations/api-keys", "surface": "reservation API key management page and dialogs", "state": "key-usage-limit-dialog", "viewport": "390x844", "theme": "light", "breakpoint": "mobile", "expectedInvariantIds": ["admin-shell", "api-key-table", "key-usage-limit-dialog", "responsive-overflow"], "intentionalDifferenceIds": ["prototype-api-back-link"] },
+    { "id": "keys-key-usage-limit-dialog-mobile-dark", "targetId": "reservation-api-keys", "entry": "index.html", "route": "/admin/reservations/api-keys", "surface": "reservation API key management page and dialogs", "state": "key-usage-limit-dialog", "viewport": "390x844", "theme": "dark", "breakpoint": "mobile", "expectedInvariantIds": ["admin-shell", "api-key-table", "key-usage-limit-dialog", "responsive-overflow"], "intentionalDifferenceIds": ["prototype-api-back-link"] }
   ]
 }
