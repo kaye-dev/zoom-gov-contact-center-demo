@@ -16,6 +16,7 @@ export default async function AdminPage() {
     ["maintenance-settings", "/admin/maintenance-settings"],
     ["developer-api", "/admin/developer-api"],
     ["roles", "/admin/roles"],
+    ["reservations", "/admin/reservations"],
   ] as const;
   const first = destinations.find(([resourceKey]) =>
     canAdminAccess(actor, resourceKey, "VIEW"),

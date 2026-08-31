@@ -68,6 +68,39 @@ const EXACT_MIGRATION_CHAIN = [
 
 const EXACT_APPLIED_PREFIX_LENGTH = 5;
 
+const EXACT_POST_REVIEWED_CHAIN = [
+  {
+    name: "20260829231500_add_developer_api_settings",
+    sha256: "73fdf3fb7c5d101b9a0abce16c7ae29b825e1e1560d68dad02f0e530e0ac430a",
+    classification: "expand-compatible",
+  },
+  {
+    name: "20260830120000_add_reservation_bookings",
+    sha256: "396d117b293417b8b473be2f9f9f13a8fa31bc0bea72d44067d2e41243bee435",
+    classification: "expand-compatible",
+  },
+  {
+    name: "20260830180000_add_reservation_api_keys",
+    sha256: "2e3b69bf591e470c53b0426d71e6f2bbd078d6df5db4f5da1ef889ccbdfc78e0",
+    classification: "expand-compatible",
+  },
+  {
+    name: "20260830230000_add_reservation_api_key_usage_limits",
+    sha256: "fe3246f27e40d804363e42180085b33f5f36665889cedb42b2062634c3eb9753",
+    classification: "expand-compatible",
+  },
+  {
+    name: "20260831010000_add_reservation_api_request_logs",
+    sha256: "8f92d235319a63c922924e28bea781c6c91fde06ab0bfa1eab1f077516929e9c",
+    classification: "expand-compatible",
+  },
+  {
+    name: "20260831140000_add_reservation_api_zva_safety",
+    sha256: "f524a6c7d604e31b4a40de060cefd197ebcfb1278079aa73307cfe38340bbf2b",
+    classification: "expand-compatible",
+  },
+] as const satisfies readonly ExactBatchMigration[];
+
 export type ReviewedMigrationBatchPlan = {
   schemaVersion: 1;
   batchId: typeof ADMIN_ACCESS_REVIEWED_BATCH_ID;
@@ -254,12 +287,20 @@ function assertExactLocalMigrationChain(
     }
   }
 
-  for (const migration of migrations.slice(EXACT_MIGRATION_CHAIN.length)) {
+  const postReviewedMigrations = migrations.slice(EXACT_MIGRATION_CHAIN.length);
+  if (postReviewedMigrations.length !== EXACT_POST_REVIEWED_CHAIN.length) {
+    throw new Error(
+      `The local chain does not match the exact reviewed post-'${ADMIN_ACCESS_REVIEWED_BATCH_ID}' chain.`,
+    );
+  }
+
+  for (const [index, migration] of postReviewedMigrations.entries()) {
+    const expected = EXACT_POST_REVIEWED_CHAIN[index];
     if (
-      migration.name !== "20260829231500_add_developer_api_settings" ||
-      migration.hash !==
-        "73fdf3fb7c5d101b9a0abce16c7ae29b825e1e1560d68dad02f0e530e0ac430a" ||
-      migration.classification !== "expand-compatible"
+      expected === undefined ||
+      migration.name !== expected.name ||
+      migration.hash !== expected.sha256 ||
+      migration.classification !== expected.classification
     ) {
       throw new Error(
         `Local migration '${migration.name}' does not match the exact reviewed post-'${ADMIN_ACCESS_REVIEWED_BATCH_ID}' chain.`,

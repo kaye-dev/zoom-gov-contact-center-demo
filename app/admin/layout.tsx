@@ -23,6 +23,7 @@ export default async function AdminLayout({
   if (canAdminAccess(actor, "maintenance-settings", "VIEW")) visibleItems.push("maintenance-settings");
   if (canAdminAccess(actor, "developer-api", "VIEW")) visibleItems.push("developer-api");
   if (canAdminAccess(actor, "roles", "VIEW")) visibleItems.push("roles");
+  if (canAdminAccess(actor, "reservations", "VIEW")) visibleItems.push("reservations");
 
   return (
     <AdminShell visibleItems={visibleItems}>

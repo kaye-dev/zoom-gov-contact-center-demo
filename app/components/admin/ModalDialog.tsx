@@ -20,6 +20,9 @@ type ModalDialogProps = {
   locked?: boolean;
   initialFocusRef?: RefObject<HTMLElement | null>;
   maxWidthClassName?: string;
+  containerId?: string;
+  titleId?: string;
+  descriptionId?: string;
 };
 
 const FOCUSABLE_SELECTOR = [
@@ -41,9 +44,14 @@ export function ModalDialog({
   locked = false,
   initialFocusRef,
   maxWidthClassName = "max-w-lg",
+  containerId,
+  titleId: explicitTitleId,
+  descriptionId: explicitDescriptionId,
 }: ModalDialogProps) {
-  const titleId = useId();
-  const descriptionId = useId();
+  const generatedTitleId = useId();
+  const generatedDescriptionId = useId();
+  const titleId = explicitTitleId ?? generatedTitleId;
+  const descriptionId = explicitDescriptionId ?? generatedDescriptionId;
   const dialogRef = useRef<HTMLDivElement>(null);
   const isClient = useSyncExternalStore(
     subscribeToClient,
@@ -123,6 +131,7 @@ export function ModalDialog({
 
   return createPortal(
     <div
+      id={containerId}
       className="fixed inset-0 z-[80] flex items-center justify-center overflow-y-auto p-4"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !locked) onRequestClose();

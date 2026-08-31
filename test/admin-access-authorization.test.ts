@@ -110,6 +110,22 @@ test("FULL_ACCESS is dynamic but a custom explicit deny still wins", () => {
   assert.equal(evaluateAdminAccess(actor([full, deny]), "roles", "VIEW").allowed, false);
 });
 
+test("reservation updates require reservation view and FULL_ACCESS includes the new resource", () => {
+  const update = {
+    resourceKey: "reservations",
+    action: "UPDATE",
+    effect: "ALLOW",
+  } as const;
+  assert.equal(
+    evaluateAdminAccess(actor([role("editor", [update])]), "reservations", "UPDATE").reason,
+    "VIEW_REQUIRED",
+  );
+  assert.equal(
+    canAdminAccess(actor([role("full", [], "FULL_ACCESS")]), "reservations", "UPDATE"),
+    true,
+  );
+});
+
 test("banned and password-change-pending actors are rejected by the request guard", () => {
   const full = role("full", [], "FULL_ACCESS");
   const suspended = evaluateAdminAccess(

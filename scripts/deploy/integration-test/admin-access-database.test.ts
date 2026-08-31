@@ -36,8 +36,8 @@ const ADMIN_ACCESS_FREEZE_MIGRATION =
   "20260828180000_add_admin_access_mutation_freeze";
 const ADMIN_ACCESS_SINGLE_ROLE_MIGRATION =
   "20260828210000_enforce_single_admin_access_role";
-const DEVELOPER_API_SETTINGS_MIGRATION =
-  "20260829231500_add_developer_api_settings";
+const RESERVATION_BOOKINGS_MIGRATION =
+  "20260830120000_add_reservation_bookings";
 const MIGRATIONS_BEFORE_ADMIN_ACCESS = [
   "20260623105657_init",
   "20260804090000_add_site_settings",
@@ -60,10 +60,10 @@ test("fresh database applies and reapplies the complete migration chain", async 
          WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL
          ORDER BY started_at`,
       );
-      assert.equal(migrations.rowCount, 10);
+      assert.equal(migrations.rowCount, 11);
       assert.equal(
         migrations.rows.at(-1)?.migration_name,
-        DEVELOPER_API_SETTINGS_MIGRATION,
+        RESERVATION_BOOKINGS_MIGRATION,
       );
       const developerApiColumns = await client.query<{ column_name: string }>(`
         SELECT column_name
@@ -76,6 +76,17 @@ test("fresh database applies and reapplies the complete migration chain", async 
       assert.deepEqual(
         developerApiColumns.rows.map(({ column_name }) => column_name),
         ["clientSecretEncrypted", "secretTokenEncrypted"],
+      );
+      const reservationColumns = await client.query<{ column_name: string }>(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'reservation_bookings'
+        ORDER BY ordinal_position
+      `);
+      assert.deepEqual(
+        reservationColumns.rows.map(({ column_name }) => column_name),
+        ["id", "serviceKey", "reservationDate", "startMinute", "isDemo", "createdAt"],
       );
       await assertSystemRoles(client);
       await assertAssignmentRevisionTriggerState(client, false);

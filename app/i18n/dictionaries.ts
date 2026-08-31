@@ -15,6 +15,11 @@ import type {
   AdminAccessSystemRole,
   AdminResourceKey,
 } from '@/lib/admin-access/types';
+import type {
+  ReservationAvailabilityStatus,
+  ReservationServiceKey,
+} from '@/lib/reservations';
+import type { ReservationApiPermission } from '@/lib/reservation-api';
 
 export const locales = SITE_LOCALES;
 
@@ -275,6 +280,7 @@ export type Dictionary = {
     languageSettings: string;
     maintenanceSettings: string;
     developerApi: string;
+    reservations: string;
     settingsMenu: string;
     userListTitle: string;
     searchPlaceholder: string;
@@ -573,7 +579,280 @@ export type Dictionary = {
       propagationNote: string;
       updatedAtLabel: string;
     };
+    reservationManagement: ReservationManagementDictionary;
   };
+};
+
+export type ReservationManagementDictionary = {
+  title: string;
+  description: string;
+  demoFill: string;
+  serviceLabel: string;
+  previousMonth: string;
+  currentMonth: string;
+  nextMonth: string;
+  methods: { DATE: string; DATETIME: string };
+  facilityMethod: string;
+  services: Record<ReservationServiceKey, { name: string; description: string }>;
+  weekdays: readonly [string, string, string, string, string, string, string];
+  statuses: Record<ReservationAvailabilityStatus, string>;
+  legend: string;
+  availableTimes: string;
+  availableDate: string;
+  noSlots: string;
+  dateSlot: string;
+  bookedCount: string;
+  openSlotCount: string;
+  dateCount: string;
+  readOnlyNotice: string;
+  generated: string;
+  loadingError: string;
+  generationError: string;
+  apiKeys: ReservationApiKeyDictionary;
+};
+
+export type ReservationApiRequestLogDictionary = {
+  entry: string;
+  backToKeys: string;
+  title: string;
+  description: string;
+  filter: {
+    heading: string;
+    search: string;
+    searchPlaceholder: string;
+    method: string;
+    result: string;
+    all: string;
+    success: string;
+    clientError: string;
+    serverError: string;
+    submit: string;
+  };
+  list: {
+    title: string;
+    description: string;
+    count: string;
+    requestedAt: string;
+    apiKey: string;
+    method: string;
+    api: string;
+    result: string;
+    duration: string;
+    requestId: string;
+    scrollRegion: string;
+    next: string;
+    emptyTitle: string;
+    emptyDescription: string;
+  };
+  detail: {
+    back: string;
+    title: string;
+    request: string;
+    normalizedJson: string;
+    credentialNotice: string;
+    response: string;
+    httpStatus: string;
+    success: string;
+    failure: string;
+    json: string;
+    properties: string;
+    requestedAt: string;
+    apiKey: string;
+    method: string;
+    permission: string;
+    status: string;
+    duration: string;
+    completedAt: string;
+    requestId: string;
+    idempotencyOutcome: string;
+    responseLocation: string;
+    responseEtag: string;
+    notApplicable: string;
+    created: string;
+    requestCopyLabel: string;
+    requestCopied: string;
+    requestCopyFailed: string;
+    responseCopyLabel: string;
+    responseCopied: string;
+    responseCopyFailed: string;
+  };
+};
+
+export type ReservationApiKeyDictionary = {
+  entry: string; title: string; description: string; back: string; issue: string; readOnly: string;
+  usage: { title: string; description: string; change: string; limit: string; current: string; remaining: string; unlimited: string; resets: string };
+  api: {
+    title: string;
+    description: string;
+    method: string;
+    endpoint: string;
+    permission: string;
+    operation: string;
+    descriptions: Record<ReservationApiPermission, string>;
+    operations: Record<"services" | "availability" | "list" | "read" | "create" | "replace" | "update" | "delete", string>;
+  };
+  keys: { title: string; description: string; name: string; key: string; nameKey: string; permissions: string; monthlyLimit: string; monthlyUsage: string; status: string; created: string; lastUsed: string; actions: string; actionsFor: string; active: string; revoked: string; never: string; unlimited: string; remaining: string; changeLimit: string; revoke: string; emptyTitle: string; emptyDescription: string };
+  issueDialog: { title: string; description: string; name: string; namePlaceholder: string; permissions: string; permissionsDescription: string; permissionError: string; limitTitle: string; limitDescription: string; limitLimitedDescription: string; limitInputLabel: string; submit: string; successTitle: string; successDescription: string; keyLabel: string; copy: string; copied: string; close: string };
+  revokeDialog: { title: string; description: string; confirm: string };
+  usageDialog: { title: string; description: string; limited: string; unlimited: string; unit: string; help: string; invalid: string; submit: string };
+  keyUsageDialog: { title: string; description: string; legend: string; limitedDescription: string; unlimited: string; unlimitedDescription: string; issueUnlimitedDescription: string; submit: string };
+  logs: ReservationApiRequestLogDictionary;
+  cancel: string; saving: string; genericError: string; conflictError: string;
+};
+
+const reservationApiKeyCopy: Record<Locale, ReservationApiKeyDictionary> = {
+  ja: {
+    entry: 'APIキー管理', title: '予約APIキー', description: '外部システムから予約を参照・登録・変更・削除するためのAPIキーと権限を管理します。', back: '予約システムに戻る', issue: 'APIキーを発行', readOnly: 'APIキーの発行と無効化、月間上限の変更には予約システムの編集権限が必要です。',
+    usage: { title: '全体の月間リクエスト上限', description: 'すべての予約APIキーを合算する自治体全体の上限です。キーごとの上限と両方が適用されます。', change: '上限を変更', limit: '現在の上限', current: '今月の利用', remaining: '残り', unlimited: '上限なし', resets: '{date}にリセットされます。' },
+    api: { title: '公開API', description: 'Authorization ヘッダーに Bearer 形式でAPIキーを指定します。作成時は Idempotency-Key、更新・削除時は If-Match を指定してください。', method: 'メソッド', endpoint: 'エンドポイント', permission: '権限', operation: '操作', descriptions: { LIST: '予約一覧の取得', READ: '指定した予約の取得', CREATE: '予約の登録', UPDATE: '予約の変更', DELETE: '予約の削除' }, operations: { services: 'サービス一覧の取得', availability: '空き枠の取得', list: '予約一覧の取得', read: '指定した予約の取得', create: '予約の登録', replace: '予約の置換', update: '予約の変更', delete: '予約の削除' } },
+    keys: { title: '発行済みAPIキー', description: 'キー本体は発行直後に一度だけ表示されます。APIキーごとに月間上限と利用状況を管理できます。', name: '名前', key: 'APIキー', nameKey: '名前 / キー', permissions: '権限', monthlyLimit: '月間上限', monthlyUsage: '今月の利用', status: '状態', created: '発行日時', lastUsed: '最終利用', actions: '操作', actionsFor: '操作: {name}', active: '有効', revoked: '無効', never: '未利用', unlimited: '上限なし', remaining: '残り', changeLimit: '上限を変更', revoke: '無効化', emptyTitle: 'APIキーはまだ発行されていません', emptyDescription: '外部システムごとに必要な権限だけを選んで発行してください。' },
+    issueDialog: { title: 'APIキーを発行', description: '利用する外部システムを識別できる名前と、許可する操作を選択してください。', name: 'APIキー名', namePlaceholder: '例：予約連携システム', permissions: '権限', permissionsDescription: '少なくとも1つ選択してください。権限はそれぞれ独立しています。', permissionError: '権限を1つ以上選択してください。', limitTitle: 'キーごとの月間リクエスト上限', limitDescription: 'このAPIキーに適用する上限を指定します。全体上限も別に適用されます。', limitLimitedDescription: '100件以上で設定します。', limitInputLabel: '1か月の上限', submit: '発行する', successTitle: 'APIキーを発行しました', successDescription: 'このキーは再表示できません。今すぐ安全な場所にコピーしてください。', keyLabel: 'APIキー', copy: 'コピー', copied: 'APIキーをコピーしました。', close: '閉じる' },
+    revokeDialog: { title: 'APIキーを無効化しますか？', description: '「{name}」は直ちに公開APIへアクセスできなくなります。この操作は取り消せません。', confirm: '無効化する' },
+    usageDialog: { title: '月間リクエスト上限を変更', description: '予約公開API全体で1か月に受け付けるリクエスト数を設定します。', limited: '上限を設定', unlimited: '上限なし', unit: '件', help: '最小100件。10,000件を超える場合は100件単位で設定してください。', invalid: '100件以上の整数を入力してください。10,000件を超える場合は100件単位です。', submit: '保存する' },
+    keyUsageDialog: { title: 'APIキーの月間上限を変更', description: '「{name}」が1か月に利用できるリクエスト数を設定します。全体上限も引き続き適用されます。', legend: 'キーごとの上限設定', limitedDescription: 'このAPIキーだけに適用します。', unlimited: 'キーごとの上限なし', unlimitedDescription: 'このキーの利用件数は集計し、全体上限だけを適用します。', issueUnlimitedDescription: '利用件数は集計し、全体上限だけを適用します。', submit: '保存する' },
+    logs: {
+      entry: '利用ログを確認', backToKeys: 'APIキー管理に戻る', title: 'API利用ログ', description: '予約公開APIを実行したAPIキー、日時、エンドポイント、結果を確認できます。',
+      filter: { heading: '利用ログを絞り込む', search: '検索', searchPlaceholder: 'リクエストID、APIキー名、キー識別子', method: 'メソッド', result: '結果', all: 'すべて', success: '成功（2xx）', clientError: 'クライアントエラー（4xx）', serverError: 'サーバーエラー（5xx）', submit: '絞り込む' },
+      list: { title: '実行履歴', description: '新しい実行順に50件ずつ表示します。', count: '{count}件', requestedAt: '実行日時', apiKey: '実行APIキー', method: 'メソッド', api: 'API', result: '結果', duration: '処理時間', requestId: 'リクエストID', scrollRegion: '実行履歴の表', next: '次の50件', emptyTitle: '条件に一致する利用ログはありません', emptyDescription: '検索条件を変更するか、公開APIの実行後にもう一度確認してください。' },
+      detail: { back: 'API利用ログに戻る', title: 'API利用ログの詳細', request: 'リクエスト', normalizedJson: '正規化済みJSON', credentialNotice: '認証ヘッダー、Idempotency-Key、未解析のリクエスト本文は保存しません。', response: 'レスポンス', httpStatus: 'HTTP {status}', success: '成功', failure: '失敗', json: 'JSON', properties: 'プロパティ', requestedAt: '実行日時', apiKey: 'APIキー', method: 'メソッド', permission: '権限', status: 'ステータス', duration: '処理時間', completedAt: '完了日時', requestId: 'リクエストID', idempotencyOutcome: '冪等性結果', responseLocation: 'Location', responseEtag: 'ETag', notApplicable: '—', created: 'Created', requestCopyLabel: 'リクエストJSONをコピー', requestCopied: 'リクエストJSONをコピーしました。', requestCopyFailed: 'リクエストJSONをコピーできませんでした。', responseCopyLabel: 'レスポンスJSONをコピー', responseCopied: 'レスポンスJSONをコピーしました。', responseCopyFailed: 'レスポンスJSONをコピーできませんでした。' },
+    },
+    cancel: 'キャンセル', saving: '処理中…', genericError: '処理できませんでした。もう一度お試しください。', conflictError: '他の変更と競合しました。再読み込みしてお試しください。',
+  },
+  en: {
+    entry: 'API key management', title: 'Reservation API keys', description: 'Manage API keys and permissions for external systems that read and manage reservations.', back: 'Back to reservations', issue: 'Issue API key', readOnly: 'Edit permission for the reservation system is required to issue or revoke keys and change the monthly limit.',
+    usage: { title: 'Overall monthly request limit', description: 'This municipality-wide limit combines requests from every reservation API key. Each key limit also applies.', change: 'Change limit', limit: 'Current limit', current: 'Used this month', remaining: 'Remaining', unlimited: 'No limit', resets: 'Resets on {date}.' },
+    api: { title: 'Public API', description: 'Send the API key as a Bearer token. Include Idempotency-Key when creating and If-Match when updating or deleting.', method: 'Method', endpoint: 'Endpoint', permission: 'Permission', operation: 'Operation', descriptions: { LIST: 'List reservations', READ: 'Get the specified reservation', CREATE: 'Create a reservation', UPDATE: 'Update a reservation', DELETE: 'Delete a reservation' }, operations: { services: 'List services', availability: 'Get availability', list: 'List reservations', read: 'Get the specified reservation', create: 'Create a reservation', replace: 'Replace a reservation', update: 'Update a reservation', delete: 'Delete a reservation' } },
+    keys: { title: 'Issued API keys', description: 'A key is shown only once, immediately after issue. Manage the monthly limit and usage for each API key here.', name: 'Name', key: 'API key', nameKey: 'Name / key', permissions: 'Permissions', monthlyLimit: 'Monthly limit', monthlyUsage: 'Used this month', status: 'Status', created: 'Issued', lastUsed: 'Last used', actions: 'Actions', actionsFor: 'Actions: {name}', active: 'Active', revoked: 'Revoked', never: 'Never', unlimited: 'No limit', remaining: 'Remaining', changeLimit: 'Change limit', revoke: 'Revoke', emptyTitle: 'No API keys have been issued', emptyDescription: 'Issue a separate key with only the permissions each external system needs.' },
+    issueDialog: { title: 'Issue API key', description: 'Enter a name that identifies the external system and select its allowed operations.', name: 'API key name', namePlaceholder: 'Example: Reservation integration', permissions: 'Permissions', permissionsDescription: 'Select at least one. Each permission is independent.', permissionError: 'Select at least one permission.', limitTitle: 'Monthly request limit for this key', limitDescription: 'Set the limit for this API key. The overall limit also applies separately.', limitLimitedDescription: 'Set a value of at least 100 requests.', limitInputLabel: 'Monthly limit', submit: 'Issue', successTitle: 'API key issued', successDescription: 'This key cannot be shown again. Copy it to a secure location now.', keyLabel: 'API key', copy: 'Copy', copied: 'API key copied.', close: 'Close' },
+    revokeDialog: { title: 'Revoke this API key?', description: '“{name}” will immediately lose access to the public API. This cannot be undone.', confirm: 'Revoke' },
+    usageDialog: { title: 'Change monthly request limit', description: 'Set the number of requests accepted by the reservation public API each month.', limited: 'Set a limit', unlimited: 'No limit', unit: 'requests', help: 'Minimum 100. Values above 10,000 must be in increments of 100.', invalid: 'Enter an integer of at least 100. Values above 10,000 must be in increments of 100.', submit: 'Save' },
+    keyUsageDialog: { title: 'Change API key monthly limit', description: 'Set how many requests “{name}” can use each month. The overall limit continues to apply.', legend: 'Limit for this key', limitedDescription: 'Applies only to this API key.', unlimited: 'No limit for this key', unlimitedDescription: 'Usage is still counted and only the overall limit applies.', issueUnlimitedDescription: 'Usage is counted and only the overall limit applies.', submit: 'Save' },
+    logs: {
+      entry: 'View usage logs', backToKeys: 'Back to API key management', title: 'API usage logs', description: 'Review the API key, time, endpoint, and result for reservation public API requests.',
+      filter: { heading: 'Filter usage logs', search: 'Search', searchPlaceholder: 'Request ID, API key name, or key identifier', method: 'Method', result: 'Result', all: 'All', success: 'Success (2xx)', clientError: 'Client error (4xx)', serverError: 'Server error (5xx)', submit: 'Filter' },
+      list: { title: 'Execution history', description: 'Shows 50 requests at a time, newest first.', count: '{count} results', requestedAt: 'Executed', apiKey: 'API key used', method: 'Method', api: 'API', result: 'Result', duration: 'Duration', requestId: 'Request ID', scrollRegion: 'Execution history table', next: 'Next 50', emptyTitle: 'No usage logs match these conditions', emptyDescription: 'Change the filters or check again after the public API is used.' },
+      detail: { back: 'Back to API usage logs', title: 'API usage log details', request: 'Request', normalizedJson: 'Normalized JSON', credentialNotice: 'Authentication headers, Idempotency-Key values, and unparsed request bodies are not stored.', response: 'Response', httpStatus: 'HTTP {status}', success: 'Success', failure: 'Failed', json: 'JSON', properties: 'Properties', requestedAt: 'Executed', apiKey: 'API key', method: 'Method', permission: 'Permission', status: 'Status', duration: 'Duration', completedAt: 'Completed', requestId: 'Request ID', idempotencyOutcome: 'Idempotency result', responseLocation: 'Location', responseEtag: 'ETag', notApplicable: '—', created: 'Created', requestCopyLabel: 'Copy request JSON', requestCopied: 'Request JSON copied.', requestCopyFailed: 'Could not copy request JSON.', responseCopyLabel: 'Copy response JSON', responseCopied: 'Response JSON copied.', responseCopyFailed: 'Could not copy response JSON.' },
+    },
+    cancel: 'Cancel', saving: 'Working…', genericError: 'The operation could not be completed. Please try again.', conflictError: 'This conflicts with another change. Reload and try again.',
+  },
+  'zh-Hans': {
+    entry: 'API密钥管理', title: '预约API密钥', description: '管理外部系统查询、创建、修改和删除预约所需的API密钥与权限。', back: '返回预约系统', issue: '签发API密钥', readOnly: '签发或撤销密钥及修改月度上限需要预约系统编辑权限。',
+    usage: { title: '整体每月请求上限', description: '这是汇总所有预约API密钥请求的自治体整体上限，同时也会应用各密钥的单独上限。', change: '修改上限', limit: '当前上限', current: '本月使用量', remaining: '剩余', unlimited: '无限制', resets: '将于{date}重置。' },
+    api: { title: '公开API', description: '请在Authorization标头中以Bearer形式指定API密钥。创建时请指定 Idempotency-Key，更新和删除时请指定 If-Match。', method: '方法', endpoint: '端点', permission: '权限', operation: '操作', descriptions: { LIST: '获取预约列表', READ: '获取指定预约', CREATE: '创建预约', UPDATE: '修改预约', DELETE: '删除预约' }, operations: { services: '获取服务列表', availability: '获取可用时段', list: '获取预约列表', read: '获取指定预约', create: '创建预约', replace: '替换预约', update: '修改预约', delete: '删除预约' } },
+    keys: { title: '已签发API密钥', description: '密钥本身仅在签发后显示一次。可在此管理各API密钥的月度上限和使用量。', name: '名称', key: 'API密钥', nameKey: '名称 / 密钥', permissions: '权限', monthlyLimit: '每月上限', monthlyUsage: '本月使用量', status: '状态', created: '签发时间', lastUsed: '最后使用', actions: '操作', actionsFor: '操作：{name}', active: '有效', revoked: '已撤销', never: '未使用', unlimited: '无限制', remaining: '剩余', changeLimit: '修改上限', revoke: '撤销', emptyTitle: '尚未签发API密钥', emptyDescription: '请为每个外部系统仅选择必要权限后签发。' },
+    issueDialog: { title: '签发API密钥', description: '输入用于识别外部系统的名称并选择允许的操作。', name: 'API密钥名称', namePlaceholder: '例：预约集成系统', permissions: '权限', permissionsDescription: '请至少选择一项。各项权限彼此独立。', permissionError: '请至少选择一项权限。', limitTitle: '单个密钥每月请求上限', limitDescription: '指定此API密钥的上限。整体上限也会另行应用。', limitLimitedDescription: '请设置为100次以上。', limitInputLabel: '每月上限', submit: '签发', successTitle: 'API密钥已签发', successDescription: '此密钥无法再次显示，请立即复制到安全位置。', keyLabel: 'API密钥', copy: '复制', copied: 'API密钥已复制。', close: '关闭' },
+    revokeDialog: { title: '要撤销API密钥吗？', description: '“{name}”将立即无法访问公开API，此操作无法撤销。', confirm: '撤销' },
+    usageDialog: { title: '修改每月请求上限', description: '设置预约公开API每月接受的请求数。', limited: '设置上限', unlimited: '无限制', unit: '次', help: '最少100次。超过10,000时须按100的倍数设置。', invalid: '请输入不小于100的整数；超过10,000时须为100的倍数。', submit: '保存' },
+    keyUsageDialog: { title: '修改API密钥每月上限', description: '设置“{name}”每月可使用的请求数。整体上限仍会继续应用。', legend: '单个密钥上限设置', limitedDescription: '仅应用于此API密钥。', unlimited: '此密钥无限制', unlimitedDescription: '仍会统计此密钥的使用量，仅应用整体上限。', issueUnlimitedDescription: '仍会统计使用量，仅应用整体上限。', submit: '保存' },
+    logs: {
+      entry: '查看使用日志', backToKeys: '返回API密钥管理', title: 'API使用日志', description: '查看预约公开API请求所使用的API密钥、执行时间、端点和结果。',
+      filter: { heading: '筛选使用日志', search: '搜索', searchPlaceholder: '请求ID、API密钥名称或密钥标识符', method: '方法', result: '结果', all: '全部', success: '成功（2xx）', clientError: '客户端错误（4xx）', serverError: '服务器错误（5xx）', submit: '筛选' },
+      list: { title: '执行记录', description: '按最新执行顺序每次显示50条。', count: '{count}条', requestedAt: '执行时间', apiKey: '执行API密钥', method: '方法', api: 'API', result: '结果', duration: '处理时间', requestId: '请求ID', scrollRegion: '执行记录表', next: '后50条', emptyTitle: '没有符合条件的使用日志', emptyDescription: '请更改筛选条件，或在公开API执行后再次查看。' },
+      detail: { back: '返回API使用日志', title: 'API使用日志详情', request: '请求', normalizedJson: '规范化JSON', credentialNotice: '不保存认证标头、Idempotency-Key 和未经解析的请求正文。', response: '响应', httpStatus: 'HTTP {status}', success: '成功', failure: '失败', json: 'JSON', properties: '属性', requestedAt: '执行时间', apiKey: 'API密钥', method: '方法', permission: '权限', status: '状态', duration: '处理时间', completedAt: '完成时间', requestId: '请求ID', idempotencyOutcome: '幂等结果', responseLocation: 'Location', responseEtag: 'ETag', notApplicable: '—', created: '已创建', requestCopyLabel: '复制请求JSON', requestCopied: '已复制请求JSON。', requestCopyFailed: '无法复制请求JSON。', responseCopyLabel: '复制响应JSON', responseCopied: '已复制响应JSON。', responseCopyFailed: '无法复制响应JSON。' },
+    },
+    cancel: '取消', saving: '处理中…', genericError: '操作失败，请重试。', conflictError: '与其他更改冲突，请重新加载后再试。',
+  },
+  'zh-Hant': {
+    entry: 'API金鑰管理', title: '預約API金鑰', description: '管理外部系統查詢、新增、修改及刪除預約所需的API金鑰與權限。', back: '返回預約系統', issue: '簽發API金鑰', readOnly: '簽發或撤銷金鑰及修改每月上限需要預約系統編輯權限。',
+    usage: { title: '整體每月請求上限', description: '這是彙總所有預約API金鑰請求的自治體整體上限，同時也會套用各金鑰的個別上限。', change: '修改上限', limit: '目前上限', current: '本月使用量', remaining: '剩餘', unlimited: '無限制', resets: '將於{date}重設。' },
+    api: { title: '公開API', description: '請在Authorization標頭中以Bearer形式指定API金鑰。建立時請指定 Idempotency-Key，更新與刪除時請指定 If-Match。', method: '方法', endpoint: '端點', permission: '權限', operation: '操作', descriptions: { LIST: '取得預約清單', READ: '取得指定預約', CREATE: '新增預約', UPDATE: '修改預約', DELETE: '刪除預約' }, operations: { services: '取得服務清單', availability: '取得可用時段', list: '取得預約清單', read: '取得指定預約', create: '新增預約', replace: '取代預約', update: '修改預約', delete: '刪除預約' } },
+    keys: { title: '已簽發API金鑰', description: '金鑰本身只會在簽發後顯示一次。可在此管理各API金鑰的每月上限與使用量。', name: '名稱', key: 'API金鑰', nameKey: '名稱 / 金鑰', permissions: '權限', monthlyLimit: '每月上限', monthlyUsage: '本月使用量', status: '狀態', created: '簽發時間', lastUsed: '最後使用', actions: '操作', actionsFor: '操作：{name}', active: '有效', revoked: '已撤銷', never: '未使用', unlimited: '無限制', remaining: '剩餘', changeLimit: '修改上限', revoke: '撤銷', emptyTitle: '尚未簽發API金鑰', emptyDescription: '請為每個外部系統僅選擇必要權限後簽發。' },
+    issueDialog: { title: '簽發API金鑰', description: '輸入用於識別外部系統的名稱並選擇允許的操作。', name: 'API金鑰名稱', namePlaceholder: '例：預約整合系統', permissions: '權限', permissionsDescription: '請至少選擇一項。各項權限彼此獨立。', permissionError: '請至少選擇一項權限。', limitTitle: '單一金鑰每月請求上限', limitDescription: '指定此API金鑰的上限。整體上限也會另外套用。', limitLimitedDescription: '請設定為100次以上。', limitInputLabel: '每月上限', submit: '簽發', successTitle: 'API金鑰已簽發', successDescription: '此金鑰無法再次顯示，請立即複製至安全位置。', keyLabel: 'API金鑰', copy: '複製', copied: 'API金鑰已複製。', close: '關閉' },
+    revokeDialog: { title: '要撤銷API金鑰嗎？', description: '「{name}」將立即無法存取公開API，此操作無法撤銷。', confirm: '撤銷' },
+    usageDialog: { title: '修改每月請求上限', description: '設定預約公開API每月接受的請求數。', limited: '設定上限', unlimited: '無限制', unit: '次', help: '最少100次。超過10,000時須以100為單位設定。', invalid: '請輸入不小於100的整數；超過10,000時須為100的倍數。', submit: '儲存' },
+    keyUsageDialog: { title: '修改API金鑰每月上限', description: '設定「{name}」每月可使用的請求數。整體上限仍會繼續套用。', legend: '單一金鑰上限設定', limitedDescription: '僅套用於此API金鑰。', unlimited: '此金鑰無限制', unlimitedDescription: '仍會統計此金鑰的使用量，只套用整體上限。', issueUnlimitedDescription: '仍會統計使用量，只套用整體上限。', submit: '儲存' },
+    logs: {
+      entry: '查看使用紀錄', backToKeys: '返回API金鑰管理', title: 'API使用紀錄', description: '查看預約公開API請求所使用的API金鑰、執行時間、端點及結果。',
+      filter: { heading: '篩選使用紀錄', search: '搜尋', searchPlaceholder: '請求ID、API金鑰名稱或金鑰識別碼', method: '方法', result: '結果', all: '全部', success: '成功（2xx）', clientError: '用戶端錯誤（4xx）', serverError: '伺服器錯誤（5xx）', submit: '篩選' },
+      list: { title: '執行紀錄', description: '依最新執行順序每次顯示50筆。', count: '{count}筆', requestedAt: '執行時間', apiKey: '執行API金鑰', method: '方法', api: 'API', result: '結果', duration: '處理時間', requestId: '請求ID', scrollRegion: '執行紀錄表', next: '後50筆', emptyTitle: '沒有符合條件的使用紀錄', emptyDescription: '請變更篩選條件，或在公開API執行後再次查看。' },
+      detail: { back: '返回API使用紀錄', title: 'API使用紀錄詳細資料', request: '請求', normalizedJson: '正規化JSON', credentialNotice: '不會儲存驗證標頭、Idempotency-Key 及未解析的請求本文。', response: '回應', httpStatus: 'HTTP {status}', success: '成功', failure: '失敗', json: 'JSON', properties: '屬性', requestedAt: '執行時間', apiKey: 'API金鑰', method: '方法', permission: '權限', status: '狀態', duration: '處理時間', completedAt: '完成時間', requestId: '請求ID', idempotencyOutcome: '冪等結果', responseLocation: 'Location', responseEtag: 'ETag', notApplicable: '—', created: '已建立', requestCopyLabel: '複製請求JSON', requestCopied: '已複製請求JSON。', requestCopyFailed: '無法複製請求JSON。', responseCopyLabel: '複製回應JSON', responseCopied: '已複製回應JSON。', responseCopyFailed: '無法複製回應JSON。' },
+    },
+    cancel: '取消', saving: '處理中…', genericError: '操作失敗，請重試。', conflictError: '與其他變更衝突，請重新載入後再試。',
+  },
+  ko: {
+    entry: 'API 키 관리', title: '예약 API 키', description: '외부 시스템이 예약을 조회·등록·변경·삭제할 수 있는 API 키와 권한을 관리합니다.', back: '예약 시스템으로 돌아가기', issue: 'API 키 발급', readOnly: '키 발급·폐기 및 월간 한도 변경에는 예약 시스템 편집 권한이 필요합니다.',
+    usage: { title: '전체 월간 요청 한도', description: '모든 예약 API 키의 요청을 합산하는 지자체 전체 한도이며, 각 키의 개별 한도도 함께 적용됩니다.', change: '한도 변경', limit: '현재 한도', current: '이번 달 사용', remaining: '남음', unlimited: '한도 없음', resets: '{date}에 초기화됩니다.' },
+    api: { title: '공개 API', description: 'Authorization 헤더에 Bearer 형식으로 API 키를 지정합니다. 생성 시 Idempotency-Key, 변경 및 삭제 시 If-Match를 지정하세요.', method: '메서드', endpoint: '엔드포인트', permission: '권한', operation: '작업', descriptions: { LIST: '예약 목록 조회', READ: '지정한 예약 조회', CREATE: '예약 등록', UPDATE: '예약 변경', DELETE: '예약 삭제' }, operations: { services: '서비스 목록 조회', availability: '예약 가능 시간 조회', list: '예약 목록 조회', read: '지정한 예약 조회', create: '예약 등록', replace: '예약 교체', update: '예약 변경', delete: '예약 삭제' } },
+    keys: { title: '발급된 API 키', description: '키 본문은 발급 직후 한 번만 표시됩니다. 각 API 키의 월간 한도와 사용량을 관리할 수 있습니다.', name: '이름', key: 'API 키', nameKey: '이름 / 키', permissions: '권한', monthlyLimit: '월간 한도', monthlyUsage: '이번 달 사용', status: '상태', created: '발급 일시', lastUsed: '마지막 사용', actions: '작업', actionsFor: '작업: {name}', active: '활성', revoked: '폐기됨', never: '미사용', unlimited: '한도 없음', remaining: '남음', changeLimit: '한도 변경', revoke: '폐기', emptyTitle: '아직 발급된 API 키가 없습니다', emptyDescription: '외부 시스템별로 필요한 권한만 선택해 발급하세요.' },
+    issueDialog: { title: 'API 키 발급', description: '외부 시스템을 식별할 이름과 허용할 작업을 선택하세요.', name: 'API 키 이름', namePlaceholder: '예: 예약 연동 시스템', permissions: '권한', permissionsDescription: '하나 이상 선택하세요. 각 권한은 서로 독립적입니다.', permissionError: '권한을 하나 이상 선택하세요.', limitTitle: '키별 월간 요청 한도', limitDescription: '이 API 키에 적용할 한도를 지정합니다. 전체 한도도 별도로 적용됩니다.', limitLimitedDescription: '100건 이상으로 설정하세요.', limitInputLabel: '월간 한도', submit: '발급', successTitle: 'API 키가 발급되었습니다', successDescription: '이 키는 다시 표시되지 않습니다. 지금 안전한 위치에 복사하세요.', keyLabel: 'API 키', copy: '복사', copied: 'API 키를 복사했습니다.', close: '닫기' },
+    revokeDialog: { title: 'API 키를 폐기하시겠습니까?', description: '“{name}”은 즉시 공개 API에 접근할 수 없게 됩니다. 이 작업은 되돌릴 수 없습니다.', confirm: '폐기' },
+    usageDialog: { title: '월간 요청 한도 변경', description: '예약 공개 API가 한 달 동안 받을 요청 수를 설정합니다.', limited: '한도 설정', unlimited: '한도 없음', unit: '건', help: '최소 100건. 10,000건을 초과하면 100건 단위로 설정하세요.', invalid: '100 이상의 정수를 입력하세요. 10,000을 초과하면 100의 배수여야 합니다.', submit: '저장' },
+    keyUsageDialog: { title: 'API 키 월간 한도 변경', description: '“{name}”이 한 달에 사용할 수 있는 요청 수를 설정합니다. 전체 한도도 계속 적용됩니다.', legend: '키별 한도 설정', limitedDescription: '이 API 키에만 적용됩니다.', unlimited: '이 키는 한도 없음', unlimitedDescription: '사용량은 계속 집계하고 전체 한도만 적용합니다.', issueUnlimitedDescription: '사용량은 집계하고 전체 한도만 적용합니다.', submit: '저장' },
+    logs: {
+      entry: '사용 로그 확인', backToKeys: 'API 키 관리로 돌아가기', title: 'API 사용 로그', description: '예약 공개 API 요청에 사용된 API 키, 실행 시간, 엔드포인트와 결과를 확인합니다.',
+      filter: { heading: '사용 로그 필터', search: '검색', searchPlaceholder: '요청 ID, API 키 이름 또는 키 식별자', method: '메서드', result: '결과', all: '전체', success: '성공(2xx)', clientError: '클라이언트 오류(4xx)', serverError: '서버 오류(5xx)', submit: '필터' },
+      list: { title: '실행 기록', description: '최신 실행 순으로 50건씩 표시합니다.', count: '{count}건', requestedAt: '실행 시간', apiKey: '실행 API 키', method: '메서드', api: 'API', result: '결과', duration: '처리 시간', requestId: '요청 ID', scrollRegion: '실행 기록 표', next: '다음 50건', emptyTitle: '조건에 맞는 사용 로그가 없습니다', emptyDescription: '검색 조건을 변경하거나 공개 API 실행 후 다시 확인하세요.' },
+      detail: { back: 'API 사용 로그로 돌아가기', title: 'API 사용 로그 상세', request: '요청', normalizedJson: '정규화된 JSON', credentialNotice: '인증 헤더, Idempotency-Key 및 파싱되지 않은 요청 본문은 저장하지 않습니다.', response: '응답', httpStatus: 'HTTP {status}', success: '성공', failure: '실패', json: 'JSON', properties: '속성', requestedAt: '실행 시간', apiKey: 'API 키', method: '메서드', permission: '권한', status: '상태', duration: '처리 시간', completedAt: '완료 시간', requestId: '요청 ID', idempotencyOutcome: '멱등성 결과', responseLocation: 'Location', responseEtag: 'ETag', notApplicable: '—', created: '생성됨', requestCopyLabel: '요청 JSON 복사', requestCopied: '요청 JSON을 복사했습니다.', requestCopyFailed: '요청 JSON을 복사하지 못했습니다.', responseCopyLabel: '응답 JSON 복사', responseCopied: '응답 JSON을 복사했습니다.', responseCopyFailed: '응답 JSON을 복사하지 못했습니다.' },
+    },
+    cancel: '취소', saving: '처리 중…', genericError: '처리하지 못했습니다. 다시 시도하세요.', conflictError: '다른 변경과 충돌했습니다. 다시 불러온 후 시도하세요.',
+  },
+};
+
+const reservationManagementCopy: Record<Locale, ReservationManagementDictionary> = {
+  ja: {
+    apiKeys: reservationApiKeyCopy.ja,
+    title: '予約システム',
+    description: '自治体業務ごとの受付日と予約状況をカレンダーで確認します。',
+    demoFill: '表示月のデモ予約を生成',
+    serviceLabel: '予約業務', previousMonth: '前の月', currentMonth: '今月', nextMonth: '次の月',
+    methods: { DATE: '日付予約', DATETIME: '日時予約' }, facilityMethod: '施設利用枠',
+    services: {
+      'my-number-card': { name: 'マイナンバーカード交付・更新', description: '平日の9:00から17:00まで、30分単位で来庁日時を予約できます。' },
+      'legal-consultation': { name: '無料法律相談', description: '毎週水曜日の午後に、60分単位で弁護士相談枠を予約できます。' },
+      'bulky-waste': { name: '粗大ごみ収集', description: '月曜日から土曜日まで、収集日を日単位で予約できます。' },
+      'civic-facility': { name: '公民館・市民会館・会議室利用', description: '午前・午後・夜間の施設利用枠から予約できます。' },
+    },
+    weekdays: ['日', '月', '火', '水', '木', '金', '土'],
+    statuses: { AVAILABLE: '空きあり', LIMITED: '残りわずか', FULL: '満員', UNAVAILABLE: '受付なし' },
+    legend: '予約状況の凡例', availableTimes: '予約可能な時間を選択できます。', availableDate: 'この日の収集予約状況です。', noSlots: 'この日は予約を受け付けていません。', dateSlot: '収集日',
+    bookedCount: '予約 {booked}/{capacity}件・残り {remaining}件', openSlotCount: '空き{count}枠', dateCount: '{booked}/{capacity}件',
+    readOnlyNotice: 'デモ予約の生成には予約システムの編集権限が必要です。', generated: '表示月の4業務にデモ予約を生成しました。', loadingError: '予約状況を読み込めませんでした。もう一度お試しください。', generationError: 'デモ予約を生成できませんでした。もう一度お試しください。',
+  },
+  en: {
+    apiKeys: reservationApiKeyCopy.en,
+    title: 'Reservation system', description: 'View appointment dates and availability for municipal services on a calendar.', demoFill: 'Generate demo bookings for this month', serviceLabel: 'Service', previousMonth: 'Previous month', currentMonth: 'Current month', nextMonth: 'Next month',
+    methods: { DATE: 'Date booking', DATETIME: 'Date and time booking' }, facilityMethod: 'Facility time slots',
+    services: {
+      'my-number-card': { name: 'My Number card issuance and renewal', description: 'Book a 30-minute visit between 9:00 and 17:00 on weekdays.' },
+      'legal-consultation': { name: 'Free legal consultation', description: 'Book a 60-minute consultation between 13:00 and 16:00 on Wednesdays.' },
+      'bulky-waste': { name: 'Bulky waste collection', description: 'Book a collection date from Monday through Saturday.' },
+      'civic-facility': { name: 'Civic halls and meeting rooms', description: 'Book a morning, afternoon, or evening facility slot.' },
+    },
+    weekdays: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], statuses: { AVAILABLE: 'Available', LIMITED: 'Almost full', FULL: 'Full', UNAVAILABLE: 'Closed' }, legend: 'Availability legend', availableTimes: 'Available times for this date.', availableDate: 'Collection availability for this date.', noSlots: 'Bookings are not accepted on this date.', dateSlot: 'Collection date', bookedCount: '{booked}/{capacity} booked · {remaining} remaining', openSlotCount: '{count} slots open', dateCount: '{booked}/{capacity}', readOnlyNotice: 'Edit permission for the reservation system is required to generate demo bookings.', generated: 'Demo bookings were generated for all four services in this month.', loadingError: 'Could not load availability. Please try again.', generationError: 'Could not generate demo bookings. Please try again.',
+  },
+  'zh-Hans': {
+    apiKeys: reservationApiKeyCopy['zh-Hans'],
+    title: '预约系统', description: '通过日历查看各项市政服务的受理日期和预约情况。', demoFill: '生成本月演示预约', serviceLabel: '预约业务', previousMonth: '上个月', currentMonth: '本月', nextMonth: '下个月', methods: { DATE: '按日期预约', DATETIME: '按日期和时间预约' }, facilityMethod: '设施使用时段',
+    services: {
+      'my-number-card': { name: '个人编号卡领取与更新', description: '工作日9:00至17:00可按30分钟预约到访。' },
+      'legal-consultation': { name: '免费法律咨询', description: '每周三13:00至16:00可按60分钟预约咨询。' },
+      'bulky-waste': { name: '大件垃圾收集', description: '周一至周六可按日期预约收集。' },
+      'civic-facility': { name: '公民馆、市民会馆和会议室', description: '可预约上午、下午或晚间设施时段。' },
+    },
+    weekdays: ['日', '一', '二', '三', '四', '五', '六'], statuses: { AVAILABLE: '有空位', LIMITED: '余位不多', FULL: '已满', UNAVAILABLE: '不受理' }, legend: '预约状态图例', availableTimes: '请选择该日期可预约的时间。', availableDate: '该日期的收集预约情况。', noSlots: '该日期不受理预约。', dateSlot: '收集日期', bookedCount: '已预约 {booked}/{capacity}件・剩余 {remaining}件', openSlotCount: '空余{count}个时段', dateCount: '{booked}/{capacity}件', readOnlyNotice: '生成演示预约需要预约系统编辑权限。', generated: '已为本月全部4项业务生成演示预约。', loadingError: '无法加载预约情况，请重试。', generationError: '无法生成演示预约，请重试。',
+  },
+  'zh-Hant': {
+    apiKeys: reservationApiKeyCopy['zh-Hant'],
+    title: '預約系統', description: '透過日曆查看各項市政服務的受理日期及預約狀況。', demoFill: '產生本月示範預約', serviceLabel: '預約業務', previousMonth: '上個月', currentMonth: '本月', nextMonth: '下個月', methods: { DATE: '按日期預約', DATETIME: '按日期及時間預約' }, facilityMethod: '設施使用時段',
+    services: {
+      'my-number-card': { name: '個人編號卡領取及更新', description: '平日9:00至17:00可按30分鐘預約到訪。' },
+      'legal-consultation': { name: '免費法律諮詢', description: '每週三13:00至16:00可按60分鐘預約諮詢。' },
+      'bulky-waste': { name: '大型垃圾收集', description: '週一至週六可按日期預約收集。' },
+      'civic-facility': { name: '公民館、市民會館及會議室', description: '可預約上午、下午或晚間設施時段。' },
+    },
+    weekdays: ['日', '一', '二', '三', '四', '五', '六'], statuses: { AVAILABLE: '尚有空位', LIMITED: '名額將滿', FULL: '已額滿', UNAVAILABLE: '不受理' }, legend: '預約狀態圖例', availableTimes: '請選擇該日期可預約的時間。', availableDate: '該日期的收集預約狀況。', noSlots: '該日期不受理預約。', dateSlot: '收集日期', bookedCount: '已預約 {booked}/{capacity}件・剩餘 {remaining}件', openSlotCount: '尚有{count}個時段', dateCount: '{booked}/{capacity}件', readOnlyNotice: '產生示範預約需要預約系統編輯權限。', generated: '已為本月全部4項業務產生示範預約。', loadingError: '無法載入預約狀況，請重試。', generationError: '無法產生示範預約，請重試。',
+  },
+  ko: {
+    apiKeys: reservationApiKeyCopy.ko,
+    title: '예약 시스템', description: '달력에서 지방자치단체 업무별 접수일과 예약 현황을 확인합니다.', demoFill: '표시 월의 데모 예약 생성', serviceLabel: '예약 업무', previousMonth: '이전 달', currentMonth: '이번 달', nextMonth: '다음 달', methods: { DATE: '날짜 예약', DATETIME: '날짜 및 시간 예약' }, facilityMethod: '시설 이용 시간',
+    services: {
+      'my-number-card': { name: '마이넘버 카드 교부 및 갱신', description: '평일 9:00부터 17:00까지 30분 단위로 방문 시간을 예약할 수 있습니다.' },
+      'legal-consultation': { name: '무료 법률 상담', description: '수요일 13:00부터 16:00까지 60분 단위로 상담을 예약할 수 있습니다.' },
+      'bulky-waste': { name: '대형 폐기물 수거', description: '월요일부터 토요일까지 수거일을 예약할 수 있습니다.' },
+      'civic-facility': { name: '공민관·시민회관·회의실 이용', description: '오전, 오후 또는 야간 시설 이용 시간을 예약할 수 있습니다.' },
+    },
+    weekdays: ['일', '월', '화', '수', '목', '금', '토'], statuses: { AVAILABLE: '예약 가능', LIMITED: '잔여 소수', FULL: '마감', UNAVAILABLE: '접수 없음' }, legend: '예약 현황 범례', availableTimes: '이 날짜에 예약 가능한 시간을 선택할 수 있습니다.', availableDate: '이 날짜의 수거 예약 현황입니다.', noSlots: '이 날짜에는 예약을 받지 않습니다.', dateSlot: '수거일', bookedCount: '예약 {booked}/{capacity}건・잔여 {remaining}건', openSlotCount: '빈 시간 {count}개', dateCount: '{booked}/{capacity}건', readOnlyNotice: '데모 예약을 생성하려면 예약 시스템 편집 권한이 필요합니다.', generated: '표시 월의 4개 업무에 데모 예약을 생성했습니다.', loadingError: '예약 현황을 불러올 수 없습니다. 다시 시도해 주세요.', generationError: '데모 예약을 생성할 수 없습니다. 다시 시도해 주세요.',
+  },
 };
 
 export const dictionaries: Record<Locale, Dictionary> = {
@@ -940,7 +1219,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       languageSettings: '言語管理',
       maintenanceSettings: 'メンテナンス管理',
       developerApi: 'Developer API',
+      reservations: '予約システム',
       settingsMenu: '設定',
+      reservationManagement: reservationManagementCopy.ja,
       userListTitle: 'ユーザー管理',
       searchPlaceholder: '氏名またはメールアドレスで検索',
       search: '検索',
@@ -1066,6 +1347,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'language-settings': '言語設定',
           'maintenance-settings': 'メンテナンス設定',
           'developer-api': 'Developer API',
+          reservations: '予約システム',
         },
         resourceDescriptions: {
           users: '管理ユーザーの一覧・詳細、作成、権限変更、停止、再開、削除、パスワード再設定、アクセス概要を扱います。',
@@ -1077,6 +1359,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'language-settings': '公開サイトの利用言語と表示順を扱います。',
           'maintenance-settings': '環境別モードとスケジュールを扱います。',
           'developer-api': '外部連携用のAPIとWebhook認証情報を管理します。',
+          reservations: '自治体業務の予約状況を閲覧し、デモ予約を生成します。',
         },
         actionLabels: { VIEW: '表示', CREATE: '追加', UPDATE: '編集', DELETE: '削除' },
       },
@@ -1729,7 +2012,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       languageSettings: 'Languages',
       maintenanceSettings: 'Maintenance',
       developerApi: 'Developer API',
+      reservations: 'Reservation system',
       settingsMenu: 'Settings',
+      reservationManagement: reservationManagementCopy.en,
       userListTitle: 'User Management',
       searchPlaceholder: 'Search by name or email',
       search: 'Search',
@@ -1855,6 +2140,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'language-settings': 'Language settings',
           'maintenance-settings': 'Maintenance settings',
           'developer-api': 'Developer API',
+          reservations: 'Reservation system',
         },
         resourceDescriptions: {
           users: 'Lists and manages admin users, passwords, status, and access summaries.',
@@ -1866,6 +2152,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'language-settings': 'Manages public-site languages and order.',
           'maintenance-settings': 'Manages environment modes and schedules.',
           'developer-api': 'Manages API and webhook credentials for integrations.',
+          reservations: 'Views municipal availability and generates demo bookings.',
         },
         actionLabels: { VIEW: 'View', CREATE: 'Create', UPDATE: 'Edit', DELETE: 'Delete' },
       },
@@ -2503,7 +2790,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       languageSettings: '语言管理',
       maintenanceSettings: '维护管理',
       developerApi: 'Developer API',
+      reservations: '预约系统',
       settingsMenu: '设置',
+      reservationManagement: reservationManagementCopy['zh-Hans'],
       userListTitle: '用户管理',
       searchPlaceholder: '按姓名或电子邮件搜索',
       search: '搜索',
@@ -2606,6 +2895,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'chat-settings': 'AI聊天设置', 'language-settings': '语言设置',
           'maintenance-settings': '维护设置',
           'developer-api': 'Developer API',
+          reservations: '预约系统',
         },
         resourceDescriptions: {
           users: '管理用户列表、详情、创建、权限、状态、密码和访问摘要。',
@@ -2617,6 +2907,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'language-settings': '管理公共网站语言和显示顺序。',
           'maintenance-settings': '管理各环境的模式和计划。',
           'developer-api': '管理外部集成使用的 API 和 Webhook 凭据。',
+          reservations: '查看市政服务预约情况并生成演示预约。',
         },
         actionLabels: { VIEW: '查看', CREATE: '添加', UPDATE: '编辑', DELETE: '删除' },
       },
@@ -3229,7 +3520,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       languageSettings: '語言管理',
       maintenanceSettings: '維護管理',
       developerApi: 'Developer API',
+      reservations: '預約系統',
       settingsMenu: '設定',
+      reservationManagement: reservationManagementCopy['zh-Hant'],
       userListTitle: '使用者管理',
       searchPlaceholder: '依姓名或電子郵件搜尋',
       search: '搜尋',
@@ -3332,6 +3625,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'chat-settings': 'AI聊天設定', 'language-settings': '語言設定',
           'maintenance-settings': '維護設定',
           'developer-api': 'Developer API',
+          reservations: '預約系統',
         },
         resourceDescriptions: {
           users: '管理使用者清單、詳細資料、建立、權限、狀態、密碼及存取摘要。',
@@ -3343,6 +3637,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'language-settings': '管理公開網站語言及顯示順序。',
           'maintenance-settings': '管理各環境的模式及排程。',
           'developer-api': '管理外部整合使用的 API 與 Webhook 認證資訊。',
+          reservations: '查看市政服務預約狀況並產生示範預約。',
         },
         actionLabels: { VIEW: '檢視', CREATE: '新增', UPDATE: '編輯', DELETE: '刪除' },
       },
@@ -3957,7 +4252,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       languageSettings: '언어 관리',
       maintenanceSettings: '점검 관리',
       developerApi: 'Developer API',
+      reservations: '예약 시스템',
       settingsMenu: '설정',
+      reservationManagement: reservationManagementCopy.ko,
       userListTitle: '사용자 관리',
       searchPlaceholder: '이름 또는 이메일로 검색',
       search: '검색',
@@ -4062,6 +4359,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'chat-settings': 'AI 채팅 설정', 'language-settings': '언어 설정',
           'maintenance-settings': '점검 설정',
           'developer-api': 'Developer API',
+          reservations: '예약 시스템',
         },
         resourceDescriptions: {
           users: '관리 사용자 목록, 상세, 생성, 권한, 상태, 비밀번호 및 접근 요약을 관리합니다.',
@@ -4073,6 +4371,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'language-settings': '공개 사이트 언어와 표시 순서를 관리합니다.',
           'maintenance-settings': '환경별 모드와 일정을 관리합니다.',
           'developer-api': '외부 연동용 API 및 Webhook 인증 정보를 관리합니다.',
+          reservations: '지방자치단체 업무의 예약 현황을 보고 데모 예약을 생성합니다.',
         },
         actionLabels: { VIEW: '보기', CREATE: '추가', UPDATE: '편집', DELETE: '삭제' },
       },

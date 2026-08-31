@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { Hono, type Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { handle } from "hono/vercel";
@@ -78,6 +80,59 @@ import {
   SETTINGS_ERROR_CODES,
   parseLanguageSettings,
 } from "@/lib/site-settings";
+import {
+  RESERVATION_ERROR_CODES,
+  isReservationMonthInRange,
+  isReservationServiceKey,
+} from "@/lib/reservations";
+import {
+  getReservationCalendarSnapshot,
+  regenerateDemoReservations,
+} from "@/lib/server/reservations";
+import {
+  RESERVATION_API_ERROR_CODES,
+  parseReservationApiKeyIssue,
+  parseReservationApiKeyRevoke,
+  parseReservationApiUsageLimit,
+  parseReservationAvailability,
+  parseReservationId,
+  parseReservationIdempotencyKey,
+  parseReservationIfMatch,
+  parseReservationList,
+  parseReservationPatch,
+  parseReservationWrite,
+  reservationEtag,
+  type ReservationDto,
+  type ReservationApiPermission,
+  type ReservationListInput,
+  type ReservationPatchInput,
+  type ReservationWriteInput,
+} from "@/lib/reservation-api";
+import {
+  authenticateReservationApiRequest,
+  issueReservationApiKey,
+  listReservationApiKeys,
+  revokeReservationApiKey,
+  updateReservationApiKeyUsageLimit,
+} from "@/lib/server/reservation-api-keys";
+import {
+  recordReservationApiRequestLog,
+  type ReservationApiRequestLogMethod,
+} from "@/lib/server/reservation-api-request-logs";
+import {
+  getReservationApiUsageSnapshot,
+  updateReservationApiUsageLimit,
+} from "@/lib/server/reservation-api-usage";
+import {
+  ReservationApiOperationError,
+  createPublicReservation,
+  deletePublicReservation,
+  getPublicReservationAvailability,
+  getPublicReservation,
+  listPublicReservationServices,
+  listPublicReservations,
+  updatePublicReservation,
+} from "@/lib/server/public-reservations";
 
 export const runtime = "nodejs";
 
@@ -1038,6 +1093,624 @@ app.put("/admin/maintenance-settings", async (c) => {
   }
 });
 
+app.get("/admin/reservations", async (c) => {
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "reservations",
+    "VIEW",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
+  }
+
+  const now = new Date();
+  const parsed = parseReservationCalendarRequest(new URL(c.req.raw.url), now);
+  if (!parsed) {
+    return c.json({ error: RESERVATION_ERROR_CODES.invalidRequest }, 400);
+  }
+
+  try {
+    const calendar = await getReservationCalendarSnapshot(prisma, {
+      ...parsed,
+      now,
+    });
+    return c.json({ calendar });
+  } catch {
+    console.error("Failed to load reservation availability.");
+    return c.json({ error: RESERVATION_ERROR_CODES.saveFailed }, 500);
+  }
+});
+
+app.post("/admin/reservations/demo-fill", async (c) => {
+  const auth = c.get("auth");
+  const prisma = c.get("prisma");
+  const authorization = await authorizeAdminApi(
+    auth,
+    prisma,
+    c.req.raw.headers,
+    "reservations",
+    "UPDATE",
+  );
+  if (!authorization.ok) {
+    return c.json({ error: authorization.error }, authorization.status);
+  }
+
+  const now = new Date();
+  const body = await readJsonBody(c.req.raw);
+  if (!isReservationDemoFillPayload(body) || !isReservationMonthInRange(body.month, now)) {
+    return c.json({ error: RESERVATION_ERROR_CODES.invalidRequest }, 400);
+  }
+
+  try {
+    return c.json(await regenerateDemoReservations(prisma, { month: body.month, now }));
+  } catch {
+    console.error("Failed to generate demo reservations.");
+    return c.json({ error: RESERVATION_ERROR_CODES.saveFailed }, 500);
+  }
+});
+
+app.get("/admin/reservation-api-keys", async (c) => {
+  setPrivateNoStore(c);
+  const authorization = await authorizeAdminApi(
+    c.get("auth"), c.get("prisma"), c.req.raw.headers, "reservations", "VIEW",
+  );
+  if (!authorization.ok) return c.json({ error: authorization.error }, authorization.status);
+  return c.json({ apiKeys: await listReservationApiKeys(c.get("prisma")) });
+});
+
+app.post("/admin/reservation-api-keys", async (c) => {
+  setPrivateNoStore(c);
+  const authorization = await authorizeAdminApi(
+    c.get("auth"), c.get("prisma"), c.req.raw.headers, "reservations", "UPDATE",
+  );
+  if (!authorization.ok) return c.json({ error: authorization.error }, authorization.status);
+  const input = parseReservationApiKeyIssue(await readJsonBody(c.req.raw));
+  if (!input) return c.json({ error: RESERVATION_API_ERROR_CODES.invalidRequest }, 400);
+  try {
+    return c.json(await issueReservationApiKey(c.get("prisma"), {
+      ...input,
+      actorId: authorization.actor.id,
+    }), 201);
+  } catch {
+    console.error("Failed to issue a reservation API key.");
+    return c.json({ error: RESERVATION_API_ERROR_CODES.operationFailed }, 500);
+  }
+});
+
+app.delete("/admin/reservation-api-keys/:id", async (c) => {
+  setPrivateNoStore(c);
+  const authorization = await authorizeAdminApi(
+    c.get("auth"), c.get("prisma"), c.req.raw.headers, "reservations", "UPDATE",
+  );
+  if (!authorization.ok) return c.json({ error: authorization.error }, authorization.status);
+  const input = parseReservationApiKeyRevoke(await readJsonBody(c.req.raw));
+  if (!input) return c.json({ error: RESERVATION_API_ERROR_CODES.invalidRequest }, 400);
+  const result = await revokeReservationApiKey(c.get("prisma"), {
+    id: c.req.param("id"),
+    expectedRevision: input.expectedRevision,
+    actorId: authorization.actor.id,
+  });
+  if (result === "NOT_FOUND") return c.json({ error: RESERVATION_API_ERROR_CODES.keyNotFound }, 404);
+  if (result === "CONFLICT") return c.json({ error: RESERVATION_API_ERROR_CODES.keyConflict }, 409);
+  return c.body(null, 204);
+});
+
+app.put("/admin/reservation-api-keys/:id/usage-limit", async (c) => {
+  setPrivateNoStore(c);
+  const authorization = await authorizeAdminApi(
+    c.get("auth"), c.get("prisma"), c.req.raw.headers, "reservations", "UPDATE",
+  );
+  if (!authorization.ok) return c.json({ error: authorization.error }, authorization.status);
+  const input = parseReservationApiUsageLimit(await readJsonBody(c.req.raw));
+  if (!input) return c.json({ error: RESERVATION_API_ERROR_CODES.invalidRequest }, 400);
+  const result = await updateReservationApiKeyUsageLimit(c.get("prisma"), {
+    id: c.req.param("id"),
+    monthlyLimit: input.mode === "UNLIMITED" ? null : input.monthlyLimit,
+    expectedRevision: input.expectedRevision,
+  });
+  if (result.status === "NOT_FOUND") {
+    return c.json({ error: RESERVATION_API_ERROR_CODES.keyNotFound }, 404);
+  }
+  if (result.status === "CONFLICT") {
+    return c.json({ error: RESERVATION_API_ERROR_CODES.keyConflict }, 409);
+  }
+  return c.json({ apiKey: result.apiKey });
+});
+
+app.get("/admin/reservation-api-usage-limit", async (c) => {
+  setPrivateNoStore(c);
+  const authorization = await authorizeAdminApi(
+    c.get("auth"), c.get("prisma"), c.req.raw.headers, "reservations", "VIEW",
+  );
+  if (!authorization.ok) return c.json({ error: authorization.error }, authorization.status);
+  return c.json({ usageLimit: await getReservationApiUsageSnapshot(c.get("prisma")) });
+});
+
+app.put("/admin/reservation-api-usage-limit", async (c) => {
+  setPrivateNoStore(c);
+  const authorization = await authorizeAdminApi(
+    c.get("auth"), c.get("prisma"), c.req.raw.headers, "reservations", "UPDATE",
+  );
+  if (!authorization.ok) return c.json({ error: authorization.error }, authorization.status);
+  const input = parseReservationApiUsageLimit(await readJsonBody(c.req.raw));
+  if (!input) return c.json({ error: RESERVATION_API_ERROR_CODES.invalidRequest }, 400);
+  const usageLimit = await updateReservationApiUsageLimit(c.get("prisma"), {
+    monthlyLimit: input.mode === "UNLIMITED" ? null : input.monthlyLimit,
+    expectedRevision: input.expectedRevision,
+    actorId: authorization.actor.id,
+  });
+  if (!usageLimit) return c.json({ error: RESERVATION_API_ERROR_CODES.usageLimitConflict }, 409);
+  return c.json({ usageLimit });
+});
+
+app.get("/public/v1/reservation-services", async (c) => {
+  setPrivateNoStore(c);
+  return runPublicReservationApiRequest(
+    c,
+    {
+      permission: "LIST",
+      method: "GET",
+      path: "/api/public/v1/reservation-services",
+    },
+    async ({ requestId }) => publicReservationApiSuccess(
+      200,
+      "RESERVATION_SERVICES_LISTED",
+      { services: listPublicReservationServices() as unknown as Prisma.JsonArray },
+      requestId,
+      { pathParameters: {}, query: {} },
+    ),
+  );
+});
+
+app.get("/public/v1/reservation-services/:serviceKey/availability", async (c) => {
+  setPrivateNoStore(c);
+  return runPublicReservationApiRequest(
+    c,
+    {
+      permission: "LIST",
+      method: "GET",
+      path: "/api/public/v1/reservation-services/{serviceKey}/availability",
+    },
+    async ({ requestId }) => {
+      const serviceKey = c.req.param("serviceKey");
+      if (!isReservationServiceKey(serviceKey)) {
+        return publicReservationApiError(
+          404,
+          RESERVATION_API_ERROR_CODES.notFound,
+          requestId,
+        );
+      }
+      const range = parseReservationAvailability(new URL(c.req.raw.url));
+      const request = {
+        pathParameters: { serviceKey },
+        query: range ? { dateFrom: range.dateFrom, dateTo: range.dateTo } : null,
+      };
+      if (!range) {
+        return publicReservationApiError(
+          400,
+          RESERVATION_API_ERROR_CODES.invalidRequest,
+          requestId,
+          request,
+        );
+      }
+      try {
+        const availability = await getPublicReservationAvailability(
+          c.get("prisma"),
+          { serviceKey, ...range },
+        );
+        return publicReservationApiSuccess(
+          200,
+          "RESERVATION_AVAILABILITY_RETRIEVED",
+          { availability: availability as unknown as Prisma.JsonObject },
+          requestId,
+          request,
+        );
+      } catch (error) {
+        return reservationOperationErrorDescriptor(error, requestId, request);
+      }
+    },
+  );
+});
+
+app.get("/public/v1/reservations", async (c) => {
+  setPrivateNoStore(c);
+  return runPublicReservationApiRequest(
+    c,
+    { permission: "LIST", method: "GET", path: "/api/public/v1/reservations" },
+    async ({ keyId, requestId }) => {
+      const input = parseReservationList(new URL(c.req.raw.url));
+      if (!input) {
+        return publicReservationApiError(
+          400,
+          RESERVATION_API_ERROR_CODES.invalidRequest,
+          requestId,
+          { pathParameters: {} },
+        );
+      }
+      const query = serializeReservationListQuery(input);
+      try {
+        const result = await listPublicReservations(c.get("prisma"), keyId, input);
+        return publicReservationApiSuccess(
+          200,
+          "RESERVATIONS_LISTED",
+          serializeReservationListResponse(result),
+          requestId,
+          { pathParameters: {}, query },
+        );
+      } catch {
+        console.error("Failed to list public reservations.");
+        return publicReservationApiError(
+          500,
+          RESERVATION_API_ERROR_CODES.operationFailed,
+          requestId,
+          { pathParameters: {}, query },
+        );
+      }
+    },
+  );
+});
+
+app.get("/public/v1/reservations/:id", async (c) => {
+  setPrivateNoStore(c);
+  return runPublicReservationApiRequest(
+    c,
+    {
+      permission: "READ",
+      method: "GET",
+      path: "/api/public/v1/reservations/{id}",
+    },
+    async ({ keyId, requestId }) => {
+      const id = parseReservationId(c.req.param("id"));
+      if (!id) {
+        return publicReservationApiError(
+          400,
+          RESERVATION_API_ERROR_CODES.invalidRequest,
+          requestId,
+        );
+      }
+      const baseRequest = { pathParameters: { id }, query: {} };
+      try {
+        const reservation = await getPublicReservation(c.get("prisma"), keyId, id);
+        return reservation
+          ? publicReservationApiSuccess(
+              200,
+              "RESERVATION_RETRIEVED",
+              serializeSingleReservationResponse(reservation),
+              requestId,
+              baseRequest,
+              { responseEtag: reservationEtag(reservation) },
+            )
+          : publicReservationApiError(
+              404,
+              RESERVATION_API_ERROR_CODES.notFound,
+              requestId,
+              baseRequest,
+            );
+      } catch {
+        console.error("Failed to get a public reservation.");
+        return publicReservationApiError(
+          500,
+          RESERVATION_API_ERROR_CODES.operationFailed,
+          requestId,
+          baseRequest,
+        );
+      }
+    },
+  );
+});
+
+app.post("/public/v1/reservations", async (c) => {
+  setPrivateNoStore(c);
+  return runPublicReservationApiRequest(
+    c,
+    { permission: "CREATE", method: "POST", path: "/api/public/v1/reservations" },
+    async ({ keyId, requestId }) => {
+      const idempotencyKey = parseReservationIdempotencyKey(
+        c.req.raw.headers.get("idempotency-key"),
+      );
+      if (!idempotencyKey) {
+        return publicReservationApiError(
+          400,
+          RESERVATION_API_ERROR_CODES.idempotencyKeyRequired,
+          requestId,
+          { pathParameters: {}, query: {} },
+        );
+      }
+      if (!isJsonRequest(c.req.raw)) {
+        return publicReservationApiError(
+          415,
+          RESERVATION_API_ERROR_CODES.unsupportedMediaType,
+          requestId,
+          { pathParameters: {}, query: {} },
+        );
+      }
+      const input = parseReservationWrite(await readJsonBody(c.req.raw));
+      if (!input) {
+        return publicReservationApiError(
+          400,
+          RESERVATION_API_ERROR_CODES.invalidRequest,
+          requestId,
+          { pathParameters: {}, query: {} },
+        );
+      }
+      const request = {
+        pathParameters: {},
+        query: {},
+        requestBody: serializeReservationWriteInput(input),
+      };
+      try {
+        const result = await createPublicReservation(c.get("prisma"), {
+          apiKeyId: keyId,
+          idempotencyKey,
+          reservation: input,
+          requestId,
+        });
+        return publicReservationApiStoredSuccess(
+          201,
+          result.body,
+          request,
+          {
+            idempotencyOutcome: result.outcome,
+            responseLocation: result.location,
+            responseEtag: result.etag,
+          },
+        );
+      } catch (error) {
+        return reservationOperationErrorDescriptor(error, requestId, request);
+      }
+    },
+  );
+});
+
+app.put("/public/v1/reservations/:id", async (c) => {
+  setPrivateNoStore(c);
+  return runPublicReservationApiRequest(
+    c,
+    {
+      permission: "UPDATE",
+      method: "PUT",
+      path: "/api/public/v1/reservations/{id}",
+    },
+    async ({ keyId, requestId }) => {
+      const id = parseReservationId(c.req.param("id"));
+      if (!id) {
+        return publicReservationApiError(
+          400,
+          RESERVATION_API_ERROR_CODES.invalidRequest,
+          requestId,
+        );
+      }
+      const request = { pathParameters: { id }, query: {} };
+      const ifMatch = c.req.raw.headers.get("if-match");
+      if (ifMatch === null) {
+        return publicReservationApiError(
+          428,
+          RESERVATION_API_ERROR_CODES.preconditionRequired,
+          requestId,
+          request,
+        );
+      }
+      const expectedRevision = parseReservationIfMatch(ifMatch, id);
+      if (expectedRevision === null) {
+        return publicReservationApiError(
+          412,
+          RESERVATION_API_ERROR_CODES.preconditionFailed,
+          requestId,
+          request,
+        );
+      }
+      if (!isJsonRequest(c.req.raw)) {
+        return publicReservationApiError(
+          415,
+          RESERVATION_API_ERROR_CODES.unsupportedMediaType,
+          requestId,
+          request,
+        );
+      }
+      const input = parseReservationWrite(await readJsonBody(c.req.raw));
+      if (!input) {
+        return publicReservationApiError(
+          400,
+          RESERVATION_API_ERROR_CODES.invalidRequest,
+          requestId,
+          request,
+        );
+      }
+      const requestWithBody = {
+        ...request,
+        requestBody: serializeReservationWriteInput(input),
+      };
+      try {
+        const reservation = await updatePublicReservation(c.get("prisma"), {
+          apiKeyId: keyId,
+          id,
+          patch: input,
+          expectedRevision,
+        });
+        return publicReservationApiSuccess(
+          200,
+          "RESERVATION_REPLACED",
+          serializeSingleReservationResponse(reservation),
+          requestId,
+          requestWithBody,
+          { responseEtag: reservationEtag(reservation) },
+        );
+      } catch (error) {
+        return reservationOperationErrorDescriptor(
+          error,
+          requestId,
+          requestWithBody,
+        );
+      }
+    },
+  );
+});
+
+app.patch("/public/v1/reservations/:id", async (c) => {
+  setPrivateNoStore(c);
+  return runPublicReservationApiRequest(
+    c,
+    {
+      permission: "UPDATE",
+      method: "PATCH",
+      path: "/api/public/v1/reservations/{id}",
+    },
+    async ({ keyId, requestId }) => {
+      const id = parseReservationId(c.req.param("id"));
+      if (!id) {
+        return publicReservationApiError(
+          400,
+          RESERVATION_API_ERROR_CODES.invalidRequest,
+          requestId,
+        );
+      }
+      const baseRequest = { pathParameters: { id }, query: {} };
+      const ifMatch = c.req.raw.headers.get("if-match");
+      if (ifMatch === null) {
+        return publicReservationApiError(
+          428,
+          RESERVATION_API_ERROR_CODES.preconditionRequired,
+          requestId,
+          baseRequest,
+        );
+      }
+      const expectedRevision = parseReservationIfMatch(ifMatch, id);
+      if (expectedRevision === null) {
+        return publicReservationApiError(
+          412,
+          RESERVATION_API_ERROR_CODES.preconditionFailed,
+          requestId,
+          baseRequest,
+        );
+      }
+      if (!isJsonRequest(c.req.raw)) {
+        return publicReservationApiError(
+          415,
+          RESERVATION_API_ERROR_CODES.unsupportedMediaType,
+          requestId,
+          { pathParameters: { id }, query: {} },
+        );
+      }
+      const input = parseReservationPatch(await readJsonBody(c.req.raw));
+      if (!input) {
+        return publicReservationApiError(
+          400,
+          RESERVATION_API_ERROR_CODES.invalidRequest,
+          requestId,
+          { pathParameters: { id }, query: {} },
+        );
+      }
+      const request = {
+        pathParameters: { id },
+        query: {},
+        requestBody: serializeReservationPatchInput(input),
+      };
+      try {
+        const reservation = await updatePublicReservation(c.get("prisma"), {
+          apiKeyId: keyId,
+          id,
+          patch: input,
+          expectedRevision,
+        });
+        return publicReservationApiSuccess(
+          200,
+          "RESERVATION_UPDATED",
+          serializeSingleReservationResponse(reservation),
+          requestId,
+          request,
+          { responseEtag: reservationEtag(reservation) },
+        );
+      } catch (error) {
+        return reservationOperationErrorDescriptor(error, requestId, request);
+      }
+    },
+  );
+});
+
+app.delete("/public/v1/reservations/:id", async (c) => {
+  setPrivateNoStore(c);
+  return runPublicReservationApiRequest(
+    c,
+    {
+      permission: "DELETE",
+      method: "DELETE",
+      path: "/api/public/v1/reservations/{id}",
+    },
+    async ({ keyId, requestId }) => {
+      const id = parseReservationId(c.req.param("id"));
+      if (!id) {
+        return publicReservationApiError(
+          400,
+          RESERVATION_API_ERROR_CODES.invalidRequest,
+          requestId,
+        );
+      }
+      const request = { pathParameters: { id }, query: {} };
+      const ifMatch = c.req.raw.headers.get("if-match");
+      if (ifMatch === null) {
+        return publicReservationApiError(
+          428,
+          RESERVATION_API_ERROR_CODES.preconditionRequired,
+          requestId,
+          request,
+        );
+      }
+      const expectedRevision = parseReservationIfMatch(ifMatch, id);
+      if (expectedRevision === null) {
+        return publicReservationApiError(
+          412,
+          RESERVATION_API_ERROR_CODES.preconditionFailed,
+          requestId,
+          request,
+        );
+      }
+      if (await hasRequestBody(c.req.raw)) {
+        return publicReservationApiError(
+          400,
+          RESERVATION_API_ERROR_CODES.invalidRequest,
+          requestId,
+          request,
+        );
+      }
+      try {
+        return await deletePublicReservation(c.get("prisma"), {
+          apiKeyId: keyId,
+          id,
+          expectedRevision,
+        })
+          ? publicReservationApiSuccess(
+              204,
+              "RESERVATION_DELETED",
+              null,
+              requestId,
+              request,
+            )
+          : publicReservationApiError(
+              404,
+              RESERVATION_API_ERROR_CODES.notFound,
+              requestId,
+              request,
+            );
+      } catch (error) {
+        if (error instanceof ReservationApiOperationError) {
+          return reservationOperationErrorDescriptor(error, requestId, request);
+        }
+        console.error("Failed to delete a public reservation.");
+        return publicReservationApiError(
+          500,
+          RESERVATION_API_ERROR_CODES.operationFailed,
+          requestId,
+          request,
+        );
+      }
+    },
+  );
+});
+
 app.get("/admin/roles", async (c) => {
   const auth = c.get("auth");
   const prisma = c.get("prisma");
@@ -1403,6 +2076,431 @@ export const PUT = handler;
 export const PATCH = handler;
 export const DELETE = handler;
 
+async function guardPublicReservationApi(
+  c: Context<AppEnvironment>,
+  permission: ReservationApiPermission,
+  requestId: string,
+) {
+  const result = await authenticateReservationApiRequest(c.get("prisma"), {
+    authorization: c.req.raw.headers.get("authorization"),
+  });
+  if (result.status === "UNAUTHORIZED") {
+    c.header("WWW-Authenticate", "Bearer");
+    return {
+      ok: false as const,
+      response: c.json(
+        publicReservationApiError(
+          401,
+          RESERVATION_API_ERROR_CODES.unauthorized,
+          requestId,
+        ).body as Record<string, unknown>,
+        401,
+      ),
+    };
+  }
+  if (result.status === "INTERNAL_ERROR") {
+    return {
+      ok: false as const,
+      result,
+      descriptor: publicReservationApiError(
+        500,
+        RESERVATION_API_ERROR_CODES.internalError,
+        requestId,
+      ),
+    };
+  }
+  if (result.status === "GLOBAL_LIMIT_EXCEEDED" || result.status === "KEY_LIMIT_EXCEEDED") {
+    c.header("Retry-After", result.retryAfterSeconds.toString());
+    return {
+      ok: false as const,
+      result,
+      descriptor: publicReservationApiError(
+        429,
+        result.status === "GLOBAL_LIMIT_EXCEEDED"
+          ? RESERVATION_API_ERROR_CODES.monthlyLimitExceeded
+          : RESERVATION_API_ERROR_CODES.keyMonthlyLimitExceeded,
+        requestId,
+      ),
+    };
+  }
+  if (!result.permissions.has(permission)) {
+    return {
+      ok: false as const,
+      result,
+      descriptor: publicReservationApiError(
+        403,
+        RESERVATION_API_ERROR_CODES.forbidden,
+        requestId,
+      ),
+    };
+  }
+  return { ok: true as const, result };
+}
+
+type PublicReservationApiStatus = ContentfulStatusCode | 204;
+
+type PublicReservationApiRequestData = {
+  pathParameters?: Prisma.JsonValue | null;
+  query?: Prisma.JsonValue | null;
+  requestBody?: Prisma.JsonValue | null;
+};
+
+type PublicReservationApiResponseDescriptor = {
+  statusCode: PublicReservationApiStatus;
+  body: Prisma.JsonValue | null;
+  errorCode: string | null;
+  pathParameters: Prisma.JsonValue | null;
+  query: Prisma.JsonValue | null;
+  requestBody: Prisma.JsonValue | null;
+  idempotencyOutcome: "NEW" | "REPLAY" | "CONFLICT" | null;
+  responseLocation: string | null;
+  responseEtag: string | null;
+};
+
+type PublicReservationApiResponseMetadata = Pick<
+  PublicReservationApiResponseDescriptor,
+  "idempotencyOutcome" | "responseLocation" | "responseEtag"
+>;
+
+async function runPublicReservationApiRequest(
+  c: Context<AppEnvironment>,
+  metadata: {
+    permission: ReservationApiPermission;
+    method: ReservationApiRequestLogMethod;
+    path: string;
+  },
+  operation: (context: {
+    keyId: string;
+    requestId: string;
+  }) => Promise<PublicReservationApiResponseDescriptor>,
+) {
+  const requestedAt = new Date();
+  const requestId = `rlog_${randomUUID().replaceAll("-", "")}`;
+  c.header("X-Request-ID", requestId);
+  const guard = await guardPublicReservationApi(c, metadata.permission, requestId);
+  if (!guard.ok && "response" in guard) return guard.response;
+
+  let descriptor: PublicReservationApiResponseDescriptor;
+  if (guard.ok) {
+    try {
+      descriptor = await operation({
+        keyId: guard.result.keyId,
+        requestId,
+      });
+    } catch {
+      console.error("Failed to execute a public reservation API request.");
+      descriptor = publicReservationApiError(
+        500,
+        RESERVATION_API_ERROR_CODES.internalError,
+        requestId,
+      );
+    }
+  } else {
+    descriptor = guard.descriptor;
+  }
+
+  const completedAt = new Date();
+  try {
+    await recordReservationApiRequestLog(c.get("prisma"), {
+      id: requestId,
+      apiKeyId: guard.result.keyId,
+      apiKeyName: guard.result.keyName,
+      apiKeyPreview: guard.result.keyPreview,
+      permission: metadata.permission,
+      method: metadata.method,
+      path: metadata.path,
+      pathParameters: descriptor.pathParameters,
+      query: descriptor.query,
+      requestBody: descriptor.requestBody,
+      responseBody: descriptor.body,
+      statusCode: descriptor.statusCode,
+      errorCode: descriptor.errorCode,
+      durationMs: Math.max(0, completedAt.getTime() - requestedAt.getTime()),
+      requestedAt,
+      completedAt,
+      idempotencyOutcome: descriptor.idempotencyOutcome,
+      responseLocation: descriptor.responseLocation,
+      responseEtag: descriptor.responseEtag,
+    });
+  } catch {
+    console.error("Failed to record a reservation API request log.");
+  }
+
+  if (descriptor.responseLocation) c.header("Location", descriptor.responseLocation);
+  if (descriptor.responseEtag) c.header("ETag", descriptor.responseEtag);
+  if (descriptor.statusCode === 204) return c.body(null, 204);
+  return c.json(
+    descriptor.body as Record<string, unknown>,
+    descriptor.statusCode as ContentfulStatusCode,
+  );
+}
+
+function publicReservationApiSuccess(
+  statusCode: PublicReservationApiStatus,
+  resultCode: string,
+  body: Prisma.JsonObject | null,
+  requestId: string,
+  request: PublicReservationApiRequestData = {},
+  response: Partial<PublicReservationApiResponseMetadata> = {},
+): PublicReservationApiResponseDescriptor {
+  const responseBody = statusCode === 204
+    ? null
+    : { resultCode, requestId, ...(body ?? {}) };
+  return publicReservationApiStoredSuccess(statusCode, responseBody, request, response);
+}
+
+function publicReservationApiStoredSuccess(
+  statusCode: PublicReservationApiStatus,
+  body: Prisma.JsonObject | null,
+  request: PublicReservationApiRequestData = {},
+  response: Partial<PublicReservationApiResponseMetadata> = {},
+): PublicReservationApiResponseDescriptor {
+  return {
+    statusCode,
+    body,
+    errorCode: null,
+    pathParameters: request.pathParameters ?? null,
+    query: request.query ?? null,
+    requestBody: request.requestBody ?? null,
+    idempotencyOutcome: response.idempotencyOutcome ?? null,
+    responseLocation: response.responseLocation ?? null,
+    responseEtag: response.responseEtag ?? null,
+  };
+}
+
+function publicReservationApiError(
+  statusCode: ContentfulStatusCode,
+  errorCode: string,
+  requestId: string,
+  request: PublicReservationApiRequestData = {},
+  options: {
+    details?: Prisma.JsonValue;
+    idempotencyOutcome?: "CONFLICT";
+  } = {},
+): PublicReservationApiResponseDescriptor {
+  return {
+    statusCode,
+    body: {
+      error: errorCode,
+      message: publicReservationApiErrorMessage(errorCode),
+      retryable: statusCode === 429 || statusCode === 500,
+      requestId,
+      ...(options.details !== undefined ? { details: options.details } : {}),
+    },
+    errorCode,
+    pathParameters: request.pathParameters ?? null,
+    query: request.query ?? null,
+    requestBody: request.requestBody ?? null,
+    idempotencyOutcome: options.idempotencyOutcome ?? null,
+    responseLocation: null,
+    responseEtag: null,
+  };
+}
+
+function reservationOperationErrorDescriptor(
+  error: unknown,
+  requestId: string,
+  request: PublicReservationApiRequestData,
+) {
+  if (error instanceof ReservationApiOperationError) {
+    if (error.code === "INVALID") {
+      return publicReservationApiError(
+        400,
+        RESERVATION_API_ERROR_CODES.invalidRequest,
+        requestId,
+        request,
+      );
+    }
+    if (error.code === "NOT_FOUND") {
+      return publicReservationApiError(
+        404,
+        RESERVATION_API_ERROR_CODES.notFound,
+        requestId,
+        request,
+      );
+    }
+    if (error.code === "PRECONDITION_FAILED") {
+      return publicReservationApiError(
+        412,
+        RESERVATION_API_ERROR_CODES.preconditionFailed,
+        requestId,
+        request,
+      );
+    }
+    if (error.code === "IDEMPOTENCY_KEY_REUSED") {
+      return publicReservationApiError(
+        409,
+        RESERVATION_API_ERROR_CODES.idempotencyKeyReused,
+        requestId,
+        request,
+        { idempotencyOutcome: "CONFLICT" },
+      );
+    }
+    if (error.code === "EXTERNAL_REFERENCE_CONFLICT") {
+      return publicReservationApiError(
+        409,
+        RESERVATION_API_ERROR_CODES.externalReferenceConflict,
+        requestId,
+        request,
+        { idempotencyOutcome: "CONFLICT" },
+      );
+    }
+    return publicReservationApiError(
+      409,
+      RESERVATION_API_ERROR_CODES.slotFull,
+      requestId,
+      request,
+      { details: reservationSlotFullDetails(request.requestBody) },
+    );
+  }
+  console.error("Failed to mutate a public reservation.");
+  return publicReservationApiError(
+    500,
+    RESERVATION_API_ERROR_CODES.internalError,
+    requestId,
+    request,
+  );
+}
+
+function publicReservationApiErrorMessage(errorCode: string): string {
+  const messages: Record<string, string> = {
+    [RESERVATION_API_ERROR_CODES.invalidRequest]: "The request is invalid.",
+    [RESERVATION_API_ERROR_CODES.unauthorized]: "Bearer authentication is required.",
+    [RESERVATION_API_ERROR_CODES.forbidden]: "The API key does not grant this operation.",
+    [RESERVATION_API_ERROR_CODES.notFound]: "The reservation or service was not found.",
+    [RESERVATION_API_ERROR_CODES.slotFull]: "The requested reservation slot is full.",
+    [RESERVATION_API_ERROR_CODES.idempotencyKeyRequired]: "A valid Idempotency-Key header is required.",
+    [RESERVATION_API_ERROR_CODES.idempotencyKeyReused]: "The Idempotency-Key was already used with a different request.",
+    [RESERVATION_API_ERROR_CODES.externalReferenceConflict]: "The externalReferenceId is already in use.",
+    [RESERVATION_API_ERROR_CODES.preconditionRequired]: "A strong If-Match header is required.",
+    [RESERVATION_API_ERROR_CODES.preconditionFailed]: "The reservation version does not match If-Match.",
+    [RESERVATION_API_ERROR_CODES.unsupportedMediaType]: "Content-Type must be application/json.",
+    [RESERVATION_API_ERROR_CODES.monthlyLimitExceeded]: "The monthly reservation API limit has been exceeded.",
+    [RESERVATION_API_ERROR_CODES.keyMonthlyLimitExceeded]: "The API key monthly limit has been exceeded.",
+    [RESERVATION_API_ERROR_CODES.operationFailed]: "The reservation API operation failed.",
+    [RESERVATION_API_ERROR_CODES.internalError]: "The reservation API is temporarily unavailable.",
+  };
+  return messages[errorCode] ?? "The reservation API request failed.";
+}
+
+function reservationSlotFullDetails(
+  body: Prisma.JsonValue | null | undefined,
+): Prisma.JsonObject {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return {};
+  const serviceKey = typeof body.serviceKey === "string" ? body.serviceKey : "";
+  const reservationDate = typeof body.reservationDate === "string"
+    ? body.reservationDate
+    : "";
+  const startMinute = typeof body.startMinute === "number" ? body.startMinute : 0;
+  return {
+    serviceKey,
+    reservationDate,
+    startMinute,
+    availabilityPath: `/api/public/v1/reservation-services/${serviceKey}/availability?dateFrom=${reservationDate}&dateTo=${reservationDate}`,
+  };
+}
+
+function serializeReservationListQuery(
+  input: ReservationListInput,
+): Prisma.JsonObject {
+  return {
+    ...(input.serviceKey ? { serviceKey: input.serviceKey } : {}),
+    ...(input.dateFrom ? { dateFrom: input.dateFrom } : {}),
+    ...(input.dateTo ? { dateTo: input.dateTo } : {}),
+    limit: input.limit,
+    ...(input.cursor
+      ? {
+          cursor: {
+            createdAt: input.cursor.createdAt.toISOString(),
+            id: input.cursor.id,
+          },
+        }
+      : {}),
+  };
+}
+
+function serializeReservationWriteInput(
+  input: ReservationWriteInput,
+): Prisma.JsonObject {
+  return {
+    serviceKey: input.serviceKey,
+    reservationDate: input.reservationDate,
+    startMinute: input.startMinute,
+    externalReferenceId: input.externalReferenceId,
+  };
+}
+
+function serializeReservationPatchInput(
+  input: ReservationPatchInput,
+): Prisma.JsonObject {
+  return {
+    ...(input.serviceKey !== undefined ? { serviceKey: input.serviceKey } : {}),
+    ...(input.reservationDate !== undefined
+      ? { reservationDate: input.reservationDate }
+      : {}),
+    ...(input.startMinute !== undefined ? { startMinute: input.startMinute } : {}),
+    ...(input.externalReferenceId !== undefined
+      ? { externalReferenceId: input.externalReferenceId }
+      : {}),
+  };
+}
+
+function serializeReservationDto(reservation: ReservationDto): Prisma.JsonObject {
+  return {
+    id: reservation.id,
+    serviceKey: reservation.serviceKey,
+    reservationDate: reservation.reservationDate,
+    startMinute: reservation.startMinute,
+    externalReferenceId: reservation.externalReferenceId,
+    version: reservation.version,
+    createdAt: reservation.createdAt,
+    updatedAt: reservation.updatedAt,
+  };
+}
+
+function serializeSingleReservationResponse(
+  reservation: ReservationDto,
+): Prisma.JsonObject {
+  return {
+    reservationId: reservation.id,
+    version: reservation.version,
+    reservation: serializeReservationDto(reservation),
+  };
+}
+
+function serializeReservationListResponse(input: {
+  items: ReservationDto[];
+  nextCursor: string | null;
+}): Prisma.JsonObject {
+  return {
+    items: input.items.map(serializeReservationDto),
+    nextCursor: input.nextCursor,
+  };
+}
+
+function setPrivateNoStore(c: Context<AppEnvironment>) {
+  c.header("Cache-Control", "private, no-store, max-age=0");
+  c.header("Pragma", "no-cache");
+  c.header("Expires", "0");
+}
+
+function isJsonRequest(request: Request) {
+  return /^application\/json(?:\s*;|$)/iu.test(request.headers.get("content-type") ?? "");
+}
+
+async function hasRequestBody(request: Request) {
+  const contentLength = request.headers.get("content-length");
+  if (contentLength !== null && contentLength !== "0") return true;
+  if (request.headers.has("transfer-encoding")) return true;
+  if (request.body === null) return false;
+
+  try {
+    return (await request.clone().arrayBuffer()).byteLength > 0;
+  } catch {
+    return true;
+  }
+}
+
 async function readJsonBody(request: Request) {
   try {
     return await request.json();
@@ -1417,6 +2515,42 @@ function isDemoRecordPayload(value: unknown): value is { message: string } {
     value !== null &&
     "message" in value &&
     typeof value.message === "string"
+  );
+}
+
+function parseReservationCalendarRequest(url: URL, now: Date) {
+  const keys = [...url.searchParams.keys()];
+  if (
+    keys.length !== 2 ||
+    keys.some((key) => key !== "service" && key !== "month") ||
+    url.searchParams.getAll("service").length !== 1 ||
+    url.searchParams.getAll("month").length !== 1
+  ) {
+    return null;
+  }
+  const service = url.searchParams.get("service");
+  const month = url.searchParams.get("month");
+  if (
+    !service ||
+    !month ||
+    !isReservationServiceKey(service) ||
+    !isReservationMonthInRange(month, now)
+  ) {
+    return null;
+  }
+  return { service, month };
+}
+
+function isReservationDemoFillPayload(
+  value: unknown,
+): value is { month: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === 1 &&
+    "month" in value &&
+    typeof value.month === "string"
   );
 }
 

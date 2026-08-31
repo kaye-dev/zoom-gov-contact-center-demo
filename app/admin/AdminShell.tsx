@@ -23,6 +23,7 @@ export type AdminNavigationItemKey =
   | "language-settings"
   | "maintenance-settings"
   | "developer-api"
+  | "reservations"
   | "roles";
 
 type AdminMenuKey = "users" | "settings";
@@ -126,7 +127,20 @@ export function AdminShell({ children, visibleItems }: AdminShellProps) {
   };
 
   return (
-    <div className="min-h-screen bg-surface text-fg">
+    <div
+      id={
+        pathname === "/admin/reservations/api-keys"
+          ? "reservation-api-keys-page"
+          : pathname === "/admin/reservations/api-keys/logs"
+            ? "reservation-api-logs-page"
+            : pathname.startsWith("/admin/reservations/api-keys/logs/")
+              ? "reservation-api-log-detail-page"
+          : pathname.startsWith("/admin/reservations")
+            ? "reservation-system-page"
+            : undefined
+      }
+      className="min-h-screen bg-surface text-fg"
+    >
       <header className="sticky top-0 z-50 border-b border-line bg-surface-raised">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-4 md:px-6">
           <Link
@@ -211,6 +225,17 @@ export function AdminShell({ children, visibleItems }: AdminShellProps) {
                     </div>
                   );
                 })}
+            {visibleItems.includes("reservations") ? (
+              <Link
+                href="/admin/reservations"
+                aria-current={pathname.startsWith("/admin/reservations") ? "page" : undefined}
+                className={`whitespace-nowrap rounded-md px-3 py-2 text-sm font-semibold transition-colors hover:bg-surface-hover hover:text-accent ${
+                  pathname.startsWith("/admin/reservations") ? "text-accent" : "text-fg"
+                }`}
+              >
+                {t.admin.reservations}
+              </Link>
+            ) : null}
             <button
               type="button"
               onClick={signOut}
@@ -238,7 +263,7 @@ function isCurrentAdminItem(pathname: string, key: AdminNavigationItemKey) {
     );
   }
   if (key === "roles") return pathname.startsWith("/admin/roles");
-  const exactPaths: Record<Exclude<AdminNavigationItemKey, "users" | "new-user" | "roles">, string> = {
+  const exactPaths: Record<Exclude<AdminNavigationItemKey, "users" | "new-user" | "roles" | "reservations">, string> = {
     "password-reset-requests": "/admin/password-reset-requests",
     "phone-settings": "/admin/phone-settings",
     "chat-settings": "/admin/chat-settings",
@@ -246,5 +271,6 @@ function isCurrentAdminItem(pathname: string, key: AdminNavigationItemKey) {
     "maintenance-settings": "/admin/maintenance-settings",
     "developer-api": "/admin/developer-api",
   };
+  if (key === "reservations") return pathname.startsWith("/admin/reservations");
   return pathname === exactPaths[key];
 }

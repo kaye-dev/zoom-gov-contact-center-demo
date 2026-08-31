@@ -1,0 +1,604 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { createPortal } from "react-dom";
+
+import { ModalDialog } from "@/app/components/admin/ModalDialog";
+import { Checkbox } from "@/app/components/Checkbox";
+import { ChevronLeftIcon } from "@/app/components/svg/ChevronLeftIcon";
+import { MoreHorizIcon } from "@/app/components/svg/MoreHorizIcon";
+import { useI18n } from "@/app/i18n/LanguageProvider";
+import {
+  RESERVATION_API_PERMISSIONS,
+  isValidMonthlyLimit,
+  type ReservationApiPermission,
+  type ReservationApiUsageLimitDto,
+} from "@/lib/reservation-api";
+import type { ReservationApiKeyMetadata } from "@/lib/server/reservation-api-keys";
+
+const PERMISSION_ROWS: Array<{ permission: ReservationApiPermission; method: string; endpoint: string }> = [
+  { permission: "LIST", method: "GET", endpoint: "/api/public/v1/reservations" },
+  { permission: "READ", method: "GET", endpoint: "/api/public/v1/reservations/{id}" },
+  { permission: "CREATE", method: "POST", endpoint: "/api/public/v1/reservations" },
+  { permission: "UPDATE", method: "PATCH", endpoint: "/api/public/v1/reservations/{id}" },
+  { permission: "DELETE", method: "DELETE", endpoint: "/api/public/v1/reservations/{id}" },
+];
+
+const PUBLIC_API_ROWS: Array<{
+  permission: ReservationApiPermission;
+  method: string;
+  endpoint: string;
+  operation: "services" | "availability" | "list" | "read" | "create" | "replace" | "update" | "delete";
+}> = [
+  { permission: "LIST", method: "GET", endpoint: "/api/public/v1/reservation-services", operation: "services" },
+  { permission: "LIST", method: "GET", endpoint: "/api/public/v1/reservation-services/{serviceKey}/availability?dateFrom={dateFrom}&dateTo={dateTo}", operation: "availability" },
+  { permission: "LIST", method: "GET", endpoint: "/api/public/v1/reservations", operation: "list" },
+  { permission: "READ", method: "GET", endpoint: "/api/public/v1/reservations/{id}", operation: "read" },
+  { permission: "CREATE", method: "POST", endpoint: "/api/public/v1/reservations", operation: "create" },
+  { permission: "UPDATE", method: "PUT", endpoint: "/api/public/v1/reservations/{id}", operation: "replace" },
+  { permission: "UPDATE", method: "PATCH", endpoint: "/api/public/v1/reservations/{id}", operation: "update" },
+  { permission: "DELETE", method: "DELETE", endpoint: "/api/public/v1/reservations/{id}", operation: "delete" },
+];
+
+export function ReservationApiKeysView({
+  initialApiKeys,
+  initialUsageLimit,
+  canEdit,
+}: {
+  initialApiKeys: ReservationApiKeyMetadata[];
+  initialUsageLimit: ReservationApiUsageLimitDto;
+  canEdit: boolean;
+}) {
+  const { locale, t } = useI18n();
+  const copy = t.admin.reservationManagement.apiKeys;
+  const [apiKeys, setApiKeys] = useState(initialApiKeys);
+  const [usageLimit, setUsageLimit] = useState(initialUsageLimit);
+  const [dialog, setDialog] = useState<"issue" | "issued" | "usage" | "keyUsage" | "revoke" | null>(null);
+  const [issuedRawKey, setIssuedRawKey] = useState<string | null>(null);
+  const [revokeTarget, setRevokeTarget] = useState<ReservationApiKeyMetadata | null>(null);
+  const [keyUsageTarget, setKeyUsageTarget] = useState<ReservationApiKeyMetadata | null>(null);
+  const [openActionsId, setOpenActionsId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [issueName, setIssueName] = useState("");
+  const [issuePermissions, setIssuePermissions] = useState<ReservationApiPermission[]>([...RESERVATION_API_PERMISSIONS]);
+  const [permissionError, setPermissionError] = useState(false);
+  const [issueLimitMode, setIssueLimitMode] = useState<"LIMITED" | "UNLIMITED">("LIMITED");
+  const [issueLimitValue, setIssueLimitValue] = useState("10000");
+  const [issueLimitError, setIssueLimitError] = useState(false);
+  const [usageMode, setUsageMode] = useState<"LIMITED" | "UNLIMITED">(usageLimit.mode);
+  const [usageValue, setUsageValue] = useState(usageLimit.monthlyLimit ?? "10000");
+  const [usageValidationError, setUsageValidationError] = useState(false);
+  const [keyUsageMode, setKeyUsageMode] = useState<"LIMITED" | "UNLIMITED">("LIMITED");
+  const [keyUsageValue, setKeyUsageValue] = useState("10000");
+  const [keyUsageValidationError, setKeyUsageValidationError] = useState(false);
+  const issueNameRef = useRef<HTMLInputElement>(null);
+  const usageModeRef = useRef<HTMLInputElement>(null);
+  const usageInputRef = useRef<HTMLInputElement>(null);
+  const issueLimitInputRef = useRef<HTMLInputElement>(null);
+  const keyUsageInputRef = useRef<HTMLInputElement>(null);
+  const issuedKeyRef = useRef<HTMLInputElement>(null);
+  const copyButtonRef = useRef<HTMLButtonElement>(null);
+  const lastActionTriggerRef = useRef<HTMLButtonElement | null>(null);
+
+  const restoreActionFocus = () => {
+    window.requestAnimationFrame(() => lastActionTriggerRef.current?.focus());
+  };
+
+  const closeDialog = () => {
+    if (isSubmitting) return;
+    const shouldRestoreActionFocus = dialog === "keyUsage" || dialog === "revoke";
+    setDialog(null);
+    setError(null);
+    setCopied(false);
+    setPermissionError(false);
+    setIssueLimitError(false);
+    setUsageValidationError(false);
+    setKeyUsageValidationError(false);
+    if (dialog === "issued") setIssuedRawKey(null);
+    if (shouldRestoreActionFocus) restoreActionFocus();
+  };
+
+  const openIssue = () => {
+    setIssueName("");
+    setIssuePermissions([...RESERVATION_API_PERMISSIONS]);
+    setIssueLimitMode("LIMITED");
+    setIssueLimitValue("10000");
+    setIssueLimitError(false);
+    setError(null);
+    setDialog("issue");
+  };
+
+  const submitIssue = async (event: FormEvent) => {
+    event.preventDefault();
+    const permissionsValid = issuePermissions.length > 0;
+    const limitValid = isMonthlyLimitValid(issueLimitMode, issueLimitValue);
+    setPermissionError(!permissionsValid);
+    setIssueLimitError(!limitValid);
+    if (!permissionsValid || !limitValid) return;
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/admin/reservation-api-keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          name: issueName,
+          permissions: issuePermissions,
+          usageLimit: issueLimitMode === "UNLIMITED"
+            ? { mode: "UNLIMITED" }
+            : { mode: "LIMITED", monthlyLimit: issueLimitValue },
+        }),
+      });
+      const body = await response.json() as { apiKey?: ReservationApiKeyMetadata; rawKey?: string };
+      if (!response.ok || !body.apiKey || !body.rawKey) throw new Error("issue");
+      setApiKeys((current) => [body.apiKey!, ...current]);
+      setIssuedRawKey(body.rawKey);
+      setDialog("issued");
+    } catch {
+      setError(copy.genericError);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const submitRevoke = async () => {
+    if (!revokeTarget) return;
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/admin/reservation-api-keys/${encodeURIComponent(revokeTarget.id)}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ expectedRevision: revokeTarget.revision }),
+      });
+      if (!response.ok) throw new Error(response.status === 409 ? "conflict" : "generic");
+      const revokedAt = new Date().toISOString();
+      setApiKeys((current) => current.map((key) => key.id === revokeTarget.id
+        ? { ...key, revokedAt, revision: key.revision + 1 }
+        : key));
+      setDialog(null);
+      setRevokeTarget(null);
+      restoreActionFocus();
+    } catch (caught) {
+      setError(caught instanceof Error && caught.message === "conflict" ? copy.conflictError : copy.genericError);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const openUsage = () => {
+    setUsageMode(usageLimit.mode);
+    setUsageValue(usageLimit.monthlyLimit ?? "10000");
+    setError(null);
+    setDialog("usage");
+  };
+
+  const submitUsage = async (event: FormEvent) => {
+    event.preventDefault();
+    let valid = true;
+    if (usageMode === "LIMITED") {
+      try {
+        valid = /^(0|[1-9]\d*)$/u.test(usageValue) && isValidMonthlyLimit(BigInt(usageValue));
+      } catch {
+        valid = false;
+      }
+    }
+    if (!valid) {
+      setUsageValidationError(true);
+      return;
+    }
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/admin/reservation-api-usage-limit", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(usageMode === "UNLIMITED"
+          ? { mode: "UNLIMITED", expectedRevision: usageLimit.revision }
+          : { mode: "LIMITED", monthlyLimit: usageValue, expectedRevision: usageLimit.revision }),
+      });
+      const body = await response.json() as { usageLimit?: ReservationApiUsageLimitDto };
+      if (!response.ok || !body.usageLimit) throw new Error(response.status === 409 ? "conflict" : "generic");
+      setUsageLimit(body.usageLimit);
+      setDialog(null);
+    } catch (caught) {
+      setError(caught instanceof Error && caught.message === "conflict" ? copy.conflictError : copy.genericError);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const openKeyUsage = (
+    key: ReservationApiKeyMetadata,
+    trigger?: HTMLButtonElement,
+  ) => {
+    if (trigger) lastActionTriggerRef.current = trigger;
+    setKeyUsageTarget(key);
+    setKeyUsageMode(key.usage.mode);
+    setKeyUsageValue(key.usage.monthlyLimit ?? "10000");
+    setKeyUsageValidationError(false);
+    setError(null);
+    setDialog("keyUsage");
+  };
+
+  const openRevoke = (
+    key: ReservationApiKeyMetadata,
+    trigger: HTMLButtonElement,
+  ) => {
+    lastActionTriggerRef.current = trigger;
+    setRevokeTarget(key);
+    setError(null);
+    setDialog("revoke");
+  };
+
+  const submitKeyUsage = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!keyUsageTarget) return;
+    if (!isMonthlyLimitValid(keyUsageMode, keyUsageValue)) {
+      setKeyUsageValidationError(true);
+      return;
+    }
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        `/api/admin/reservation-api-keys/${encodeURIComponent(keyUsageTarget.id)}/usage-limit`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify(keyUsageMode === "UNLIMITED"
+            ? { mode: "UNLIMITED", expectedRevision: keyUsageTarget.revision }
+            : {
+              mode: "LIMITED",
+              monthlyLimit: keyUsageValue,
+              expectedRevision: keyUsageTarget.revision,
+            }),
+        },
+      );
+      const body = await response.json() as { apiKey?: ReservationApiKeyMetadata };
+      if (!response.ok || !body.apiKey) {
+        throw new Error(response.status === 409 ? "conflict" : "generic");
+      }
+      setApiKeys((current) => current.map((key) => key.id === body.apiKey!.id
+        ? body.apiKey!
+        : key));
+      setDialog(null);
+      setKeyUsageTarget(null);
+      restoreActionFocus();
+    } catch (caught) {
+      setError(caught instanceof Error && caught.message === "conflict"
+        ? copy.conflictError
+        : copy.genericError);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const copyRawKey = async () => {
+    if (!issuedRawKey) return;
+    try {
+      await navigator.clipboard.writeText(issuedRawKey);
+      setCopied(true);
+    } catch {
+      issuedKeyRef.current?.select();
+    }
+  };
+  const firstRevokedIndex = apiKeys.findIndex(({ revokedAt }) => revokedAt !== null);
+
+  return (
+    <div><section id="reservation-api-key-content" className="min-w-0 space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="max-w-3xl space-y-2">
+          <Link id="back-to-reservations" href="/admin/reservations" className="inline-flex items-center gap-1 text-sm font-semibold text-accent hover:underline"><ChevronLeftIcon className="h-5 w-5" />{copy.back}</Link>
+          <h1 className="text-2xl font-bold">{copy.title}</h1>
+          <p className="text-sm leading-6 text-fg-muted">{copy.description}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          <Link id="api-log-list-link" href="/admin/reservations/api-keys/logs" className="rounded-md border border-line bg-surface px-4 py-2.5 text-center text-sm font-semibold text-fg transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">{copy.logs.entry}</Link>
+          <button id="open-issue-dialog" type="button" onClick={openIssue} disabled={!canEdit} className="cursor-pointer rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50">{copy.issue}</button>
+        </div>
+      </div>
+
+      <p id="read-only-notice" role="status" hidden={canEdit} className="rounded-md border border-line bg-surface-accent-subtle px-4 py-3 text-sm font-semibold text-accent">{copy.readOnly}</p>
+
+      <section id="usage-limit-card" aria-labelledby="usage-limit-heading" className="rounded-lg border border-line bg-surface-raised shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4 px-5 py-4">
+          <div><h2 id="usage-limit-heading" className="text-lg font-bold">{copy.usage.title}</h2><p className="mt-1 text-sm leading-6 text-fg-muted">{copy.usage.description}</p></div>
+          <button id="open-usage-limit-dialog" type="button" onClick={openUsage} disabled={!canEdit} className="cursor-pointer rounded-md border border-line bg-surface px-4 py-2 text-sm font-semibold hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50">{copy.usage.change}</button>
+        </div>
+        <dl className="grid gap-px border-t border-line bg-line-subtle sm:grid-cols-3">
+          <UsageValue id="usage-limit-value" label={copy.usage.limit} value={usageLimit.monthlyLimit ? `${formatCount(usageLimit.monthlyLimit, locale)}${copy.usageDialog.unit}` : copy.usage.unlimited} />
+          <UsageValue id="usage-current-value" label={copy.usage.current} value={`${formatCount(usageLimit.requestCount, locale)}${copy.usageDialog.unit}`} />
+          <UsageValue id="usage-remaining-value" label={copy.usage.remaining} value={usageLimit.remaining === null ? copy.usage.unlimited : `${formatCount(usageLimit.remaining, locale)}${copy.usageDialog.unit}`} />
+        </dl>
+        <p id="usage-reset-copy" className="border-t border-line px-5 py-3 text-sm text-fg-muted">{formatTemplate(copy.usage.resets, { date: formatResetDateTime(usageLimit.resetsAt, locale) })}</p>
+      </section>
+
+      <section id="public-api-reference" aria-labelledby="api-reference-heading" className="overflow-hidden rounded-lg border border-line bg-surface-raised shadow-sm">
+        <div className="border-b border-line px-5 py-4"><h2 id="api-reference-heading" className="text-lg font-bold">{copy.api.title}</h2><p className="mt-1 text-sm leading-6 text-fg-muted">{copy.api.description}</p></div>
+        <div className="max-w-full overflow-x-auto">
+          <table id="public-api-table" className="w-full table-fixed min-w-[1160px] divide-y divide-line-subtle text-sm">
+            <colgroup><col className="w-[140px]" /><col className="w-[140px]" /><col className="w-[600px]" /><col className="w-[280px]" /></colgroup>
+            <thead className="bg-surface"><tr><th className="whitespace-nowrap px-5 py-3 text-left font-semibold">{copy.api.permission}</th><th className="whitespace-nowrap px-5 py-3 text-left font-semibold">{copy.api.method}</th><th className="whitespace-nowrap px-5 py-3 text-left font-semibold">{copy.api.endpoint}</th><th className="whitespace-nowrap px-5 py-3 text-left font-semibold">{copy.api.operation}</th></tr></thead>
+            <tbody className="divide-y divide-line-subtle">
+              {PUBLIC_API_ROWS.map((row, index) => (
+                <tr key={`${row.method}-${row.endpoint}`}>
+                  <td className="whitespace-nowrap px-5 py-3 font-mono text-xs font-semibold">{row.permission}</td>
+                  <td className={`whitespace-nowrap px-5 py-3 font-mono font-semibold ${apiMethodClassName(row.method)}`}>{row.method}</td>
+                  <td className="px-5 py-3"><span id={index === 0 ? "public-api-endpoint-primary" : undefined} className="whitespace-nowrap font-mono text-sm font-semibold text-fg">{row.endpoint}</span></td>
+                  <td className="whitespace-nowrap px-5 py-3">{copy.api.operations[row.operation]}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="api-key-list-card" aria-labelledby="api-key-list-heading" className="overflow-hidden rounded-lg border border-line bg-surface-raised shadow-sm">
+        <div className="border-b border-line px-5 py-4"><h2 id="api-key-list-heading" className="text-lg font-bold">{copy.keys.title}</h2><p className="mt-1 text-sm text-fg-muted">{copy.keys.description}</p></div>
+        {apiKeys.length === 0 ? <div id="api-key-empty" className="px-5 py-12 text-center"><p className="font-semibold">{copy.keys.emptyTitle}</p><p className="mt-2 text-sm text-fg-muted">{copy.keys.emptyDescription}</p></div> : (
+          <div id="api-key-table-wrap" className="max-w-full overflow-x-auto">
+            <table id="api-key-table" className="w-full table-fixed min-w-[1450px] divide-y divide-line-subtle text-sm">
+              <colgroup><col className="w-[260px]" /><col className="w-[390px]" /><col className="w-[140px]" /><col className="w-[120px]" /><col className="w-[170px]" /><col className="w-[170px]" /><col className="w-[90px]" /><col className="w-[110px]" /></colgroup>
+              <thead className="bg-surface"><tr>{[copy.keys.nameKey, copy.keys.permissions, copy.keys.monthlyLimit, copy.keys.monthlyUsage, copy.keys.created, copy.keys.lastUsed, copy.keys.status, copy.keys.actions].map((label) => <th key={label} className="whitespace-nowrap px-5 py-3 text-left font-semibold last:text-center">{label}</th>)}</tr></thead>
+              <tbody className="divide-y divide-line-subtle">
+                {apiKeys.map((key, index) => (
+                  <tr key={key.id} data-key-row={key.revokedAt ? "revoked" : "active"}>
+                    <td className="min-w-0 px-5 py-4 align-top"><p id={index === 0 ? "active-key-name" : undefined} title={key.name} className="truncate whitespace-nowrap font-semibold">{key.name}</p><code id={index === 0 ? "active-key-preview" : undefined} className="mt-1 block whitespace-nowrap text-xs text-fg-muted">{key.keyPreview}</code></td>
+                    <td className="px-5 py-4 align-top"><div id={index === 0 ? "active-key-permissions" : undefined} className="flex flex-nowrap gap-1.5 whitespace-nowrap">{key.permissions.map((permission) => <PermissionBadge key={permission} permission={permission} />)}</div></td>
+                    <td id={index === 0 ? "active-key-limit" : undefined} className="whitespace-nowrap px-5 py-4 align-top"><span className="font-semibold">{key.usage.monthlyLimit === null ? copy.keys.unlimited : `${formatCount(key.usage.monthlyLimit, locale)}${copy.usageDialog.unit}`}</span></td>
+                    <td id={index === 0 ? "active-key-usage" : undefined} className="whitespace-nowrap px-5 py-4 align-top"><span className="font-semibold">{formatCount(key.usage.requestCount, locale)}{copy.usageDialog.unit}</span></td>
+                    <td className="whitespace-nowrap px-5 py-4 align-top">{formatDateTime(key.createdAt, locale)}</td>
+                    <td className="whitespace-nowrap px-5 py-4 align-top">{key.lastUsedAt ? formatDateTime(key.lastUsedAt, locale) : copy.keys.never}</td>
+                    <td className="whitespace-nowrap px-5 py-4 text-center align-top"><span id={key.revokedAt ? (index === firstRevokedIndex ? "revoked-key-status" : undefined) : (index === 0 ? "active-key-status" : undefined)} className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${key.revokedAt ? "bg-surface-accent-subtle text-fg-muted" : "bg-green-100 text-green-800 dark:bg-green-950/60 dark:text-green-200"}`}>{key.revokedAt ? copy.keys.revoked : copy.keys.active}</span></td>
+                    <td className="px-5 py-4 text-center align-top">
+                      {key.revokedAt ? "—" : (
+                        <ApiKeyActionsMenu
+                          keyMetadata={key}
+                          isOpen={openActionsId === key.id}
+                          canEdit={canEdit}
+                          disabledReason={copy.readOnly}
+                          actionsFor={copy.keys.actionsFor}
+                          changeLimit={copy.keys.changeLimit}
+                          revoke={copy.keys.revoke}
+                          isPrimary={index === 0}
+                          onOpenChange={(open) => setOpenActionsId(open ? key.id : null)}
+                          onChangeLimit={openKeyUsage}
+                          onRevoke={openRevoke}
+                        />
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {dialog === "usage" ? <ModalDialog containerId="usage-limit-dialog" title={copy.usageDialog.title} description={copy.usageDialog.description} locked={isSubmitting} initialFocusRef={usageInputRef} onRequestClose={closeDialog}><form id="usage-limit-form" onSubmit={submitUsage} className="mt-6 space-y-5"><div id="usage-limit-options" className="space-y-3"><label className="flex cursor-pointer items-start gap-3"><input ref={usageModeRef} id="usage-mode-limited" name="usage-limit-mode" type="radio" value="LIMITED" checked={usageMode === "LIMITED"} onChange={() => setUsageMode("LIMITED")} className="mt-0.5 h-4 w-4 shrink-0 accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" /><span className="font-semibold">{copy.usageDialog.limited}</span></label><div id="usage-limit-input-wrap" className="ml-7 space-y-2"><div className="flex items-center gap-2"><input ref={usageInputRef} id="usage-limit-input" inputMode="numeric" autoComplete="off" value={usageValue} onChange={(event) => { setUsageValue(event.target.value); setUsageValidationError(false); }} disabled={usageMode === "UNLIMITED"} aria-describedby="usage-limit-help usage-limit-error" className="min-w-0 flex-1 rounded-md border border-line bg-surface px-3 py-2.5 text-fg outline-none focus:border-accent disabled:cursor-not-allowed disabled:opacity-50" /><span className="text-sm font-semibold">{copy.usageDialog.unit}</span></div><p id="usage-limit-help" className="text-sm leading-6 text-fg-muted">{copy.usageDialog.help}</p>{usageValidationError ? <p id="usage-limit-error" role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">{copy.usageDialog.invalid}</p> : null}</div><label className="flex cursor-pointer items-start gap-3"><input id="usage-mode-unlimited" name="usage-limit-mode" type="radio" value="UNLIMITED" checked={usageMode === "UNLIMITED"} onChange={() => setUsageMode("UNLIMITED")} className="mt-0.5 h-4 w-4 shrink-0 accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" /><span className="font-semibold">{copy.usageDialog.unlimited}</span></label></div><DialogError error={error} /><DialogActions cancel={copy.cancel} submit={isSubmitting ? copy.saving : copy.usageDialog.submit} submitId="save-usage-limit" isSubmitting={isSubmitting} onCancel={closeDialog} /></form></ModalDialog> : null}
+
+      {dialog === "keyUsage" && keyUsageTarget ? <ModalDialog containerId="key-usage-limit-dialog" title={copy.keyUsageDialog.title} description={formatTemplate(copy.keyUsageDialog.description, { name: keyUsageTarget.name })} locked={isSubmitting} initialFocusRef={keyUsageInputRef} onRequestClose={closeDialog}><form id="key-usage-limit-form" onSubmit={submitKeyUsage} className="mt-6 space-y-5"><fieldset><legend className="text-sm font-semibold">{copy.keyUsageDialog.legend}</legend><div id="key-usage-limit-options" className="mt-3 space-y-3"><label className="flex cursor-pointer items-start gap-3 rounded-lg border border-line p-4 hover:bg-surface-hover"><input id="key-usage-mode-limited" name="key-usage-limit-mode" type="radio" value="LIMITED" checked={keyUsageMode === "LIMITED"} onChange={() => setKeyUsageMode("LIMITED")} className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" /><span><strong className="block text-sm">{copy.usageDialog.limited}</strong><span className="mt-1 block text-sm text-fg-muted">{copy.keyUsageDialog.limitedDescription}</span></span></label><div id="key-usage-limit-input-wrap" className="ml-7 space-y-2"><label htmlFor="key-usage-limit-input" className="block text-sm font-semibold">{copy.issueDialog.limitInputLabel}</label><div className="flex items-center gap-2"><input ref={keyUsageInputRef} id="key-usage-limit-input" name="monthlyLimit" inputMode="numeric" autoComplete="off" value={keyUsageValue} onChange={(event) => { setKeyUsageValue(event.target.value); setKeyUsageValidationError(false); }} disabled={keyUsageMode === "UNLIMITED"} aria-describedby="key-usage-limit-help key-usage-limit-error" className="min-w-0 flex-1 rounded-md border border-line bg-surface px-3 py-2.5 text-fg outline-none focus:border-accent disabled:cursor-not-allowed disabled:opacity-50" /><span className="text-sm font-semibold">{copy.usageDialog.unit}</span></div><p id="key-usage-limit-help" className="text-sm leading-6 text-fg-muted">{copy.usageDialog.help}</p>{keyUsageValidationError ? <p id="key-usage-limit-error" role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">{copy.usageDialog.invalid}</p> : null}</div><label className="flex cursor-pointer items-start gap-3 rounded-lg border border-line p-4 hover:bg-surface-hover"><input id="key-usage-mode-unlimited" name="key-usage-limit-mode" type="radio" value="UNLIMITED" checked={keyUsageMode === "UNLIMITED"} onChange={() => setKeyUsageMode("UNLIMITED")} className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" /><span><strong className="block text-sm">{copy.keyUsageDialog.unlimited}</strong><span className="mt-1 block text-sm text-fg-muted">{copy.keyUsageDialog.unlimitedDescription}</span></span></label></div></fieldset><DialogError error={error} /><DialogActions cancel={copy.cancel} submit={isSubmitting ? copy.saving : copy.keyUsageDialog.submit} submitId="save-key-usage-limit" isSubmitting={isSubmitting} onCancel={closeDialog} /></form></ModalDialog> : null}
+
+      {dialog === "issue" ? <ModalDialog containerId="issue-dialog" title={copy.issueDialog.title} description={copy.issueDialog.description} locked={isSubmitting} initialFocusRef={issueNameRef} onRequestClose={closeDialog} maxWidthClassName="max-w-2xl"><form id="issue-form" onSubmit={submitIssue} className="mt-6 space-y-6"><label className="block space-y-2"><span className="block text-sm font-semibold">{copy.issueDialog.name}</span><input ref={issueNameRef} id="key-name" required maxLength={100} autoComplete="off" value={issueName} onChange={(event) => setIssueName(event.target.value)} placeholder={copy.issueDialog.namePlaceholder} className="w-full rounded-md border border-line bg-surface px-3 py-2.5 text-fg outline-none focus:border-accent" /></label><fieldset><legend className="text-sm font-semibold">{copy.issueDialog.permissions}</legend><p className="mt-1 text-sm text-fg-muted">{copy.issueDialog.permissionsDescription}</p><div id="scope-options" className="mt-3 divide-y divide-line-subtle overflow-hidden rounded-lg border border-line">{PERMISSION_ROWS.map((row) => <label key={row.permission} className="flex cursor-pointer items-start gap-3 px-4 py-3 hover:bg-surface-hover"><span className="-ml-1 -mr-1 -mt-0.5 flex h-6 w-6 shrink-0"><Checkbox id={`scope-${row.permission.toLowerCase()}`} name="permissions" value={row.permission} checked={issuePermissions.includes(row.permission)} onChange={(event) => { setPermissionError(false); setIssuePermissions((current) => event.target.checked ? [...current, row.permission] : current.filter((item) => item !== row.permission)); }} /></span><span><strong className="font-mono text-sm">{row.permission}</strong><span className="ml-2 text-sm">{copy.api.descriptions[row.permission]}</span><code className="mt-1 block text-xs text-fg-muted">{row.method} {row.endpoint}</code></span></label>)}</div></fieldset><fieldset><legend className="text-sm font-semibold">{copy.issueDialog.limitTitle}</legend><p className="mt-1 text-sm text-fg-muted">{copy.issueDialog.limitDescription}</p><div id="issue-key-limit-options" className="mt-3 space-y-3"><label className="flex cursor-pointer items-start gap-3 rounded-lg border border-line p-4 hover:bg-surface-hover"><input id="issue-key-mode-limited" name="issue-key-limit-mode" type="radio" value="LIMITED" checked={issueLimitMode === "LIMITED"} onChange={() => setIssueLimitMode("LIMITED")} className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" /><span className="min-w-0 flex-1"><strong className="block text-sm">{copy.usageDialog.limited}</strong><span className="mt-1 block text-sm text-fg-muted">{copy.issueDialog.limitLimitedDescription}</span></span></label><div className="ml-7 space-y-2"><label htmlFor="issue-key-limit-input" className="block text-sm font-semibold">{copy.issueDialog.limitInputLabel}</label><div className="flex items-center gap-2"><input ref={issueLimitInputRef} id="issue-key-limit-input" inputMode="numeric" autoComplete="off" value={issueLimitValue} onChange={(event) => { setIssueLimitValue(event.target.value); setIssueLimitError(false); }} disabled={issueLimitMode === "UNLIMITED"} aria-describedby="issue-key-limit-help issue-key-limit-error" className="min-w-0 flex-1 rounded-md border border-line bg-surface px-3 py-2.5 text-fg outline-none focus:border-accent disabled:cursor-not-allowed disabled:opacity-50" /><span className="text-sm font-semibold">{copy.usageDialog.unit}</span></div><p id="issue-key-limit-help" className="text-sm leading-6 text-fg-muted">{copy.usageDialog.help}</p>{issueLimitError ? <p id="issue-key-limit-error" role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">{copy.usageDialog.invalid}</p> : null}</div><label className="flex cursor-pointer items-start gap-3 rounded-lg border border-line p-4 hover:bg-surface-hover"><input id="issue-key-mode-unlimited" name="issue-key-limit-mode" type="radio" value="UNLIMITED" checked={issueLimitMode === "UNLIMITED"} onChange={() => setIssueLimitMode("UNLIMITED")} className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" /><span><strong className="block text-sm">{copy.keyUsageDialog.unlimited}</strong><span className="mt-1 block text-sm text-fg-muted">{copy.keyUsageDialog.issueUnlimitedDescription}</span></span></label></div></fieldset>{permissionError ? <p id="permission-error" role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">{copy.issueDialog.permissionError}</p> : null}<DialogError error={error} /><DialogActions cancel={copy.cancel} submit={isSubmitting ? copy.saving : copy.issueDialog.submit} isSubmitting={isSubmitting} onCancel={closeDialog} /></form></ModalDialog> : null}
+
+      {dialog === "issued" && issuedRawKey ? <ModalDialog containerId="issued-dialog" descriptionId="issued-dialog-description" title={copy.issueDialog.successTitle} description={copy.issueDialog.successDescription} initialFocusRef={copyButtonRef} onRequestClose={closeDialog}><label className="mt-6 block space-y-2"><span className="block text-sm font-semibold">{copy.issueDialog.keyLabel}</span><div className="flex min-w-0 flex-wrap gap-2"><input ref={issuedKeyRef} id="issued-api-key" readOnly value={issuedRawKey} className="min-w-0 flex-1 rounded-md border border-line bg-surface px-3 py-2.5 font-mono text-sm text-fg outline-none" /><button ref={copyButtonRef} id="copy-api-key" type="button" onClick={copyRawKey} className="cursor-pointer rounded-md border border-line bg-surface px-4 py-2 text-sm font-semibold hover:bg-surface-hover">{copy.issueDialog.copy}</button></div></label>{copied ? <p id="copy-feedback" role="status" aria-live="polite" className="mt-3 rounded-md bg-green-50 px-3 py-2 text-sm font-semibold text-green-800 dark:bg-green-950/50 dark:text-green-200">{copy.issueDialog.copied}</p> : null}<div className="mt-6 flex justify-end"><button id="close-issued" type="button" onClick={closeDialog} className="cursor-pointer rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-900">{copy.issueDialog.close}</button></div></ModalDialog> : null}
+
+      {dialog === "revoke" && revokeTarget ? <ModalDialog containerId="revoke-dialog" title={copy.revokeDialog.title} description={formatTemplate(copy.revokeDialog.description, { name: revokeTarget.name })} locked={isSubmitting} onRequestClose={closeDialog}><DialogError error={error} /><div className="mt-6 flex flex-wrap justify-end gap-3"><button id="cancel-revoke" type="button" onClick={closeDialog} disabled={isSubmitting} className="cursor-pointer rounded-md border border-line bg-surface px-4 py-2 text-sm font-semibold hover:bg-surface-hover disabled:opacity-50">{copy.cancel}</button><button id="confirm-revoke" type="button" onClick={submitRevoke} disabled={isSubmitting} className="cursor-pointer rounded-md bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50">{isSubmitting ? copy.saving : copy.revokeDialog.confirm}</button></div></ModalDialog> : null}
+    </section></div>
+  );
+}
+
+function ApiKeyActionsMenu({
+  keyMetadata,
+  isOpen,
+  canEdit,
+  disabledReason,
+  actionsFor,
+  changeLimit,
+  revoke,
+  isPrimary,
+  onOpenChange,
+  onChangeLimit,
+  onRevoke,
+}: {
+  keyMetadata: ReservationApiKeyMetadata;
+  isOpen: boolean;
+  canEdit: boolean;
+  disabledReason: string;
+  actionsFor: string;
+  changeLimit: string;
+  revoke: string;
+  isPrimary: boolean;
+  onOpenChange: (open: boolean) => void;
+  onChangeLimit: (key: ReservationApiKeyMetadata, trigger?: HTMLButtonElement) => void;
+  onRevoke: (key: ReservationApiKeyMetadata, trigger: HTMLButtonElement) => void;
+}) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLUListElement>(null);
+  const [menuStyle, setMenuStyle] = useState<CSSProperties | null>(null);
+  const menuId = isPrimary ? "api-key-actions-menu" : `api-key-actions-menu-${keyMetadata.id}`;
+  const accessibleName = formatTemplate(actionsFor, { name: keyMetadata.name });
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const focusFirstItem = window.requestAnimationFrame(() => {
+      menuRef.current?.querySelector<HTMLElement>("[role='menuitem']")?.focus();
+    });
+    const close = () => onOpenChange(false);
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!buttonRef.current?.contains(target) && !menuRef.current?.contains(target)) {
+        close();
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      close();
+      buttonRef.current?.focus();
+    };
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      window.cancelAnimationFrame(focusFirstItem);
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [isOpen, onOpenChange]);
+
+  const toggleMenu = () => {
+    if (isOpen) {
+      onOpenChange(false);
+      return;
+    }
+    const trigger = buttonRef.current;
+    if (!trigger) return;
+
+    const rect = trigger.getBoundingClientRect();
+    const menuWidth = 176;
+    const menuHeight = 90;
+    const margin = 8;
+    const openAbove = window.innerHeight - rect.bottom < menuHeight + margin;
+    setMenuStyle({
+      left: Math.min(window.innerWidth - menuWidth - margin, Math.max(margin, rect.right - menuWidth)),
+      top: openAbove ? rect.top - menuHeight - 4 : rect.bottom + 4,
+      width: menuWidth,
+    });
+    onOpenChange(true);
+  };
+
+  const menu = isOpen && menuStyle ? (
+    <ul
+      ref={menuRef}
+      id={menuId}
+      role="menu"
+      aria-label={accessibleName}
+      style={menuStyle}
+      onBlur={(event) => {
+        const next = event.relatedTarget as Node | null;
+        if (!menuRef.current?.contains(next) && !buttonRef.current?.contains(next)) {
+          onOpenChange(false);
+        }
+      }}
+      className="fixed z-[70] w-44 overflow-hidden rounded-lg border border-line bg-surface-raised py-1 text-left shadow-xl"
+    >
+      <li role="none">
+        <button
+          id={isPrimary ? "open-key-usage-limit-dialog" : undefined}
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            onOpenChange(false);
+            if (buttonRef.current) onChangeLimit(keyMetadata, buttonRef.current);
+          }}
+          className="w-full cursor-pointer px-4 py-2 text-left text-sm font-semibold text-fg transition-colors hover:bg-surface-hover hover:text-accent focus:bg-surface-hover focus:outline-none"
+        >
+          {changeLimit}
+        </button>
+      </li>
+      <li role="none" className="border-t border-line-subtle">
+        <button
+          id={isPrimary ? "open-revoke-dialog" : undefined}
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            onOpenChange(false);
+            if (buttonRef.current) onRevoke(keyMetadata, buttonRef.current);
+          }}
+          className="w-full cursor-pointer px-4 py-2 text-left text-sm font-semibold text-red-700 transition-colors hover:bg-red-50 focus:bg-red-50 focus:outline-none dark:text-red-300 dark:hover:bg-red-950/50 dark:focus:bg-red-950/50"
+        >
+          {revoke}
+        </button>
+      </li>
+    </ul>
+  ) : null;
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        id={isPrimary ? "api-key-actions-trigger" : undefined}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        aria-controls={menuId}
+        aria-label={accessibleName}
+        title={canEdit ? undefined : disabledReason}
+        disabled={!canEdit}
+        onClick={toggleMenu}
+        className="inline-flex cursor-pointer items-center justify-center rounded-md p-2 text-fg transition-colors hover:bg-surface-hover hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <MoreHorizIcon className="h-6 w-6" />
+      </button>
+      {menu ? createPortal(menu, document.body) : null}
+    </>
+  );
+}
+
+function UsageValue({ id, label, value }: { id: string; label: string; value: string }) {
+  return <div className="bg-surface-raised px-5 py-4"><dt className="text-sm text-fg-muted">{label}</dt><dd id={id} className="mt-1 text-xl font-bold">{value}</dd></div>;
+}
+
+function PermissionBadge({ permission }: { permission: ReservationApiPermission }) {
+  return <span className="shrink-0 whitespace-nowrap rounded-full bg-surface-accent-subtle px-2 py-1 text-xs font-semibold text-accent">{permission}</span>;
+}
+
+function apiMethodClassName(method: string) {
+  if (method === "GET") return "text-green-700 dark:text-green-300";
+  if (method === "POST") return "text-blue-700 dark:text-blue-300";
+  if (method === "PUT" || method === "PATCH") return "text-amber-700 dark:text-amber-300";
+  return "text-red-700 dark:text-red-300";
+}
+
+function DialogError({ error }: { error: string | null }) {
+  return error ? <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">{error}</p> : null;
+}
+
+function DialogActions({ cancel, submit, submitId, isSubmitting, onCancel }: { cancel: string; submit: string; submitId?: string; isSubmitting: boolean; onCancel: () => void }) {
+  return <div className="flex flex-wrap justify-end gap-3"><button type="button" onClick={onCancel} disabled={isSubmitting} className="cursor-pointer rounded-md border border-line bg-surface px-4 py-2 text-sm font-semibold hover:bg-surface-hover disabled:opacity-50">{cancel}</button><button id={submitId} type="submit" disabled={isSubmitting} className="cursor-pointer rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-900 disabled:opacity-50">{submit}</button></div>;
+}
+
+function isMonthlyLimitValid(mode: "LIMITED" | "UNLIMITED", value: string) {
+  if (mode === "UNLIMITED") return true;
+  try {
+    return /^(0|[1-9]\d*)$/u.test(value) && isValidMonthlyLimit(BigInt(value));
+  } catch {
+    return false;
+  }
+}
+
+function formatCount(value: string, locale: string) {
+  return new Intl.NumberFormat(localeTag(locale)).format(BigInt(value));
+}
+
+function formatDateTime(value: string, locale: string) {
+  return new Intl.DateTimeFormat(localeTag(locale), { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Tokyo" }).format(new Date(value));
+}
+
+function formatResetDateTime(value: string, locale: string) {
+  return new Intl.DateTimeFormat(localeTag(locale), {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "Asia/Tokyo",
+  }).format(new Date(value));
+}
+
+function localeTag(locale: string) {
+  return { ja: "ja-JP", en: "en-US", "zh-Hans": "zh-CN", "zh-Hant": "zh-TW", ko: "ko-KR" }[locale] ?? "ja-JP";
+}
+
+function formatTemplate(template: string, values: Record<string, string>) {
+  return Object.entries(values).reduce((result, [key, value]) => result.replace(`{${key}}`, value), template);
+}
