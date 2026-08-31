@@ -50,7 +50,7 @@ test("deployment phases make Colima bind-mounted output private before execution
   );
   assert.match(
     source,
-    /"\$\{DEPLOY_RUNNER_IMAGE\}" \\\n+    sh -ceu "\$\{DEPLOY_PRIVATE_OUTPUT_ENTRYPOINT\}" sh \\\n+    node --no-warnings --import tsx scripts\/deploy\/main\.ts/u,
+    /"\$\{DEPLOY_RUNNER_IMAGE\}" \\\n+[ \t]+sh -ceu "\$\{DEPLOY_PRIVATE_OUTPUT_ENTRYPOINT\}" sh \\\n+[ \t]+node --no-warnings --import tsx scripts\/deploy\/main\.ts/u,
   );
 });
 
@@ -259,6 +259,55 @@ function runFixture(root: string, body: string) {
     encoding: "utf8",
   });
 }
+
+test("pending migration phase returns 75 without changing caller errexit", () => {
+  const root = initializeWrapperFixture();
+  const output = join(root, "phase-output");
+  try {
+    mkdirSync(output, { mode: 0o700 });
+    const common = [
+      "DEPLOY_AWS_ACCOUNT_ID=123456789012",
+      "DEPLOY_AWS_PROFILE=deploy-test",
+      "DEPLOY_RUNNER_IMAGE=deploy-test:fixture",
+      "DEPLOY_LOG_STYLE=plain",
+      "read_aws_account_id() { :; }",
+      "stream_ssm_context() { :; }",
+      "docker() { return 75; }",
+    ];
+    const disabled = runFixture(
+      root,
+      [
+        ...common,
+        "set +e",
+        `run_deploy_phase validate ${shellQuote(output)}`,
+        "phase_status=$?",
+        "case $- in *e*) exit 90 ;; esac",
+        `printf 'captured:%s' "\${phase_status}"`,
+      ].join("\n"),
+    );
+    assert.equal(disabled.status, 0, disabled.stderr);
+    assert.equal(disabled.stdout, "captured:75");
+
+    const enabled = runFixture(
+      root,
+      [
+        ...common,
+        "set -e",
+        `if run_deploy_phase validate ${shellQuote(output)}; then`,
+        "  phase_status=0",
+        "else",
+        "  phase_status=$?",
+        "fi",
+        "case $- in *e*) : ;; *) exit 91 ;; esac",
+        `printf 'captured:%s' "\${phase_status}"`,
+      ].join("\n"),
+    );
+    assert.equal(enabled.status, 0, enabled.stderr);
+    assert.equal(enabled.stdout, "captured:75");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("interactive deployment logs use ANSI unless color is disabled", () => {
   const root = initializeWrapperFixture();
