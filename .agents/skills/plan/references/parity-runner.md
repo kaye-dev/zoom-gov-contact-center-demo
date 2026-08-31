@@ -47,7 +47,7 @@ Interaction risk tags (`dialog`, `menu`, `keyboard`, `focus`) select the changed
 
 Use the standalone Node CLI to validate files and select rows. When a compatible reusable Browser adapter already exists, `BrowserParityRunner` may execute those rows. Otherwise perform the selected operations directly through the Codex in-app Browser and pass the measured result through the same evidence validator. Do not create runtime shims or a large task-specific adapter during feature implementation.
 
-The runner accepts only `http://localhost:3000` for production and an explicit `http://127.0.0.1:<port>` for the prototype. It rejects credentials, external origins, and base-URL query or fragments before activating a tab.
+The runner accepts `http://localhost:3000` for a verified Local runtime or `http://localhost:<port>` in the worktree allocator range `3100-3899` for a verified worktree runtime. The caller must obtain that production URL from `./dev-compose.sh status --url` after checking project, checkout mount, runtime identity, and health. The prototype still requires an explicit `http://127.0.0.1:<port>`. It rejects credentials, external origins, ports outside those contracts, and base-URL query or fragments before activating a tab.
 
 Wrap the selected Browser API with one adapter object exposing:
 

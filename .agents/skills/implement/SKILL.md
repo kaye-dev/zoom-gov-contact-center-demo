@@ -42,7 +42,7 @@ Do not probe Browser capability, open comparison tabs, or generate parity eviden
 
 - Implement the adopted design while preserving unrelated changes. Treat the prototype, UI contract, and validation profile as fixed targets; stop rather than silently redesigning them.
 - Run the smallest relevant code checks while editing. Do not run `affected` Browser rows or supplemental Browser sweeps. Use source inspection and focused automated tests until the completion candidate is ready.
-- If the verified Compose runtime needs a new-route or stale-cache refresh, recheck project, checkout mount, and exact `web` service identity, then run `./dev-compose.sh restart web` without asking. Record before/after container ID, mount, port, URL, fixture, and authorization. Do not restart other services or run broad Compose shutdown.
+- Use HMR for ordinary source changes. `./dev-compose.sh ensure` may restart only the verified Compose `web` after it applies a pending migration. For a new-route, stale-cache, package, or runtime-configuration refresh, report the reason and wait for the explicit `./dev-compose.sh restart web` (`Web restart`) action; do not restart automatically. Any explicit restart must recheck project, checkout mount, exact `web` identity, and record before/after container ID, mount, port, URL, fixture, and authorization. Do not restart other services or run broad Compose shutdown.
 - Before a build that shares output, stop only agent-owned runtime after identity recheck. Never stop a user-owned server for a build; use an exact isolated build or report the build blocked.
 - For focused code/test edits, run the named relevant tests plus lint/typecheck and `git diff --check`. Run the full test suite only when the change can affect unrelated suites or no reliable targeted command exists. Run a production build only for route/configuration/bundling/server-boundary changes or an explicit repository requirement; do not create an isolated build solely because a UI file changed.
 
@@ -50,13 +50,13 @@ Do not probe Browser capability, open comparison tabs, or generate parity eviden
 
 Only after implementation, focused tests, lint/typecheck, any justified build, and diff review are otherwise complete:
 
-- Start or reuse the correct real app at `http://localhost:3000`, then start `./dev-prototype.sh <slug>` once. Recheck runtime owner, checkout/mount, route, fixture, authorization, query, viewport, DPR, scroll, and captured digests.
+- Start or reuse the correct real app with `./dev-compose.sh ensure`, then obtain its verified URL from `./dev-compose.sh status --url`. Local remains `http://localhost:3000`; worktrees use `http://localhost:<allocated-port>` with a port in `3100-3899`. Start `./dev-prototype.sh <slug>` once. Recheck runtime owner, Compose project, checkout/mount, route, fixture, authorization, query, viewport, DPR, scroll, and captured digests.
 - Run one capability canary and one phase `final` over the recorded `targeted` selection or justified `full` matrix. Use an existing common adapter when available; otherwise operate the selected rows directly in the Codex in-app Browser. Do not create a substantial task-specific adapter or runtime shim.
 - Write only `implementation-parity.json` using parity evidence schema version 3. New runs do not create `pre-edit-parity.json`.
 - If the final review reveals an implementation defect, fix it using the evidence, finish static checks, and replace the invalidated final review once at the new completion boundary. Do not add an `affected` run, supplemental sweep, or separate duplicate manual check.
 
 Browser unavailability, a failed selected row, unexplained difference, or condition drift prevents a completion claim but does not roll back valid implementation edits. Any later related change invalidates it and requires one replacement final review at the next completion boundary. Report the exact unverified or failed condition. For Browser plumbing, stop after one setup attempt plus one retry rather than redesigning the runner inside the feature task.
 
-Clean up only baseline-delta resources proven agent-owned. Never run broad `docker compose down`, delete volumes, or stop pre-existing/user resources other than the specifically authorized verified `web` restart.
+Clean up only baseline-delta resources proven agent-owned. For a worktree, use `./dev-compose.sh cleanup`, which requires matching session baseline and runtime labels and preserves named volumes. Local cleanup is a no-op. Never run broad `docker compose down`, delete volumes, or stop pre-existing/user resources other than an explicitly requested verified `web` restart.
 
 Report changed paths, commands and results, runtime checks, evidence paths, parity results, risks, and preserved unrelated changes. Do not mutate the goal for progress, ship automatically, stage, commit, push, or create a pull request.

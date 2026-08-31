@@ -419,6 +419,42 @@ test("runnerは外部originを拒否してloopback surfaceだけを操作する"
   );
 });
 
+test("runnerはLocal 3000と割当済みworktree portだけをproduction loopbackとして受理する", async () => {
+  const { BrowserParityRunner } = await parityModulePromise;
+  const run = {
+    runId: "run-worktree-port",
+    goalSha256: digest,
+    runtime: {},
+    sources: [],
+  };
+  await new BrowserParityRunner(createAdapter()).run({
+    definition: { contract, spec, prototypeRevision: revision, validationProfileDigest: digest },
+    phase: "smoke",
+    tabs: { production: "production", prototype: "prototype" },
+    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4000/" },
+    run,
+  });
+  for (const production of [
+    "http://localhost:3001/",
+    "http://localhost:3099/",
+    "http://localhost:3900/",
+    "http://127.0.0.1:3142/",
+    "http://localhost:3142/path",
+    "http://localhost:3142/?query=1",
+  ]) {
+    await assert.rejects(
+      new BrowserParityRunner(createAdapter()).run({
+        definition: { contract, spec, prototypeRevision: revision, validationProfileDigest: digest },
+        phase: "smoke",
+        tabs: { production: "production", prototype: "prototype" },
+        baseUrls: { production, prototype: "http://127.0.0.1:4000/" },
+        run,
+      }),
+      /production base URL/u,
+    );
+  }
+});
+
 test("final-only evidenceはBrowser完了境界を検証し旧pre-edit pairもread-onlyで受け入れる", async () => {
   const {
     BrowserParityRunner,

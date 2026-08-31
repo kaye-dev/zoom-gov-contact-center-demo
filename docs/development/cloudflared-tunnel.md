@@ -1,5 +1,7 @@
 # Cloudflare Tunnel
 
+この手順はLocal checkout専用である。Codex worktreeはcheckout固有の動的portへloopback bindし、LANやCloudflare Tunnelへ公開しない。worktreeで作業中の場合はCodexのHandoffでLocalへ移動し、`./dev-compose.sh status`が`RUNTIME_MODE=local`と`HOST_PORT=3000`を返すことを確認してから進める。
+
 公開ホスト名は`demo.keien.dev`、トンネル名は`zoomineer`（ID: `3f536d7d-2d28-4f4f-8e9d-657a4923d596`）を使う。
 
 複数の端末で同じホスト名を使い回すと、DNSのCNAMEが後から設定した端末のトンネルへ上書きされ、
@@ -76,9 +78,9 @@ Select [1/2/3]: 3
 ```
 
 ```bash
-docker compose exec -T web printenv BETTER_AUTH_URL
-docker compose exec -T web printenv BETTER_AUTH_TRUSTED_ORIGINS
-docker compose exec -T web printenv NEXT_ALLOWED_DEV_ORIGIN
+./dev-compose.sh exec -T web printenv BETTER_AUTH_URL
+./dev-compose.sh exec -T web printenv BETTER_AUTH_TRUSTED_ORIGINS
+./dev-compose.sh exec -T web printenv NEXT_ALLOWED_DEV_ORIGIN
 curl -fsS http://127.0.0.1:3000/api/health
 ```
 
@@ -108,7 +110,7 @@ https://demo.keien.dev
 2. 次を実行する。
 
 ```bash
-./dev-compose.sh down
+./dev-compose.sh stop web
 ```
 
 3. Cloudflare AccessのAllow policyから参加者のメールアドレスを削除する。

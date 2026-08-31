@@ -30,6 +30,8 @@
 /plans/*
 !/plans/template.md
 /plan/
+/.codex/runtime.local.env
+/.codex/runtime-session.local.json
 
 # debug
 npm-debug.log*

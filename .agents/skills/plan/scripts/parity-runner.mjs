@@ -433,7 +433,12 @@ function requireLoopbackBaseUrl(value, surface) {
   ensure(parsed.pathname === "/", `${surface} base URL must use the origin root`);
   ensure(parsed.search === "" && parsed.hash === "", `${surface} base URL must not contain query or fragment`);
   if (surface === "production") {
-    ensure(parsed.hostname === "localhost" && parsed.port === "3000", "production base URL must use localhost:3000");
+    const port = Number(parsed.port);
+    ensure(
+      parsed.hostname === "localhost" &&
+        (port === 3000 || (port >= 3100 && port <= 3899)),
+      "production base URL must use Local localhost:3000 or an allocated worktree localhost port in 3100-3899",
+    );
   } else {
     ensure(parsed.hostname === "127.0.0.1" && parsed.port !== "", "prototype base URL must use 127.0.0.1 with an explicit port");
   }
