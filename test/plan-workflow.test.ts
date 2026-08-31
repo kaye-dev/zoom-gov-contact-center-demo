@@ -384,6 +384,59 @@ test("実装・shipping・振り返りはcustom agentへ委譲しない", async 
   }
 });
 
+test("git shippingのdetached引受けと再開prompt契約はworkflowと一致する", async () => {
+  const [shipping, workflow] = await Promise.all([
+    read(".agents/skills/git-commit-push-pr/SKILL.md"),
+    read("docs/development/codex-development-workflow.md"),
+  ]);
+
+  assert.doesNotMatch(shipping, /Stop for a detached HEAD/);
+  for (const pattern of [
+    /detached HEAD continues to section 2/,
+    /git merge-base --is-ancestor HEAD <remote>\/<base>/,
+    /git switch -c <topic> HEAD/,
+    /次に送るプロンプト/,
+    /expected full HEAD SHA/,
+    /remote base OID/,
+    /current-task path allowlist/,
+    /staged binary-patch digest/,
+    /do not stop again for the same ambiguity/,
+    /git restore --staged -- <explicit excluded paths>/,
+    /If any captured value drifted, apply none of the prompt/,
+  ]) {
+    assert.match(shipping, pattern);
+  }
+  for (const pattern of [
+    /安全条件を満たすdetached HEAD/,
+    /repository、full HEAD、baseとOID/,
+    /`次に送るプロンプト`/,
+    /snapshotが一致すれば同じ停止理由を再質問せず/,
+    /`git restore --staged --`/,
+    /snapshotが変わっていれば何も部分適用せず/,
+  ]) {
+    assert.match(workflow, pattern);
+  }
+});
+
+test("git shippingはdetached引受け後も既存の禁止操作を維持する", async () => {
+  const shipping = await read(".agents/skills/git-commit-push-pr/SKILL.md");
+
+  for (const pattern of [
+    /Never use `-C`/,
+    /`--ignore-other-worktrees`/,
+    /Never use `git add \.`/,
+    /`git add -A`/,
+    /`git commit -a`/,
+    /Never use `--force`/,
+    /`--force-with-lease`/,
+    /does not authorize force pushing, stashing or discarding changes/,
+    /does not authorize.*creating a fork, merging the pull request, or waiting for CI/,
+    /never authorizes `--worktree`/,
+  ]) {
+    assert.match(shipping, pattern);
+  }
+});
+
 test("明示的な6 skill構成を保ち廃止skill・lifecycle・旧implementation agentを復活させない", async () => {
   const removed = [
     ".agents/skills/plan-critic/SKILL.md",

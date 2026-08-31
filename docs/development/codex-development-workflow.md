@@ -137,14 +137,18 @@ $implement plans/<slug>/goal.md
 ### `$git-commit-push-pr`
 
 1. Git規約、状態、remote、GitHub認証、repository対応を確認してfetchする。
-2. baseとtopic branchを解決し、protected branch上ならtopic branchを作る。
+2. baseとtopic branchを解決し、protected branch上または安全条件を満たすdetached HEADならtopic branchを作る。
 3. 未commit変更があればcurrent taskのpathだけをstageし、検証後に1件のcommitを作る。
 4. 最新baseへ安全に同期する。
 5. historyを書き換えずにpushし、localとremoteのSHA一致を確認する。
 6. 同じheadのPRを作成するか、必要な箇所だけを更新する。
 7. PRのbase/head OID、draft、mergeability、merge stateをreadbackして報告する。
 
-現在のユーザーが明示した場合だけ実行する。force push、stash、変更破棄、広域stage、自動競合解決、PR merge、CI待機は行わない。競合、remote divergence、複数PR、認証・repository不一致は停止条件とし、plan・review生成物は明示scope外ならstageも削除もしない。
+現在のユーザーが明示した場合だけ実行する。detached HEADではremoteとGitHub repositoryを確認してfetchした後、HEADが唯一のbase候補の履歴内にあり、task path、index、未使用branch名が一意な場合だけ`git switch -c`で新規topic branchを作り、通常のshippingへ合流する。
+
+`main`と`develop`のbase候補が競合する、別topicのcommitを含む、branch名が既存、同名branchを別worktreeが使用中、またはstaged scopeが曖昧な場合は、branch、index、remote、GitHubを変更せず停止する。停止報告にはrepository、full HEAD、baseとOID、未使用topic branch、task path、staged pathとdigest、index policy、必要なhistory decisionを実値で埋めた`次に送るプロンプト`を提示する。選択肢が複数ならplaceholderのない独立promptを提示し、ユーザーが一つを再送した時点でその値を明示判断として扱う。snapshotが一致すれば同じ停止理由を再質問せず、必要なexact pathのindex-only unstage、commit、同期、non-force push、PR作成または最小更新、readbackまで続行する。snapshotが変わっていれば何も部分適用せず、現在値から停止し直す。
+
+force push、force-create、shared worktree checkout、stash、変更破棄、広域stage、自動競合解決、PR merge、CI待機は行わない。再開promptが許可できるindex変更は、列挙された対象外pathへの`git restore --staged --`だけとし、working treeを変更しない。競合、remote divergence、複数PR、認証・repository不一致など、再開promptが解消していない独立条件は停止条件とする。plan・review生成物は明示scope外ならstageも削除もしない。
 
 ## 任意の振り返り
 
