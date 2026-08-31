@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
+
+import { parseTOML } from "confbox";
 
 const root = path.resolve(import.meta.dirname, "..");
 const read = (relative: string) => readFile(path.join(root, relative), "utf8");
@@ -19,19 +21,61 @@ const headings = [
 const workflowSkillNames = ["plan", "implement", "review", "workflow-retrospective"];
 const allSkillNames = [...workflowSkillNames, "git-commit-push-pr", "kabeuchi"];
 
-function parseToml(relative: string): Record<string, unknown> {
-  const result = spawnSync(
-    "python3",
-    [
-      "-c",
-      "import json, pathlib, sys, tomllib; print(json.dumps(tomllib.loads(pathlib.Path(sys.argv[1]).read_text())))",
-      path.join(root, relative),
-    ],
-    { encoding: "utf8" },
-  );
-  assert.equal(result.status, 0, result.stderr);
-  return JSON.parse(result.stdout) as Record<string, unknown>;
+function parseTomlSource(relative: string, source: string): Record<string, unknown> {
+  try {
+    return parseTOML(source) as Record<string, unknown>;
+  } catch (error) {
+    throw new Error(`Failed to parse TOML: ${relative}`, { cause: error });
+  }
 }
+
+function parseToml(relative: string): Record<string, unknown> {
+  return parseTomlSource(
+    relative,
+    readFileSync(path.join(root, relative), "utf8"),
+  );
+}
+
+test("TOML設定はNode内で解析される", () => {
+  const environment = parseToml(".codex/environments/environment.toml");
+  const config = parseToml(".codex/config.toml");
+  const productAdvisor = parseToml(".codex/agents/product_advisor.toml");
+  const projectExplorer = parseToml(".codex/agents/project_explorer.toml");
+  const independentReviewer = parseToml(".codex/agents/independent_reviewer.toml");
+
+  assert.equal(environment.name, "zoom-gov-contact-center-demo");
+  assert.deepEqual(Object.keys(config.agents as Record<string, unknown>).sort(), [
+    "independent_reviewer",
+    "product_advisor",
+    "project_explorer",
+  ]);
+  assert.equal(productAdvisor.model, "gpt-5.6-terra");
+  assert.equal(projectExplorer.model, "gpt-5.6-luna");
+  assert.equal(independentReviewer.model_reasoning_effort, "high");
+});
+
+test("TOML parserは直接依存として固定される", async () => {
+  const packageJson = JSON.parse(await read("package.json")) as {
+    devDependencies: Record<string, string>;
+  };
+  const packageLock = JSON.parse(await read("package-lock.json")) as {
+    packages: Record<
+      string,
+      { devDependencies?: Record<string, string>; version?: string }
+    >;
+  };
+
+  assert.equal(packageJson.devDependencies.confbox, "0.2.4");
+  assert.equal(packageLock.packages[""].devDependencies?.confbox, "0.2.4");
+  assert.equal(packageLock.packages["node_modules/confbox"].version, "0.2.4");
+});
+
+test("不正TOMLは対象path付きで失敗する", () => {
+  assert.throws(
+    () => parseTomlSource("fixtures/invalid.toml", "[invalid"),
+    { message: "Failed to parse TOML: fixtures/invalid.toml" },
+  );
+});
 
 test("templateはgoal設計とinvocation approvalだけを持ちmutable parityを重複しない", async () => {
   const template = await read("plans/template.md");
