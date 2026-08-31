@@ -982,6 +982,32 @@ runtime_cleanup_network_label_matches() {
   [[ "${runtime_id}" == "${RUNTIME_ID}" && "${checkout:A}" == "${RUNTIME_CHECKOUT_PATH}" && "${session_id}" == "${CODEX_RUNTIME_SESSION_ID}" ]]
 }
 
+runtime_confirmation_cleanup_policy() {
+  local policy_output
+  local policy_status=0
+  local confirmation_stop_session_id="${CODEX_CONFIRMATION_STOP_SESSION_ID:-}"
+
+  policy_output="$(CODEX_CONFIRMATION_STOP_SESSION_ID="${confirmation_stop_session_id}" node "${DEV_COMPOSE_SCRIPT_DIR}/scripts/confirmation-session.mjs" \
+    runtime-cleanup-policy \
+    "${CODEX_RUNTIME_SESSION_ID}" \
+    "${RUNTIME_ID}" \
+    "${COMPOSE_PROJECT_NAME}")" || policy_status=$?
+  case "${policy_status}" in
+    0)
+      return 0
+      ;;
+    10)
+      print -r -- "Cleanup skipped: the exact worktree runtime is held by an active confirmation session."
+      [[ -n "${policy_output}" ]] && print -r -- "${policy_output}"
+      return 10
+      ;;
+    *)
+      print -u2 "Cleanup refused because confirmation-session ownership could not be verified."
+      return 1
+      ;;
+  esac
+}
+
 runtime_cleanup() {
   local captured
   local container_output
@@ -1000,6 +1026,12 @@ runtime_cleanup() {
     print -r -- "Local cleanup is a no-op; pre-existing native and Compose runtimes are preserved."
     return 0
   fi
+  local confirmation_policy_status=0
+  runtime_confirmation_cleanup_policy || confirmation_policy_status=$?
+  if (( confirmation_policy_status == 10 )); then
+    return 0
+  fi
+  (( confirmation_policy_status == 0 )) || return "${confirmation_policy_status}"
   if [[ ! -f "${RUNTIME_SESSION_PATH}" || "${CODEX_RUNTIME_SESSION_ID}" == "worktree-unmanaged" ]]; then
     print -r -- "No worktree runtime session exists; nothing was removed."
     return 0
