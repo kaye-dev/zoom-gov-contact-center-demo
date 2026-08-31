@@ -27,6 +27,12 @@
 *.sqlite
 *.sqlite-*
 /lib/generated/prisma/
+/plans/*
+!/plans/template.md
+/.codex/confirmation-session.local.json
+/plan/
+/.codex/runtime.local.env
+/.codex/runtime-session.local.json
 
 # debug
 npm-debug.log*

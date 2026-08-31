@@ -1,9 +1,0 @@
-{
-  "schemaVersion": 1,
-  "basis": "explicit-$implement-invocation",
-  "runId": "20260829T154639Z-developer-api-settings",
-  "invokedAt": "2026-08-29T15:46:47.211Z",
-  "goalSha256": "sha256:e432277dad9c971372691e29afd6913fef7aa933ec9bef23d0dda79a11c5fa4f",
-  "prototypeRevision": "sha256:cc422ca0ae74aae354361f5d783a789bacbae90ae442e1ecfbcbf98630ee704e",
-  "validationProfileDigest": "sha256:1abaf69f9d9c9ea480f8b4829ab30116948f8da97bc9bb428200d601197d7a31"
-}
