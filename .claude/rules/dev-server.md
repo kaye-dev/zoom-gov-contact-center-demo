@@ -9,6 +9,18 @@
 - buildを実行した場合の最終確認では、agent所有の実アプリを`./dev-compose.sh ensure`で同じcheckout固有runtimeへ戻す。ユーザー所有serverを再利用する場合も含め、割当portのLISTEN address、PIDまたはcontainer ID、cwd、command、runtime owner、Compose project、checkout mount、`status --url`の実URL、fixture・authorizationなどの比較条件を再確認してからparityを実行する。
 - UI変更はCodexアプリ内Browserで影響するtarget、state、theme、viewport、responsive breakpoint、操作、keyboard、focus、console、networkを確認する。局所的またはviewport固有の変更へ無関係なtheme・desktop・breakpointを追加しない。global style・token・shell・navigation・横断responsive変更ではlight・dark双方のdesktopと390×844および影響境界を含むfull matrixを使う。`curl`やtestだけで実画面確認済みとしない。
 
+## 管理画面ログイン
+
+Codexが実装検証で管理画面へログインする場合は、次の順序を守る。
+
+1. `./dev-compose.sh exec web npm run db:check-seed-admin`を実行する。この確認はread-onlyで、出力はパスワードを含まないJSONとする。
+2. `MISSING`の場合だけ`./dev-compose.sh exec web npm run db:seed-admin`を実行し、checkを再実行する。
+3. `PRESENT_STANDARD`では現在のseed用credentialでログインを1回試す。この状態はpassword一致を保証しない。
+4. `PRESENT_NONSTANDARD`または既存ユーザーのログイン失敗ではseedを自動実行しない。ユーザーへ状態と影響を報告する。
+5. ユーザーがローカルseed管理者のパスワード復旧を明示的に承認した場合だけ、`./dev-compose.sh exec web env NODE_ENV=development CONFIRM_LOCAL_SEED_ADMIN_PASSWORD_RESET=1 npm run db:reset-seed-admin-password`を実行する。実行後はcheckとログインを再確認する。
+
+`db:reset-seed-admin-password`は`NODE_ENV=development`、確認変数、local／Compose DB hostをすべて検証する。対象ユーザーが存在しなければ失敗し、ユーザーを新規作成しない。成功時はcredential passwordを現在の`SEED_ADMIN_PASSWORD`へ更新し、パスワード変更要求を解除して対象ユーザーの既存sessionを削除する。name、role、ban状態、access role assignment、他ユーザー、migration、named volumeは変更しない。パスワード、hash、接続URLをログへ出力しない。
+
 ## plan prototypeとHTMLレビュー
 
 `plans/<slug>/prototype/`は次の軽量なloopback serverで配信する。引数なしではcanonical prototypeから最終更新されたものを自動選択する。対象を指定する場合だけslugを渡す。

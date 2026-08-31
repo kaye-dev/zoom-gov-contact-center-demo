@@ -70,13 +70,30 @@ LocalのPrisma Studioは[http://localhost:5555](http://localhost:5555)です。w
 
 日常操作でraw `docker compose`は使いません。wrapperが`--project-directory`、project名、runtime envを必ず注入し、別worktreeへの誤操作を防ぎます。
 
-初回起動後、別ターミナルで初期管理者 seed を実行します。
+初回起動後や管理画面へのログインが必要になったときは、別ターミナルで最初に初期管理者の状態を確認します。このコマンドはDBを変更せず、パスワードも出力しません。
+
+```bash
+./dev-compose.sh exec web npm run db:check-seed-admin
+```
+
+結果が`MISSING`の場合だけ、初期管理者 seed を実行してから状態を再確認します。
 
 ```bash
 ./dev-compose.sh exec web npm run db:seed-admin
+./dev-compose.sh exec web npm run db:check-seed-admin
 ```
 
-初期管理者は compose の既定値では以下です。必要に応じて `.env` または環境変数で上書きしてください。
+`PRESENT_STANDARD`はcredential、admin role、ban、パスワード変更要求、FULL_ACCESS assignmentが標準状態であることを示しますが、設定されたパスワードとの一致までは証明しません。まず現在のseed用credentialでログインします。`PRESENT_NONSTANDARD`または既存ユーザーのログイン失敗を理由に`db:seed-admin`を自動実行してはいけません。
+
+ローカル開発DBに限り、既存のseed管理者のパスワードを明示的に復旧する場合は、対象と影響を確認してから次を実行します。
+
+```bash
+./dev-compose.sh exec web env NODE_ENV=development CONFIRM_LOCAL_SEED_ADMIN_PASSWORD_RESET=1 npm run db:reset-seed-admin-password
+```
+
+このリセットは`SEED_ADMIN_EMAIL`の既存ユーザーだけを対象とし、credential passwordを`SEED_ADMIN_PASSWORD`へ更新してパスワード変更要求を解除し、対象ユーザーの既存sessionを削除します。ユーザーが存在しない場合は作成しません。name、role、ban状態、access role assignmentは変更しません。実行結果にパスワードやhashは出力されません。
+
+初期管理者は compose の既定値では以下です。実行時の値は`.env`または環境変数で上書きされる場合があるため、現在のCompose設定を正本として扱ってください。
 
 ```text
 SEED_ADMIN_EMAIL=admin@example.local
