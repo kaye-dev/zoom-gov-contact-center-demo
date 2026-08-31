@@ -1,0 +1,636 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "予約公開API",
+    "version": "1.0.0",
+    "description": "Zoom Virtual Agentなどの外部システム向け予約API。空き枠は参考スナップショットであり、予約確定時のPOSTが最終判定です。"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "ローカル開発環境"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/public/v1/reservation-services": {
+      "get": {
+        "operationId": "listReservationServices",
+        "summary": "予約サービス一覧を取得する",
+        "x-reservation-permission": "LIST",
+        "responses": {
+          "200": { "$ref": "#/components/responses/ServiceList" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/public/v1/reservation-services/{serviceKey}/availability": {
+      "get": {
+        "operationId": "getReservationAvailability",
+        "summary": "31日以内の空き枠を取得する",
+        "x-reservation-permission": "LIST",
+        "parameters": [
+          { "$ref": "#/components/parameters/ServiceKey" },
+          { "$ref": "#/components/parameters/DateFromRequired" },
+          { "$ref": "#/components/parameters/DateToRequired" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/Availability" },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/public/v1/reservations": {
+      "get": {
+        "operationId": "listReservations",
+        "summary": "APIキーが作成した予約の一覧を取得する",
+        "x-reservation-permission": "LIST",
+        "parameters": [
+          { "$ref": "#/components/parameters/ServiceKeyOptional" },
+          { "$ref": "#/components/parameters/DateFromOptional" },
+          { "$ref": "#/components/parameters/DateToOptional" },
+          { "$ref": "#/components/parameters/Limit" },
+          { "$ref": "#/components/parameters/Cursor" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/ReservationList" },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      },
+      "post": {
+        "operationId": "createReservation",
+        "summary": "予約を登録する",
+        "description": "同じIdempotency-Keyと同じpayloadを24時間以内に再送すると、予約を増やさず元の予約を201で返します。HTTP requestごとにrequestIdと利用数は新しく記録されます。",
+        "x-reservation-permission": "CREATE",
+        "parameters": [
+          { "$ref": "#/components/parameters/IdempotencyKey" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ReservationWrite" },
+              "example": {
+                "serviceKey": "my-number-card",
+                "reservationDate": "2026-09-08",
+                "startMinute": 540,
+                "externalReferenceId": "zva_workflow_01J6J0F7X8R5T2A4"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "$ref": "#/components/responses/ReservationCreated" },
+          "400": { "$ref": "#/components/responses/InvalidOrMissingIdempotency" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/ReservationConflict" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/public/v1/reservations/{id}": {
+      "get": {
+        "operationId": "getReservation",
+        "summary": "指定した予約を取得する",
+        "x-reservation-permission": "READ",
+        "parameters": [
+          { "$ref": "#/components/parameters/ReservationId" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/ReservationRead" },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      },
+      "put": {
+        "operationId": "replaceReservation",
+        "summary": "予約を完全置換する",
+        "x-reservation-permission": "UPDATE",
+        "parameters": [
+          { "$ref": "#/components/parameters/ReservationId" },
+          { "$ref": "#/components/parameters/IfMatch" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ReservationWrite" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/ReservationReplaced" },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/ReservationConflict" },
+          "412": { "$ref": "#/components/responses/PreconditionFailed" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "428": { "$ref": "#/components/responses/PreconditionRequired" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      },
+      "patch": {
+        "operationId": "updateReservation",
+        "summary": "予約を部分更新する",
+        "x-reservation-permission": "UPDATE",
+        "parameters": [
+          { "$ref": "#/components/parameters/ReservationId" },
+          { "$ref": "#/components/parameters/IfMatch" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ReservationPatch" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/ReservationUpdated" },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/ReservationConflict" },
+          "412": { "$ref": "#/components/responses/PreconditionFailed" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "428": { "$ref": "#/components/responses/PreconditionRequired" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      },
+      "delete": {
+        "operationId": "deleteReservation",
+        "summary": "予約を削除する",
+        "x-reservation-permission": "DELETE",
+        "parameters": [
+          { "$ref": "#/components/parameters/ReservationId" },
+          { "$ref": "#/components/parameters/IfMatch" }
+        ],
+        "responses": {
+          "204": { "$ref": "#/components/responses/ReservationDeleted" },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "412": { "$ref": "#/components/responses/PreconditionFailed" },
+          "428": { "$ref": "#/components/responses/PreconditionRequired" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "予約APIキー管理画面で発行したAPIキーをBearer tokenとして送信します。"
+      }
+    },
+    "parameters": {
+      "ReservationId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": { "$ref": "#/components/schemas/OpaqueId" }
+      },
+      "ServiceKey": {
+        "name": "serviceKey",
+        "in": "path",
+        "required": true,
+        "schema": { "$ref": "#/components/schemas/ServiceKey" }
+      },
+      "ServiceKeyOptional": {
+        "name": "serviceKey",
+        "in": "query",
+        "required": false,
+        "schema": { "$ref": "#/components/schemas/ServiceKey" }
+      },
+      "DateFromRequired": {
+        "name": "dateFrom",
+        "in": "query",
+        "required": true,
+        "schema": { "$ref": "#/components/schemas/CalendarDate" }
+      },
+      "DateToRequired": {
+        "name": "dateTo",
+        "in": "query",
+        "required": true,
+        "schema": { "$ref": "#/components/schemas/CalendarDate" }
+      },
+      "DateFromOptional": {
+        "name": "dateFrom",
+        "in": "query",
+        "required": false,
+        "schema": { "$ref": "#/components/schemas/CalendarDate" }
+      },
+      "DateToOptional": {
+        "name": "dateTo",
+        "in": "query",
+        "required": false,
+        "schema": { "$ref": "#/components/schemas/CalendarDate" }
+      },
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 }
+      },
+      "Cursor": {
+        "name": "cursor",
+        "in": "query",
+        "required": false,
+        "schema": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" }
+      },
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "description": "16〜100文字の不透明な再送識別子。同じAPIキー内で24時間保持されます。個人情報を含めないでください。",
+        "schema": { "$ref": "#/components/schemas/OpaqueExternalId" }
+      },
+      "IfMatch": {
+        "name": "If-Match",
+        "in": "header",
+        "required": true,
+        "description": "直前のCREATE/GET/PUT/PATCHで受信した単一のstrong ETag。wildcardと複数値は使用できません。",
+        "schema": {
+          "type": "string",
+          "pattern": "^\\\"reservation-[A-Za-z0-9_-]{1,191}-v[1-9][0-9]*\\\"$",
+          "example": "\"reservation-rsv_01J6J0F7X8R5T2A4-v1\""
+        }
+      }
+    },
+    "headers": {
+      "XRequestId": {
+        "description": "このHTTP request固有の相関ID。JSON bodyのrequestIdおよび認証済み利用ログIDと一致します。",
+        "schema": { "type": "string", "pattern": "^rlog_[a-f0-9]{32}$" }
+      },
+      "Location": {
+        "description": "作成した予約の相対URL。",
+        "schema": { "type": "string", "pattern": "^/api/public/v1/reservations/[A-Za-z0-9_-]+$" }
+      },
+      "ETag": {
+        "description": "予約revisionを表すstrong ETag。",
+        "schema": { "type": "string", "pattern": "^\\\"reservation-[A-Za-z0-9_-]{1,191}-v[1-9][0-9]*\\\"$" }
+      },
+      "RetryAfter": {
+        "description": "月間上限がリセットされるまでの秒数。429にだけ返ります。",
+        "schema": { "type": "integer", "minimum": 1 }
+      },
+      "WwwAuthenticate": {
+        "description": "Bearer認証が必要であることを示します。",
+        "schema": { "type": "string", "const": "Bearer" }
+      }
+    },
+    "schemas": {
+      "OpaqueId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_-]{1,191}$"
+      },
+      "OpaqueExternalId": {
+        "type": "string",
+        "minLength": 16,
+        "maxLength": 100,
+        "pattern": "^[A-Za-z0-9_-]+$"
+      },
+      "CalendarDate": {
+        "type": "string",
+        "format": "date"
+      },
+      "ServiceKey": {
+        "type": "string",
+        "enum": ["my-number-card", "legal-consultation", "bulky-waste", "civic-facility"]
+      },
+      "ReservationWrite": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["serviceKey", "reservationDate", "startMinute", "externalReferenceId"],
+        "properties": {
+          "serviceKey": { "$ref": "#/components/schemas/ServiceKey" },
+          "reservationDate": { "$ref": "#/components/schemas/CalendarDate" },
+          "startMinute": { "type": "integer", "minimum": 0, "maximum": 1439 },
+          "externalReferenceId": { "$ref": "#/components/schemas/OpaqueExternalId" }
+        }
+      },
+      "ReservationPatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
+          "serviceKey": { "$ref": "#/components/schemas/ServiceKey" },
+          "reservationDate": { "$ref": "#/components/schemas/CalendarDate" },
+          "startMinute": { "type": "integer", "minimum": 0, "maximum": 1439 },
+          "externalReferenceId": { "$ref": "#/components/schemas/OpaqueExternalId" }
+        }
+      },
+      "Reservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "serviceKey", "reservationDate", "startMinute", "externalReferenceId", "version", "createdAt", "updatedAt"],
+        "properties": {
+          "id": { "$ref": "#/components/schemas/OpaqueId" },
+          "serviceKey": { "$ref": "#/components/schemas/ServiceKey" },
+          "reservationDate": { "$ref": "#/components/schemas/CalendarDate" },
+          "startMinute": { "type": "integer", "minimum": 0, "maximum": 1439 },
+          "externalReferenceId": { "oneOf": [{ "$ref": "#/components/schemas/OpaqueExternalId" }, { "type": "null" }] },
+          "version": { "type": "integer", "minimum": 1 },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "RequestIdentity": {
+        "type": "object",
+        "required": ["resultCode", "requestId"],
+        "properties": {
+          "resultCode": { "type": "string" },
+          "requestId": { "type": "string", "pattern": "^rlog_[a-f0-9]{32}$" }
+        }
+      },
+      "ReservationEnvelope": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RequestIdentity" },
+          {
+            "type": "object",
+            "required": ["reservationId", "version", "reservation"],
+            "properties": {
+              "reservationId": { "$ref": "#/components/schemas/OpaqueId" },
+              "version": { "type": "integer", "minimum": 1 },
+              "reservation": { "$ref": "#/components/schemas/Reservation" }
+            }
+          }
+        ]
+      },
+      "ReservationListEnvelope": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RequestIdentity" },
+          {
+            "type": "object",
+            "required": ["items", "nextCursor"],
+            "properties": {
+              "items": { "type": "array", "items": { "$ref": "#/components/schemas/Reservation" } },
+              "nextCursor": { "oneOf": [{ "type": "string" }, { "type": "null" }] }
+            }
+          }
+        ]
+      },
+      "ReservationService": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["serviceKey", "reservationMethod", "weekdays", "slots"],
+        "properties": {
+          "serviceKey": { "$ref": "#/components/schemas/ServiceKey" },
+          "reservationMethod": { "type": "string", "enum": ["DATE", "DATETIME"] },
+          "weekdays": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 6 } },
+          "slots": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["startMinute", "slotDurationMinutes", "capacity"],
+              "properties": {
+                "startMinute": { "type": "integer", "minimum": 0, "maximum": 1439 },
+                "slotDurationMinutes": { "type": "integer", "minimum": 1 },
+                "capacity": { "type": "integer", "minimum": 1 }
+              }
+            }
+          }
+        }
+      },
+      "ServiceListEnvelope": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RequestIdentity" },
+          {
+            "type": "object",
+            "required": ["services"],
+            "properties": {
+              "services": { "type": "array", "items": { "$ref": "#/components/schemas/ReservationService" } }
+            }
+          }
+        ]
+      },
+      "AvailabilityEnvelope": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RequestIdentity" },
+          {
+            "type": "object",
+            "required": ["availability"],
+            "properties": {
+              "availability": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["serviceKey", "dateFrom", "dateTo", "days"],
+                "properties": {
+                  "serviceKey": { "$ref": "#/components/schemas/ServiceKey" },
+                  "dateFrom": { "$ref": "#/components/schemas/CalendarDate" },
+                  "dateTo": { "$ref": "#/components/schemas/CalendarDate" },
+                  "days": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["date", "status", "slots"],
+                      "properties": {
+                        "date": { "$ref": "#/components/schemas/CalendarDate" },
+                        "status": { "type": "string", "enum": ["AVAILABLE", "LIMITED", "FULL", "CLOSED"] },
+                        "slots": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": ["startMinute", "capacity", "booked", "remaining", "status"],
+                            "properties": {
+                              "startMinute": { "type": "integer", "minimum": 0, "maximum": 1439 },
+                              "capacity": { "type": "integer", "minimum": 1 },
+                              "booked": { "type": "integer", "minimum": 0 },
+                              "remaining": { "type": "integer", "minimum": 0 },
+                              "status": { "type": "string", "enum": ["AVAILABLE", "LIMITED", "FULL"] }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "PublicError": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["error", "message", "retryable", "requestId"],
+        "properties": {
+          "error": {
+            "type": "string",
+            "enum": [
+              "RESERVATION_API_INVALID_REQUEST",
+              "RESERVATION_API_UNAUTHORIZED",
+              "RESERVATION_API_FORBIDDEN",
+              "RESERVATION_API_NOT_FOUND",
+              "RESERVATION_SLOT_FULL",
+              "RESERVATION_IDEMPOTENCY_KEY_REQUIRED",
+              "RESERVATION_IDEMPOTENCY_KEY_REUSED",
+              "RESERVATION_EXTERNAL_REFERENCE_CONFLICT",
+              "RESERVATION_PRECONDITION_REQUIRED",
+              "RESERVATION_PRECONDITION_FAILED",
+              "RESERVATION_API_UNSUPPORTED_MEDIA_TYPE",
+              "RESERVATION_API_MONTHLY_LIMIT_EXCEEDED",
+              "RESERVATION_API_KEY_MONTHLY_LIMIT_EXCEEDED",
+              "RESERVATION_API_OPERATION_FAILED",
+              "RESERVATION_API_INTERNAL_ERROR"
+            ]
+          },
+          "message": { "type": "string" },
+          "retryable": { "type": "boolean" },
+          "requestId": { "type": "string", "pattern": "^rlog_[a-f0-9]{32}$" },
+          "details": { "type": "object" }
+        }
+      }
+    },
+    "responses": {
+      "ServiceList": {
+        "description": "サービス一覧",
+        "headers": { "X-Request-ID": { "$ref": "#/components/headers/XRequestId" } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ServiceListEnvelope" } } }
+      },
+      "Availability": {
+        "description": "空き枠スナップショット",
+        "headers": { "X-Request-ID": { "$ref": "#/components/headers/XRequestId" } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AvailabilityEnvelope" } } }
+      },
+      "ReservationList": {
+        "description": "予約一覧",
+        "headers": { "X-Request-ID": { "$ref": "#/components/headers/XRequestId" } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReservationListEnvelope" } } }
+      },
+      "ReservationCreated": {
+        "description": "予約を作成または冪等再送した",
+        "headers": {
+          "X-Request-ID": { "$ref": "#/components/headers/XRequestId" },
+          "Location": { "$ref": "#/components/headers/Location" },
+          "ETag": { "$ref": "#/components/headers/ETag" }
+        },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReservationEnvelope" } } }
+      },
+      "ReservationRead": {
+        "description": "予約詳細",
+        "headers": {
+          "X-Request-ID": { "$ref": "#/components/headers/XRequestId" },
+          "ETag": { "$ref": "#/components/headers/ETag" }
+        },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReservationEnvelope" } } }
+      },
+      "ReservationReplaced": {
+        "description": "予約を完全置換した",
+        "headers": {
+          "X-Request-ID": { "$ref": "#/components/headers/XRequestId" },
+          "ETag": { "$ref": "#/components/headers/ETag" }
+        },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReservationEnvelope" } } }
+      },
+      "ReservationUpdated": {
+        "description": "予約を部分更新した",
+        "headers": {
+          "X-Request-ID": { "$ref": "#/components/headers/XRequestId" },
+          "ETag": { "$ref": "#/components/headers/ETag" }
+        },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReservationEnvelope" } } }
+      },
+      "ReservationDeleted": {
+        "description": "予約を削除した。bodyは返しません。",
+        "headers": { "X-Request-ID": { "$ref": "#/components/headers/XRequestId" } }
+      },
+      "InvalidRequest": {
+        "description": "JSON、query、pathまたはbodyが不正",
+        "headers": { "X-Request-ID": { "$ref": "#/components/headers/XRequestId" } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PublicError" } } }
+      },
+      "InvalidOrMissingIdempotency": {
+        "description": "Idempotency-Key欠落・不正、またはJSON/bodyが不正",
+        "headers": { "X-Request-ID": { "$ref": "#/components/headers/XRequestId" } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PublicError" } } }
+      },
+      "Unauthorized": {
+        "description": "Bearer credentialが欠落、不正、未知または無効",
+        "headers": {
+          "X-Request-ID": { "$ref": "#/components/headers/XRequestId" },
+          "WWW-Authenticate": { "$ref": "#/components/headers/WwwAuthenticate" }
+        },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PublicError" } } }
+      },
+      "Forbidden": {
+        "description": "APIキーに必要な権限がない",
+        "headers": { "X-Request-ID": { "$ref": "#/components/headers/XRequestId" } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PublicError" } } }
+      },
+      "NotFound": {
+        "description": "サービスまたはこのAPIキーが所有する予約が存在しない",
+        "headers": { "X-Request-ID": { "$ref": "#/components/headers/XRequestId" } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PublicError" } } }
+      },
+      "ReservationConflict": {
+        "description": "満枠、Idempotency-Key再利用、またはexternalReferenceId競合",
+        "headers": { "X-Request-ID": { "$ref": "#/components/headers/XRequestId" } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PublicError" } } }
+      },
+      "PreconditionFailed": {
+        "description": "If-Matchが予約の現在revisionと一致しない",
+        "headers": { "X-Request-ID": { "$ref": "#/components/headers/XRequestId" } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PublicError" } } }
+      },
+      "UnsupportedMediaType": {
+        "description": "Content-Typeがapplication/jsonではない",
+        "headers": { "X-Request-ID": { "$ref": "#/components/headers/XRequestId" } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PublicError" } } }
+      },
+      "PreconditionRequired": {
+        "description": "If-Matchが欠落している",
+        "headers": { "X-Request-ID": { "$ref": "#/components/headers/XRequestId" } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PublicError" } } }
+      },
+      "TooManyRequests": {
+        "description": "自治体全体またはAPIキーごとの月間上限に到達した",
+        "headers": {
+          "X-Request-ID": { "$ref": "#/components/headers/XRequestId" },
+          "Retry-After": { "$ref": "#/components/headers/RetryAfter" }
+        },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PublicError" } } }
+      },
+      "InternalError": {
+        "description": "再試行可能な内部障害",
+        "headers": { "X-Request-ID": { "$ref": "#/components/headers/XRequestId" } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PublicError" } } }
+      }
+    }
+  }
+}

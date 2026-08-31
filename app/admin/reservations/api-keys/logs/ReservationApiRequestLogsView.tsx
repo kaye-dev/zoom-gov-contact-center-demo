@@ -56,6 +56,7 @@ export function ReservationApiRequestLogsView({
               <option value="">{copy.filter.all}</option>
               <option value="GET">GET</option>
               <option value="POST">POST</option>
+              <option value="PUT">PUT</option>
               <option value="PATCH">PATCH</option>
               <option value="DELETE">DELETE</option>
             </select>
@@ -81,7 +82,22 @@ export function ReservationApiRequestLogsView({
           </div>
           <p id="api-log-result-count" className="text-sm font-semibold text-fg-muted">{formatTemplate(copy.list.count, { count: formatCount(logs.length, locale) })}</p>
         </div>
-        <div id="api-log-list-wrap" hidden={!hasLogs} className="max-w-full overflow-x-auto">
+        <div
+          id="api-log-list-wrap"
+          hidden={!hasLogs}
+          role="region"
+          aria-label={copy.list.scrollRegion}
+          tabIndex={0}
+          onKeyDown={(event) => {
+            if (event.target !== event.currentTarget) return;
+            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+            event.preventDefault();
+            event.currentTarget.scrollBy({
+              left: event.key === "ArrowRight" ? 48 : -48,
+            });
+          }}
+          className="max-w-full overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
+        >
           <div id="api-log-list-grid" className="min-w-[1720px] text-sm">
             <div aria-hidden="true" className={`${API_LOG_GRID_CLASS_NAME} bg-surface px-5 py-3 font-semibold`}>
               <span>{copy.list.requestedAt}</span>
@@ -151,7 +167,7 @@ function buildNextPageHref(
 function methodBadgeClassName(method: ReservationApiRequestLogMethod) {
   if (method === "GET") return "bg-green-100 text-green-800 dark:bg-green-950/60 dark:text-green-200";
   if (method === "POST") return "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-200";
-  if (method === "PATCH") return "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200";
+  if (method === "PUT" || method === "PATCH") return "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200";
   return "bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-200";
 }
 

@@ -6,6 +6,7 @@ import test from "node:test";
 const migrationPath = new URL("../prisma/migrations/20260830180000_add_reservation_api_keys/migration.sql", import.meta.url);
 const keyUsageMigrationPath = new URL("../prisma/migrations/20260830230000_add_reservation_api_key_usage_limits/migration.sql", import.meta.url);
 const requestLogMigrationPath = new URL("../prisma/migrations/20260831010000_add_reservation_api_request_logs/migration.sql", import.meta.url);
+const zvaSafetyMigrationPath = new URL("../prisma/migrations/20260831140000_add_reservation_api_zva_safety/migration.sql", import.meta.url);
 
 test("reservation API migration is additive and manifest hash is exact", () => {
   const migration = readFileSync(migrationPath, "utf8");
@@ -48,6 +49,17 @@ test("reservation API migration is additive and manifest hash is exact", () => {
   assert.doesNotMatch(requestLogMigration, /^\s*(?:DROP|TRUNCATE|RENAME|UPDATE)\b/imu);
 
   const requestLogSha256 = createHash("sha256").update(requestLogMigration).digest("hex");
+  const zvaSafetyMigration = readFileSync(zvaSafetyMigrationPath, "utf8");
+  for (const column of ["apiKeyId", "externalReferenceId", "revision"]) {
+    assert.match(zvaSafetyMigration, new RegExp(`ADD COLUMN "${column}"`, "u"));
+  }
+  assert.match(zvaSafetyMigration, /CREATE TABLE "reservation_api_idempotency_records"/u);
+  assert.doesNotMatch(zvaSafetyMigration, /reservation_bookings_apiKeyId_externalReferenceId_key/u);
+  assert.match(zvaSafetyMigration, /reservation_api_request_logs_idempotency_outcome_check/u);
+  assert.match(zvaSafetyMigration, /idempotency_outcome_check"[\s\S]*NOT VALID/u);
+  assert.doesNotMatch(zvaSafetyMigration, /reservation_api_idempotency_records_reservationId_fkey/u);
+  assert.doesNotMatch(zvaSafetyMigration, /^\s*(?:DROP|TRUNCATE|RENAME|UPDATE)\b/imu);
+  const zvaSafetySha256 = createHash("sha256").update(zvaSafetyMigration).digest("hex");
   const manifest = JSON.parse(readFileSync(new URL("../scripts/deploy/migrations.manifest.json", import.meta.url), "utf8")) as {
     migrations: Array<{ name: string; sha256: string; classification: string }>;
   };
@@ -59,12 +71,21 @@ test("reservation API migration is additive and manifest hash is exact", () => {
       classification: "expand-compatible",
     },
   );
-  assert.deepEqual(manifest.migrations.at(-1), {
+  assert.deepEqual(
+    manifest.migrations.find(({ name }) => name === "20260831010000_add_reservation_api_request_logs"),
+    {
     name: "20260831010000_add_reservation_api_request_logs",
     sha256: requestLogSha256,
+    classification: "expand-compatible",
+    },
+  );
+  assert.deepEqual(manifest.migrations.at(-1), {
+    name: "20260831140000_add_reservation_api_zva_safety",
+    sha256: zvaSafetySha256,
     classification: "expand-compatible",
   });
   const reviewed = readFileSync(new URL("../scripts/deploy/lib/reviewed-migrations.ts", import.meta.url), "utf8");
   assert.match(reviewed, new RegExp(keyUsageSha256, "u"));
   assert.match(reviewed, new RegExp(requestLogSha256, "u"));
+  assert.match(reviewed, new RegExp(zvaSafetySha256, "u"));
 });

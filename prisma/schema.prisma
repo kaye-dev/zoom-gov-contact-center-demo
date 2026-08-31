@@ -290,13 +290,16 @@ model AdminAccessMutationState {
 }
 
 model ReservationBooking {
-  id              String    @id @default(cuid())
-  serviceKey      String
-  reservationDate DateTime  @db.Date
-  startMinute     Int
-  isDemo          Boolean   @default(false)
-  createdAt       DateTime  @default(now()) @db.Timestamptz(3)
-  updatedAt       DateTime? @updatedAt @db.Timestamptz(3)
+  id                  String    @id @default(cuid())
+  serviceKey          String
+  reservationDate     DateTime  @db.Date
+  startMinute         Int
+  isDemo              Boolean   @default(false)
+  apiKeyId            String?
+  externalReferenceId String?
+  revision            Int?
+  createdAt           DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime? @updatedAt @db.Timestamptz(3)
 
   @@index([serviceKey, reservationDate, startMinute])
   @@index([reservationDate, isDemo])
@@ -316,11 +319,12 @@ model ReservationApiKey {
   createdByUserId String?
   revokedByUserId String?
 
-  createdBy    user?                           @relation("ReservationApiKeyCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  revokedBy    user?                           @relation("ReservationApiKeyRevokedBy", fields: [revokedByUserId], references: [id], onDelete: SetNull)
-  permissions  ReservationApiKeyPermission[]
-  monthlyUsage ReservationApiKeyMonthlyUsage[]
-  requestLogs  ReservationApiRequestLog[]
+  createdBy          user?                             @relation("ReservationApiKeyCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  revokedBy          user?                             @relation("ReservationApiKeyRevokedBy", fields: [revokedByUserId], references: [id], onDelete: SetNull)
+  permissions        ReservationApiKeyPermission[]
+  monthlyUsage       ReservationApiKeyMonthlyUsage[]
+  requestLogs        ReservationApiRequestLog[]
+  idempotencyRecords ReservationApiIdempotencyRecord[]
 
   @@index([createdAt, id])
   @@index([revokedAt])
@@ -328,22 +332,25 @@ model ReservationApiKey {
 }
 
 model ReservationApiRequestLog {
-  id             String                   @id @default(cuid())
-  apiKeyId       String?
-  apiKeyName     String
-  apiKeyPreview  String
-  permission     ReservationApiPermission
-  method         String
-  path           String
-  pathParameters Json?
-  query          Json?
-  requestBody    Json?
-  responseBody   Json?
-  statusCode     Int
-  errorCode      String?
-  durationMs     Int
-  requestedAt    DateTime                 @db.Timestamptz(3)
-  completedAt    DateTime                 @db.Timestamptz(3)
+  id                 String                   @id @default(cuid())
+  apiKeyId           String?
+  apiKeyName         String
+  apiKeyPreview      String
+  permission         ReservationApiPermission
+  method             String
+  path               String
+  pathParameters     Json?
+  query              Json?
+  requestBody        Json?
+  responseBody       Json?
+  statusCode         Int
+  errorCode          String?
+  durationMs         Int
+  requestedAt        DateTime                 @db.Timestamptz(3)
+  completedAt        DateTime                 @db.Timestamptz(3)
+  idempotencyOutcome String?
+  responseLocation   String?
+  responseEtag       String?
 
   apiKey ReservationApiKey? @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
 
@@ -352,6 +359,27 @@ model ReservationApiRequestLog {
   @@index([method, requestedAt])
   @@index([statusCode, requestedAt])
   @@map("reservation_api_request_logs")
+}
+
+model ReservationApiIdempotencyRecord {
+  id               String   @id @default(cuid())
+  apiKeyId         String
+  keyDigest        String
+  requestDigest    String
+  reservationId    String
+  statusCode       Int
+  responseBody     Json
+  responseLocation String
+  responseEtag     String
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
+  expiresAt        DateTime @db.Timestamptz(3)
+
+  apiKey ReservationApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  @@unique([apiKeyId, keyDigest])
+  @@index([expiresAt])
+  @@index([reservationId])
+  @@map("reservation_api_idempotency_records")
 }
 
 model ReservationApiKeyMonthlyUsage {

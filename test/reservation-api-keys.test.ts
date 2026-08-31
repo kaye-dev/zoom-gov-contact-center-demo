@@ -80,14 +80,19 @@ test("API request log list has required columns and native row links", () => {
   }
   assert.match(source, /<Link id=\{index === 0 \? "api-log-row-primary"/u);
   assert.match(source, /encodeURIComponent\(log\.id\)/u);
-  assert.doesNotMatch(source, /role="link"|tabIndex=\{?0\}?/u);
+  assert.doesNotMatch(source, /role="link"/u);
+  assert.match(source, /role="region"/u);
+  assert.match(source, /aria-label=\{copy\.list\.scrollRegion\}/u);
+  assert.match(source, /tabIndex=\{0\}/u);
+  assert.match(source, /event\.target !== event\.currentTarget/u);
+  assert.match(source, /left: event\.key === "ArrowRight" \? 48 : -48/u);
 });
 
 test("API request log rows preserve full-width hover and focus after horizontal scroll", () => {
   const source = sourceFile(
     "../app/admin/reservations/api-keys/logs/ReservationApiRequestLogsView.tsx",
   );
-  assert.match(source, /id="api-log-list-wrap"[^>]*className="max-w-full overflow-x-auto"/u);
+  assert.match(source, /id="api-log-list-wrap"[\s\S]*?className="max-w-full overflow-x-auto focus-visible:outline-2/u);
   assert.match(source, /id="api-log-list-grid"[^>]*className="min-w-\[1720px\] text-sm"/u);
   assert.match(source, /grid w-full grid-cols-\[192px_304px_112px_432px_120px_120px_300px\] gap-4/u);
   assert.match(source, /hover:bg-surface-hover focus:bg-surface-hover/u);
@@ -190,8 +195,11 @@ test("public API table renders readable endpoint paths and natural READ copy", (
   const source = sourceFile(
     "../app/admin/reservations/api-keys/ReservationApiKeysView.tsx",
   );
-  assert.match(source, /id="public-api-table"[^>]*table-fixed min-w-\[960px\]/u);
-  assert.match(source, /<col className="w-\[140px\]" \/><col className="w-\[140px\]" \/><col className="w-\[420px\]" \/><col className="w-\[260px\]"/u);
+  assert.match(source, /id="public-api-table"[^>]*table-fixed min-w-\[1160px\]/u);
+  assert.match(source, /<col className="w-\[140px\]" \/><col className="w-\[140px\]" \/><col className="w-\[600px\]" \/><col className="w-\[280px\]"/u);
+  assert.match(source, /const PUBLIC_API_ROWS/u);
+  const publicApiRows = source.match(/const PUBLIC_API_ROWS[\s\S]*?\n\];/u)?.[0] ?? "";
+  assert.equal((publicApiRows.match(/\{ permission: "(?:LIST|READ|CREATE|UPDATE|DELETE)", method: "(?:GET|POST|PUT|PATCH|DELETE)", endpoint: "[^"]+", operation: "(?:services|availability|list|read|create|replace|update|delete)" \}/gu) ?? []).length, 8);
   assert.match(source, /<span id=\{index === 0 \? "public-api-endpoint-primary"[^>]*className="whitespace-nowrap font-mono text-sm font-semibold text-fg">\{row\.endpoint\}<\/span>/u);
   assert.doesNotMatch(source, /<code[^>]*>\{row\.endpoint\}<\/code>/u);
   assert.equal(dictionaries.ja.admin.reservationManagement.apiKeys.api.descriptions.READ, "指定した予約の取得");
@@ -217,12 +225,12 @@ test("reservation API tables preserve fixed columns inside local horizontal scro
   const logSource = sourceFile(
     "../app/admin/reservations/api-keys/logs/ReservationApiRequestLogsView.tsx",
   );
-  assert.match(keySource, /id="public-api-table"[^>]*min-w-\[960px\]/u);
+  assert.match(keySource, /id="public-api-table"[^>]*min-w-\[1160px\]/u);
   assert.match(keySource, /id="api-key-table"[^>]*min-w-\[1450px\]/u);
   assert.match(logSource, /id="api-log-list-grid"[^>]*min-w-\[1720px\]/u);
   assert.match(keySource, /id="api-key-table-wrap" className="max-w-full overflow-x-auto"/u);
-  assert.match(logSource, /id="api-log-list-wrap"[^>]*className="max-w-full overflow-x-auto"/u);
-  assert.doesNotMatch(keySource, /(?:sm|md|lg):min-w-\[(?:960|1450)px\]/u);
+  assert.match(logSource, /id="api-log-list-wrap"[\s\S]*?className="max-w-full overflow-x-auto/u);
+  assert.doesNotMatch(keySource, /(?:sm|md|lg):min-w-\[(?:1160|1450)px\]/u);
   assert.doesNotMatch(logSource, /(?:sm|md|lg):min-w-\[1720px\]/u);
 });
 

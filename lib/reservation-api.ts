@@ -21,9 +21,16 @@ export const RESERVATION_API_ERROR_CODES = {
   forbidden: "RESERVATION_API_FORBIDDEN",
   notFound: "RESERVATION_API_NOT_FOUND",
   slotFull: "RESERVATION_SLOT_FULL",
+  idempotencyKeyRequired: "RESERVATION_IDEMPOTENCY_KEY_REQUIRED",
+  idempotencyKeyReused: "RESERVATION_IDEMPOTENCY_KEY_REUSED",
+  externalReferenceConflict: "RESERVATION_EXTERNAL_REFERENCE_CONFLICT",
+  preconditionRequired: "RESERVATION_PRECONDITION_REQUIRED",
+  preconditionFailed: "RESERVATION_PRECONDITION_FAILED",
+  unsupportedMediaType: "RESERVATION_API_UNSUPPORTED_MEDIA_TYPE",
   monthlyLimitExceeded: "RESERVATION_API_MONTHLY_LIMIT_EXCEEDED",
   keyMonthlyLimitExceeded: "RESERVATION_API_KEY_MONTHLY_LIMIT_EXCEEDED",
   operationFailed: "RESERVATION_API_OPERATION_FAILED",
+  internalError: "RESERVATION_API_INTERNAL_ERROR",
   keyNotFound: "RESERVATION_API_KEY_NOT_FOUND",
   keyConflict: "RESERVATION_API_KEY_CONFLICT",
   usageLimitConflict: "RESERVATION_API_USAGE_LIMIT_CONFLICT",
@@ -36,6 +43,8 @@ export type ReservationDto = {
   serviceKey: ReservationServiceKey;
   reservationDate: string;
   startMinute: number;
+  externalReferenceId: string | null;
+  version: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -63,6 +72,7 @@ export type ReservationWriteInput = {
   serviceKey: ReservationServiceKey;
   reservationDate: string;
   startMinute: number;
+  externalReferenceId: string;
 };
 
 export type ReservationPatchInput = Partial<ReservationWriteInput>;
@@ -74,6 +84,51 @@ export type ReservationListInput = {
   limit: number;
   cursor?: { createdAt: Date; id: string };
 };
+
+export type ReservationServiceDto = {
+  serviceKey: ReservationServiceKey;
+  reservationMethod: "DATE" | "DATETIME";
+  weekdays: number[];
+  slots: Array<{
+    startMinute: number;
+    slotDurationMinutes: number;
+    capacity: number;
+  }>;
+};
+
+export type ReservationAvailabilitySlotDto = {
+  startMinute: number;
+  capacity: number;
+  booked: number;
+  remaining: number;
+  status: "AVAILABLE" | "LIMITED" | "FULL";
+};
+
+export type ReservationAvailabilityDto = {
+  serviceKey: ReservationServiceKey;
+  dateFrom: string;
+  dateTo: string;
+  days: Array<{
+    date: string;
+    status: "AVAILABLE" | "LIMITED" | "FULL" | "CLOSED";
+    slots: ReservationAvailabilitySlotDto[];
+  }>;
+};
+
+export type PublicReservationError = {
+  error: string;
+  message: string;
+  retryable: boolean;
+  requestId: string;
+  details?: unknown;
+};
+
+export type PublicReservationSuccess<T extends Record<string, unknown>> = {
+  resultCode: string;
+  requestId: string;
+} & T;
+
+export const RESERVATION_EXTERNAL_REFERENCE_PATTERN = /^[A-Za-z0-9_-]{16,100}$/u;
 
 export function isReservationApiPermission(
   value: unknown,
@@ -146,22 +201,24 @@ function parseReservationApiKeyUsageLimit(
 }
 
 export function parseReservationWrite(value: unknown): ReservationWriteInput | null {
-  if (!isExactRecord(value, ["serviceKey", "reservationDate", "startMinute"])) return null;
+  if (!isExactRecord(value, ["serviceKey", "reservationDate", "startMinute", "externalReferenceId"])) return null;
   if (typeof value.serviceKey !== "string" || !isReservationServiceKey(value.serviceKey) ||
       typeof value.reservationDate !== "string" || !isReservationDate(value.reservationDate) ||
-      !Number.isInteger(value.startMinute) || Number(value.startMinute) < 0 || Number(value.startMinute) > 1439) {
+      !Number.isInteger(value.startMinute) || Number(value.startMinute) < 0 || Number(value.startMinute) > 1439 ||
+      typeof value.externalReferenceId !== "string" || !RESERVATION_EXTERNAL_REFERENCE_PATTERN.test(value.externalReferenceId)) {
     return null;
   }
   return {
     serviceKey: value.serviceKey,
     reservationDate: value.reservationDate,
     startMinute: Number(value.startMinute),
+    externalReferenceId: value.externalReferenceId,
   };
 }
 
 export function parseReservationPatch(value: unknown): ReservationPatchInput | null {
   if (!isRecord(value)) return null;
-  const allowed = ["serviceKey", "reservationDate", "startMinute"];
+  const allowed = ["serviceKey", "reservationDate", "startMinute", "externalReferenceId"];
   const keys = Object.keys(value);
   if (keys.length < 1 || keys.some((key) => !allowed.includes(key))) return null;
   const result: ReservationPatchInput = {};
@@ -177,7 +234,50 @@ export function parseReservationPatch(value: unknown): ReservationPatchInput | n
     if (!Number.isInteger(value.startMinute) || Number(value.startMinute) < 0 || Number(value.startMinute) > 1439) return null;
     result.startMinute = Number(value.startMinute);
   }
+  if ("externalReferenceId" in value) {
+    if (typeof value.externalReferenceId !== "string" ||
+        !RESERVATION_EXTERNAL_REFERENCE_PATTERN.test(value.externalReferenceId)) return null;
+    result.externalReferenceId = value.externalReferenceId;
+  }
   return result;
+}
+
+export function parseReservationIdempotencyKey(value: string | null): string | null {
+  return value && RESERVATION_EXTERNAL_REFERENCE_PATTERN.test(value) ? value : null;
+}
+
+export function parseReservationIfMatch(
+  value: string | null,
+  reservationId: string,
+): number | null {
+  if (!value || value.includes(",") || value === "*") return null;
+  const match = /^"reservation-([A-Za-z0-9_-]{1,191})-v([1-9]\d*)"$/u.exec(value);
+  if (!match || match[1] !== reservationId) return null;
+  const revision = Number(match[2]);
+  return Number.isSafeInteger(revision) ? revision : null;
+}
+
+export function reservationEtag(reservation: Pick<ReservationDto, "id" | "version">): string {
+  return `"reservation-${reservation.id}-v${reservation.version}"`;
+}
+
+export function parseReservationAvailability(
+  url: URL,
+): { dateFrom: string; dateTo: string } | null {
+  const keys = [...url.searchParams.keys()];
+  if (keys.length !== 2 ||
+      keys.some((key) => key !== "dateFrom" && key !== "dateTo") ||
+      url.searchParams.getAll("dateFrom").length !== 1 ||
+      url.searchParams.getAll("dateTo").length !== 1) return null;
+  const dateFrom = url.searchParams.get("dateFrom");
+  const dateTo = url.searchParams.get("dateTo");
+  if (!dateFrom || !dateTo || !isReservationDate(dateFrom) ||
+      !isReservationDate(dateTo) || dateFrom > dateTo) return null;
+  const dayCount = Math.round(
+    (Date.parse(`${dateTo}T00:00:00.000Z`) - Date.parse(`${dateFrom}T00:00:00.000Z`)) /
+      (24 * 60 * 60 * 1_000),
+  ) + 1;
+  return dayCount >= 1 && dayCount <= 31 ? { dateFrom, dateTo } : null;
 }
 
 export function parseReservationId(value: string): string | null {

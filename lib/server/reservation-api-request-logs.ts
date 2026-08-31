@@ -7,6 +7,7 @@ export const RESERVATION_API_REQUEST_LOG_PAGE_SIZE = 50;
 export const RESERVATION_API_REQUEST_LOG_METHODS = [
   "GET",
   "POST",
+  "PUT",
   "PATCH",
   "DELETE",
 ] as const;
@@ -41,6 +42,9 @@ export type ReservationApiRequestLogDetail = ReservationApiRequestLogSummary & {
   query: Prisma.JsonValue | null;
   requestBody: Prisma.JsonValue | null;
   responseBody: Prisma.JsonValue | null;
+  idempotencyOutcome: "NEW" | "REPLAY" | "CONFLICT" | null;
+  responseLocation: string | null;
+  responseEtag: string | null;
 };
 
 export type ReservationApiRequestLogListInput = {
@@ -51,6 +55,7 @@ export type ReservationApiRequestLogListInput = {
 };
 
 export type ReservationApiRequestLogRecordInput = {
+  id: string;
   apiKeyId: string;
   apiKeyName: string;
   apiKeyPreview: string;
@@ -66,6 +71,9 @@ export type ReservationApiRequestLogRecordInput = {
   durationMs: number;
   requestedAt: Date;
   completedAt: Date;
+  idempotencyOutcome: "NEW" | "REPLAY" | "CONFLICT" | null;
+  responseLocation: string | null;
+  responseEtag: string | null;
 };
 
 type SearchParamsRecord = Record<string, string | string[] | undefined>;
@@ -260,6 +268,9 @@ export async function getReservationApiRequestLog(
       durationMs: true,
       requestedAt: true,
       completedAt: true,
+      idempotencyOutcome: true,
+      responseLocation: true,
+      responseEtag: true,
     },
   });
   return row ? toReservationApiRequestLogDetail(row) : null;
@@ -276,6 +287,7 @@ export async function recordReservationApiRequestLog(
     });
     await transaction.reservationApiRequestLog.create({
       data: {
+        id: input.id,
         apiKeyId: input.apiKeyId,
         apiKeyName: input.apiKeyName,
         apiKeyPreview: input.apiKeyPreview,
@@ -291,6 +303,9 @@ export async function recordReservationApiRequestLog(
         durationMs: input.durationMs,
         requestedAt: input.requestedAt,
         completedAt: input.completedAt,
+        idempotencyOutcome: input.idempotencyOutcome,
+        responseLocation: input.responseLocation,
+        responseEtag: input.responseEtag,
       },
     });
   });
@@ -348,6 +363,9 @@ function toReservationApiRequestLogDetail(row: {
   durationMs: number;
   requestedAt: Date;
   completedAt: Date;
+  idempotencyOutcome: string | null;
+  responseLocation: string | null;
+  responseEtag: string | null;
 }): ReservationApiRequestLogDetail {
   return {
     ...toReservationApiRequestLogSummary(row),
@@ -356,10 +374,19 @@ function toReservationApiRequestLogDetail(row: {
     query: canonicalizeReservationApiLogJson(row.query),
     requestBody: canonicalizeReservationApiLogJson(row.requestBody),
     responseBody: canonicalizeReservationApiLogJson(row.responseBody),
+    idempotencyOutcome: isReservationApiIdempotencyOutcome(row.idempotencyOutcome)
+      ? row.idempotencyOutcome
+      : null,
+    responseLocation: row.responseLocation,
+    responseEtag: row.responseEtag,
   };
 }
 
 const RESERVATION_API_LOG_JSON_KEY_ORDER = [
+  "resultCode",
+  "requestId",
+  "reservationId",
+  "version",
   "reservation",
   "items",
   "nextCursor",
@@ -367,6 +394,7 @@ const RESERVATION_API_LOG_JSON_KEY_ORDER = [
   "serviceKey",
   "reservationDate",
   "startMinute",
+  "externalReferenceId",
   "createdAt",
   "updatedAt",
   "dateFrom",
@@ -374,6 +402,9 @@ const RESERVATION_API_LOG_JSON_KEY_ORDER = [
   "limit",
   "cursor",
   "error",
+  "message",
+  "retryable",
+  "details",
 ] as const;
 
 function canonicalizeReservationApiLogJson(
@@ -427,6 +458,12 @@ function isReservationApiRequestLogResult(
   return RESERVATION_API_REQUEST_LOG_RESULTS.includes(
     value as ReservationApiRequestLogResult,
   );
+}
+
+function isReservationApiIdempotencyOutcome(
+  value: string | null,
+): value is "NEW" | "REPLAY" | "CONFLICT" {
+  return value === "NEW" || value === "REPLAY" || value === "CONFLICT";
 }
 
 function isExactRecord(

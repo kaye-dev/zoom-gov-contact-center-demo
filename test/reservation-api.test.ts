@@ -9,6 +9,9 @@ import {
   decodeReservationCursor,
   encodeReservationCursor,
   parseReservationApiKeyIssue,
+  parseReservationAvailability,
+  parseReservationIdempotencyKey,
+  parseReservationIfMatch,
   parseReservationApiUsageLimit,
   parseReservationList,
   parseReservationPatch,
@@ -97,12 +100,23 @@ test("monthly usage follows the Asia Tokyo calendar boundary", () => {
 });
 
 test("reservation writes, patches, list query, and cursor are strict", () => {
-  const write = { serviceKey: "bulky-waste", reservationDate: "2026-09-01", startMinute: 0 };
+  const write = { serviceKey: "bulky-waste", reservationDate: "2026-09-01", startMinute: 0, externalReferenceId: "zva_workflow_0001" };
   assert.deepEqual(parseReservationWrite(write), write);
   assert.equal(parseReservationWrite({ ...write, unknown: true }), null);
   assert.deepEqual(parseReservationPatch({ reservationDate: "2026-09-02" }), { reservationDate: "2026-09-02" });
   assert.equal(parseReservationPatch({}), null);
   assert.equal(parseReservationPatch({ startMinute: 1.5 }), null);
+  assert.deepEqual(parseReservationPatch({ externalReferenceId: "zva_workflow_0002" }), { externalReferenceId: "zva_workflow_0002" });
+  assert.equal(parseReservationPatch({ externalReferenceId: "contains@email.example" }), null);
+  assert.equal(parseReservationIdempotencyKey("idempotency_key_0001"), "idempotency_key_0001");
+  assert.equal(parseReservationIdempotencyKey("short"), null);
+  assert.equal(parseReservationIfMatch('"reservation-booking_1-v3"', "booking_1"), 3);
+  assert.equal(parseReservationIfMatch("*", "booking_1"), null);
+  assert.deepEqual(
+    parseReservationAvailability(new URL("https://example.test/api?dateFrom=2026-09-01&dateTo=2026-10-01")),
+    { dateFrom: "2026-09-01", dateTo: "2026-10-01" },
+  );
+  assert.equal(parseReservationAvailability(new URL("https://example.test/api?dateFrom=2026-09-01&dateTo=2026-10-02")), null);
 
   const cursorInput = { createdAt: new Date("2026-08-30T00:00:00.000Z"), id: "booking_1" };
   const cursor = encodeReservationCursor(cursorInput);
@@ -152,7 +166,7 @@ test("reservation API log query, cursor, and retention boundary are strict", () 
     { unknown: "1" },
     { query: ["first", "second"] },
     { query: "x".repeat(101) },
-    { method: "PUT" },
+    { method: "OPTIONS" },
     { result: "redirect" },
     { cursor: "" },
     { cursor: `${cursor}=` },
@@ -190,6 +204,9 @@ test("reservation API log DTOs expose only allowlisted operational fields", asyn
     durationMs: 84,
     requestedAt,
     completedAt,
+    idempotencyOutcome: "NEW",
+    responseLocation: "/api/public/v1/reservations/booking-1",
+    responseEtag: '"reservation-booking-1-v1"',
     authorization: "Bearer raw-key-must-not-escape",
     secretHash: "secret-hash-must-not-escape",
     cookie: "session-cookie-must-not-escape",
@@ -223,8 +240,9 @@ test("reservation API log DTOs expose only allowlisted operational fields", asyn
   ]);
   assert.deepEqual(Object.keys(detail!).sort(), [
     "apiKeyName", "apiKeyPreview", "completedAt", "durationMs", "errorCode", "id",
-    "method", "path", "pathParameters", "permission", "query", "requestBody",
-    "requestedAt", "responseBody", "statusCode",
+    "idempotencyOutcome", "method", "path", "pathParameters", "permission", "query",
+    "requestBody", "requestedAt", "responseBody", "responseEtag", "responseLocation",
+    "statusCode",
   ]);
   const serialized = JSON.stringify({ listed, detail });
   for (const forbidden of [
@@ -246,6 +264,7 @@ test("all locales contain complete reservation API key copy", () => {
     const copy = dictionaries[locale].admin.reservationManagement.apiKeys;
     assert.ok(copy.title && copy.description && copy.issue && copy.usage.title && copy.keys.monthlyLimit && copy.keyUsageDialog.title, locale);
     assert.deepEqual(Object.keys(copy.api.descriptions), [...RESERVATION_API_PERMISSIONS], locale);
+    assert.equal(Object.keys(copy.api.operations).length, 8, locale);
   }
 });
 

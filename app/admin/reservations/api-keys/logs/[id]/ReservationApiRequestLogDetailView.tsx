@@ -26,6 +26,7 @@ export function ReservationApiRequestLogDetailView({
     query: log.query,
     body: log.requestBody,
   };
+  const requestId = responseRequestId(log.responseBody) ?? log.id;
   const successful = log.statusCode >= 200 && log.statusCode <= 299;
 
   return (
@@ -100,11 +101,20 @@ export function ReservationApiRequestLogDetailView({
             <Property label={copy.status}>{log.statusCode}</Property>
             <Property label={copy.duration}>{log.durationMs} ms</Property>
             <Property label={copy.completedAt}><time dateTime={log.completedAt}>{formatDateTime(log.completedAt, locale)}</time></Property>
+            <Property label={copy.requestId}><code className="break-all text-xs">{requestId}</code></Property>
+            <Property label={copy.idempotencyOutcome}>{log.idempotencyOutcome ?? copy.notApplicable}</Property>
+            <Property label={copy.responseLocation}>{log.responseLocation ? <code className="break-all text-xs">{log.responseLocation}</code> : copy.notApplicable}</Property>
+            <Property label={copy.responseEtag}>{log.responseEtag ? <code className="break-all text-xs">{log.responseEtag}</code> : copy.notApplicable}</Property>
           </dl>
         </aside>
       </div>
     </section>
   );
+}
+
+function responseRequestId(value: ReservationApiRequestLogDetail["responseBody"]): string | null {
+  if (!value || Array.isArray(value) || typeof value !== "object") return null;
+  return typeof value.requestId === "string" ? value.requestId : null;
 }
 
 function Property({ label, children }: { label: string; children: ReactNode }) {
@@ -121,7 +131,7 @@ function statusBadgeClassName(statusCode: number) {
 function methodTextClassName(method: string) {
   if (method === "GET") return "text-green-700 dark:text-green-300";
   if (method === "POST") return "text-blue-700 dark:text-blue-300";
-  if (method === "PATCH") return "text-amber-700 dark:text-amber-300";
+  if (method === "PUT" || method === "PATCH") return "text-amber-700 dark:text-amber-300";
   return "text-red-700 dark:text-red-300";
 }
 
