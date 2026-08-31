@@ -218,7 +218,7 @@ function readLocalAdminDatabaseUrl(): string {
   const url = new URL(raw);
   if (
     url.protocol !== "postgresql:" ||
-    !["127.0.0.1", "localhost"].includes(url.hostname) ||
+    !["127.0.0.1", "localhost", "db"].includes(url.hostname) ||
     url.pathname !== "/postgres" ||
     url.search !== "" ||
     url.hash !== ""
