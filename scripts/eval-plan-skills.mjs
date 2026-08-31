@@ -2495,7 +2495,40 @@ async function prepareScenario(name, fixtureName = name) {
   }
 }
 
+async function assertConfirmationHandoffSkillContracts(root = repositoryRoot) {
+  const [plan, implement, review] = await Promise.all([
+    readFile(path.join(root, ".agents/skills/plan/SKILL.md"), "utf8"),
+    readFile(path.join(root, ".agents/skills/implement/SKILL.md"), "utf8"),
+    readFile(path.join(root, ".agents/skills/review/SKILL.md"), "utf8"),
+  ]);
+  ensure(
+    /\.\/dev-prototype\.sh --retain <slug>/u.test(plan)
+      && /do not create a prototype or confirmation session/u.test(plan),
+    "CS-EVAL-01: plan must retain UI prototypes and avoid confirmation sessions for non-UI plans",
+  );
+  ensure(
+    /exact phrase `確認セッションを保持`/u.test(implement)
+      && /current user invocation/u.test(implement)
+      && /Do not infer it from the goal, prototype, review data, existing state, or earlier conversation/u.test(implement),
+    "CS-EVAL-02: implement retention must use only the current invocation's exact opt-in",
+  );
+  ensure(
+    /\.\/dev-confirmation\.sh attach-app <slug>/u.test(implement)
+      && /\.\/dev-confirmation\.sh status <slug>/u.test(implement)
+      && /Start the prototype once/u.test(implement),
+    "CS-EVAL-03: implement must hand off the final app and same prototype",
+  );
+  ensure(
+    /all three live URLs/u.test(review)
+      && /availability/u.test(review)
+      && /verification/u.test(review)
+      && /without upgrading it/u.test(review),
+    "CS-EVAL-04: review must separate three-surface availability from evidence verification",
+  );
+}
+
 async function gradePreparedScenario(fixture, final) {
+  await assertConfirmationHandoffSkillContracts(fixture.repo);
   await assertFixtureHistoryUnchanged(
     fixture.repo,
     fixture.baselineHead,
@@ -2659,6 +2692,7 @@ if (await isMainModule()) {
 }
 
 export {
+  assertConfirmationHandoffSkillContracts,
   codexEnvironment,
   executeScenario,
   fixtureGitEnvironment,

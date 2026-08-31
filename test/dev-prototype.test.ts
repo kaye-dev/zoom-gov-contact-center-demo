@@ -63,6 +63,11 @@ async function createRepositoryFixture(context: test.TestContext): Promise<Fixtu
     "// Fake server: the fake Node executable records its path without starting it.\n",
   );
   await writeFile(
+    path.join(root, "dev-confirmation.sh"),
+    "#!/bin/sh\nprintf 'CONFIRMATION_ARG=%s\\n' \"$@\"\n",
+  );
+  await chmod(path.join(root, "dev-confirmation.sh"), 0o755);
+  await writeFile(
     path.join(bin, "node"),
     "#!/bin/sh\nprintf 'FAKE_NODE_ARG=%s\\n' \"$@\"\n",
   );
@@ -130,6 +135,17 @@ test("slugを明示するとcanonical prototypeを選ぶ", async (context) => {
   const result = runLauncher(fixture, [slug]);
 
   assertServed(result, `plans/${slug}/prototype`);
+});
+
+test("--retainはslugをconfirmation helperへ薄く委譲する", async (context) => {
+  const fixture = await createRepositoryFixture(context);
+  const result = runLauncher(fixture, ["--retain", "chosen-prototype"]);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /CONFIRMATION_ARG=start/u);
+  assert.match(result.stdout, /CONFIRMATION_ARG=chosen-prototype/u);
+  assert.match(result.stdout, /CONFIRMATION_ARG=prototype/u);
+  assert.doesNotMatch(result.stdout, /FAKE_NODE_ARG=/u);
 });
 
 test("旧pathだけにprototypeがあっても起動しない", async (context) => {

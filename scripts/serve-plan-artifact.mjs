@@ -30,6 +30,12 @@ const CSP = [
   "frame-ancestors 'none'",
   "form-action 'none'",
 ].join("; ");
+const confirmationSessionToken = process.env.PLAN_ARTIFACT_SESSION_TOKEN ?? "";
+
+if (confirmationSessionToken !== "" && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(confirmationSessionToken)) {
+  console.error("PLAN_ARTIFACT_SESSION_TOKEN must be a UUID when provided");
+  process.exit(1);
+}
 
 function fail(message) {
   console.error(message);
@@ -82,7 +88,7 @@ try {
 }
 
 function headers(contentType) {
-  return {
+  const values = {
     "Cache-Control": "no-store",
     "Content-Security-Policy": CSP,
     "Content-Type": contentType,
@@ -91,6 +97,8 @@ function headers(contentType) {
     "X-Frame-Options": "DENY",
     "X-Robots-Tag": "noindex, nofollow",
   };
+  if (confirmationSessionToken !== "") values["X-Confirmation-Session-Token"] = confirmationSessionToken;
+  return values;
 }
 
 const server = createServer({ requireHostHeader: false }, async (request, response) => {

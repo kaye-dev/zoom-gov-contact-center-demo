@@ -70,7 +70,7 @@ plan成果物のcleanupは、この流れとは別の明示操作として行う
 3. 自己完結した最終設計と`## 要件クロージャ`を`plans/<slug>/goal.md`へ書く。
 4. UI変更時は完成UI、`ui-contract.json`、`parity-spec.json`を作る。
 5. goalを監査し、UI変更時はCSS build、contract/profile validation、revision計算を終えてから、返却直前に影響scopeのsmokeを1回行う。
-6. goal、prototype URL、revision、smoke結果、未確認事項を返す。
+6. UI planは`./dev-prototype.sh --retain <slug>`でprototypeを確認可能な状態にし、goal、live URL、PID、owner、revision、smoke結果、未確認事項、停止commandを返す。非UI planは確認セッションを作らない。
 
 フィードバックでは同じplanを最終設計として更新する。Browserをauthoring中に使わず、静的作業が完了した返却直前に影響scopeのsmokeを1回だけ行う。全matrixや承認状態は作らない。
 
@@ -96,8 +96,8 @@ plan成果物のcleanupは、この流れとは別の明示操作として行う
 3. 影響target・state・viewportを特定し、`targeted`または`full`のmatrix scopeを固定する。
 4. goalとUI契約に従って実装し、Browserを使わず対象testで確認する。
 5. 変更riskに比例するtest、lint、typecheck、必要な場合だけbuild、diff checkを行う。
-6. 完了候補ができた最後にruntimeと比較条件を確認し、選択rowのfinal parityを1回実行する。
-7. schema version 3の最終証跡を書き、agent-ownedなbaseline差分だけをcleanupして結果を返す。
+6. 完了候補ができた最後に`./dev-compose.sh status --url`でcheckout固有runtimeと比較条件を確認し、選択rowのfinal parityを1回実行する。
+7. schema version 3の最終証跡を書く。現在のinvocationにexact phrase `確認セッションを保持`がある場合だけ同じprototypeとownership検証済みappを確認セッションへhandoffし、なければagent-ownedなbaseline差分だけをcleanupして結果を返す。
 
 明示的な`$implement`実行自体を現在のgoal、revision、profile digestへの承認とする。「承認します」という別回答やrevision転記は不要である。静的gateの失敗はproduction差分0件のまま停止する。Browser unavailable、final parity失敗、drift、欠落rowは完了扱いにせず、実装差分と未確認条件を報告する。
 
@@ -111,7 +111,7 @@ pre-editとaffectedのBrowser phaseは新規runで実行しない。同じBrowse
 
 1. exact diffと必要なcontextを固定し、UI影響と構造化証跡を監査する。
 2. blind diff reviewとgoal適合reviewを独立した履歴なし`independent_reviewer`で並行実行する。
-3. `plans/<slug>/review/`へHTML reportを作り、desktopと390×844で確認する。
+3. `plans/<slug>/review/`へHTML reportを作り、desktopと390×844で確認する。現在のinvocationにexact phrase `確認セッションを保持`がある場合だけ、review、prototype、ownership検証済みappを同じslugの確認セッションへhandoffする。
 
 HTML reportは実装を変更せず、`採用 / 却下 / 未確定`、comment、Markdown生成、copyを提供する。
 
@@ -137,14 +137,18 @@ $implement plans/<slug>/goal.md
 ### `$git-commit-push-pr`
 
 1. Git規約、状態、remote、GitHub認証、repository対応を確認してfetchする。
-2. baseとtopic branchを解決し、protected branch上ならtopic branchを作る。
+2. baseとtopic branchを解決し、protected branch上または安全条件を満たすdetached HEADならtopic branchを作る。
 3. 未commit変更があればcurrent taskのpathだけをstageし、検証後に1件のcommitを作る。
 4. 最新baseへ安全に同期する。
 5. historyを書き換えずにpushし、localとremoteのSHA一致を確認する。
 6. 同じheadのPRを作成するか、必要な箇所だけを更新する。
 7. PRのbase/head OID、draft、mergeability、merge stateをreadbackして報告する。
 
-現在のユーザーが明示した場合だけ実行する。force push、stash、変更破棄、広域stage、自動競合解決、PR merge、CI待機は行わない。競合、remote divergence、複数PR、認証・repository不一致は停止条件とし、plan・review生成物は明示scope外ならstageも削除もしない。
+現在のユーザーが明示した場合だけ実行する。detached HEADではremoteとGitHub repositoryを確認してfetchした後、HEADが唯一のbase候補の履歴内にあり、task path、index、未使用branch名が一意な場合だけ`git switch -c`で新規topic branchを作り、通常のshippingへ合流する。
+
+`main`と`develop`のbase候補が競合する、別topicのcommitを含む、branch名が既存、同名branchを別worktreeが使用中、またはstaged scopeが曖昧な場合は、branch、index、remote、GitHubを変更せず停止する。停止報告にはrepository、full HEAD、baseとOID、未使用topic branch、task path、staged pathとdigest、index policy、必要なhistory decisionを実値で埋めた`次に送るプロンプト`を提示する。選択肢が複数ならplaceholderのない独立promptを提示し、ユーザーが一つを再送した時点でその値を明示判断として扱う。snapshotが一致すれば同じ停止理由を再質問せず、必要なexact pathのindex-only unstage、commit、同期、non-force push、PR作成または最小更新、readbackまで続行する。snapshotが変わっていれば何も部分適用せず、現在値から停止し直す。
+
+force push、force-create、shared worktree checkout、stash、変更破棄、広域stage、自動競合解決、PR merge、CI待機は行わない。再開promptが許可できるindex変更は、列挙された対象外pathへの`git restore --staged --`だけとし、working treeを変更しない。競合、remote divergence、複数PR、認証・repository不一致など、再開promptが解消していない独立条件は停止条件とする。plan・review生成物は明示scope外ならstageも削除もしない。
 
 ## 任意の振り返り
 
@@ -186,19 +190,21 @@ plan中のsmokeは代表desktopと390×844を基本とし、theme/token/native c
 
 ### Runtime所有権
 
-1. port 3000と関連process、container、Compose、dependencyのbaselineとownerを記録する。
+1. Localはport 3000、worktreeはruntime manifestの割当portについて、関連process、container、Compose、dependencyのbaselineとownerを記録する。
 2. implementationと静的検証が終わるまでBrowserとprototype serverを起動しない。
 3. buildが必要な場合だけidentityを再確認し、agent-owned runtimeだけを停止する。
-4. 完了直前に実アプリとprototypeを正しいcheckout・条件で起動し、final parityを行う。
-5. 最終確認後はbaselineとの差分だけをcleanupする。
+4. 完了直前に`./dev-compose.sh ensure`で実アプリを再利用または起動し、`status --url`のURLとprototypeでfinal parityを行う。
+5. 最終確認後はworktreeだけ`./dev-compose.sh cleanup`を使い、baselineとの差分だけをcleanupする。
 
-記録にはPID、command、cwd、checkout mount、container ID、URL、fixture、authorizationを含める。新規routeやstale cacheでは、project・mount・`web` identityを再確認して`./dev-compose.sh restart web`だけを実行できる。他serviceやproject全体を停止しない。ユーザー所有dev serverはbuildのために停止せず、安全な隔離buildができなければblockedとする。広域な`docker compose down`や既存resourceの削除は行わない。
+Localでは同じcheckoutのhealthyなnative Next.jsまたは正しいCompose `web`を`http://localhost:3000`で再利用する。worktreeではcanonical checkout pathから固有Compose projectとweb・PostgreSQL・Studio portを割り当て、DB、named volume、network、originを他checkoutと分離する。保持するnamed volumeのcreation identityはsession間で固定し、可変なcurrent session labelを理由にdatabase再作成を要求しない。worktreeはloopbackだけにbindし、LANとCloudflareはLocal専用とする。
+
+記録にはPID、command、cwd、Compose project、checkout mount、container ID、URL、fixture、authorizationを含める。通常変更はHMRを使い、wrapperが自動再起動できるのはpending migration適用後のverified `web`だけとする。新規route、stale cache、package、runtime設定の変更は理由を報告し、明示的な`./dev-compose.sh restart web`（`Web restart`）操作を待つ。他serviceやproject全体を停止しない。ユーザー所有dev serverはbuildのために停止せず、安全な隔離buildができなければblockedとする。広域な`docker compose down`や既存resource、named volumeの削除は行わない。
 
 ## Workflowの検証
 
 通常のcontract testは`npm test`、認証済みCodex CLIでのforward evalは`npm run eval:plan-skills`を使う。forward evalはplan返却直前のsmoke、invocation承認、targeted/full selection、静的gate停止、final Browser unavailable、driftなどのnegative caseも検証する。
 
-CLI evalはCodexアプリ内Browserを代替しない。runtime所有権、build、verified Compose `web` restart、live parity、cleanupの契約を変えた場合は、shipping前にCodex desktopで成功経路と停止経路をmanual確認する。
+CLI evalはCodexアプリ内Browserを代替しない。runtime所有権、build、migration起因のverified Compose `web` restart、live parity、cleanupの契約を変えた場合は、shipping前にCodex DesktopでLocal再利用、worktree分離、foreign owner停止、session限定cleanupの成功・停止経路をmanual確認する。
 
 局所的な2ファイル変更の評価では、task固有adapter/shimを作らないこと、pre-editとaffectedのBrowser実行が0回、完了直前のtargeted finalが1回、追加sweepが0回、不要な全test・buildを実行しないことを確認する。phase別経過時間、shell command数、Browser操作数、full matrix回数も記録し、検証量が変更riskへ比例していることを評価する。
 
@@ -207,3 +213,5 @@ CLI evalはCodexアプリ内Browserを代替しない。runtime所有権、build
 goalやskillは追加権限ではない。deploy、外部API書き込み、共有・本番DB変更、secret操作、削除、commit、push、PRには現在のユーザー依頼による権限が必要である。
 
 `npm run plans:cleanup`は`plans/template.md`以外の削除候補をpreviewする。実際に削除する場合だけ、別の明示操作として`npm run plans:cleanup -- --apply`を使う。
+
+active confirmation sessionのslugが削除候補に含まれる場合、applyは何も削除せず`./dev-confirmation.sh stop <slug>`を表示する。stateがmalformed、symlink、別checkoutの場合も所有権を推測せず停止する。

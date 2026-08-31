@@ -7,6 +7,7 @@ import { test } from "node:test";
 
 import { Client } from "pg";
 
+import { createAuth } from "../../../lib/auth";
 import { replaceUserAdminAccessRoles } from "../../../lib/server/admin-access/authority-service";
 import {
   type AdminAccessSessionLock,
@@ -411,6 +412,250 @@ test("settled freeze inspection waits for commit and observes rollback", async (
     } finally {
       await blocker.query("ROLLBACK").catch(() => undefined);
       await blocker.end();
+    }
+  });
+});
+
+test("ADM-LOGIN-01..07 seed admin login bootstrap CLI is safe and recoverable", async (context) => {
+  await withIsolatedDatabase(async (databaseUrl) => {
+    runPrismaMigrateDeploy(databaseUrl);
+    const seed = {
+      email: "seed-login-admin@example.test",
+      name: "Seed Login Admin",
+      password: "seed-login-old-password-1",
+    };
+    const resetPassword = "seed-login-new-password-2";
+    const client = new Client({ connectionString: databaseUrl });
+    await client.connect();
+
+    try {
+      await context.test("ADM-LOGIN-01 check classifies state without writing", async () => {
+        const beforeMissing = await readSeedAdminToolSnapshot(client, seed.email);
+        const missing = runCheckSeedAdmin(databaseUrl, seed.email);
+        assert.equal(missing.status, 0, missing.stderr);
+        assert.deepEqual(JSON.parse(missing.stdout), {
+          email: seed.email,
+          status: "MISSING",
+          credentialPresent: false,
+          role: null,
+          banned: false,
+          mustChangePassword: false,
+          accessRoleIds: [],
+        });
+        assert.deepEqual(
+          await readSeedAdminToolSnapshot(client, seed.email),
+          beforeMissing,
+        );
+      });
+
+      await context.test("ADM-LOGIN-02 missing state converges through the existing seed", async () => {
+        runSeedAdmin(databaseUrl, seed, true);
+        const beforeStandardCheck = await readSeedAdminToolSnapshot(
+          client,
+          seed.email,
+        );
+        const standard = runCheckSeedAdmin(databaseUrl, seed.email);
+        assert.equal(standard.status, 0, standard.stderr);
+        assert.deepEqual(JSON.parse(standard.stdout), {
+          email: seed.email,
+          status: "PRESENT_STANDARD",
+          credentialPresent: true,
+          role: "admin",
+          banned: false,
+          mustChangePassword: false,
+          accessRoleIds: ["system-full-access"],
+        });
+        assert.deepEqual(
+          await readSeedAdminToolSnapshot(client, seed.email),
+          beforeStandardCheck,
+        );
+      });
+
+      await context.test("ADM-LOGIN-03 existing nonstandard state remains read-only", async () => {
+        const user = await client.query<{ id: string }>(
+          `SELECT id FROM "user" WHERE email = $1`,
+          [seed.email],
+        );
+        const userId = user.rows[0]?.id;
+        assert.ok(userId);
+        await client.query(
+          `INSERT INTO admin_access_roles
+             (id, name, "nameKey", description, "systemKey")
+           VALUES ('seed-login-custom', 'Seed Login Custom', 'seed login custom', NULL, NULL)`,
+        );
+        await replaceAssignment(client, userId, "seed-login-custom");
+        await client.query(
+          `UPDATE "user"
+           SET role = 'user',
+               banned = true,
+               "mustChangePassword" = true,
+               "temporaryPasswordIssuedAt" = CURRENT_TIMESTAMP
+           WHERE id = $1`,
+          [userId],
+        );
+        await client.query(
+          `INSERT INTO session
+             (id, "expiresAt", token, "createdAt", "updatedAt", "userId")
+           VALUES
+             ('seed-login-session-1', CURRENT_TIMESTAMP + INTERVAL '1 hour', 'seed-login-token-1', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $1),
+             ('seed-login-session-2', CURRENT_TIMESTAMP + INTERVAL '1 hour', 'seed-login-token-2', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $1)`,
+          [userId],
+        );
+
+        const beforeCheck = await readSeedAdminToolSnapshot(client, seed.email);
+        const nonstandard = runCheckSeedAdmin(databaseUrl, seed.email);
+        assert.equal(nonstandard.status, 0, nonstandard.stderr);
+        assert.deepEqual(JSON.parse(nonstandard.stdout), {
+          email: seed.email,
+          status: "PRESENT_NONSTANDARD",
+          credentialPresent: true,
+          role: "user",
+          banned: true,
+          mustChangePassword: true,
+          accessRoleIds: ["seed-login-custom"],
+        });
+        assert.deepEqual(
+          await readSeedAdminToolSnapshot(client, seed.email),
+          beforeCheck,
+        );
+      });
+
+      await context.test("ADM-LOGIN-05 reset guards fail without changing data", async () => {
+        const beforeGuards = await readSeedAdminToolSnapshot(client, seed.email);
+        const missingEmail = "missing-seed-admin@example.test";
+        const missingBeforeGuards = await readSeedAdminToolSnapshot(
+          client,
+          missingEmail,
+        );
+        const guardCases = [
+          runResetSeedAdmin(databaseUrl, seed.email, resetPassword, {
+            confirmation: false,
+          }),
+          runResetSeedAdmin(databaseUrl, seed.email, resetPassword, {
+            nodeEnv: "production",
+          }),
+          runResetSeedAdmin(
+            "postgresql://remote-user:remote-secret@example.test/remote-db",
+            seed.email,
+            resetPassword,
+          ),
+          runResetSeedAdmin(
+            databaseUrl,
+            missingEmail,
+            resetPassword,
+          ),
+        ];
+        for (const result of guardCases) {
+          assert.notEqual(result.status, 0, "Reset guard unexpectedly succeeded.");
+          assertSecretFree(result, [resetPassword, databaseUrl, "remote-secret"]);
+        }
+        assert.deepEqual(
+          await readSeedAdminToolSnapshot(client, seed.email),
+          beforeGuards,
+        );
+        assert.deepEqual(
+          await readSeedAdminToolSnapshot(client, missingEmail),
+          missingBeforeGuards,
+        );
+      });
+
+      await context.test("ADM-LOGIN-06 reset changes only credential lifecycle state", async () => {
+        const beforeReset = await readSeedAdminToolSnapshot(client, seed.email);
+        const reset = runResetSeedAdmin(
+          databaseUrl,
+          seed.email,
+          resetPassword,
+        );
+        assert.equal(reset.status, 0, reset.stderr);
+        assert.match(reset.stdout, new RegExp(seed.email, "u"));
+        assertSecretFree(reset, [resetPassword, databaseUrl]);
+
+        const afterReset = await readSeedAdminToolSnapshot(client, seed.email);
+        assert.equal(afterReset.users.length, 1);
+        assert.equal(afterReset.users[0]?.role, beforeReset.users[0]?.role);
+        assert.equal(afterReset.users[0]?.banned, beforeReset.users[0]?.banned);
+        assert.equal(afterReset.users[0]?.name, beforeReset.users[0]?.name);
+        assert.deepEqual(afterReset.assignments, beforeReset.assignments);
+        assert.equal(afterReset.sessions.length, 0);
+        assert.equal(afterReset.users[0]?.mustChangePassword, false);
+        assert.equal(afterReset.users[0]?.temporaryPasswordIssuedAt, null);
+        assert.notEqual(
+          afterReset.users[0]?.passwordChangedAt?.toISOString(),
+          beforeReset.users[0]?.passwordChangedAt?.toISOString(),
+        );
+        assert.equal(afterReset.credentials.length, 1);
+        assert.notEqual(
+          afterReset.credentials[0]?.password,
+          beforeReset.credentials[0]?.password,
+        );
+
+        await client.query(
+          `DELETE FROM account
+           WHERE "userId" = $1 AND "providerId" = 'credential'`,
+          [afterReset.users[0]?.id],
+        );
+        const withoutCredential = runCheckSeedAdmin(databaseUrl, seed.email);
+        assert.equal(withoutCredential.status, 0, withoutCredential.stderr);
+        assert.equal(
+          JSON.parse(withoutCredential.stdout).credentialPresent,
+          false,
+        );
+        assert.equal(
+          JSON.parse(withoutCredential.stdout).status,
+          "PRESENT_NONSTANDARD",
+        );
+        const recreateCredential = runResetSeedAdmin(
+          databaseUrl,
+          seed.email,
+          resetPassword,
+        );
+        assert.equal(recreateCredential.status, 0, recreateCredential.stderr);
+        const afterCredentialRecreate = await readSeedAdminToolSnapshot(
+          client,
+          seed.email,
+        );
+        assert.equal(afterCredentialRecreate.credentials.length, 1);
+      });
+
+      await context.test("ADM-LOGIN-04 reset password authenticates with Better Auth", async () => {
+        await client.query(
+          `UPDATE "user" SET banned = false WHERE email = $1`,
+          [seed.email],
+        );
+        const database = createDatabaseContext({
+          NODE_ENV: "development",
+          DATABASE_URL: databaseUrl,
+        });
+        try {
+          const auth = createAuth(database.prisma, {
+            baseURL: "http://localhost:3000",
+            env: { NODE_ENV: "development" },
+          });
+          await assert.rejects(
+            auth.api.signInEmail({
+              body: { email: seed.email, password: seed.password },
+            }),
+          );
+          const signedIn = await auth.api.signInEmail({
+            body: { email: seed.email, password: resetPassword },
+          });
+          assert.equal(signedIn.user.email, seed.email);
+        } finally {
+          await database.close();
+        }
+      });
+
+      await context.test("ADM-LOGIN-07 command output never reveals secrets", () => {
+        const check = runCheckSeedAdmin(databaseUrl, seed.email);
+        assert.equal(check.status, 0, check.stderr);
+        assertSecretFree(check, [seed.password, resetPassword, databaseUrl]);
+        assert.doesNotMatch(
+          check.stdout,
+          /passwordHash|credentialHash|sessionToken/iu,
+        );
+      });
+    } finally {
+      await client.end();
     }
   });
 });
@@ -943,7 +1188,7 @@ function readLocalAdminDatabaseUrl(): string {
   const url = new URL(raw);
   if (
     url.protocol !== "postgresql:" ||
-    !["127.0.0.1", "localhost"].includes(url.hostname) ||
+    !["127.0.0.1", "localhost", "db"].includes(url.hostname) ||
     url.pathname !== "/postgres" ||
     url.search !== "" ||
     url.hash !== ""
@@ -1013,6 +1258,145 @@ function runSeedAdmin(
   } else {
     assert.notEqual(result.status, 0, "Admin seed unexpectedly succeeded.");
   }
+}
+
+type SeedAdminCommandResult = {
+  status: number | null;
+  stdout: string;
+  stderr: string;
+};
+
+function runCheckSeedAdmin(
+  databaseUrl: string,
+  email: string,
+): SeedAdminCommandResult {
+  const result = spawnSync(
+    "npm",
+    ["run", "--silent", "db:check-seed-admin"],
+    {
+      cwd: PROJECT_ROOT,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        NODE_ENV: "development",
+        DATABASE_URL: databaseUrl,
+        DATABASE_URL_UNPOOLED: databaseUrl,
+        SEED_ADMIN_EMAIL: email,
+      },
+      timeout: 120_000,
+    },
+  );
+  return {
+    status: result.status,
+    stdout: result.stdout.trim(),
+    stderr: result.stderr.trim(),
+  };
+}
+
+function runResetSeedAdmin(
+  databaseUrl: string,
+  email: string,
+  password: string,
+  options: {
+    confirmation?: boolean;
+    nodeEnv?: "development" | "production" | "test";
+  } = {},
+): SeedAdminCommandResult {
+  const environment: NodeJS.ProcessEnv = {
+    ...process.env,
+    NODE_ENV: options.nodeEnv ?? "development",
+    DATABASE_URL: databaseUrl,
+    DATABASE_URL_UNPOOLED: databaseUrl,
+    SEED_ADMIN_EMAIL: email,
+    SEED_ADMIN_PASSWORD: password,
+  };
+  if (options.confirmation === false) {
+    delete environment.CONFIRM_LOCAL_SEED_ADMIN_PASSWORD_RESET;
+  } else {
+    environment.CONFIRM_LOCAL_SEED_ADMIN_PASSWORD_RESET = "1";
+  }
+  const result = spawnSync(
+    "npm",
+    ["run", "--silent", "db:reset-seed-admin-password"],
+    {
+      cwd: PROJECT_ROOT,
+      encoding: "utf8",
+      env: environment,
+      timeout: 120_000,
+    },
+  );
+  return {
+    status: result.status,
+    stdout: result.stdout.trim(),
+    stderr: result.stderr.trim(),
+  };
+}
+
+async function readSeedAdminToolSnapshot(client: Client, email: string) {
+  const users = await client.query<{
+    id: string;
+    name: string;
+    role: string | null;
+    banned: boolean | null;
+    mustChangePassword: boolean;
+    temporaryPasswordIssuedAt: Date | null;
+    passwordChangedAt: Date | null;
+  }>(
+    `SELECT id, name, role, banned,
+            "mustChangePassword",
+            "temporaryPasswordIssuedAt",
+            "passwordChangedAt"
+     FROM "user"
+     WHERE email = $1
+     ORDER BY id`,
+    [email],
+  );
+  const userIds = users.rows.map(({ id }) => id);
+  const credentials = await client.query<{
+    id: string;
+    password: string | null;
+  }>(
+    `SELECT id, password
+     FROM account
+     WHERE "userId" = ANY($1::text[]) AND "providerId" = 'credential'
+     ORDER BY id`,
+    [userIds],
+  );
+  const sessions = await client.query<{ id: string; token: string }>(
+    `SELECT id, token
+     FROM session
+     WHERE "userId" = ANY($1::text[])
+     ORDER BY id`,
+    [userIds],
+  );
+  const assignments = await client.query<{ roleId: string; userId: string }>(
+    `SELECT "roleId", "userId"
+     FROM admin_access_role_assignments
+     WHERE "userId" = ANY($1::text[])
+     ORDER BY "userId", "roleId"`,
+    [userIds],
+  );
+  return {
+    users: users.rows,
+    credentials: credentials.rows,
+    sessions: sessions.rows,
+    assignments: assignments.rows,
+  };
+}
+
+function assertSecretFree(
+  result: SeedAdminCommandResult,
+  secrets: string[],
+): void {
+  const output = `${result.stdout}\n${result.stderr}`;
+  for (const secret of secrets) {
+    assert.ok(secret);
+    assert.doesNotMatch(output, new RegExp(escapeRegExp(secret), "u"));
+  }
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
 function readMigration(name: string): string {

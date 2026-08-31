@@ -11,6 +11,7 @@
     "test:deploy": "node --import tsx --test scripts/deploy/test/*.test.ts",
     "test:admin-access:db": "node --import tsx --test scripts/deploy/integration-test/*.test.ts",
     "eval:plan-skills": "node scripts/eval-plan-skills.mjs",
+    "eval:git-shipping-skill": "node scripts/eval-git-commit-push-pr.mjs",
     "plans:cleanup": "node scripts/cleanup-plan-files.mjs",
     "plans:guard": "node scripts/verify-plan-artifacts.mjs",
     "audit:runtime": "npm audit --omit=dev",
@@ -26,7 +27,9 @@
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "db:studio:docker": "prisma studio --port 5555 --browser none",
-    "db:seed-admin": "tsx prisma/seed-admin.ts"
+    "db:check-seed-admin": "tsx prisma/check-seed-admin.ts",
+    "db:seed-admin": "tsx prisma/seed-admin.ts",
+    "db:reset-seed-admin-password": "tsx prisma/reset-seed-admin-password.ts"
   },
   "dependencies": {
     "@mdx-js/loader": "^3.1.1",

@@ -4,6 +4,7 @@ import { lstat, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { readConfirmationState } from "./confirmation-session.mjs";
 
 const TEMPLATE_NAME = "template.md";
 
@@ -54,6 +55,26 @@ async function listEntry(repositoryRoot, absolutePath) {
   return listed;
 }
 
+async function requireInactiveCleanupCandidates(repositoryRoot, topLevelEntries) {
+  const statePath = path.join(repositoryRoot, ".codex/confirmation-session.local.json");
+  try {
+    await lstat(statePath);
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return;
+    throw error;
+  }
+  const { state } = await readConfirmationState(repositoryRoot, { required: true });
+  if (topLevelEntries.some((entry) => entry.name === state.slug)) {
+    const activeSurfaces = [
+      ...Object.keys(state.artifactServers),
+      ...(state.appRuntime ? ["app"] : []),
+    ];
+    throw new Error(
+      `plan cleanup refused before deleting any entry: '${state.slug}' has an active confirmation session (${activeSurfaces.join(", ") || "session"}). Stop it first with ./dev-confirmation.sh stop ${state.slug}`,
+    );
+  }
+}
+
 /**
  * @param {string[]} args
  * @returns {{ apply: boolean }}
@@ -92,6 +113,7 @@ export async function cleanupPlanFiles({ repositoryRoot, apply = false, remove =
 
   onCandidates?.(candidates);
   if (!apply || topLevelEntries.length === 0) return { candidates, removed: [] };
+  await requireInactiveCleanupCandidates(root, topLevelEntries);
 
   const removed = [];
   for (const entry of topLevelEntries) {
