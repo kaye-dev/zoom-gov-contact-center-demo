@@ -528,14 +528,16 @@ run_deploy_phase() {
   [[ -z "${expected_previous_deployment_id}" ]] || \
     container_arguments+=(--env "DEPLOY_EXPECTED_PREVIOUS_DEPLOYMENT_ID=${expected_previous_deployment_id}")
   read_aws_account_id
-  set +e
-  stream_ssm_context | docker run \
-    "${container_arguments[@]}" \
-    "${DEPLOY_RUNNER_IMAGE}" \
-    sh -ceu "${DEPLOY_PRIVATE_OUTPUT_ENTRYPOINT}" sh \
-    node --no-warnings --import tsx scripts/deploy/main.ts
-  local status=$?
-  set -e
+  local status
+  if stream_ssm_context | docker run \
+      "${container_arguments[@]}" \
+      "${DEPLOY_RUNNER_IMAGE}" \
+      sh -ceu "${DEPLOY_PRIVATE_OUTPUT_ENTRYPOINT}" sh \
+      node --no-warnings --import tsx scripts/deploy/main.ts; then
+    status=0
+  else
+    status=$?
+  fi
   if [[ -f "${output_directory}/result" && ! -L "${output_directory}/result" ]]; then
     docker run --rm --user 0 \
       --volume "${output_directory}:/deploy-output" \
@@ -658,13 +660,14 @@ main() {
 
   prepare_deploy_output_directory
   validate_directory="$(prepare_phase_output_directory validate)"
-  set +e
-  run_deploy_phase \
-    validate \
-    "${validate_directory}" \
-    "${DEPLOY_INTERNAL_EXPECTED_TARGET_FINGERPRINT:-}"
-  validate_status=$?
-  set -e
+  if run_deploy_phase \
+      validate \
+      "${validate_directory}" \
+      "${DEPLOY_INTERNAL_EXPECTED_TARGET_FINGERPRINT:-}"; then
+    validate_status=0
+  else
+    validate_status=$?
+  fi
   if [[ ${validate_status} -ne 0 && ${validate_status} -ne 75 ]]; then
     exit "${validate_status}"
   fi

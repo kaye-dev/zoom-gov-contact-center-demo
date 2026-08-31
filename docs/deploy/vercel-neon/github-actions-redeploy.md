@@ -4,11 +4,13 @@
 
 ## 実行前の確認
 
-- デプロイ対象が`main`へmerge済みで、必須CIが成功している。
+- デプロイ対象が`main`へmerge済みで、required status checkの`Deploy runner npm test`を含む必須CIが成功している。
 - GitHub Environmentsの`production-deploy`と`production-migration`が`main`だけを許可している。
 - `production-migration`にrequired reviewerが設定されている。
 - 実行中の別Production deployがない。並行起動したrunは同じconcurrency groupで直列化され、進行中のrunはcancelされない。
 - AWS IAM Role、KMS key、4件のParameter Store設定を変更した場合は、先に権限テストをやり直している。
+
+`Deploy runner npm test`はPRと`main` pushのexact SHAからdeploy runnerをbuildし、そのイメージ内で`npm test`を実行します。AWS OIDC、SSM、Vercel、Neon、GitHub Environmentやsecretは使わず、このcheckの成功・失敗だけではProduction変更なしです。失敗した場合はProduction workflowやAWS SSO再認証へ進まず、Docker buildまたはイメージ内testを修正した新しいPR SHAでcheckを成功させます。
 
 ## 実行する
 
@@ -75,6 +77,7 @@ pending migrationがあるrunは`production-migration` Environmentの承認待�
 
 | 停止箇所 | 外部状態 | 対応 |
 | --- | --- | --- |
+| required status checkの`Deploy runner npm test` | Production変更なし | Docker buildまたはイメージ内testを修正し、新しいPR SHAでcheckを再実行する |
 | validate / plan | 外部変更なし | errorを修正してmainへmergeし、新しいrunを起動する |
 | migration承認待ち / 拒否 | 外部変更なし | 内容を再確認し、同じrunを不用意に再利用せず判断する |
 | migration apply / verify | DBが一部または全部変更済みの可能性あり | Neon migration状態とschemaを確認し、自動rollbackしない |

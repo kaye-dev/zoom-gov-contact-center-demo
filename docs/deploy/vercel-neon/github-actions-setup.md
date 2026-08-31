@@ -114,11 +114,23 @@ GitHub Secretsは作成しません。Vercel token、Neon API key、管理者pas
 
 ## 6. 保護設定と権限を検証する
 
-1. `main`をbranch protectionまたはrulesetで保護し、Pull Request reviewと必須CIを設定する。`Plan artifact guard / Verify plan artifacts`をrequired status checkに登録し、`plans/template.md`以外のplan生成物をmergeできないようにする。
-2. deploy関連ファイルの変更にCODEOWNERS reviewを設定する。
-3. IAM Roleが2件のexact OIDC subject以外からAssumeRoleできないことを確認する。
-4. Roleが4 parameterだけを読め、SSM経由の3件だけをdecryptできることを確認する。
-5. GitHubのEnvironmentにSecretsがなく、repository Variablesが上記2件だけであることを確認する。
+`Deploy runner npm test`はProduction credentialを受け取らず、PRのexact SHAから作ったdeploy runner内で`npm test`を実行するだけのcheckです。このcheckの失敗時はProduction変更なしです。required status checkへ登録する前に、対象repositoryのPRでGitHub Actions由来のcheckが1回成功していることを確認します。
+
+1. `main`をbranch protectionまたはrulesetで保護し、Pull Request reviewと必須CIを設定する。
+2. `Plan artifact guard / Verify plan artifacts`と`Deploy runner npm test`をrequired status checkに登録する。strict modeを有効にし、最新`main`との組み合わせで両checkが成功するまでmergeを許可しない。
+3. GitHub APIまたはSettings画面でrequired checksをread backし、`Deploy runner npm test`のsourceがGitHub Actionsであること、strict mode、既存のreview/admin protectionが維持されていることを確認する。
+
+   ```bash
+   gh api 'repos/{owner}/{repo}/branches/main/protection/required_status_checks'
+   gh api 'repos/{owner}/{repo}/branches/main/protection'
+   ```
+
+4. deploy関連ファイルの変更にCODEOWNERS reviewを設定する。
+5. IAM Roleが2件のexact OIDC subject以外からAssumeRoleできないことを確認する。
+6. Roleが4 parameterだけを読め、SSM経由の3件だけをdecryptできることを確認する。
+7. GitHubのEnvironmentにSecretsがなく、repository Variablesが上記2件だけであることを確認する。
+
+required checkのworkflowを変更、rename、削除する場合は、replacement checkを先に成功させてrequired化するか、review済みのbranch protection変更で旧required contextを除去し、そのreadback後にworkflowを変更します。workflowだけを先に削除して全PRをpendingにしません。
 
 詳細な拒否テストとsecurity boundaryは[AWS IAM / GitHub OIDC設定](aws-iam-oidc.md#7-初回の権限テスト)を参照してください。AWSとGitHubは、OIDC trustを対象repositoryとEnvironmentへ限定し、Environmentへbranch protection ruleを設定することを推奨しています。[AWS IAM OIDC guidance](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-idp_oidc.html)と[GitHub Environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments)も参照してください。
 
@@ -135,6 +147,7 @@ token、project ID、database URLの追加入力はありません。migration�
 ## 完了チェック
 
 - `main`の`Manual production deployment`を手動起動できる。
+- `Deploy runner npm test`がGitHub Actions由来のrequired status checkとしてstrict modeで設定されている。
 - 2 Environmentのbranch / reviewer設定が意図どおりである。
 - IAM trust policyがフォーク先の実際の2 subjectだけを許可している。
 - GitHubには秘密値と長期AWS credentialがない。

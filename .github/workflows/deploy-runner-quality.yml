@@ -1,0 +1,56 @@
+name: Deploy runner quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-runner-npm-test:
+    name: Deploy runner npm test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the exact workflow commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Build and test the immutable deploy runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${GITHUB_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(git rev-parse HEAD)" == "${GITHUB_SHA}" ]]
+          case "${GITHUB_EVENT_NAME}" in
+            pull_request)
+              [[ "${GITHUB_REF}" =~ ^refs/pull/[0-9]+/merge$ ]]
+              ;;
+            push)
+              [[ "${GITHUB_REF}" == "refs/heads/main" ]]
+              ;;
+            *)
+              echo "Unexpected GitHub event: ${GITHUB_EVENT_NAME}" >&2
+              exit 1
+              ;;
+          esac
+          command -v docker >/dev/null
+          docker version >/dev/null
+          build_context="$(mktemp -d "${RUNNER_TEMP:?}/zoom-deploy-quality.XXXXXX")"
+          [[ -d "${build_context}" && ! -L "${build_context}" ]]
+          git archive --format=tar "${GITHUB_SHA}" | tar -xf - -C "${build_context}"
+          [[ -f "${build_context}/Dockerfile.deploy" && ! -L "${build_context}/Dockerfile.deploy" ]]
+          image="zoom-gov-contact-center-demo-deploy:${GITHUB_SHA}"
+          docker build \
+            --file "${build_context}/Dockerfile.deploy" \
+            --build-arg "DEPLOY_GIT_SHA=${GITHUB_SHA}" \
+            --build-arg "DEPLOY_GIT_BRANCH=ci/${GITHUB_EVENT_NAME}" \
+            --tag "${image}" \
+            "${build_context}"
+          docker run --rm --init --network none \
+            --entrypoint npm \
+            "${image}" \
+            test
