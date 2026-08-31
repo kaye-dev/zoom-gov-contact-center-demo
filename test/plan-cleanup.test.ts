@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
-import { lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
 
 import { cleanupPlanFiles, parsePlanCleanupArgs } from "../scripts/cleanup-plan-files.mjs";
+
+const execFileAsync = promisify(execFile);
 
 async function createFixture(context: test.TestContext) {
   const root = await mkdtemp(path.join(tmpdir(), "plan-cleanup-"));
@@ -134,4 +139,55 @@ test("不明な引数を拒否し、部分完了時は削除済みentryと失敗
   await assert.rejects(lstat(path.join(root, "plans/a.md")), { code: "ENOENT" });
   assert.equal(await readFile(path.join(root, "plans/b.md"), "utf8"), "second\n");
   assert.equal(await readFile(path.join(root, "plans/template.md"), "utf8"), "canonical template\n");
+});
+
+test("CS-CL-01/CS-CL-02: active sessionと不正stateは削除開始前にfail closedする", async (context) => {
+  const root = await createFixture(context);
+  await execFileAsync("git", ["init", "-q"], { cwd: root });
+  const checkout = await realpath(root);
+  const gitCommonDirectory = await realpath(
+    (await execFileAsync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], { cwd: root })).stdout.trim(),
+  );
+  const statePath = path.join(root, ".codex/confirmation-session.local.json");
+  await mkdir(path.dirname(statePath), { recursive: true });
+  const state = {
+    schemaVersion: 1,
+    sessionId: randomUUID(),
+    checkout,
+    gitCommonDirectory,
+    slug: "example",
+    createdAt: new Date().toISOString(),
+    artifactServers: {
+      prototype: {
+        surface: "prototype",
+        artifactRealpath: path.join(root, "plans/example/prototype"),
+        url: "http://127.0.0.1:41234/",
+        pid: process.pid,
+        processToken: randomUUID(),
+        startedAt: new Date().toISOString(),
+      },
+    },
+    appRuntime: null,
+  };
+  await writeFile(statePath, `${JSON.stringify(state)}\n`, { mode: 0o600 });
+
+  await assert.rejects(
+    cleanupPlanFiles({ repositoryRoot: root, apply: true }),
+    /refused before deleting any entry[\s\S]*\.\/dev-confirmation\.sh stop example/u,
+  );
+  assert.equal(await readFile(path.join(root, "plans/example/goal.md"), "utf8"), "canonical goal\n");
+  assert.equal(await readFile(path.join(root, "plans/top-level-plan.md"), "utf8"), "top-level plan\n");
+
+  await rm(statePath);
+  const cleaned = await cleanupPlanFiles({ repositoryRoot: root, apply: true });
+  assert.ok(cleaned.removed.includes("plans/example/"));
+  assert.deepEqual(await readdir(path.join(root, "plans")), ["template.md"]);
+
+  const malformedRoot = await createFixture(context);
+  await execFileAsync("git", ["init", "-q"], { cwd: malformedRoot });
+  const malformedState = path.join(malformedRoot, ".codex/confirmation-session.local.json");
+  await mkdir(path.dirname(malformedState), { recursive: true });
+  await writeFile(malformedState, "not json\n", { mode: 0o600 });
+  await assert.rejects(cleanupPlanFiles({ repositoryRoot: malformedRoot, apply: true }), /malformed/u);
+  assert.equal(await readFile(path.join(malformedRoot, "plans/example/goal.md"), "utf8"), "canonical goal\n");
 });

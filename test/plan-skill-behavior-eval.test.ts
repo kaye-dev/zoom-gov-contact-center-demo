@@ -17,6 +17,7 @@ type PreparedFixture = {
   scenario: { simulate(repo: string): Promise<void> };
 };
 type EvaluatorModule = {
+  assertConfirmationHandoffSkillContracts(root?: string): Promise<void>;
   codexEnvironment(): Record<string, string>;
   executeScenario(name: string): Promise<void>;
   fixtureGitEnvironment(): Record<string, string>;
@@ -87,6 +88,16 @@ test("plan skill behavioral evalのartifact graderはpositive/negative control�
     timeout: 180_000,
   });
   assert.match(stdout, /self-test passed: 8 scenarios/);
+});
+
+test("CS-EVAL-01〜04: skill evalはconfirmation handoff契約を全scenarioのgrade前に固定する", async () => {
+  const evaluatorModule = await evaluatorModulePromise;
+  await evaluatorModule.assertConfirmationHandoffSkillContracts(root);
+  const source = await readFile(evaluator, "utf8");
+  for (const caseId of ["CS-EVAL-01", "CS-EVAL-02", "CS-EVAL-03", "CS-EVAL-04"]) {
+    assert.match(source, new RegExp(caseId, "u"));
+  }
+  assert.match(source, /assertConfirmationHandoffSkillContracts\(fixture\.repo\)/u);
 });
 
 test("eval fixtureは外部MCPなしで必要なcustom agent定義を読み込める", async (context) => {

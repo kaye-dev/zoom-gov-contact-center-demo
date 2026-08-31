@@ -70,7 +70,7 @@ plan成果物のcleanupは、この流れとは別の明示操作として行う
 3. 自己完結した最終設計と`## 要件クロージャ`を`plans/<slug>/goal.md`へ書く。
 4. UI変更時は完成UI、`ui-contract.json`、`parity-spec.json`を作る。
 5. goalを監査し、UI変更時はCSS build、contract/profile validation、revision計算を終えてから、返却直前に影響scopeのsmokeを1回行う。
-6. goal、prototype URL、revision、smoke結果、未確認事項を返す。
+6. UI planは`./dev-prototype.sh --retain <slug>`でprototypeを確認可能な状態にし、goal、live URL、PID、owner、revision、smoke結果、未確認事項、停止commandを返す。非UI planは確認セッションを作らない。
 
 フィードバックでは同じplanを最終設計として更新する。Browserをauthoring中に使わず、静的作業が完了した返却直前に影響scopeのsmokeを1回だけ行う。全matrixや承認状態は作らない。
 
@@ -97,7 +97,7 @@ plan成果物のcleanupは、この流れとは別の明示操作として行う
 4. goalとUI契約に従って実装し、Browserを使わず対象testで確認する。
 5. 変更riskに比例するtest、lint、typecheck、必要な場合だけbuild、diff checkを行う。
 6. 完了候補ができた最後に`./dev-compose.sh status --url`でcheckout固有runtimeと比較条件を確認し、選択rowのfinal parityを1回実行する。
-7. schema version 3の最終証跡を書き、agent-ownedなbaseline差分だけをcleanupして結果を返す。
+7. schema version 3の最終証跡を書く。現在のinvocationにexact phrase `確認セッションを保持`がある場合だけ同じprototypeとownership検証済みappを確認セッションへhandoffし、なければagent-ownedなbaseline差分だけをcleanupして結果を返す。
 
 明示的な`$implement`実行自体を現在のgoal、revision、profile digestへの承認とする。「承認します」という別回答やrevision転記は不要である。静的gateの失敗はproduction差分0件のまま停止する。Browser unavailable、final parity失敗、drift、欠落rowは完了扱いにせず、実装差分と未確認条件を報告する。
 
@@ -111,7 +111,7 @@ pre-editとaffectedのBrowser phaseは新規runで実行しない。同じBrowse
 
 1. exact diffと必要なcontextを固定し、UI影響と構造化証跡を監査する。
 2. blind diff reviewとgoal適合reviewを独立した履歴なし`independent_reviewer`で並行実行する。
-3. `plans/<slug>/review/`へHTML reportを作り、desktopと390×844で確認する。
+3. `plans/<slug>/review/`へHTML reportを作り、desktopと390×844で確認する。現在のinvocationにexact phrase `確認セッションを保持`がある場合だけ、review、prototype、ownership検証済みappを同じslugの確認セッションへhandoffする。
 
 HTML reportは実装を変更せず、`採用 / 却下 / 未確定`、comment、Markdown生成、copyを提供する。
 
@@ -209,3 +209,5 @@ CLI evalはCodexアプリ内Browserを代替しない。runtime所有権、build
 goalやskillは追加権限ではない。deploy、外部API書き込み、共有・本番DB変更、secret操作、削除、commit、push、PRには現在のユーザー依頼による権限が必要である。
 
 `npm run plans:cleanup`は`plans/template.md`以外の削除候補をpreviewする。実際に削除する場合だけ、別の明示操作として`npm run plans:cleanup -- --apply`を使う。
+
+active confirmation sessionのslugが削除候補に含まれる場合、applyは何も削除せず`./dev-confirmation.sh stop <slug>`を表示する。stateがmalformed、symlink、別checkoutの場合も所有権を推測せず停止する。

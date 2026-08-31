@@ -112,9 +112,10 @@ async function stopServer(child: ReturnType<typeof spawn>) {
   await exited;
 }
 
-async function startServer(context: TestContext, repository: TestRepository, relativeArtifact: string) {
+async function startServer(context: TestContext, repository: TestRepository, relativeArtifact: string, env: NodeJS.ProcessEnv = process.env) {
   const child = spawn(process.execPath, [repository.serverScript, relativeArtifact], {
     cwd: repository.root,
+    env,
     stdio: ["ignore", "pipe", "pipe"],
   });
   context.after(async () => stopServer(child));
@@ -147,6 +148,21 @@ async function startServer(context: TestContext, repository: TestRepository, rel
     });
   });
 }
+
+test("CS-SRV-01: retained server adds only its ownership token header", async (context) => {
+  const repository = await createTestRepository(context);
+  const slug = uniqueSlug("retained");
+  await createPrototypeFixture(repository, `plans/${slug}/prototype`);
+  const token = randomUUID();
+  const { url } = await startServer(context, repository, `plans/${slug}/prototype`, {
+    ...process.env,
+    PLAN_ARTIFACT_SESSION_TOKEN: token,
+  });
+
+  const response = await fetchArtifact(url, "/", { method: "HEAD" });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("x-confirmation-session-token"), token);
+});
 
 async function fetchArtifact(url: string, pathname: string, init?: RequestInit) {
   const response = await fetch(new URL(pathname, url), init);

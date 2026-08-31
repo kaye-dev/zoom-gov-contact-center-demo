@@ -154,6 +154,30 @@ test("implementはinvocation approval後にBrowserを使わず実装し完了直
   assert.match(workflow, /巨大なpending一覧を作らない/);
 });
 
+test("CS-WF-01/02/03: confirmation handoffはskill別の明示境界とverification分離を持つ", async () => {
+  const [plan, implement, review, workflow, devServer, agents] = await Promise.all([
+    read(".agents/skills/plan/SKILL.md"),
+    read(".agents/skills/implement/SKILL.md"),
+    read(".agents/skills/review/SKILL.md"),
+    read("docs/development/codex-development-workflow.md"),
+    read(".claude/rules/dev-server.md"),
+    read("AGENTS.md"),
+  ]);
+  assert.match(plan, /\.\/dev-prototype\.sh --retain <slug>/u);
+  assert.match(plan, /do not create a prototype or confirmation session/u);
+  for (const contract of [implement, review, workflow, devServer, agents]) {
+    assert.match(contract, /確認セッションを保持/u);
+    assert.match(contract, /current (?:user )?invocation|現在のinvocation/u);
+  }
+  assert.match(implement, /Without that exact opt-in/u);
+  assert.match(implement, /availability separately from parity verification/u);
+  assert.match(review, /all three live URLs/u);
+  assert.match(review, /without upgrading it/u);
+  assert.match(devServer, /\.\/dev-confirmation\.sh status <slug>/u);
+  assert.match(devServer, /\.\/dev-confirmation\.sh stop <slug>/u);
+  assert.match(workflow, /active confirmation sessionのslug/u);
+});
+
 test("migrationだけを自動再起動理由としbuildとcleanupの境界を維持する", async () => {
   const [implement, workflow, devServer] = await Promise.all([
     read(".agents/skills/implement/SKILL.md"),
@@ -212,6 +236,7 @@ test("Local Environmentはworktree setupとcheckout-scoped actionだけを共有
   }
   assert.match(gitignore, /^\/\.codex\/runtime\.local\.env$/mu);
   assert.match(gitignore, /^\/\.codex\/runtime-session\.local\.json$/mu);
+  assert.match(gitignore, /^\/\.codex\/confirmation-session\.local\.json$/mu);
   assert.match(parityReference, /status --url/u);
   assert.match(parityReference, /3100-3899/u);
 });

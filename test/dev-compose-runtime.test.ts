@@ -596,6 +596,10 @@ test("RT-10 and RT-11: worktree exposure, labels, restart, and cleanup guards ar
   assert.match(wrapper, /WEB_CONTAINER_BEFORE/u);
   assert.match(wrapper, /WEB_CONTAINER_AFTER/u);
   assert.match(wrapper, /Local cleanup is a no-op/u);
+  assert.match(wrapper, /runtime-cleanup-policy/u);
+  assert.match(wrapper, /CODEX_CONFIRMATION_STOP_SESSION_ID/u);
+  assert.match(wrapper, /confirmation_policy_status == 10/u);
+  assert.match(wrapper, /Cleanup skipped: the exact worktree runtime is held by an active confirmation session/u);
   assert.doesNotMatch(wrapper, /docker compose down/u);
   for (const label of [
     "dev.zoomgov.runtime.id",
