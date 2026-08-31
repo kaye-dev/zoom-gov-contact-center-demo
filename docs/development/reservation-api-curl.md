@@ -24,6 +24,8 @@ curl -fsS "$BASE_URL/api/health" | jq .
 
 API contractの正本は [reservation-api.openapi.json](./reservation-api.openapi.json) です。すべての公開API responseは `X-Request-ID` を返し、JSON bodyがある場合は同じ値を `requestId` に返します。
 
+ZVAのツールテンプレートは[予約APIツールテンプレート作成](../knowledge-base/ZVA設定/04_予約APIツールテンプレート作成.md)の手順で作成します。
+
 ## 1. サービスと空き枠を確認する
 
 サービス一覧には予約方法、曜日、開始時刻、所要時間、定員が含まれます。
