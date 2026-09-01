@@ -484,7 +484,13 @@ Zoom公式のCustom Script例は、`req.get`が例外を投げる場合だけで
 
 保存後、`私のスキル`から開き直し、General、名前、トリガー、指示、7件のツール参照が各1件であることと、`mirai_reservation_list`が0件であることを確認します。
 
-Skill Libraryへの保存だけでは利用者向けAgentへ反映されません。公開前の停止条件を満たした後、対象Agentで`Add from library` → `Use`を選び、スキルを`Active`にしてAgentを`Publish`します。ツールテンプレートまたは共有スキルを後から変更した場合も、影響するAgentの参照内容を確認して再Publishします。
+Skill Libraryへの保存だけでは利用者向けAgentへ反映されません。公開前の停止条件を満たした後、対象Agentで`Add from library` → `Use`を選び、スキルを`Active`にします。ツールテンプレートまたは共有スキルを後から変更した場合も、影響するAgentの参照内容を確認してからPublishします。
+
+2026年9月1日の対象音声Agentでは、Generalスキルの`Use`が`skill.channel=3 incompatible with agent.channel=2`で失敗しました。Zoom公式手順はカスタムスキルのモダリティとしてGeneral、Voice、Chatを案内していますが、この内部チャネル番号の対応関係は公開していません。同じエラーが発生した場合は追加を停止し、資格情報やモダリティを推測で変更せず、[音声ボット作成](./02_音声ボット作成.md#予約対応を音声agentへ追加する)の手順で対象Agent内にローカルスキルを作成します。
+
+Agentローカル版では`スキルライブラリに追加`をオフにし、同じ指示と7件のツール参照を設定します。各ツールの`ツールの確認と追加`に表示される保存済みの静的Authorizationは外部へ表示、コピー、変更せず、同一アカウントの承認済み設定であることを確認して`保存して追加`を実行します。Skill Library版とAgentローカル版は別管理のため、一方の変更が他方へ自動同期されたと扱いません。
+
+Agent guidanceで予約操作を禁止しても、7件のツールを持つスキル自体の権限は縮小されません。公開時はフル予約スキルを外すか無効化し、`mirai_reservation_list_services`と`mirai_reservation_get_availability`だけを参照するread-onlyスキルへ置き換えるか、API側の利用者認証と予約所有者検証を完了します。
 
 ## 確認
 
