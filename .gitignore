@@ -30,6 +30,7 @@
 /plans/*
 !/plans/template.md
 /.codex/confirmation-session.local.json
+/.codex/parity-runs/
 /plan/
 /.codex/runtime.local.env
 /.codex/runtime-session.local.json

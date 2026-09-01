@@ -159,7 +159,100 @@ test("parity-specは全target/state・row・probeを厳密に検証する", asyn
 
   const externalQuery = clone(spec);
   externalQuery.stateSetups[0].production.query = { returnTo: "https://example.com/" };
-  assert.throws(() => validateParitySpec(externalQuery, contract), /must not contain an external/u);
+  assert.throws(() => validateParitySpec(externalQuery, contract), /safe fixture value|external/u);
+
+  const secretQuery = clone(spec);
+  secretQuery.stateSetups[0].production.query = { accessToken: "opaque-value" };
+  assert.throws(() => validateParitySpec(secretQuery, contract), /sensitive query parameter/u);
+
+  const personalDataFill = clone(spec);
+  personalDataFill.stateSetups[0].production.actions.push({
+    type: "fill",
+    selector: "#field",
+    value: "resident@example.jp",
+  } as never);
+  assert.throws(() => validateParitySpec(personalDataFill, contract), /synthetic fixture token/u);
+
+  const safeFill = clone(spec);
+  safeFill.stateSetups[0].production.actions.push({
+    type: "fill",
+    selector: "#field",
+    value: "ZAAD_fixture_01",
+  } as never);
+  assert.equal(validateParitySpec(safeFill, contract), safeFill);
+  for (const value of [
+    "",
+    "山田花子",
+    "090-1234-5678",
+    "https://example.invalid/",
+    "fixture value",
+    "fixture\nvalue",
+    `A${"a".repeat(64)}`,
+  ]) {
+    const unsafeFill = clone(spec);
+    unsafeFill.stateSetups[0].production.actions.push({
+      type: "fill",
+      selector: "#field",
+      value,
+    } as never);
+    assert.throws(() => validateParitySpec(unsafeFill, contract), /synthetic fixture token/u, value);
+  }
+});
+
+test("COMPAT-01 legacy CLI exports adapters and evidence readers", async () => {
+  const parity = await parityModulePromise;
+  for (const exportName of [
+    "BrowserParityRunner",
+    "ParityRunError",
+    "compareProbe",
+    "createApprovalEvidence",
+    "loadParityDefinition",
+    "runCli",
+    "selectRows",
+    "validateApprovalEvidence",
+    "validateEvidenceBundle",
+    "validateParityEvidence",
+    "validateParitySpec",
+    "writeRunEvidence",
+  ]) {
+    assert.equal(typeof (parity as Record<string, unknown>)[exportName], "function", `missing export ${exportName}`);
+  }
+  assert.equal(parity.validateParitySpec(spec, contract), spec);
+  const versionTwo = {
+    ...clone(spec),
+    version: 2,
+    browserSetups: [{
+      targetId: "main",
+      production: { type: "aria-switch", selector: "#theme", checkedTheme: "dark", readbackSelector: "html" },
+      prototype: { type: "query", parameter: "theme" },
+    }],
+  };
+  assert.equal(parity.validateParitySpec(versionTwo, contract), versionTwo);
+  const missingBrowserTarget = clone(versionTwo);
+  missingBrowserTarget.browserSetups = [];
+  assert.throws(
+    () => parity.validateParitySpec(missingBrowserTarget, contract),
+    /cover every ui-contract\.json comparison target/u,
+  );
+  const unsafeBrowserQuery = clone(versionTwo);
+  unsafeBrowserQuery.browserSetups[0].prototype.parameter = "https://example.com";
+  assert.throws(
+    () => parity.validateParitySpec(unsafeBrowserQuery, contract),
+    /safe query parameter/u,
+  );
+  const inAppOnly = createAdapter({ requiresBrowserSetups: true });
+  await assert.rejects(
+    new parity.BrowserParityRunner(inAppOnly).run({
+      definition: { contract, spec, prototypeRevision: revision, validationProfileDigest: digest },
+      phase: "final",
+      changedTargetIds: ["main"],
+      changedStates: ["default"],
+      tabs: { production: "production", prototype: "prototype" },
+      baseUrls: { production: "http://localhost:3000/", prototype: "http://127.0.0.1:4000/" },
+      run: { runId: "compat", goalSha256: digest, runtime: {}, sources: [] },
+    }),
+    (error: unknown) => (error as { code?: string }).code === "PARITY_BROWSER_SETUP_REQUIRED",
+  );
 });
 
 test("phaseとrisk tagからsmoke・affected・全matrixを決定する", async () => {
@@ -516,11 +609,13 @@ test("final-only evidenceはBrowser完了境界を検証し旧pre-edit pairもre
   );
 });
 
-test("selector failureは対象row/probeを示して即時停止する", async () => {
+test("未知のBrowser例外は秘密を保持せずstable codeと対象row/probeだけを示す", async () => {
   const { BrowserParityRunner, ParityRunError } = await parityModulePromise;
   const adapter = createAdapter({
-    async runProbe(_tabId: string, probe: { id: string }) {
-      throw new Error(`selector not found for ${probe.id}`);
+    async runProbe() {
+      throw new Error(
+        "Bearer runner-secret Cookie: session=runner https://localhost/fixture?token=runner-secret",
+      );
     },
   });
   await assert.rejects(
@@ -538,12 +633,44 @@ test("selector failureは対象row/probeを示して即時停止する", async (
     }),
     (error: unknown) => {
       assert.ok(error instanceof ParityRunError);
-      assert.match(
-        (error as { evidence: { rows: Array<{ error: string }> } }).evidence.rows[0].error,
-        /main-default-desktop-light\/production\/dom-shell/u,
+      const candidate = error as {
+        code?: string;
+        message?: string;
+        evidence?: Record<string, unknown>;
+      };
+      assert.equal(candidate.code, "PARITY_UNEXPECTED_ERROR");
+      assert.deepEqual(candidate.evidence, {
+        operation: "runProbe",
+        rowId: "main-default-desktop-light",
+        surface: "production",
+        probeId: "dom-shell",
+      });
+      assert.doesNotMatch(
+        JSON.stringify({
+          code: candidate.code,
+          message: candidate.message,
+          evidence: candidate.evidence,
+        }),
+        /Bearer|Cookie|runner-secret|token=/iu,
       );
       return true;
     },
+  );
+
+  const stableAdapter = createAdapter({
+    async runProbe() {
+      throw new ParityRunError("PARITY_REQUIRED_PROBE_UNAVAILABLE", "documented probe API unavailable");
+    },
+  });
+  await assert.rejects(
+    new BrowserParityRunner(stableAdapter).run({
+      definition: { contract, spec, prototypeRevision: revision, validationProfileDigest: digest },
+      phase: "smoke",
+      tabs: { production: "production", prototype: "prototype" },
+      baseUrls: { production: "http://localhost:3000/", prototype: "http://127.0.0.1:4000/" },
+      run: { runId: "run-stable-code", goalSha256: digest, runtime: {}, sources: [] },
+    }),
+    (error: unknown) => (error as { code?: string }).code === "PARITY_REQUIRED_PROBE_UNAVAILABLE",
   );
 });
 

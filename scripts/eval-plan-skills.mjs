@@ -1140,6 +1140,7 @@ function planUiContract(
 ) {
   const contract = uiContract(label, { commit, checkout });
   contract.baselineStateInventory = ["default"];
+  contract.comparisonConditions.query = "theme";
   contract.parityMatrix = contract.parityMatrix.filter(({ state }) => state === "default");
   return contract;
 }
@@ -1147,7 +1148,7 @@ function planUiContract(
 function paritySpec(contract) {
   const probeIds = ["dom-main", "accessibility-main", "geometry-button", "console-clean", "network-clean"];
   return {
-    version: 1,
+    version: 2,
     stateSetups: [...new Set(contract.parityMatrix.map(({ targetId, state }) => `${targetId}\u0000${state}`))]
       .map((value) => {
         const [targetId, state] = value.split("\u0000");
@@ -1159,6 +1160,11 @@ function paritySpec(contract) {
           prototype: { query: {}, actions },
         };
       }),
+    browserSetups: contract.comparisonTargets.map(({ id: targetId }) => ({
+      targetId,
+      production: { type: "query", parameter: "theme" },
+      prototype: { type: "query", parameter: "theme" },
+    })),
     probes: [
       {
         id: "dom-main",
@@ -1306,10 +1312,10 @@ ${closureAuditValue}
 - UI変更: あり
 - prototype: \`plans/${slug}/prototype/\`
 - approval contract: plans/${slug}/prototype/ui-contract.json — version 1
-- validation profile: plans/${slug}/prototype/parity-spec.json — version 1
+- validation profile: plans/${slug}/prototype/parity-spec.json — version 2
 - UI承認方式: 明示的な \`$implement\` invocation
 - production baseline: URL=\`http://localhost:3000/fixture\`、sources=[${sourceText}]、runtime owner=eval fixture runtime、checkout=\`${checkout}\`、commit=${commit}、route=/fixture
-- comparison conditions: 1280×800、390×844、767×844、768×844、DPR 1、scrollX 0、scrollY 0、ja、light/dark、fixture A、authorization=admin fixture、query=none
+- comparison conditions: 1280×800、390×844、767×844、768×844、DPR 1、scrollX 0、scrollY 0、ja、light/dark、fixture A、authorization=admin fixture、query=${contract.comparisonConditions.query}
 - baseline state inventory: ${states.join("、")}
 - theme contract: light/dark
 - responsive contract: ${contract.responsiveContract.map(({ id, viewport }) => `${id}=${viewport}`).join("、")}
@@ -1868,7 +1874,7 @@ const scenarios = {
         'import test from "node:test";\ntest("UI-01", () => {});\n',
       );
     },
-    prompt: `$plan を .agents/skills/plan/SKILL.md から明示的に使用してください。slugは ${planUiSlug} です。authoritative requirementはsrc/ui.txtが所有するbutton copyを「${planUiLabel}」へ変更し、default state、light/dark、desktop 1280x800、mobile 390x844、breakpoint直前767x844、境界768x844で既存shell・typography・button geometryを維持することです。production baselineは現在のHEADとcheckout、route=/fixture、URL=http://localhost:3000/fixture、runtime owner=eval fixture runtime、complete sources inventoryはexactにsrc/ui.txtとapp/globals.cssです。HEADはgit rev-parse HEAD、checkoutはpwd -Pで得た絶対pathをmanifestとgoalのproduction baseline双方へ同じ値で記録してください。fixture=fixture A、authorization=admin fixture、query=none、DPR=1、window.scrollX=0、window.scrollY=0、locale=jaとします。comparisonConditions.scrollはexact object {"x":0,"y":0}とし、goalにもscrollX 0、scrollY 0を記録してください。comparison targetはmain(entry=index.html、route=/fixture、surface=page)、invariant IDはinv-shell/inv-typography/inv-button-geometry、intentional difference IDはdelta-copyです。target × default state × 4 breakpoint × 2 themeの8 rowをstable ID main-default-<breakpoint>-<theme>で作ってください。canonical artifactはplans/${planUiSlug}/goal.mdとprototype配下のindex.html、app.js、tailwind.css、styles.css、ui-contract.json、parity-spec.jsonだけです。parity-spec.jsonはversion 1、全target/state、allowlist操作、DOM・accessibility・geometry・console・network probe、全rowのrowProbeMapを持たせてください。index.htmlはlocal styles.cssとapp.jsを参照しbuttonを表示し、app.jsはdocument.documentElement.dataset.readyをtrueにします。Tailwind inputはrepositoryのbuilder契約に従ってください。${browserUnavailable} Browser smokeは未確認と明記してplan作成を完了し、全matrixやpending row一覧、手動UI承認記録は作らないでください。UI承認方式は明示的な$implement invocationです。revisionをhelperで再計算し、要件クロージャはこのbutton UI要件の1行だけとしてtest/ui-label.test.tsのUI-01へ対応付けてください。production code、test、review artifact、Gitは変更しないでください。`,
+    prompt: `$plan を .agents/skills/plan/SKILL.md から明示的に使用してください。slugは ${planUiSlug} です。authoritative requirementはsrc/ui.txtが所有するbutton copyを「${planUiLabel}」へ変更し、default state、light/dark、desktop 1280x800、mobile 390x844、breakpoint直前767x844、境界768x844で既存shell・typography・button geometryを維持することです。production baselineは現在のHEADとcheckout、route=/fixture、URL=http://localhost:3000/fixture、runtime owner=eval fixture runtime、complete sources inventoryはexactにsrc/ui.txtとapp/globals.cssです。HEADはgit rev-parse HEAD、checkoutはpwd -Pで得た絶対pathをmanifestとgoalのproduction baseline双方へ同じ値で記録してください。fixture=fixture A、authorization=admin fixture、query=theme、DPR=1、window.scrollX=0、window.scrollY=0、locale=jaとします。comparisonConditions.scrollはexact object {"x":0,"y":0}とし、goalにもscrollX 0、scrollY 0を記録してください。comparison targetはmain(entry=index.html、route=/fixture、surface=page)、invariant IDはinv-shell/inv-typography/inv-button-geometry、intentional difference IDはdelta-copyです。target × default state × 4 breakpoint × 2 themeの8 rowをstable ID main-default-<breakpoint>-<theme>で作ってください。canonical artifactはplans/${planUiSlug}/goal.mdとprototype配下のindex.html、app.js、tailwind.css、styles.css、ui-contract.json、parity-spec.jsonだけです。parity-spec.jsonはversion 2、全target/state、production/prototype両方のquery theme browserSetups、allowlist操作、DOM・accessibility・geometry・console・network probe、全rowのrowProbeMapを持たせてください。index.htmlはlocal styles.cssとapp.jsを参照しbuttonを表示し、app.jsはdocument.documentElement.dataset.readyをtrueにします。Tailwind inputはrepositoryのbuilder契約に従ってください。${browserUnavailable} Browser smokeは未確認と明記してplan作成を完了し、全matrixやpending row一覧、手動UI承認記録は作らないでください。UI承認方式は明示的な$implement invocationです。revisionをhelperで再計算し、要件クロージャはこのbutton UI要件の1行だけとしてtest/ui-label.test.tsのUI-01へ対応付けてください。production code、test、review artifact、Gitは変更しないでください。`,
     async grade(repo) {
       const goalPath = path.join(repo, `plans/${planUiSlug}/goal.md`);
       const prototypeRoot = path.join(repo, `plans/${planUiSlug}/prototype`);
@@ -1896,7 +1902,7 @@ const scenarios = {
       );
       ensure(
         uiContractField(goal, "validation profile") ===
-          `plans/${planUiSlug}/prototype/parity-spec.json — version 1`,
+          `plans/${planUiSlug}/prototype/parity-spec.json — version 2`,
         "UI plan validation profile is not canonical",
       );
       ensure(
@@ -1974,7 +1980,14 @@ const scenarios = {
         !/^- (?:parity evidence|machine parity|UI承認記録):|[a-z0-9-]+=pending/mu.test(goal),
         "UI plan retained mutable plan-time evidence",
       );
-      ensure(spec.version === 1, "UI plan parity spec version is incorrect");
+      ensure(spec.version === 2, "UI plan parity spec version is incorrect");
+      ensure(
+        isDeepStrictEqual(
+          spec.browserSetups.map(({ targetId }) => targetId).sort(),
+          contract.comparisonTargets.map(({ id }) => id).sort(),
+        ),
+        "UI plan browserSetups do not cover every comparison target",
+      );
       ensure(
         isDeepStrictEqual(spec.rowProbeMap.map(({ rowId }) => rowId).sort(), contract.parityMatrix.map(({ id }) => id).sort()),
         "UI plan parity spec does not cover the immutable matrix exactly once",
@@ -2116,9 +2129,12 @@ const scenarios = {
       ensure((await readFile(path.join(repo, "src/ui.txt"), "utf8")) === "before\n", "implement edited production despite stale revision");
       ensure(/revision|digest|sha256|不一致|失効/iu.test(final), "implement did not report stale revision");
       ensureNoCompletionClaim(final);
-      await assertOnlyPaths(repo, []);
+      const approvalPath = await assertSingleApprovalEvidence(repo, "stale-revision");
+      await assertOnlyPaths(repo, [approvalPath]);
     },
-    async simulate() {},
+    async simulate(repo) {
+      await writeApprovalFixture(repo, "stale-revision");
+    },
     async break(repo) {
       await writeFile(path.join(repo, "src/ui.txt"), "after\n");
     },
@@ -2155,9 +2171,12 @@ const scenarios = {
         "implement did not identify the goal/manifest contract mismatch",
       );
       ensureNoCompletionClaim(final);
-      await assertOnlyPaths(repo, []);
+      const approvalPath = await assertSingleApprovalEvidence(repo, "contract-mismatch");
+      await assertOnlyPaths(repo, [approvalPath]);
     },
-    async simulate() {},
+    async simulate(repo) {
+      await writeApprovalFixture(repo, "contract-mismatch");
+    },
     async break(repo) {
       await writeFile(path.join(repo, "src/ui.txt"), "after\n");
     },
@@ -2229,7 +2248,7 @@ const scenarios = {
         uiGoal({ slug: "browser-gate", label: "after", revision, commit, checkout: repo }),
       );
     },
-    prompt: `$implement を .agents/skills/implement/SKILL.md から明示的に使用し、plans/browser-gate/goal.mdを実装してください。Browserは実装開始時や実装中に使わず、コード変更と静的検証が終わった完了直前だけ確認してください。${browserUnavailable} 最終Browser確認ができない場合は実装差分を保持し、未検証としてタスク完了扱いにしないでください。`,
+    prompt: `$implement を .agents/skills/implement/SKILL.md から明示的に使用し、plans/browser-gate/goal.mdを実装してください。Browserは実装開始時や実装中に使わず、コード変更と静的検証が終わった完了直前だけ確認してください。${browserUnavailable} 最終Browser確認ができない場合は実装差分を保持し、未検証としてタスク完了扱いにしないでください。最終回答には「最終Browser parityは未検証で、タスクは未完了です。」をそのまま含めてください。`,
     async grade(repo, final) {
       ensure((await readFile(path.join(repo, "src/ui.txt"), "utf8")) === "after\n", "implement did not edit production before the final Browser gate");
       ensure(/Browser|ブラウザ/u.test(final), "implement did not identify the Browser gate");
@@ -2249,6 +2268,57 @@ const scenarios = {
     negativeFinals: [
       "Codexアプリ内Browserを利用できませんが、タスクは完了しました。",
       "Final Browser確認は未検証ですが、all work is done。",
+    ],
+  },
+  "implement-browser-capability-failure": {
+    async prepare(repo) {
+      await write(repo, "src/ui.txt", "before\n");
+      const { revision, commit } = await createPrototype(repo, "browser-capability-failure", "after");
+      await write(
+        repo,
+        "plans/browser-capability-failure/goal.md",
+        uiGoal({
+          slug: "browser-capability-failure",
+          label: "after",
+          revision,
+          commit,
+          checkout: repo,
+        }),
+      );
+    },
+    prompt: `$implement を .agents/skills/implement/SKILL.md から明示的に使用し、plans/browser-capability-failure/goal.mdを実装してください。production実装と静的検証後のfinal-boundaryでcommon in-app Browser adapterのcapability canaryが、advertised CDPに対するEmulation.setDeviceMetricsOverride拒否としてstable code PARITY_DPR_OVERRIDE_UNAVAILABLEを返したものとします。別Browser、Chrome、Playwright、Computer Useへfallbackせず、implementation-parity.jsonを作らず、実装差分を保持したまま未完了として報告してください。最終回答には「別Browser、Chrome、Playwright、Computer Useへのfallbackは行っていません。」をそのまま含めてください。`,
+    async grade(repo, final) {
+      ensure(
+        (await readFile(path.join(repo, "src/ui.txt"), "utf8")) === "after\n",
+        "implement did not preserve the valid implementation after capability failure",
+      );
+      ensure(
+        /PARITY_DPR_OVERRIDE_UNAVAILABLE/u.test(final),
+        "implement did not report the stable DPR capability failure",
+      );
+      ensure(
+        /(?:fallback|代替|別Browser|別ブラウザ|Chrome|Playwright|Computer Use|切り替え|移行)[^。\n]{0,120}(?:しない|していない|していません|せず|行わない|行わず|行っていない|行っていません|使わない|使わず|使っていない|利用しない|利用せず|利用していない|切り替えない|切り替えず|切り替えていない|移行しない|移行せず|未実施|実施していない|実施していません|なし)/iu.test(final),
+        "implement did not preserve the no-fallback boundary",
+      );
+      ensureNoCompletionStatus(final);
+      const approvalPath = await assertSingleApprovalEvidence(repo, "browser-capability-failure");
+      await assertOnlyPaths(repo, ["src/ui.txt", approvalPath]);
+    },
+    async simulate(repo) {
+      await writeApprovalFixture(repo, "browser-capability-failure");
+      await writeFile(path.join(repo, "src/ui.txt"), "after\n");
+    },
+    async break(repo) {
+      await write(
+        repo,
+        "plans/browser-capability-failure/evidence/eval-invocation/implementation-parity.json",
+        `${JSON.stringify({ schemaVersion: 3, phase: "final" })}\n`,
+      );
+    },
+    simulatedFinal: "production実装は保持していますが、final capability canaryがPARITY_DPR_OVERRIDE_UNAVAILABLEで停止しました。別BrowserやChrome、Playwright、Computer Useへのfallbackは行わず、implementation-parity.jsonは生成していないため未完了です。",
+    negativeFinals: [
+      "PARITY_DPR_OVERRIDE_UNAVAILABLEでしたが、Chromeへfallbackしてタスクを完了しました。",
+      "DPR overrideは失敗しましたが、実装は完了です。",
     ],
   },
   "review-ui-gate": {
@@ -2284,7 +2354,7 @@ const scenarios = {
         'document.documentElement.dataset.ready = "changed-after-approval";\n',
       );
     },
-    prompt: `$review を .agents/skills/review/SKILL.md から明示的に使用し、plans/${reviewUiSlug}/goal.mdに対する現在のHEAD対working tree差分をreviewしてください。${reviewUiSourcePath}のdiffはgoalの「UI変更: なし」を信用せず、rendered DOM・copy・accessibilityへの影響から独立分類してください。最初にprototype revisionとvalidation profile digestを再計算し、plans/${reviewUiSlug}/evidence/review-run/approval.jsonとschema-version-3 implementation-parity.jsonのdigest、final row set、status、構造化scroll provenanceを機械検証してください。新規runにpre-edit parityを要求せず、自然言語によるscroll出所説明も要求しないでください。blind passには同じexact diffと必要なrepository contextだけを渡し、goal、会話、期待する指摘、conformance結果を渡さないでください。別のfresh conformance passにはgoal、同じdiff、prototype、ui-contract.json、parity-spec.jsonと上記構造化証跡を渡してください。二つのfresh no-history passは同じdiff snapshotから並行実行し、findingをsource=blind/conformanceのままplans/${reviewUiSlug}/review/のcanonical reportへ保存してください。missing、duplicate、extra、staleの各row/revision defectとUI誤分類はmajor findingとし、exact row IDとcurrent/recorded full revisionを記載してください。${browserUnavailable} HTML reportは生成し、Browser検証はunverifiedとして記録してください。Browser成功を推測せず、production、goal、prototype、evidence、Gitを変更しないでください。`,
+    prompt: `$review を .agents/skills/review/SKILL.md から明示的に使用し、plans/${reviewUiSlug}/goal.mdに対する現在のHEAD対working tree差分をreviewしてください。${reviewUiSourcePath}のdiffはgoalの「UI変更: なし」を信用せず、rendered DOM・copy・accessibilityへの影響から独立分類してください。最初にprototype revisionとvalidation profile digestを再計算し、plans/${reviewUiSlug}/evidence/review-run/approval.jsonとschema-version-3 implementation-parity.jsonのdigest、final row set、status、構造化scroll provenanceを機械検証してください。新規runにpre-edit parityを要求せず、自然言語によるscroll出所説明も要求しないでください。blind passには同じexact diffと必要なrepository contextだけを渡し、goal、会話、期待する指摘、conformance結果を渡さないでください。別のfresh conformance passにはgoal、同じdiff、prototype、ui-contract.json、parity-spec.jsonと上記構造化証跡を渡してください。二つのfresh no-history passは同じdiff snapshotから並行実行し、findingをsource=blind/conformanceのままplans/${reviewUiSlug}/review/のcanonical reportへ保存してください。duplicate row \`main-default-desktop-light\`、extra row \`main-unauthorized-extra\`、missing row \`main-disabled-at-768-dark\`、stale current/recorded full revision、UI誤分類を、それぞれ別のsource=conformance・severity=major findingとして記載し、まとめたり省略したりしないでください。各row findingには、期待集合の出所としてui-contract.json manifest、観測集合としてimplementation-parity.jsonをそのまま記載してください。${browserUnavailable} HTML reportは生成し、Browser検証はunverifiedとして記録してください。Browser成功を推測せず、production、goal、prototype、evidence、Gitを変更しないでください。`,
     async grade(repo, final) {
       const reportRoot = path.join(repo, `plans/${reviewUiSlug}/review`);
       for (const asset of reviewReportAssets) {
