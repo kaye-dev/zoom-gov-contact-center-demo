@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ja" class="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>In-app Browser parity fixture</title>
+    <link rel="stylesheet" href="/fixture.css" />
+    <script src="/fixture.js" defer></script>
+  </head>
+  <body>
+    <button id="theme-toggle" type="button" role="switch" aria-checked="false">
+      テーマ
+    </button>
+    <main id="fixture-main" data-state="idle" data-active="false" tabindex="-1">
+      <h1>防災情報テスト</h1>
+      <p id="message">決定論的な比較用コンテンツです。</p>
+      <label for="field">確認値</label>
+      <input id="field" type="text" value="" />
+      <button id="activate" type="button">確認</button>
+      <p id="hidden" hidden>非表示</p>
+    </main>
+  </body>
+</html>

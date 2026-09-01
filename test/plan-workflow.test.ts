@@ -182,7 +182,11 @@ test("implementはinvocation approval後にBrowserを使わず実装し完了直
   assert.match(implement, /Use `targeted` by default/);
   assert.match(implement, /Use `full` only when/);
   assert.match(implement, /one setup attempt plus one retry/);
-  assert.match(implement, /Do not create a substantial task-specific adapter or runtime shim/);
+  assert.match(implement, /in-app-browser-parity-adapter\.mjs/);
+  assert.match(implement, /prepare-run/);
+  assert.match(implement, /record-batch/);
+  assert.match(implement, /finalize-run/);
+  assert.match(implement, /task-specific runtime shim/);
   assert.match(implement, /Run the full test suite only when/);
   assert.match(implement, /Run a production build only for/);
   assert.match(implement, /Any later related change invalidates it/);
@@ -191,11 +195,36 @@ test("implementはinvocation approval後にBrowserを使わず実装し完了直
   assert.match(implement, /do not delegate implementation to a custom agent/);
   assert.match(workflow, /final parityを1回/);
   assert.match(workflow, /`targeted`を既定/);
-  assert.match(workflow, /大規模なadapterやruntime shimを新設・debugしない/);
+  assert.match(workflow, /task固有adapter、実行可能bundle、runtime shimを新設しない/);
   assert.match(workflow, /不要な全test・buildを実行しない/);
   assert.match(workflow, /pre-editとaffectedのBrowser実行が0回/);
   assert.match(workflow, /完了直前のtargeted finalが1回/);
   assert.match(workflow, /巨大なpending一覧を作らない/);
+});
+
+test("WF-01 in-app parity lifecycle contract", async () => {
+  const [plan, implement, review, workflow, reference, gitignore] = await Promise.all([
+    read(".agents/skills/plan/SKILL.md"),
+    read(".agents/skills/implement/SKILL.md"),
+    read(".agents/skills/review/SKILL.md"),
+    read("docs/development/codex-development-workflow.md"),
+    read(".agents/skills/plan/references/parity-runner.md"),
+    read(".gitignore"),
+  ]);
+  assert.match(plan, /parity-spec\.json` version 2/u);
+  assert.match(plan, /browserSetups/u);
+  for (const contract of [implement, workflow, reference]) {
+    assert.match(contract, /prepare-run/u);
+    assert.match(contract, /record-batch/u);
+    assert.match(contract, /finalize-run/u);
+    assert.match(contract, /390x844 \/ DPR 1|390×844 \/ DPR 1/u);
+  }
+  assert.match(review, /terminal cleanup/u);
+  assert.match(review, /parity-runs/u);
+  assert.match(reference, /PARITY_DPR_OVERRIDE_UNAVAILABLE/u);
+  assert.match(reference, /PARITY_CLEANUP_FAILED/u);
+  assert.match(reference, /single selected tab|選択済みtab|selected comparison tab/u);
+  assert.match(gitignore, /^\/\.codex\/parity-runs\/$/mu);
 });
 
 test("CS-WF-01/02/03: confirmation handoffはskill別の明示境界とverification分離を持つ", async () => {
@@ -290,6 +319,9 @@ test("reviewはstructured evidenceを先に検証して二つのpassを並行実
   assert.match(review, /approval\.json/);
   assert.match(review, /implementation-parity\.json/);
   assert.match(review, /schema-version-3/);
+  assert.match(review, /node \.agents\/skills\/plan\/scripts\/prototype-revision\.mjs plans\/<slug>\/prototype/);
+  assert.match(review, /review-data\.json\.validations/);
+  assert.match(review, /returned current `sha256:` revision/);
   assert.match(review, /New runs do not require or create `pre-edit-parity\.json`/);
   assert.match(review, /structured scroll provenance/);
   assert.doesNotMatch(review, /natural-language scroll|自然言語.*scroll/iu);
@@ -314,7 +346,13 @@ test("parity runnerとprototype helperはcanonical artifactsを検証する", as
     access(path.join(root, ".agents/skills/plan/references/parity-runner.md")),
     access(path.join(root, "dev-prototype.sh")),
   ]);
-  const [runner, revision] = await Promise.all([read(runnerPath), read(revisionPath)]);
+  const [runnerFacade, runnerCore, workspace, revision] = await Promise.all([
+    read(runnerPath),
+    read(".agents/skills/plan/scripts/parity-runner-core.mjs"),
+    read(".agents/skills/plan/scripts/parity-run-workspace.mjs"),
+    read(revisionPath),
+  ]);
+  const runner = `${runnerFacade}\n${runnerCore}\n${workspace}`;
   for (const token of [
     "stateSetups",
     "rowProbeMap",
@@ -326,6 +364,9 @@ test("parity runnerとprototype helperはcanonical artifactsを検証する", as
     "window.scrollX/window.scrollY",
     "explicit-$implement-invocation",
     "validateEvidenceBundle",
+    "prepare-run",
+    "record-batch",
+    "finalize-run",
   ]) {
     assert.ok(runner.includes(token), `parity runner omitted ${token}`);
   }

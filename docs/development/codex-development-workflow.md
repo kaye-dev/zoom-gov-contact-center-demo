@@ -91,19 +91,19 @@ plan成果物のcleanupは、この流れとは別の明示操作として行う
 
 ### `$implement`
 
-1. goal、prototype revision、validation profile digestを検証し、fresh runへ承認を記録する。
+1. goal、prototype revision、validation profile digestを検証し、fresh runへ承認を記録する。in-app Browserを使う新規UI planは`parity-spec.json` version 2とtarget全件の`browserSetups`を必須とする。
 2. UI変更時はBrowserを開かず、HEAD、checkout mount、source、contract、matrix scopeを静的に検証する。
 3. 影響target・state・viewportを特定し、`targeted`または`full`のmatrix scopeを固定する。
 4. goalとUI契約に従って実装し、Browserを使わず対象testで確認する。
 5. 変更riskに比例するtest、lint、typecheck、必要な場合だけbuild、diff checkを行う。
-6. 完了候補ができた最後に`./dev-compose.sh status --url`でcheckout固有runtimeと比較条件を確認し、選択rowのfinal parityを1回実行する。
-7. schema version 3の最終証跡を書く。現在のinvocationにexact phrase `確認セッションを保持`がある場合だけ同じprototypeとownership検証済みappを確認セッションへhandoffし、なければagent-ownedなbaseline差分だけをcleanupして結果を返す。
+6. 完了候補ができた最後に`./dev-compose.sh status`でownership、health、PID/container、cwd、mount、Compose project、portを読み戻し、`./dev-compose.sh status --url`のURLを取得する。その実測値をcommon in-app Browser adapterと`prepare-run` / stdin `record-batch` / `finalize-run`へ渡し、選択rowのfinal parityを1回実行する。
+7. Browser viewportとCDP override、run workspaceのcleanupをread backした後にだけschema version 3の最終証跡を書く。現在のinvocationにexact phrase `確認セッションを保持`がある場合だけ同じprototypeとownership検証済みappを確認セッションへhandoffし、なければagent-ownedなbaseline差分だけをcleanupして結果を返す。
 
 明示的な`$implement`実行自体を現在のgoal、revision、profile digestへの承認とする。「承認します」という別回答やrevision転記は不要である。静的gateの失敗はproduction差分0件のまま停止する。Browser unavailable、final parity失敗、drift、欠落rowは完了扱いにせず、実装差分と未確認条件を報告する。
 
 `targeted`を既定とし、copy、局所的なcomponent挙動、accessibility、keyboard、focus、viewport固有の変更は影響rowだけを選ぶ。`full`はprototype・contract、global style・semantic token、共通shell layout・navigation構造、breakpointを横断するresponsive規則、複数の無関係target、または明示要求を変える場合だけ使う。共有componentであることやUI fileを編集したことだけを全matrixの理由にしない。
 
-pre-editとaffectedのBrowser phaseは新規runで実行しない。同じBrowser assertionをparity、追加sweep、個別manual checkで重複確認しない。既存adapterがなければ完了直前に選択rowをCodexアプリ内Browserで直接確認し、feature実装中に大規模なadapterやruntime shimを新設・debugしない。Browser plumbingは初回と1回のretryで止める。
+pre-editとaffectedのBrowser phaseは新規runで実行しない。同じBrowser assertionをparity、追加sweep、個別manual checkで重複確認しない。common adapterは`.agents/skills/plan/scripts/in-app-browser-parity-adapter.mjs`を使い、Browser Node REPLへpure ESMとdata-only JSON batchだけを読み込む。比較にはfreshな選択済みtabを1つ使い、productionからprototypeへ直列に移動する。task固有adapter、実行可能bundle、runtime shimを新設しない。Browser plumbingは初回と1回のretryで止める。
 
 局所変更は対象testとlint、typecheck、diff checkを基本とする。全testは無関係suiteへ波及し得る場合または信頼できる対象testがない場合、production buildはroute、configuration、bundling、server boundaryを変える場合またはrepositoryの明示要件がある場合だけ行う。
 
@@ -175,30 +175,32 @@ node .agents/skills/plan/scripts/parity-runner.mjs validate plans/<slug>/prototy
 
 `ui-contract.json` version 1には完全なproduction `sources` inventory、runtime owner、checkout、route、state、theme、responsive、interaction、安定したtargetとmatrix行を記録する。比較条件はviewport、DPR、locale、theme、fixture、authorization、queryと、両surfaceの`window.scrollX` / `window.scrollY`から実測したexact `scroll: {x, y}`を一致させる。
 
-`parity-spec.json` version 1にはdeterministic setup、allowlist action、screenshot・DOM・accessibility・style・geometry・focus・console・network probeと全row mappingを記録する。schemaとBrowser adapterの正本は`.agents/skills/plan/references/parity-runner.md`とする。
+`parity-spec.json` version 2にはdeterministic setup、targetごとのquery / ARIA switch / fixed theme `browserSetups`、allowlist action、screenshot・DOM・accessibility・style・geometry・focus・console・network probeと全row mappingを記録する。version 1はlegacy planのstatic validationと既存custom adapterに限り維持する。schemaとBrowser adapterの正本は`.agents/skills/plan/references/parity-runner.md`とする。
 
 plan中のsmokeは代表desktopと390×844を基本とし、theme/token/native controlはlight/dark、responsive/layoutは影響breakpoint、dialog/menu/keyboard/focusはinteraction probeを追加する。
 
 ### 承認と証跡
 
-`$implement`はfreshな`plans/<slug>/evidence/<run-id>/`へ次を作る。
+`$implement`はfreshな`plans/<slug>/evidence/<run-id>/`へ次を作る。`evidence/`とrun directoryはumaskに依存せず`0700`、canonical JSONは`0600`で排他的に作成し、既存pathのtype、symlink、realpath、mode不一致では修復せず停止する。
 
 - `approval.json`: goal digest、prototype revision、profile digest
 - `implementation-parity.json`: 完了候補の最後に選択rowで実行した結果
 
-新規parity fileはfinal-onlyのschema version 3とし、`matrixScope`とtarget・state・viewport・riskのselectionを記録する。`full`ならmanifest全row、`targeted`ならselectionから再計算したexact rowだけを含める。既存のschema version 1と2はlegacyなpre-edit/final pairとしてread-only検証し、暗黙に書き換えない。executed rowは1回だけ記録し、statusは`pass`または`fail`とする。未実行はfile欠落で表し、巨大なpending一覧を作らない。scrollには`source: "window.scrollX/window.scrollY"`を残す。goal、prototype、contract/profile、source、fixture、authorization、query、route、Browser条件のdriftは承認または証跡を失効させる。
+新規parity fileはfinal-onlyのschema version 3とし、`matrixScope`とtarget・state・viewport・riskのselectionを記録する。`full`ならmanifest全row、`targeted`ならselectionから再計算したexact rowだけを含める。既存のschema version 1と2はlegacyなpre-edit/final pairとしてread-only検証し、暗黙に書き換えない。executed rowは1回だけ記録し、statusは`pass`または`fail`とする。未実行はfile欠落で表し、巨大なpending一覧を作らない。scrollには`source: "window.scrollX/window.scrollY"`を残す。capability canary、`390x844 / DPR 1`の実測、CDP / viewport cleanup、`/.codex/parity-runs/<run-id>/`のabsenceが揃った場合だけ`finalize-run`がcanonical evidenceを`wx`で作る。goal、prototype、contract/profile、source、fixture、authorization、query、route、Browser条件のdriftは承認または証跡を失効させる。
 
 ### Runtime所有権
 
 1. Localはport 3000、worktreeはruntime manifestの割当portについて、関連process、container、Compose、dependencyのbaselineとownerを記録する。
 2. implementationと静的検証が終わるまでBrowserとprototype serverを起動しない。
 3. buildが必要な場合だけidentityを再確認し、agent-owned runtimeだけを停止する。
-4. 完了直前に`./dev-compose.sh ensure`で実アプリを再利用または起動し、`status --url`のURLとprototypeでfinal parityを行う。
+4. 完了直前に`./dev-compose.sh ensure`で実アプリを再利用または起動し、`./dev-compose.sh status`の`RUNTIME_OWNERSHIP=verified`、`ACTIVE_RUNTIME_HEALTH=healthy`、`RUNTIME_RESTART_REQUIRED=0`、PID/container、cwd、mount、Compose project、portを読み戻す。続いて`./dev-compose.sh status --url`のURLとprototypeでfinal parityを行い、`finalize-run`直前にも同じreadbackを繰り返す。
 5. 最終確認後はworktreeだけ`./dev-compose.sh cleanup`を使い、baselineとの差分だけをcleanupする。
 
 Localでは同じcheckoutのhealthyなnative Next.jsまたは正しいCompose `web`を`http://localhost:3000`で再利用する。worktreeではcanonical checkout pathから固有Compose projectとweb・PostgreSQL・Studio portを割り当て、DB、named volume、network、originを他checkoutと分離する。保持するnamed volumeのcreation identityはsession間で固定し、可変なcurrent session labelを理由にdatabase再作成を要求しない。worktreeはloopbackだけにbindし、LANとCloudflareはLocal専用とする。
 
-記録にはPID、command、cwd、Compose project、checkout mount、container ID、URL、fixture、authorizationを含める。通常変更はHMRを使い、wrapperが自動再起動できるのはpending migration適用後のverified `web`だけとする。新規route、stale cache、package、runtime設定の変更は理由を報告し、明示的な`./dev-compose.sh restart web`（`Web restart`）操作を待つ。他serviceやproject全体を停止しない。ユーザー所有dev serverはbuildのために停止せず、安全な隔離buildができなければblockedとする。広域な`docker compose down`や既存resource、named volumeの削除は行わない。
+記録にはPID、command、cwd、Compose project、checkout mount、container ID、URL、fixture、authorizationを含める。`prepare-run`の`--runtime-owner`と`--runtime-checkout`はこの外部readback値をcontract、current checkout、manifest、evidenceへ結び付ける宣言値であり、CLI自身はprocess、container、listener、mount、healthを検査しない。引数同士やcontractとの一致だけを実runtime所有権の確認として扱わない。
+
+通常変更はHMRを使い、wrapperが自動再起動できるのはpending migration適用後のverified `web`だけとする。新規route、stale cache、package、runtime設定の変更は理由を報告し、明示的な`./dev-compose.sh restart web`（`Web restart`）操作を待つ。他serviceやproject全体を停止しない。ユーザー所有dev serverはbuildのために停止せず、安全な隔離buildができなければblockedとする。広域な`docker compose down`や既存resource、named volumeの削除は行わない。
 
 ## Workflowの検証
 
