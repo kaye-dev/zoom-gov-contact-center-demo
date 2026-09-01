@@ -36,8 +36,8 @@ const ADMIN_ACCESS_FREEZE_MIGRATION =
   "20260828180000_add_admin_access_mutation_freeze";
 const ADMIN_ACCESS_SINGLE_ROLE_MIGRATION =
   "20260828210000_enforce_single_admin_access_role";
-const RESERVATION_BOOKINGS_MIGRATION =
-  "20260830120000_add_reservation_bookings";
+const DISASTER_RADIO_ZAAD_MIGRATION =
+  "20260901060000_add_disaster_radio_zaad";
 const MIGRATIONS_BEFORE_ADMIN_ACCESS = [
   "20260623105657_init",
   "20260804090000_add_site_settings",
@@ -60,10 +60,10 @@ test("fresh database applies and reapplies the complete migration chain", async 
          WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL
          ORDER BY started_at`,
       );
-      assert.equal(migrations.rowCount, 11);
+      assert.equal(migrations.rowCount, 16);
       assert.equal(
         migrations.rows.at(-1)?.migration_name,
-        RESERVATION_BOOKINGS_MIGRATION,
+        DISASTER_RADIO_ZAAD_MIGRATION,
       );
       const developerApiColumns = await client.query<{ column_name: string }>(`
         SELECT column_name
@@ -86,7 +86,18 @@ test("fresh database applies and reapplies the complete migration chain", async 
       `);
       assert.deepEqual(
         reservationColumns.rows.map(({ column_name }) => column_name),
-        ["id", "serviceKey", "reservationDate", "startMinute", "isDemo", "createdAt"],
+        [
+          "id",
+          "serviceKey",
+          "reservationDate",
+          "startMinute",
+          "isDemo",
+          "createdAt",
+          "updatedAt",
+          "apiKeyId",
+          "externalReferenceId",
+          "revision",
+        ],
       );
       await assertSystemRoles(client);
       await assertAssignmentRevisionTriggerState(client, false);

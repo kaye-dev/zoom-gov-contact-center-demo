@@ -90,10 +90,11 @@ export function PageTitleBand({ title, iconSrc }: { title: string; iconSrc?: str
   );
 }
 
-export function SectionHeading({ id, children }: { id: string; children: ReactNode }) {
+export function SectionHeading({ id, children, tabIndex }: { id: string; children: ReactNode; tabIndex?: number }) {
   return (
     <h2
       id={id}
+      tabIndex={tabIndex}
       className="scroll-mt-24 border-l-4 border-accent bg-surface-hover px-5 py-4 text-xl font-bold leading-8 text-fg md:px-6 md:text-2xl"
     >
       {children}

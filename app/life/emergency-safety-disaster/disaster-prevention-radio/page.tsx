@@ -11,6 +11,14 @@ export const metadata: Metadata = {
   description: pageCopy.lead,
 };
 
-export default function DisasterPreventionRadioPage() {
-  return <DisasterPreventionRadioView />;
+export default async function DisasterPreventionRadioPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const query = await searchParams;
+  const reviewState = process.env.NODE_ENV !== 'production' && typeof query.reviewState === 'string'
+    ? query.reviewState
+    : undefined;
+  return <DisasterPreventionRadioView initialReviewState={reviewState} />;
 }

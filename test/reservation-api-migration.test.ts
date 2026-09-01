@@ -79,11 +79,16 @@ test("reservation API migration is additive and manifest hash is exact", () => {
     classification: "expand-compatible",
     },
   );
-  assert.deepEqual(manifest.migrations.at(-1), {
-    name: "20260831140000_add_reservation_api_zva_safety",
-    sha256: zvaSafetySha256,
-    classification: "expand-compatible",
-  });
+  assert.deepEqual(
+    manifest.migrations.find(
+      ({ name }) => name === "20260831140000_add_reservation_api_zva_safety",
+    ),
+    {
+      name: "20260831140000_add_reservation_api_zva_safety",
+      sha256: zvaSafetySha256,
+      classification: "expand-compatible",
+    },
+  );
   const reviewed = readFileSync(new URL("../scripts/deploy/lib/reviewed-migrations.ts", import.meta.url), "utf8");
   assert.match(reviewed, new RegExp(keyUsageSha256, "u"));
   assert.match(reviewed, new RegExp(requestLogSha256, "u"));

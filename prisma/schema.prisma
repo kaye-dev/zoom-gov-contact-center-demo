@@ -65,6 +65,39 @@ enum ReservationApiPermission {
   DELETE
 }
 
+enum DisasterRadioConsentStatus {
+  CONSENTED
+  NOT_CONSENTED
+}
+
+enum DisasterRadioRegistrationSource {
+  PUBLIC_FORM
+  ADMIN_FORM
+  ADMIN_CSV
+}
+
+enum ZoomContactSyncStatus {
+  NOT_ELIGIBLE
+  NOT_ASSIGNED
+  PENDING
+  SYNCED
+  FAILED
+}
+
+enum ZaadMessageSyncStatus {
+  PENDING
+  SYNCED
+  SYNC_FAILED
+}
+
+enum ZaadOneTimeDispatchState {
+  DRAFT
+  PREPARING
+  READY
+  FAILED
+  RESULT_UNKNOWN
+}
+
 model user {
   id                        String    @id
   name                      String
@@ -91,6 +124,11 @@ model user {
   createdReservationApiKeys          ReservationApiKey[]          @relation("ReservationApiKeyCreatedBy")
   revokedReservationApiKeys          ReservationApiKey[]          @relation("ReservationApiKeyRevokedBy")
   updatedReservationApiUsageSettings ReservationApiUsageSetting[] @relation("ReservationApiUsageSettingUpdatedBy")
+  registeredDisasterRadioResidents   DisasterRadioSubscription[]  @relation("DisasterRadioSubscriptionRegisteredBy")
+  updatedZaadRegistrationSettings    ZaadRegistrationSetting[]    @relation("ZaadRegistrationSettingUpdatedBy")
+  createdZaadOutboundMessages        ZaadOutboundMessage[]        @relation("ZaadOutboundMessageCreatedBy")
+  updatedZaadOutboundMessages        ZaadOutboundMessage[]        @relation("ZaadOutboundMessageUpdatedBy")
+  createdZaadOneTimeDispatches       ZaadOneTimeDispatch[]        @relation("ZaadOneTimeDispatchCreatedBy")
 
   @@unique([email])
   @@map("user")
@@ -423,4 +461,149 @@ model ReservationApiMonthlyUsage {
   updatedAt    DateTime @default(now()) @updatedAt @db.Timestamptz(3)
 
   @@map("reservation_api_monthly_usage")
+}
+
+model DisasterRadioSubscription {
+  id                          String                          @id @default(cuid())
+  name                        String
+  normalizedEmail             String
+  normalizedPhone             String
+  consentStatus               DisasterRadioConsentStatus
+  consentVersion              String?
+  consentedAt                 DateTime?                       @db.Timestamptz(3)
+  source                      DisasterRadioRegistrationSource
+  registeredByUserId          String?
+  revision                    Int                             @default(1)
+  zoomContactListId           String?
+  zoomContactListNameSnapshot String?
+  zoomContactId               String?
+  syncStatus                  ZoomContactSyncStatus
+  syncErrorCode               String?
+  syncedAt                    DateTime?                       @db.Timestamptz(3)
+  createdAt                   DateTime                        @default(now()) @db.Timestamptz(3)
+  updatedAt                   DateTime                        @default(now()) @updatedAt @db.Timestamptz(3)
+
+  registeredBy user? @relation("DisasterRadioSubscriptionRegisteredBy", fields: [registeredByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([normalizedEmail, normalizedPhone])
+  @@index([createdAt, id])
+  @@index([consentStatus, syncStatus])
+  @@index([zoomContactListId])
+  @@map("disaster_radio_subscriptions")
+}
+
+model ZaadRegistrationSetting {
+  id                      Int      @id @default(1)
+  contactListId           String?
+  contactListNameSnapshot String?
+  revision                Int      @default(1)
+  updatedByUserId         String?
+  updatedAt               DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+
+  updatedBy user? @relation("ZaadRegistrationSettingUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@map("zaad_registration_settings")
+}
+
+model ZaadOutboundMessage {
+  id              String                @id @default(cuid())
+  name            String
+  body            String
+  languageCode    String                @default("ja-JP")
+  voiceId         String
+  zoomAssetId     String?
+  zoomAssetItemId String?
+  syncStatus      ZaadMessageSyncStatus @default(PENDING)
+  syncErrorCode   String?
+  syncedAt        DateTime?             @db.Timestamptz(3)
+  revision        Int                   @default(1)
+  createdByUserId String?
+  updatedByUserId String?
+  createdAt       DateTime              @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime              @default(now()) @updatedAt @db.Timestamptz(3)
+
+  createdBy user? @relation("ZaadOutboundMessageCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  updatedBy user? @relation("ZaadOutboundMessageUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([updatedAt, id])
+  @@map("zaad_outbound_messages")
+}
+
+model ZaadOneTimeDispatch {
+  id                    String                   @id @default(cuid())
+  operationKey          String                   @unique
+  name                  String
+  body                  String
+  languageCode          String                   @default("ja-JP")
+  voiceId               String
+  state                 ZaadOneTimeDispatchState @default(DRAFT)
+  baseCampaignId        String
+  selectedListCount     Int                      @default(0)
+  selectedResidentCount Int                      @default(0)
+  duplicateCount        Int                      @default(0)
+  recipientCount        Int                      @default(0)
+  lastCompletedStep     String?
+  zoomContactListId     String?
+  zoomAssetId           String?
+  zoomAssetItemId       String?
+  zoomCampaignId        String?
+  stableErrorCode       String?
+  revision              Int                      @default(1)
+  createdByUserId       String?
+  createdAt             DateTime                 @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime                 @default(now()) @updatedAt @db.Timestamptz(3)
+
+  createdBy   user?                           @relation("ZaadOneTimeDispatchCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  sourceLists ZaadOneTimeDispatchSourceList[]
+  residents   ZaadOneTimeDispatchResident[]
+
+  @@index([createdAt, id])
+  @@index([state, updatedAt])
+  @@map("zaad_one_time_dispatches")
+}
+
+model ZaadOneTimeDispatchSourceList {
+  dispatchId    String
+  contactListId String
+  selectedOrder Int
+
+  dispatch ZaadOneTimeDispatch @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
+
+  @@id([dispatchId, contactListId])
+  @@unique([dispatchId, selectedOrder])
+  @@map("zaad_one_time_dispatch_source_lists")
+}
+
+model ZaadOneTimeDispatchResident {
+  dispatchId       String
+  residentId       String
+  residentRevision Int
+  selectedOrder    Int
+
+  dispatch ZaadOneTimeDispatch @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
+
+  @@id([dispatchId, residentId])
+  @@unique([dispatchId, selectedOrder])
+  @@map("zaad_one_time_dispatch_residents")
+}
+
+model ZaadAdminAudit {
+  id                 String   @id @default(cuid())
+  actorUserId        String?
+  resourceKind       String
+  targetRef          String
+  action             String
+  result             String
+  changedFieldNames  String[]
+  fromConsentStatus  String?
+  toConsentStatus    String?
+  fromCampaignStatus String?
+  toCampaignStatus   String?
+  stableErrorCode    String?
+  createdAt          DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([createdAt, id])
+  @@index([actorUserId, createdAt])
+  @@index([resourceKind, createdAt])
+  @@map("zaad_admin_audits")
 }

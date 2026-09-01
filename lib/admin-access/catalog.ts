@@ -86,6 +86,12 @@ export const ADMIN_RESOURCE_CATALOG = [
     supportedActions: ["VIEW", "UPDATE"],
     requiresAdminUser: false,
   },
+  {
+    key: "zaad",
+    displayPaths: ["/admin/zaad"],
+    supportedActions: ADMIN_ACCESS_ACTIONS,
+    requiresAdminUser: false,
+  },
 ] as const satisfies readonly AdminResourceDefinition[];
 
 export function getAdminResourceDefinition(resourceKey: string) {

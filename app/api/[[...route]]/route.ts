@@ -133,6 +133,7 @@ import {
   listPublicReservations,
   updatePublicReservation,
 } from "@/lib/server/public-reservations";
+import { registerZaadApiRoutes } from "@/lib/server/zaad/api-routes";
 
 export const runtime = "nodejs";
 
@@ -162,6 +163,8 @@ app.use("*", async (c, next) => {
     await database.close();
   }
 });
+
+registerZaadApiRoutes(app);
 
 const USER_ROLES = ["user", "admin"] as const;
 

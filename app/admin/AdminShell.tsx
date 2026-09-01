@@ -24,6 +24,7 @@ export type AdminNavigationItemKey =
   | "maintenance-settings"
   | "developer-api"
   | "reservations"
+  | "zaad"
   | "roles";
 
 type AdminMenuKey = "users" | "settings";
@@ -236,6 +237,17 @@ export function AdminShell({ children, visibleItems }: AdminShellProps) {
                 {t.admin.reservations}
               </Link>
             ) : null}
+            {visibleItems.includes("zaad") ? (
+              <Link
+                href="/admin/zaad"
+                aria-current={pathname.startsWith("/admin/zaad") ? "page" : undefined}
+                className={`whitespace-nowrap rounded-md px-3 py-2 text-sm font-semibold transition-colors hover:bg-surface-hover hover:text-accent ${
+                  pathname.startsWith("/admin/zaad") ? "text-accent" : "text-fg"
+                }`}
+              >
+                {t.admin.zaad.navLabel}
+              </Link>
+            ) : null}
             <button
               type="button"
               onClick={signOut}
@@ -263,7 +275,7 @@ function isCurrentAdminItem(pathname: string, key: AdminNavigationItemKey) {
     );
   }
   if (key === "roles") return pathname.startsWith("/admin/roles");
-  const exactPaths: Record<Exclude<AdminNavigationItemKey, "users" | "new-user" | "roles" | "reservations">, string> = {
+  const exactPaths: Record<Exclude<AdminNavigationItemKey, "users" | "new-user" | "roles" | "reservations" | "zaad">, string> = {
     "password-reset-requests": "/admin/password-reset-requests",
     "phone-settings": "/admin/phone-settings",
     "chat-settings": "/admin/chat-settings",
@@ -272,5 +284,6 @@ function isCurrentAdminItem(pathname: string, key: AdminNavigationItemKey) {
     "developer-api": "/admin/developer-api",
   };
   if (key === "reservations") return pathname.startsWith("/admin/reservations");
+  if (key === "zaad") return pathname.startsWith("/admin/zaad");
   return pathname === exactPaths[key];
 }

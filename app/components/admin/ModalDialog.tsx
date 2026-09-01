@@ -149,7 +149,7 @@ export function ModalDialog({
         onKeyDown={trapFocus}
         className={`relative my-auto max-h-[calc(100dvh-2rem)] w-full ${maxWidthClassName} overflow-y-auto rounded-xl border border-line bg-surface-raised p-6 text-fg shadow-2xl`}
       >
-        <h2 id={titleId} className="text-xl font-bold">
+        <h2 id={titleId} tabIndex={-1} className="text-xl font-bold">
           {title}
         </h2>
         <p id={descriptionId} className="mt-2 text-sm leading-6 text-fg-muted">

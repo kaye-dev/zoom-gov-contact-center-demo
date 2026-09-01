@@ -99,6 +99,11 @@ const EXACT_POST_REVIEWED_CHAIN = [
     sha256: "f524a6c7d604e31b4a40de060cefd197ebcfb1278079aa73307cfe38340bbf2b",
     classification: "expand-compatible",
   },
+  {
+    name: "20260901060000_add_disaster_radio_zaad",
+    sha256: "d1d79dc4de25dbd10f1984b502342576b6fcf6b40916ae0f31613e9749f7a05b",
+    classification: "expand-compatible",
+  },
 ] as const satisfies readonly ExactBatchMigration[];
 
 export type ReviewedMigrationBatchPlan = {

@@ -20,6 +20,7 @@ import type {
   ReservationServiceKey,
 } from '@/lib/reservations';
 import type { ReservationApiPermission } from '@/lib/reservation-api';
+import { zaadDictionaries, type ZaadDictionary } from './zaad-dictionaries';
 
 export const locales = SITE_LOCALES;
 
@@ -110,6 +111,28 @@ export type DisasterRadioDictionary = {
   contactHeading: string;
   contactNote: string;
   contactPhoneLabel: string;
+  form: {
+    heading: string;
+    description: string;
+    name: string;
+    email: string;
+    emailHelp: string;
+    phone: string;
+    phoneHelp: string;
+    consent: string;
+    required: string;
+    submit: string;
+    submitting: string;
+    syncNote: string;
+    assignmentNote: string;
+    validationTitle: string;
+    validationMessage: string;
+    serverErrorTitle: string;
+    serverErrorMessage: string;
+    successTitle: string;
+    successMessage: string;
+    registerAnother: string;
+  };
 };
 
 export type Dictionary = {
@@ -281,6 +304,7 @@ export type Dictionary = {
     maintenanceSettings: string;
     developerApi: string;
     reservations: string;
+    zaad: ZaadDictionary;
     settingsMenu: string;
     userListTitle: string;
     searchPlaceholder: string;
@@ -1002,6 +1026,20 @@ export const dictionaries: Record<Locale, Dictionary> = {
         contactNote:
           '防災行政無線と配信サービスについては、未来市 防災課へお問い合わせください。',
         contactPhoneLabel: '電話',
+        form: {
+          heading: '防災行政無線の配信登録',
+          description: '空メールの送信は不要です。次のフォームに登録者情報を入力してください。',
+          name: '氏名', email: 'メールアドレス', emailHelp: '防災行政無線のメール通知先です。',
+          phone: '電話番号', phoneHelp: '自動音声電話の通知先です。',
+          consent: '防災行政無線のお知らせをメールと自動音声電話で受け取ること、および入力情報を配信登録の管理に利用することに同意します。',
+          required: '必須', submit: '防災行政無線を登録する', submitting: '登録しています…',
+          syncNote: '登録情報はZAADへ保存され、管理画面の登録先設定に応じてZoomの連絡先リストへ反映されます。',
+          assignmentNote: '連絡先リストが割り当てられていない場合もZAADへの登録は完了します。この画面からキャンペーンの開始や自動音声電話の発信は行いません。',
+          validationTitle: '入力内容を確認してください', validationMessage: '氏名、メールアドレス、電話番号、配信同意はすべて必須です。',
+          serverErrorTitle: '登録を受け付けられませんでした', serverErrorMessage: '時間をおいてもう一度お試しください。入力内容は保持されています。',
+          successTitle: '登録を受け付けました（デモ）', successMessage: '防災行政無線の配信登録情報を保存しました。連絡先リストへの反映状況は未来市が管理します。',
+          registerAnother: '別の連絡先を登録する',
+        },
       },
       faq: {
         indexLead: '未来市のよくある質問を課・局別にご案内します。',
@@ -1222,6 +1260,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       reservations: '予約システム',
       settingsMenu: '設定',
       reservationManagement: reservationManagementCopy.ja,
+      zaad: zaadDictionaries.ja,
       userListTitle: 'ユーザー管理',
       searchPlaceholder: '氏名またはメールアドレスで検索',
       search: '検索',
@@ -1348,6 +1387,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'maintenance-settings': 'メンテナンス設定',
           'developer-api': 'Developer API',
           reservations: '予約システム',
+          zaad: 'ZAAD',
         },
         resourceDescriptions: {
           users: '管理ユーザーの一覧・詳細、作成、権限変更、停止、再開、削除、パスワード再設定、アクセス概要を扱います。',
@@ -1360,6 +1400,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'maintenance-settings': '環境別モードとスケジュールを扱います。',
           'developer-api': '外部連携用のAPIとWebhook認証情報を管理します。',
           reservations: '自治体業務の予約状況を閲覧し、デモ予約を生成します。',
+          zaad: '防災行政無線の登録住民、発信メッセージ、連絡先リスト、キャンペーンを管理します。',
         },
         actionLabels: { VIEW: '表示', CREATE: '追加', UPDATE: '編集', DELETE: '削除' },
       },
@@ -1794,6 +1835,20 @@ export const dictionaries: Record<Locale, Dictionary> = {
         contactNote:
           'For questions about disaster prevention radio and notification services, contact the Mirai City Disaster Prevention Division.',
         contactPhoneLabel: 'Phone',
+        form: {
+          heading: 'Register for disaster radio notifications',
+          description: 'No blank email is needed. Enter the recipient information in this form.',
+          name: 'Name', email: 'Email address', emailHelp: 'Used for disaster radio email notifications.',
+          phone: 'Phone number', phoneHelp: 'Used for automated voice notifications.',
+          consent: 'I consent to receive disaster radio notices by email and automated voice call and to the use of this information to manage my registration.',
+          required: 'Required', submit: 'Register for disaster radio', submitting: 'Registering…',
+          syncNote: 'The registration is saved in ZAAD and reflected in the Zoom contact list selected by the administrator.',
+          assignmentNote: 'Registration in ZAAD completes even when no contact list is assigned. This page does not start a campaign or place an automated call.',
+          validationTitle: 'Check your entries', validationMessage: 'Name, email address, phone number, and consent are all required.',
+          serverErrorTitle: 'We could not accept the registration', serverErrorMessage: 'Please try again later. Your entries have been retained.',
+          successTitle: 'Registration accepted (demo)', successMessage: 'Your disaster radio registration was saved. Mirai City manages synchronization with its contact lists.',
+          registerAnother: 'Register another contact',
+        },
       },
       faq: {
         indexLead:
@@ -2015,6 +2070,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       reservations: 'Reservation system',
       settingsMenu: 'Settings',
       reservationManagement: reservationManagementCopy.en,
+      zaad: zaadDictionaries.en,
       userListTitle: 'User Management',
       searchPlaceholder: 'Search by name or email',
       search: 'Search',
@@ -2141,6 +2197,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'maintenance-settings': 'Maintenance settings',
           'developer-api': 'Developer API',
           reservations: 'Reservation system',
+          zaad: 'ZAAD',
         },
         resourceDescriptions: {
           users: 'Lists and manages admin users, passwords, status, and access summaries.',
@@ -2153,6 +2210,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'maintenance-settings': 'Manages environment modes and schedules.',
           'developer-api': 'Manages API and webhook credentials for integrations.',
           reservations: 'Views municipal availability and generates demo bookings.',
+          zaad: 'Manages disaster radio residents, outbound messages, contact lists, and campaigns.',
         },
         actionLabels: { VIEW: 'View', CREATE: 'Create', UPDATE: 'Edit', DELETE: 'Delete' },
       },
@@ -2579,6 +2637,20 @@ export const dictionaries: Record<Locale, Dictionary> = {
         contactNote:
           '如对防灾行政无线和推送服务有疑问，请联系未来市防灾科。',
         contactPhoneLabel: '电话',
+        form: {
+          heading: '防灾行政无线推送登记',
+          description: '无需发送空白邮件。请在以下表单中填写接收人信息。',
+          name: '姓名', email: '电子邮件地址', emailHelp: '用于接收防灾行政无线邮件通知。',
+          phone: '电话号码', phoneHelp: '用于接收自动语音电话通知。',
+          consent: '我同意通过电子邮件和自动语音电话接收防灾行政无线通知，并同意将所填信息用于管理推送登记。',
+          required: '必填', submit: '登记防灾行政无线', submitting: '正在登记…',
+          syncNote: '登记信息将保存至ZAAD，并根据管理画面的登记目标设置同步到Zoom联系人列表。',
+          assignmentNote: '即使未分配联系人列表，ZAAD登记也会完成。本页面不会启动活动或拨打自动语音电话。',
+          validationTitle: '请检查输入内容', validationMessage: '姓名、电子邮件地址、电话号码和推送同意均为必填项。',
+          serverErrorTitle: '无法受理登记', serverErrorMessage: '请稍后重试。您输入的内容已保留。',
+          successTitle: '已受理登记（演示）', successMessage: '防灾行政无线推送登记信息已保存。联系人列表的同步状态由未来市管理。',
+          registerAnother: '登记其他联系人',
+        },
       },
       faq: {
         indexLead: '按部门和局分类查看未来市的常见问题。',
@@ -2793,6 +2865,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       reservations: '预约系统',
       settingsMenu: '设置',
       reservationManagement: reservationManagementCopy['zh-Hans'],
+      zaad: zaadDictionaries['zh-Hans'],
       userListTitle: '用户管理',
       searchPlaceholder: '按姓名或电子邮件搜索',
       search: '搜索',
@@ -2896,6 +2969,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'maintenance-settings': '维护设置',
           'developer-api': 'Developer API',
           reservations: '预约系统',
+          zaad: 'ZAAD',
         },
         resourceDescriptions: {
           users: '管理用户列表、详情、创建、权限、状态、密码和访问摘要。',
@@ -2908,6 +2982,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'maintenance-settings': '管理各环境的模式和计划。',
           'developer-api': '管理外部集成使用的 API 和 Webhook 凭据。',
           reservations: '查看市政服务预约情况并生成演示预约。',
+          zaad: '管理防灾行政无线居民、外呼消息、联系人列表和活动。',
         },
         actionLabels: { VIEW: '查看', CREATE: '添加', UPDATE: '编辑', DELETE: '删除' },
       },
@@ -3309,6 +3384,20 @@ export const dictionaries: Record<Locale, Dictionary> = {
         contactNote:
           '如對防災行政無線和推播服務有疑問，請聯絡未來市防災課。',
         contactPhoneLabel: '電話',
+        form: {
+          heading: '防災行政無線推播登記',
+          description: '無需寄送空白郵件。請在下列表單填寫接收人資訊。',
+          name: '姓名', email: '電子郵件地址', emailHelp: '用於接收防災行政無線電子郵件通知。',
+          phone: '電話號碼', phoneHelp: '用於接收自動語音電話通知。',
+          consent: '我同意透過電子郵件及自動語音電話接收防災行政無線通知，並同意將輸入資訊用於管理推播登記。',
+          required: '必填', submit: '登記防災行政無線', submitting: '正在登記…',
+          syncNote: '登記資訊會儲存至ZAAD，並依管理畫面的登記目標設定同步到Zoom聯絡人清單。',
+          assignmentNote: '即使未分配聯絡人清單，ZAAD登記仍會完成。本頁面不會啟動行銷活動或撥打自動語音電話。',
+          validationTitle: '請檢查輸入內容', validationMessage: '姓名、電子郵件地址、電話號碼和推播同意皆為必填。',
+          serverErrorTitle: '無法受理登記', serverErrorMessage: '請稍後再試。您輸入的內容已保留。',
+          successTitle: '已受理登記（示範）', successMessage: '防災行政無線推播登記資訊已儲存。聯絡人清單的同步狀態由未來市管理。',
+          registerAnother: '登記其他聯絡人',
+        },
       },
       faq: {
         indexLead: '按部門和局分類查看未來市的常見問題。',
@@ -3523,6 +3612,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       reservations: '預約系統',
       settingsMenu: '設定',
       reservationManagement: reservationManagementCopy['zh-Hant'],
+      zaad: zaadDictionaries['zh-Hant'],
       userListTitle: '使用者管理',
       searchPlaceholder: '依姓名或電子郵件搜尋',
       search: '搜尋',
@@ -3626,6 +3716,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'maintenance-settings': '維護設定',
           'developer-api': 'Developer API',
           reservations: '預約系統',
+          zaad: 'ZAAD',
         },
         resourceDescriptions: {
           users: '管理使用者清單、詳細資料、建立、權限、狀態、密碼及存取摘要。',
@@ -3638,6 +3729,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'maintenance-settings': '管理各環境的模式及排程。',
           'developer-api': '管理外部整合使用的 API 與 Webhook 認證資訊。',
           reservations: '查看市政服務預約狀況並產生示範預約。',
+          zaad: '管理防災行政無線居民、外撥訊息、聯絡人清單與活動。',
         },
         actionLabels: { VIEW: '檢視', CREATE: '新增', UPDATE: '編輯', DELETE: '刪除' },
       },
@@ -4040,6 +4132,20 @@ export const dictionaries: Record<Locale, Dictionary> = {
         contactNote:
           '방재 행정 무선과 알림 서비스는 미래시 방재과로 문의해 주세요.',
         contactPhoneLabel: '전화',
+        form: {
+          heading: '방재 행정 무선 알림 등록',
+          description: '빈 이메일을 보낼 필요가 없습니다. 아래 양식에 수신자 정보를 입력해 주세요.',
+          name: '이름', email: '이메일 주소', emailHelp: '방재 행정 무선 이메일 알림 수신 주소입니다.',
+          phone: '전화번호', phoneHelp: '자동 음성 전화 알림 수신 번호입니다.',
+          consent: '방재 행정 무선 안내를 이메일과 자동 음성 전화로 수신하고 입력 정보를 알림 등록 관리에 이용하는 데 동의합니다.',
+          required: '필수', submit: '방재 행정 무선 등록', submitting: '등록 중…',
+          syncNote: '등록 정보는 ZAAD에 저장되며 관리 화면의 등록 대상 설정에 따라 Zoom 연락처 목록에 반영됩니다.',
+          assignmentNote: '연락처 목록이 지정되지 않아도 ZAAD 등록은 완료됩니다. 이 화면에서는 캠페인을 시작하거나 자동 음성 전화를 걸지 않습니다.',
+          validationTitle: '입력 내용을 확인해 주세요', validationMessage: '이름, 이메일 주소, 전화번호, 알림 동의는 모두 필수입니다.',
+          serverErrorTitle: '등록을 접수할 수 없습니다', serverErrorMessage: '잠시 후 다시 시도해 주세요. 입력 내용은 유지됩니다.',
+          successTitle: '등록이 접수되었습니다(데모)', successMessage: '방재 행정 무선 알림 등록 정보를 저장했습니다. 연락처 목록 반영 상태는 미래시가 관리합니다.',
+          registerAnother: '다른 연락처 등록',
+        },
       },
       faq: {
         indexLead: '미래시의 자주 묻는 질문을 과·국별로 안내합니다.',
@@ -4255,6 +4361,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       reservations: '예약 시스템',
       settingsMenu: '설정',
       reservationManagement: reservationManagementCopy.ko,
+      zaad: zaadDictionaries.ko,
       userListTitle: '사용자 관리',
       searchPlaceholder: '이름 또는 이메일로 검색',
       search: '검색',
@@ -4360,6 +4467,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'maintenance-settings': '점검 설정',
           'developer-api': 'Developer API',
           reservations: '예약 시스템',
+          zaad: 'ZAAD',
         },
         resourceDescriptions: {
           users: '관리 사용자 목록, 상세, 생성, 권한, 상태, 비밀번호 및 접근 요약을 관리합니다.',
@@ -4372,6 +4480,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           'maintenance-settings': '환경별 모드와 일정을 관리합니다.',
           'developer-api': '외부 연동용 API 및 Webhook 인증 정보를 관리합니다.',
           reservations: '지방자치단체 업무의 예약 현황을 보고 데모 예약을 생성합니다.',
+          zaad: '방재 행정 무선 주민, 발신 메시지, 연락처 목록 및 캠페인을 관리합니다.',
         },
         actionLabels: { VIEW: '보기', CREATE: '추가', UPDATE: '편집', DELETE: '삭제' },
       },

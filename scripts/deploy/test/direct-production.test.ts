@@ -261,6 +261,10 @@ test("reviewed migration manifest exactly classifies the current SHA-verified ch
         name: "20260831140000_add_reservation_api_zva_safety",
         classification: "expand-compatible",
       },
+      {
+        name: "20260901060000_add_disaster_radio_zaad",
+        classification: "expand-compatible",
+      },
     ],
   );
 });

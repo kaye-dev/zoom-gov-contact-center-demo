@@ -6,8 +6,6 @@ import { dictionaries, locales } from '../app/i18n/dictionaries';
 import { listPublicSitemapPaths } from '../lib/search-indexing';
 
 const route = '/life/emergency-safety-disaster/disaster-prevention-radio';
-const registrationAddress = 'bosai-register@city.example';
-const senderAddress = 'bosai-info@city.example';
 
 const footerSource = readFileSync(
   new URL('../app/components/FooterClient.tsx', import.meta.url),
@@ -39,15 +37,6 @@ const mobileMenuSource = readFileSync(
   new URL('../app/components/MobileMenu.tsx', import.meta.url),
   'utf8',
 );
-const chevronDownSource = readFileSync(
-  new URL('../app/components/svg/ChevronDownIcon.tsx', import.meta.url),
-  'utf8',
-);
-const chevronRightSource = readFileSync(
-  new URL('../app/components/svg/ChevronRightIcon.tsx', import.meta.url),
-  'utf8',
-);
-
 function collectStrings(value: unknown): string[] {
   if (typeof value === 'string') return [value];
   if (Array.isArray(value)) return value.flatMap(collectStrings);
@@ -89,7 +78,7 @@ test('DR-02 page structure and metadata', () => {
   assert.match(viewSource, /href: '\/life\/emergency-safety-disaster'/);
   assert.match(viewSource, /<PageTitleBand[\s\S]*title=\{copy\.title\}/);
   assert.match(viewSource, /<ContentsNavigation items=\{contentsItems\}/);
-  assert.match(viewSource, /id="email-service"/);
+  assert.match(viewSource, /id="registration-service"/);
   assert.match(viewSource, /id="phone-service"/);
   assert.match(viewSource, /id="radio-contact"/);
   assert.match(pageSource, /export const metadata: Metadata/);
@@ -100,20 +89,27 @@ test('DR-02 page structure and metadata', () => {
   assert.match(pageSource, /description: pageCopy\.lead/);
 });
 
-test('DR-03 embedded email registration content', () => {
+test('DR-03 embedded registration form and API submission', () => {
   const copy = dictionaries.ja.contentPages.disasterRadio;
 
-  assert.equal(copy.registrationSteps.length, 3);
-  assert.match(copy.registrationSteps[1], /件名に「ALL」と入力/);
-  assert.match(viewSource, /<ol className=/);
-  assert.match(viewSource, /copy\.registrationSteps\.map/);
+  assert.equal(copy.form.heading, '防災行政無線の配信登録');
+  assert.match(copy.form.description, /空メールの送信は不要/);
+  assert.match(viewSource, /id="disaster-registration-form"/);
+  assert.match(viewSource, /onSubmit=\{submit\}/);
+  assert.match(viewSource, /new FormData\(form\)/);
   assert.match(
     viewSource,
-    /href=\{`mailto:\$\{registrationAddress\}\?subject=\$\{registrationSubject\}`\}/,
+    /fetch\('\/api\/disaster-radio-subscriptions', \{/,
   );
-  assert.match(viewSource, new RegExp(registrationAddress.replace('.', '\\.')));
-  assert.match(viewSource, new RegExp(senderAddress.replace('.', '\\.')));
-  assert.match(viewSource, /const registrationSubject = 'ALL'/);
+  assert.match(viewSource, /method: 'POST'/);
+  assert.match(
+    viewSource,
+    /JSON\.stringify\(\{ name, email, phone, consent: true \}\)/,
+  );
+  for (const field of ['name', 'email', 'phone', 'consent']) {
+    assert.match(viewSource, new RegExp(`name="${field}"`, 'u'));
+  }
+  assert.doesNotMatch(viewSource, /mailto:|registrationSubject/iu);
   assert.doesNotMatch(viewSource, /iframe|\.pdf/iu);
 });
 
@@ -128,21 +124,30 @@ test('DR-04 embedded phone service content', () => {
   assert.match(viewSource, /const contactPhoneHref = 'tel:\+81312345678'/);
 });
 
-test('DR-05 frontend-only boundary', () => {
+test('DR-05 public client and API boundary', () => {
   const routeSources = `${viewSource}\n${pageSource}`;
 
+  assert.match(viewSource, /^'use client';/);
+  assert.match(routeSources, /fetch\('\/api\/disaster-radio-subscriptions'/u);
+  assert.match(routeSources, /FormData|onSubmit/u);
   assert.doesNotMatch(
     routeSources,
-    /\b(?:fetch|axios|prisma|use server|server action|route handler)\b/iu,
+    /\b(?:axios|prisma|use server|server action)\b/iu,
   );
-  assert.doesNotMatch(routeSources, /<iframe|\.pdf|FormData|onSubmit/iu);
-  assert.match(viewSource, /^'use client';/);
+  assert.doesNotMatch(routeSources, /<iframe|\.pdf/iu);
+  assert.doesNotMatch(
+    routeSources,
+    /campaigns?\/(?:start|stop)|one-time\/prepare/iu,
+  );
 });
 
-test('DR-06 demo endpoint safety', () => {
-  const implementedContent = `${viewSource}\n${JSON.stringify(
-    dictionaries.ja.contentPages.disasterRadio,
-  )}`;
+test('DR-06 demo and registration safety copy', () => {
+  const copy = dictionaries.ja.contentPages.disasterRadio;
+  const implementedContent = `${viewSource}\n${JSON.stringify({
+    form: copy.form,
+    demoSuffix: copy.demoSuffix,
+    phoneNote: copy.phoneNote,
+  })}`;
   const forbiddenValues = [
     'd-touroku@rt.city.rikuzentakata.iwate.jp',
     'd-mail@rt.city.rikuzentakata.iwate.jp',
@@ -156,7 +161,15 @@ test('DR-06 demo endpoint safety', () => {
     );
   }
   assert.match(implementedContent, /デモ用/);
-  assert.match(implementedContent, /実際の登録は行われません/);
+  assert.match(implementedContent, /登録情報はZAADへ保存/);
+  assert.match(
+    implementedContent,
+    /連絡先リストが割り当てられていない場合もZAADへの登録は完了/,
+  );
+  assert.match(
+    implementedContent,
+    /キャンペーンの開始や自動音声電話の発信は行いません/,
+  );
 });
 
 test('DR-07 locale completeness', () => {
@@ -167,7 +180,11 @@ test('DR-07 locale completeness', () => {
   for (const locale of locales) {
     const copy = dictionaries[locale].contentPages.disasterRadio;
     assert.deepEqual(Object.keys(copy).sort(), expectedKeys, locale);
-    assert.equal(copy.registrationSteps.length, 3, locale);
+    assert.deepEqual(
+      Object.keys(copy.form).sort(),
+      Object.keys(dictionaries.ja.contentPages.disasterRadio.form).sort(),
+      locale,
+    );
     for (const value of collectStrings(copy)) {
       assert.ok(value.trim().length > 0, `${locale}: empty disaster radio copy`);
     }
@@ -184,19 +201,16 @@ test('DR-08 semantic UI and icon source guard', () => {
   assert.match(informationPageSource, /maskImage/);
   assert.match(viewSource, /iconSrc="\/life-information\/life-safety\.png"/);
   assert.match(viewSource, /<ContentsNavigation items=\{contentsItems\}/);
-  assert.match(viewSource, /<ChevronRightIcon className="shrink-0"/);
   assert.match(
-    chevronDownSource,
-    /M480-345 240-585l56-56 184 184 184-184 56 56-240 240Z/,
+    viewSource,
+    /<section id="registration-service" aria-labelledby="registration-heading"/,
   );
   assert.match(
-    chevronRightSource,
-    /M504-480 320-664l56-56 240 240-240 240-56-56 184-184Z/,
+    viewSource,
+    /<form[\s\S]*id="disaster-registration-form"[\s\S]*noValidate[\s\S]*onSubmit=\{submit\}/,
   );
-  assert.match(chevronDownSource, /height = 24/);
-  assert.match(chevronDownSource, /width = 24/);
-  assert.match(chevronRightSource, /height = 24/);
-  assert.match(chevronRightSource, /width = 24/);
+  assert.match(viewSource, /role="alert"/);
+  assert.match(viewSource, /id="registration-success-heading" tabIndex=\{-1\}/);
   assert.doesNotMatch(viewSource, /[⌄›‹]/u);
 });
 
