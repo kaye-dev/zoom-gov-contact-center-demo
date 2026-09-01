@@ -27,18 +27,24 @@ const cdpRemediation = Object.freeze({
 });
 const cdpUnavailableMessage =
   "in-app BrowserでCDPを利用できません。Codexデスクトップの「設定 → ブラウザ → 開発者モード → 完全な CDP アクセスを有効にする」をオンにし、アプリを再起動してから、対象のローカルoriginでCDP利用を承認してください。";
+const cdpAdvertisementUnknownMessage =
+  "in-app BrowserのCDP capability一覧を取得できなかったため、CDPの有効化状態を確認できません。Codexデスクトップの「設定 → ブラウザ → 開発者モード → 完全な CDP アクセスを有効にする」を確認し、アプリを再起動してから、対象のローカルoriginでCDP利用を承認して再実行してください。";
+const cdpCommandRejectedMessage =
+  "CDPは広告・取得済みですが、DPR変更コマンドが拒否されました。Codexデスクトップの「設定 → ブラウザ → 開発者モード → 完全な CDP アクセスを有効にする」がオンであることと、対象のローカルoriginでCDP利用を承認していることを確認してください。アプリ再起動後も拒否される場合、このin-app Browser backendではDPR変更を利用できません。";
 
 function fail(code, message, evidence) {
   throw new ParityRunError(code, message, evidence);
 }
 
-function cdpUnavailableEvidence({ operation, cdpAdvertised }) {
-  return {
+function cdpUnavailableEvidence({ operation, cdpAdvertised, cdpAcquired }) {
+  const evidence = {
     operation,
     requiredCapability: "cdp",
     cdpAdvertised,
     remediation: { ...cdpRemediation },
   };
+  if (typeof cdpAcquired === "boolean") evidence.cdpAcquired = cdpAcquired;
+  return evidence;
 }
 
 function guardAdapterOperations(adapter) {
@@ -357,33 +363,56 @@ function createInAppBrowserParityAdapter({
 
   async function getCdpCapability() {
     if (state.cdp) return state.cdp;
+    let advertised;
     try {
-      const advertised = await tab.capabilities.list();
-      const cdpAdvertised = Array.isArray(advertised) && advertised.some(
-        (entry) => (typeof entry === "string" ? entry : entry?.id) === "cdp",
+      advertised = await tab.capabilities.list();
+    } catch {
+      fail(
+        "PARITY_CDP_CAPABILITY_UNAVAILABLE",
+        cdpAdvertisementUnknownMessage,
+        cdpUnavailableEvidence({ operation: "tab.capabilities.list", cdpAdvertised: null }),
       );
-      if (!cdpAdvertised) {
-        fail(
-          "PARITY_CDP_CAPABILITY_UNAVAILABLE",
-          cdpUnavailableMessage,
-          cdpUnavailableEvidence({ operation: "tab.capabilities.list", cdpAdvertised: false }),
-        );
-      }
-      state.cdp = await tab.capabilities.get("cdp");
-      state.cdpOrigin = state.currentOrigin;
-    } catch (error) {
-      if (error instanceof ParityRunError) throw error;
+    }
+    if (!Array.isArray(advertised)) {
+      fail(
+        "PARITY_CDP_CAPABILITY_UNAVAILABLE",
+        cdpAdvertisementUnknownMessage,
+        cdpUnavailableEvidence({ operation: "tab.capabilities.list", cdpAdvertised: null }),
+      );
+    }
+    const cdpAdvertised = advertised.some(
+      (entry) => (typeof entry === "string" ? entry : entry?.id) === "cdp",
+    );
+    if (!cdpAdvertised) {
       fail(
         "PARITY_CDP_CAPABILITY_UNAVAILABLE",
         cdpUnavailableMessage,
-        cdpUnavailableEvidence({ operation: "tab.capabilities.cdp", cdpAdvertised: true }),
+        cdpUnavailableEvidence({ operation: "tab.capabilities.list", cdpAdvertised: false }),
+      );
+    }
+    try {
+      state.cdp = await tab.capabilities.get("cdp");
+      state.cdpOrigin = state.currentOrigin;
+    } catch {
+      fail(
+        "PARITY_CDP_CAPABILITY_UNAVAILABLE",
+        cdpUnavailableMessage,
+        cdpUnavailableEvidence({
+          operation: "tab.capabilities.get",
+          cdpAdvertised: true,
+          cdpAcquired: false,
+        }),
       );
     }
     if (typeof state.cdp?.send !== "function") {
       fail(
         "PARITY_CDP_CAPABILITY_UNAVAILABLE",
         cdpUnavailableMessage,
-        cdpUnavailableEvidence({ operation: "tab.capabilities.cdp", cdpAdvertised: true }),
+        cdpUnavailableEvidence({
+          operation: "tab.capabilities.get",
+          cdpAdvertised: true,
+          cdpAcquired: true,
+        }),
       );
     }
     return state.cdp;
@@ -520,9 +549,13 @@ function createInAppBrowserParityAdapter({
     } catch {
       fail(
         "PARITY_DPR_OVERRIDE_UNAVAILABLE",
-        "Emulation.setDeviceMetricsOverride was rejected",
+        cdpCommandRejectedMessage,
         {
-          operation: "cdp.send",
+          ...cdpUnavailableEvidence({
+            operation: "cdp.send",
+            cdpAdvertised: true,
+            cdpAcquired: true,
+          }),
           command: "Emulation.setDeviceMetricsOverride",
         },
       );

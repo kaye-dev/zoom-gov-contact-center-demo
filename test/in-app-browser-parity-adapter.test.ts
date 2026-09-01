@@ -16,6 +16,12 @@ const corePath = path.resolve(
 const adapterModulePromise = import(pathToFileURL(adapterPath).href);
 const coreModulePromise = import(pathToFileURL(corePath).href);
 const digest = `sha256:${"a".repeat(64)}`;
+const expectedCdpRemediation = {
+  settingsPath: "設定 → ブラウザ → 開発者モード",
+  setting: "完全な CDP アクセスを有効にする",
+  requiresRestart: true,
+  requiresOriginApproval: true,
+};
 
 function assertSanitizedParityError(
   error: unknown,
@@ -468,17 +474,104 @@ test("IAB-02 390x844 DPR1 canary and cleanup", async () => {
         operation: "tab.capabilities.list",
         requiredCapability: "cdp",
         cdpAdvertised: false,
-        remediation: {
-          settingsPath: "設定 → ブラウザ → 開発者モード",
-          setting: "完全な CDP アクセスを有効にする",
-          requiresRestart: true,
-          requiresOriginApproval: true,
-        },
+        remediation: expectedCdpRemediation,
       });
       return true;
     },
   );
   await noCdp.cleanup();
+
+  const unknownCdp = createFakeBrowser();
+  unknownCdp.tab.capabilities.list = async () => {
+    throw new Error("Bearer list-secret Cookie: cdp=list https://localhost/?token=list");
+  };
+  const unknownCdpAdapter = createInAppBrowserParityAdapter({
+    browser: unknownCdp.browser,
+    tab: unknownCdp.tab,
+  });
+  await assert.rejects(
+    unknownCdpAdapter.setViewport("comparison", { width: 390, height: 844 }),
+    (error: unknown) => {
+      assertSanitizedParityError(error, "PARITY_CDP_CAPABILITY_UNAVAILABLE", [
+        "Bearer",
+        "Cookie",
+        "list-secret",
+        "token=",
+      ]);
+      const candidate = error as { message?: string; evidence?: Record<string, unknown> };
+      assert.match(candidate.message ?? "", /CDPの有効化状態を確認できません/u);
+      assert.deepEqual(candidate.evidence, {
+        operation: "tab.capabilities.list",
+        requiredCapability: "cdp",
+        cdpAdvertised: null,
+        remediation: expectedCdpRemediation,
+      });
+      return true;
+    },
+  );
+  assert.equal((await unknownCdpAdapter.cleanup()).status, "pass");
+  assert.equal(unknownCdp.state.viewportReset, 1);
+
+  const malformedCdp = createFakeBrowser();
+  malformedCdp.tab.capabilities.list = async () => undefined as never;
+  const malformedCdpAdapter = createInAppBrowserParityAdapter({
+    browser: malformedCdp.browser,
+    tab: malformedCdp.tab,
+  });
+  await assert.rejects(
+    malformedCdpAdapter.setViewport("comparison", { width: 390, height: 844 }),
+    (error: unknown) => {
+      const candidate = error as {
+        code?: string;
+        message?: string;
+        evidence?: Record<string, unknown>;
+      };
+      assert.equal(candidate.code, "PARITY_CDP_CAPABILITY_UNAVAILABLE");
+      assert.match(candidate.message ?? "", /CDPの有効化状態を確認できません/u);
+      assert.deepEqual(candidate.evidence, {
+        operation: "tab.capabilities.list",
+        requiredCapability: "cdp",
+        cdpAdvertised: null,
+        remediation: expectedCdpRemediation,
+      });
+      return true;
+    },
+  );
+  assert.equal((await malformedCdpAdapter.cleanup()).status, "pass");
+  assert.equal(malformedCdp.state.viewportReset, 1);
+
+  const unavailableCdp = createFakeBrowser();
+  unavailableCdp.tab.capabilities.get = async (id: string) => {
+    assert.equal(id, "cdp");
+    throw new Error("Bearer get-secret Cookie: cdp=get https://localhost/?token=get");
+  };
+  const unavailableCdpAdapter = createInAppBrowserParityAdapter({
+    browser: unavailableCdp.browser,
+    tab: unavailableCdp.tab,
+  });
+  await assert.rejects(
+    unavailableCdpAdapter.setViewport("comparison", { width: 390, height: 844 }),
+    (error: unknown) => {
+      assertSanitizedParityError(error, "PARITY_CDP_CAPABILITY_UNAVAILABLE", [
+        "Bearer",
+        "Cookie",
+        "get-secret",
+        "token=",
+      ]);
+      const candidate = error as { message?: string; evidence?: Record<string, unknown> };
+      assert.match(candidate.message ?? "", /完全な CDP アクセスを有効にする/u);
+      assert.deepEqual(candidate.evidence, {
+        operation: "tab.capabilities.get",
+        requiredCapability: "cdp",
+        cdpAdvertised: true,
+        remediation: expectedCdpRemediation,
+        cdpAcquired: false,
+      });
+      return true;
+    },
+  );
+  assert.equal((await unavailableCdpAdapter.cleanup()).status, "pass");
+  assert.equal(unavailableCdp.state.viewportReset, 1);
 
   const rejected = createFakeBrowser();
   const rejectedOriginal = rejected.cdp.send.bind(rejected.cdp);
@@ -492,12 +585,25 @@ test("IAB-02 390x844 DPR1 canary and cleanup", async () => {
   const broken = createInAppBrowserParityAdapter({ browser: rejected.browser, tab: rejected.tab });
   await assert.rejects(
     broken.setViewport("comparison", { width: 390, height: 844 }),
-    (error: unknown) => assertSanitizedParityError(error, "PARITY_DPR_OVERRIDE_UNAVAILABLE", [
-      "Bearer",
-      "Cookie",
-      "partial-secret",
-      "token=",
-    ]),
+    (error: unknown) => {
+      assertSanitizedParityError(error, "PARITY_DPR_OVERRIDE_UNAVAILABLE", [
+        "Bearer",
+        "Cookie",
+        "partial-secret",
+        "token=",
+      ]);
+      const candidate = error as { message?: string; evidence?: Record<string, unknown> };
+      assert.match(candidate.message ?? "", /対象のローカルoriginでCDP利用を承認/u);
+      assert.deepEqual(candidate.evidence, {
+        operation: "cdp.send",
+        requiredCapability: "cdp",
+        cdpAdvertised: true,
+        remediation: expectedCdpRemediation,
+        cdpAcquired: true,
+        command: "Emulation.setDeviceMetricsOverride",
+      });
+      return true;
+    },
   );
   const brokenCleanup = await broken.cleanup();
   assert.equal(rejected.state.cdpClear, 1);
