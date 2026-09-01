@@ -2,7 +2,9 @@
 
 Zoom Virtual Agent（ZVA）から予約APIを呼び出すツールテンプレートを、APIコール7件とカスタムスクリプト1件の順で作成し、Skill Libraryへ登録します。
 
-この手順は、2026年9月1日に`https://demo.lg.keien.dev`とZoom AI Studioの実画面で、8件すべてのDebugと予約の作成・取得・更新・取消まで確認した設定を反映しています。部分更新スクリプトのGET非200明示処理は、その後にZoom公式例を再確認して追加した未適用の安全修正です。Zoom側へ反映して正常系と非200系を再Debugするまでは、Agentを公開しません。
+この手順は、2026年9月1日に`https://demo.lg.keien.dev`とZoom AI Studioの実画面で確認した8件を、公開音声Agentの発信者番号所有者照合へ対応させるための設定です。予約作成、詳細取得、完全更新、削除は、Zoom AI Studioの変数ピッカーで`global_system.Engagement.ANI`を選び、`X-Reservation-Caller-Phone`へ渡します。バックエンド切替、4件すべてのヘッダー設定、Debug、同一ANIと別ANIの実通話試験が終わるまでは公開しません。
+
+部分更新スクリプトのGET非200明示処理はZoom側へ未適用で、ANIヘッダーの伝播も未確認です。安全修正と再Debugが完了するまでAgentへ追加せず、一部項目の変更も詳細取得、空き枠確認、完全更新で実行します。
 
 ## 準備
 
@@ -44,7 +46,12 @@ Zoom Virtual Agent（ZVA）から予約APIを呼び出すツールテンプレ�
    | --- | --- | --- | --- | --- | --- |
    | `Authorization` | Header | String | はい | 手動 | `Bearer REPLACE_WITH_RESERVATION_API_KEY` |
 
-6. `Virtual Agent`の出力へ各節のレスポンス項目を追加し、タイムアウトを`10`秒にして保存します。
+6. `mirai_reservation_create`、`mirai_reservation_get`、`mirai_reservation_replace`、`mirai_reservation_delete`には、各節に示す`X-Reservation-Caller-Phone`も追加します。値はLLM収集や手動値ではなく、`From Variable`の変数ピッカーから選択する`global_system.Engagement.ANI`です。変数名を手入力せず、発信者番号をBody、Query、URL、`externalReferenceId`へ複製しません。
+7. `Virtual Agent`の出力へ各節のレスポンス項目を追加し、タイムアウトを`10`秒にして保存します。
+
+Zoom公式のTool作成記事は同じ発信者番号変数を`global.system.engagement.ani`と表記しますが、2026年9月1日の変数ピッカーと保存後の実画面では`global_system.Engagement.ANI`と表示されました。イベントスクリプトの公式例もunderscore形式を使用しています。本手順では実画面の保存値を正とし、必ずピッカーから選択します。APIは`+`と国番号を含むstrict E.164だけを受け付けます。非通知、空値、形式不正を会話で聞き直した番号へ置き換えません。
+
+`保存`または`保存して追加`を押しただけでは完了と扱いません。モーダルが閉じ、一覧の更新時刻が変わり、開き直した設定にURL、必須ヘッダー、変数mappingが残っていることを保存証拠とします。
 
 APIコール7件には、各節の出力に加えて次の異常系出力を追加します。`requestId`が各節にある場合は重複して追加しません。
 
@@ -100,6 +107,8 @@ APIコール7件には、各節の出力に加えて次の異常系出力を追�
 
 ## 3. 予約一覧
 
+このツールはAPIキー管理用です。Tool Templatesには保守できますが、Skill Libraryと利用者向けAgentには追加しません。ANIによる利用者単位の予約一覧ではありません。
+
 | 項目 | 値 |
 | --- | --- |
 | 名前 | `mirai_reservation_list` |
@@ -141,6 +150,7 @@ APIコール7件には、各節の出力に加えて次の異常系出力を追�
 | --- | --- | --- | --- | --- | --- |
 | `Content-Type` | Header | String | はい | 手動 | `application/json` |
 | `Idempotency-Key` | Header | String | はい | LLM | 16〜100文字の英数字、`_`、`-`。`externalReferenceId`と同じ値にし、同じ予約意図の再試行では再利用 |
+| `X-Reservation-Caller-Phone` | Header | String | はい | From Variable | `global_system.Engagement.ANI`。変数ピッカーから選び、発話から収集、復唱、手動補完しない |
 | `serviceKey` | Body | String | はい | LLM | 予約サービス一覧で取得したキー |
 | `reservationDate` | Body | String | はい | LLM | 予約日。`YYYY-MM-DD` |
 | `startMinute` | Body | Number | はい | LLM | 0〜1439の開始分 |
@@ -170,6 +180,7 @@ APIコール7件には、各節の出力に加えて次の異常系出力を追�
 | 名前 | 場所 | 型 | 必須 | 値の指定元 | 説明 |
 | --- | --- | --- | --- | --- | --- |
 | `id` | Path | String | はい | LLM | 対象の予約ID |
+| `X-Reservation-Caller-Phone` | Header | String | はい | From Variable | `global_system.Engagement.ANI`。変数ピッカーから選び、作成時と同じANIだけ取得可能 |
 
 出力を次のとおり設定します。
 
@@ -197,6 +208,7 @@ APIコール7件には、各節の出力に加えて次の異常系出力を追�
 | `id` | Path | String | はい | LLM | 対象の予約ID |
 | `If-Match` | Header | String | はい | LLM | `"reservation-{id}-v{version}"`形式のstrong ETag |
 | `Content-Type` | Header | String | はい | 手動 | `application/json` |
+| `X-Reservation-Caller-Phone` | Header | String | はい | From Variable | `global_system.Engagement.ANI`。変数ピッカーから選び、作成時と同じANIだけ更新可能 |
 | `serviceKey` | Body | String | はい | LLM | 予約サービスのキー |
 | `reservationDate` | Body | String | はい | LLM | 予約日。`YYYY-MM-DD` |
 | `startMinute` | Body | Number | はい | LLM | 0〜1439の開始分 |
@@ -227,12 +239,15 @@ APIコール7件には、各節の出力に加えて次の異常系出力を追�
 | --- | --- | --- | --- | --- | --- |
 | `id` | Path | String | はい | LLM | 対象の予約ID |
 | `If-Match` | Header | String | はい | LLM | `"reservation-{id}-v{version}"`形式のstrong ETag |
+| `X-Reservation-Caller-Phone` | Header | String | はい | From Variable | `global_system.Engagement.ANI`。変数ピッカーから選び、作成時と同じANIだけ削除可能 |
 
 成功時は`204 No Content`のため成功出力を追加しません。共通の異常系出力だけを設定します。
 
 ## 8. 予約部分更新
 
 ZoomのAPIコールは`PATCH`を選択できません。また、2026年9月1日に本デモのProduction URLへNode.jsの`fetch`と`https.request`で、それぞれ単一の直接HTTPS PATCHを送信した検証では、クライアントが`412`を受け取った一方、直後のGETではversionが1から2へ進んでいました。同じserver-side実行が更新と`412`の両方を発生させたとは断定できず、transportまたは中継経路での再送、別リクエスト、同時更新の可能性を含めて原因は未特定です。この挙動を正常仕様として扱いません。OpenAPIとローカルのAPI contractはPATCHを引き続き提供しますが、更新済みか不明な状態で再実行すると意図しない変更につながるため、Zoomのカスタムスクリプトでは予約をGETし、未指定項目をマージしてPUTする方式を使用します。
+
+このカスタムスクリプトは、GETとPUTの両方へ`X-Reservation-Caller-Phone`を安全に渡す修正が完了していません。以下は既知の未適用実装として保守しますが、Tool TemplateのDebug、Skillへの追加、Agentからの実行は行いません。現行Agentでは`mirai_reservation_get`、必要な場合の`mirai_reservation_get_availability`、`mirai_reservation_replace`を使用します。
 
 | 項目 | 値 |
 | --- | --- |
@@ -428,9 +443,16 @@ Zoom公式のCustom Script例は、`req.get`が例外を投げる場合だけで
 
 ### 公開前の停止条件
 
-現行予約APIは静的APIキー単位で予約を分離し、会話中の利用者本人と予約所有者をserver-sideで照合しません。予約IDが第三者へ漏れた場合、同じAPIキーを使うAgentから詳細取得、変更、取消が可能です。
+次の条件を一つでも満たさない場合は、予約スキルを公開Agentへ反映しません。公開中のAgentを編集する場合は、検証中の版をドラフトに保ちます。
 
-このため、`未来市の予約案内・予約管理`は管理者による制御されたデモとPreviewだけに使用します。利用者認証と予約所有者検証をAPI側へ実装して検証するまでは、公開Agentへ追加、Active化、Publishしません。公開環境でサービス・空き枠案内だけが必要な場合は、作成、詳細取得、全置換、部分更新、取消を含まないread-onlyスキルを別に作成します。
+- ANI所有者照合を含む予約APIとデータベース移行がProductionへ反映されている。
+- `mirai_reservation_create`、`mirai_reservation_get`、`mirai_reservation_replace`、`mirai_reservation_delete`の`X-Reservation-Caller-Phone`が、`From Variable`の`global_system.Engagement.ANI`として保存され、開き直しても保持されている。
+- 4件が有効なE.164テストANIでDebugに成功し、欠落と形式不正を400で拒否する。
+- 同一ANIの作成、取得、変更、取消と、別ANIによる同じ予約IDへのアクセス拒否を実通話で確認した。
+- AgentとSkillに`mirai_reservation_list`と`mirai_reservation_update_partial`が追加されていない。
+- 粗大ごみを日付だけのデモ予約として扱い、品目、大きさ、数量、住所、排出場所を質問、収集、記録せず、料金、処理券、正式受付番号、行政申請完了を確定しない指示が反映されている。
+
+ANIは発信者番号の連続性を使うデモ用の所有者境界であり、強い本人確認ではありません。番号の不正な表示や電話番号の再割当てなどを排除できないため、行政手続きの本番運用ではOTPなどの追加認証を設計します。
 
 ツールテンプレートのDebugが完了したら、`AI Studio` → `Skill Library` → `スキルを作成`を開き、次を設定します。
 
@@ -446,25 +468,30 @@ Zoom公式のCustom Script例は、`req.get`が例外を投げる場合だけで
 このスキルは、未来市の予約可能サービスと空き枠の案内、予約の作成、予約IDによる内容確認、変更、取消に使用する。
 
 安全と適用範囲
-- このスキルは管理者による制御されたデモとPreviewだけに使用する。利用者認証と予約所有者検証をAPI側で保証できない公開Agentでは、予約の詳細取得、作成、変更、取消を実行しない。
+- 公開音声Agentでは、発信者番号がglobal_system.Engagement.ANIからX-Reservation-Caller-Phoneへ渡され、API側のANI所有者照合が有効な場合だけ、予約の詳細取得、作成、変更、取消を実行する。
+- 発信者番号を利用者へ質問、復唱、表示しない。発話された番号、推測値、別の変数でglobal_system.Engagement.ANIを置き換えない。
+- 発信者番号が非通知、空、E.164形式以外、作成時と不一致、または所有者情報のない旧予約の場合は、予約の存在や内容を明かさず「この通話では予約を確認できません」と案内する。
+- ANIはデモ用の継続性境界であり、本人確認済み、行政上の本人認証済みとは案内しない。
 - serviceKeyを推測しない。未確定ならサービス一覧を取得して利用者に確認する。
-- 予約一覧ツールは利用者単位に分離されていないため、このスキルでは絶対に使用しない。他の利用者の予約を検索、列挙、推測しない。
-- serviceKeyがbulky-wasteの場合、サービスと空き枠の案内だけ行う。予約の作成、変更、取消は実行せず、現行の正式受付方法を案内する。
-- Authorization、APIキー、Idempotency-Key、externalReferenceIdを利用者へ表示しない。APIにない本人確認、審査、料金、通知の完了を確定したと案内しない。
+- 予約一覧ツールはAPIキー管理用で発信者単位に分離されていないため、このスキルでは絶対に使用しない。他の利用者の予約を検索、列挙、推測しない。
+- serviceKeyがbulky-wasteの場合も、日付と空き状況だけのデモ予約記録は作成、確認、変更、取消できる。このデモでは品目、大きさ、数量、住所、排出場所を質問、収集、記録せず、料金算定、処理券発行、正式受付番号発行、行政上の収集申込み完了とは案内しない。正式申込み手順を質問された場合は、FAQに基づいて利用者自身が確認する事項として案内するだけにする。
+- Authorization、APIキー、Idempotency-Key、externalReferenceId、X-Reservation-Caller-Phoneを利用者へ表示しない。APIにない本人確認、審査、料金、通知の完了を確定したと案内しない。
+- 部分更新ツールは使用しない。一部項目だけを変更する場合も、詳細取得、空き枠確認、完全更新を使用する。
 
 操作手順
 1. サービスが未確定ならサービス一覧を取得する。空き枠は指定日を含む31日以内で確認し、startMinuteをHH:mmに変換して案内する。空き枠は参考値であり、作成結果を確定情報とする。
-2. 予約作成前にサービス、日付、時刻を提示し、利用者の明示的な確定意思を得る。個人情報を含まない16〜100文字の識別子を予約意図ごとに1つ生成し、Idempotency-KeyとexternalReferenceIdへ同じ値を渡す。不明な結果の再照会では同じ値を再利用する。
-3. 既存予約の確認、変更、取消では、利用者本人が保管する予約IDを受け取り、最初に予約を取得して最新内容とversionを確認する。
-4. サービス、日付、時刻を変える場合は先に空き枠を再確認する。変更前後を提示して同意を得た後、一部項目だけなら部分更新、全項目を置換する場合だけ全置換を使う。
+2. 予約作成前にサービス、日付、時刻を提示し、利用者の明示的な確定意思を得る。bulky-wasteの時刻は日付予約を表す00:00として内部で扱い、時刻指定とは案内しない。個人情報を含まない16〜100文字の識別子を予約意図ごとに1つ生成し、Idempotency-KeyとexternalReferenceIdへ同じ値を渡す。不明な結果の再照会では同じ値を再利用する。
+3. 既存予約の確認、変更、取消では、利用者が保管する予約IDを受け取り、最初に予約を取得して最新内容とversionを確認する。予約IDだけで所有者確認済みとは扱わず、APIのANI照合結果に従う。
+4. サービス、日付、時刻を変える場合は先に空き枠を再確認する。変更前後を提示して同意を得た後、現在値と変更値をまとめて完全更新する。
 5. 取消前に対象予約と取消意思を明示的に確認し、最新versionからIf-Matchを作って取消する。204で本文が空でもエラーがなく、その後の確認が404なら成功として扱う。
-6. RESERVATION_PRECONDITION_FAILEDまたは曖昧な更新結果では自動再実行しない。予約を再取得して実状態と差分を説明し、再度同意を得る。RESERVATION_SLOT_FULLでは空き枠を再取得して別候補を案内する。
-7. 出力にerrorがある、または非2xxの場合は成功と案内しない。retryableがtrueでも変更系ツールを連打せず、requestIdを障害調査用に保持する。
+6. RESERVATION_CALLER_PHONE_REQUIREDまたはRESERVATION_CALLER_PHONE_INVALIDでは予約操作を停止し、番号を聞き取って補完しない。404では存在しない予約、別ANI、所有者情報のない旧予約を区別して説明しない。
+7. RESERVATION_PRECONDITION_FAILEDまたは曖昧な更新結果では自動再実行しない。予約を再取得して実状態と差分を説明し、再度同意を得る。RESERVATION_SLOT_FULLでは空き枠を再取得して別候補を案内する。
+8. 出力にerrorがある、または非2xxの場合は成功と案内しない。retryableがtrueでも変更系ツールを連打せず、requestIdを障害調査用に保持する。
 
 使用可能なツールは、この指示へ挿入されたツールだけとする。
 ```
 
-`挿入` → `ツール`から次の7件を各1件追加します。`Custom tool`の最初の一覧に部分更新ツールが表示されない場合は、同セクションの`さらに表示`を押します。
+`挿入` → `ツール`から次の6件を各1件追加します。
 
 | 種別 | 名前 |
 | --- | --- |
@@ -474,23 +501,24 @@ Zoom公式のCustom Script例は、`req.get`が例外を投げる場合だけで
 | APIコール | `mirai_reservation_get` |
 | APIコール | `mirai_reservation_replace` |
 | APIコール | `mirai_reservation_delete` |
-| カスタムスクリプト | `mirai_reservation_update_partial` |
 
-`mirai_reservation_list`はスキルへ追加しません。このAPIは同じAPIキーで作成された予約を一覧化し、会話中の利用者単位には分離しないためです。利用者の予約確認には、利用者本人が保管する予約IDを受け取り、`mirai_reservation_get`を使用します。
+`mirai_reservation_list`はスキルへ追加しません。このAPIは同じAPIキーで作成された予約を一覧化する管理機能で、発信者単位には分離しないためです。利用者の予約確認には、利用者が保管する予約IDを受け取り、`mirai_reservation_get`を使用します。
 
-この除外はSkill上の抑止であり、server-sideの利用者分離や本人確認ではありません。予約IDの提示だけを本人確認済みと扱わず、公開運用では利用者識別と予約所有者の検証、またはサービス照会と予約一覧の権限分離を別途実装します。
+`mirai_reservation_update_partial`も追加しません。GET非200分岐とANIヘッダー伝播を修正し、保存後の読み戻し、正常系、同一ANI、別ANI、404を再Debugするまで未使用にします。
 
-`bulky-waste`は[粗大ごみFAQ](../自治体-基礎自治体-未来市/14.ごみゼロ推進課/03_粗大ごみ_FAQ.md)で、チャットによる予約確定、料金算定、受付番号発行を行わないと案内しています。ナレッジを更新してZoomへ再同期するまでは、サービス・空き枠の案内だけを許可し、作成・変更・取消を実行しません。
+`X-Reservation-Caller-Phone`は予約APIがserver-sideで検証するための入力で、レスポンス、会話、予約一覧、ログへ返しません。APIはAPIキーを鍵にANIをHMAC-SHA-256で不可逆なdigestへ変換し、raw番号を予約レコードへ保存しません。詳細は[予約API発信者番号所有者照合](./06_予約API発信者番号所有者照合.md)を確認します。
 
-保存後、`私のスキル`から開き直し、General、名前、トリガー、指示、7件のツール参照が各1件であることと、`mirai_reservation_list`が0件であることを確認します。
+保存後、`私のスキル`から開き直し、General、名前、トリガー、指示、6件のツール参照が各1件であることと、`mirai_reservation_list`と`mirai_reservation_update_partial`が0件であることを確認します。
 
 Skill Libraryへの保存だけでは利用者向けAgentへ反映されません。公開前の停止条件を満たした後、対象Agentで`Add from library` → `Use`を選び、スキルを`Active`にします。ツールテンプレートまたは共有スキルを後から変更した場合も、影響するAgentの参照内容を確認してからPublishします。
 
 2026年9月1日の対象音声Agentでは、Generalスキルの`Use`が`skill.channel=3 incompatible with agent.channel=2`で失敗しました。Zoom公式手順はカスタムスキルのモダリティとしてGeneral、Voice、Chatを案内していますが、この内部チャネル番号の対応関係は公開していません。同じエラーが発生した場合は追加を停止し、資格情報やモダリティを推測で変更せず、[音声ボット作成](./02_音声ボット作成.md#予約対応を音声agentへ追加する)の手順で対象Agent内にローカルスキルを作成します。
 
-Agentローカル版では`スキルライブラリに追加`をオフにし、同じ指示と7件のツール参照を設定します。各ツールの`ツールの確認と追加`に表示される保存済みの静的Authorizationは外部へ表示、コピー、変更せず、同一アカウントの承認済み設定であることを確認して`保存して追加`を実行します。Skill Library版とAgentローカル版は別管理のため、一方の変更が他方へ自動同期されたと扱いません。部分更新のGET非200安全分岐と再Debugが未完了の間は、実会話を始める前にAgentローカル版から`mirai_reservation_update_partial`を外し、残り6件だけで[予約デモのトーク例](./05_予約デモトーク例.md)を実施します。
+Agentローカル版では`スキルライブラリに追加`をオフにし、同じ指示と6件のツール参照を設定します。各ツールの`ツールの確認と追加`に表示される保存済みの静的Authorizationは外部へ表示、コピー、変更せず、同一アカウントの承認済み設定であることを確認して`保存して追加`を実行します。Skill Library版とAgentローカル版は別管理のため、一方の変更が他方へ自動同期されたと扱いません。
 
-Agent guidanceで予約操作を禁止しても、7件のツールを持つスキル自体の権限は縮小されません。公開時はフル予約スキルを外すか無効化し、`mirai_reservation_list_services`と`mirai_reservation_get_availability`だけを参照するread-onlyスキルへ置き換えるか、API側の利用者認証と予約所有者検証を完了します。
+Tool Templateを更新しても、既存Agent内の同名ツールは更新されません。同名の新テンプレートを旧コピーと同じ保存操作で追加すると重複エラーになるため、最初にAgentローカルスキルから作成、詳細取得、完全更新、削除の旧4件を外し、サービス一覧と空き枠取得だけの中間状態を保存します。次に開き直して最新テンプレートの4件を再追加し、6件すべてを保存後に読み戻します。Agent guidanceとSkill Library版も別々に保存、監査し、Production検証完了後にAgentを再Publishします。
+
+Agent guidanceだけでは権限制御になりません。公開判断は、APIのANI照合と4件のヘッダー設定を実通話で検証した結果に基づきます。未完了の場合は、予約スキルを無効化し、`mirai_reservation_list_services`と`mirai_reservation_get_availability`だけを参照するread-onlyスキルへ戻します。
 
 ## 確認
 
@@ -509,23 +537,32 @@ Agentの`テストを開始`で実会話を確認する場合は、[予約デモ
    | APIコール | `mirai_reservation_delete` |
    | カスタムスクリプト | `mirai_reservation_update_partial` |
 
-2. APIコール7件とカスタムスクリプトを保存後に開き直し、Production URL、静的Authorization、入力、出力を確認します。`localhost`、プレースホルダー、同名出力の重複を残しません。
+2. APIコール7件とカスタムスクリプトを保存後に開き直し、Production URL、静的Authorization、入力、出力を確認します。`localhost`、プレースホルダー、同名出力の重複を残しません。作成、詳細取得、完全更新、削除の`X-Reservation-Caller-Phone`は、4件すべてが`From Variable`の`global_system.Engagement.ANI`であることを個別に読み戻します。
 3. `Debug`は次の順で実行します。
 
    1. サービス一覧、空き枠、予約一覧を実行します。
-   2. 個人情報を含まない検証専用の`Idempotency-Key`と`externalReferenceId`で一時予約を作成します。
-   3. 作成結果の予約IDを使用して、詳細取得と完全更新を実行します。
-   4. 部分更新は、GET非200安全分岐をZoom側へ反映し、保存後に開き直して反映を確認した場合だけ実行します。正常系200の後、別の存在しない予約IDで制御された404を確認します。安全分岐が未反映なら部分更新のDebugを実行しません。
-   5. 最新versionで予約を削除します。DELETEは`204 No Content`のためDebug結果が空でも正常です。
-   6. 削除後の詳細取得が`404 RESERVATION_API_NOT_FOUND`になることと、検証用予約が一覧に残っていないことを確認します。
+   2. 管理者が管理するstrict E.164の`〈テストANI-A〉`を設定します。Tool Debugが`From Variable`のテスト値注入に対応する場合は、保存済みmappingを手動値へ変更せずDebug入力から設定します。対応しない場合はAgent Previewの`Start test with variables`で、画面に表示される`global_system.Engagement.ANI`へ設定し、Tool実行結果を確認します。実利用者の番号をテストケース名、文書、スクリーンショット、チャットへ記録しません。
+   3. 個人情報を含まない検証専用の`Idempotency-Key`と`externalReferenceId`で一時予約を作成します。
+   4. 作成結果の予約IDと同じ`〈テストANI-A〉`を使用して、詳細取得と完全更新を実行します。
+   5. 同じ予約IDを別の`〈テストANI-B〉`で取得し、`404 RESERVATION_API_NOT_FOUND`になり、予約内容、所有者照合結果、件数が返らないことを確認します。
+   6. `〈テストANI-A〉`で得た最新versionとstrong `If-Match`を使い、`〈テストANI-B〉`で完全更新を実行します。404になり、その後に`〈テストANI-A〉`で取得した予約内容とversionが変わっていないことを確認します。
+   7. 同じstrong `If-Match`を使い、`〈テストANI-B〉`で削除を実行します。404になり、その後も`〈テストANI-A〉`で予約を取得でき、内容とversionが変わっていないことを確認します。
+   8. `〈テストANI-A〉`へ戻し、最新versionで予約を削除します。DELETEは`204 No Content`のためDebug結果が空でも正常です。
+   9. 削除後の詳細取得が`404 RESERVATION_API_NOT_FOUND`になることと、検証用予約が管理用一覧に残っていないことを確認します。
+   10. 欠落値は`400 RESERVATION_CALLER_PHONE_REQUIRED`、E.164以外は`400 RESERVATION_CALLER_PHONE_INVALID`になることを確認します。Agentには番号を聞き取って再試行させません。
+   11. 部分更新は、GET非200安全分岐とANIヘッダー伝播をZoom側へ反映し、保存後に開き直して反映を確認するまでDebugしません。正常系、同一ANI、別ANI、存在しない予約IDの再Debugが完了するまではSkillへ追加しません。
 
 4. 変更系ツールの結果が不明な場合は自動再実行せず、詳細取得で現在の予約とversionを照合します。
-5. エラーは`message`ではなく`error`と`retryable`で分岐します。予約枠満了は`409 RESERVATION_SLOT_FULL`、更新競合は`412`、`If-Match`欠落は`428`、月間上限は`429`として扱います。
-6. Skill Libraryの保存後監査を行います。Agentへの追加、Active化、Publishは別の変更として扱います。
+5. エラーは`message`ではなく`error`と`retryable`で分岐します。発信者番号の欠落・形式不正は`400`、予約が存在しない、別ANI、所有者情報のない旧予約は区別せず`404`、予約枠満了は`409 RESERVATION_SLOT_FULL`、更新競合は`412`、`If-Match`欠落は`428`、月間上限は`429`として扱います。
+6. Skill LibraryとAgentローカル版の保存後監査を別々に行います。Agentローカル版は最新テンプレートの4件を再追加した後、6件のツール参照を開き直します。Agent guidance、公開前の停止条件を満たした後に再Publishし、公開音声チャネルで同一ANIと別ANIの実通話試験を行います。Previewだけの成功はANI自動連携の証拠にしません。
 
 ## 参考情報
 
 - [予約API OpenAPI](../../development/reservation-api.openapi.json)
 - [予約APIのcurl動作確認](../../development/reservation-api-curl.md)
+- [予約API発信者番号所有者照合](./06_予約API発信者番号所有者照合.md)
 - [Creating Zoom Virtual Agent tools](https://support.zoom.com/hc/en/article?id=zm_kb&sysparm_article=KB0081099)
+- [Testing a voice or chat agent in Zoom Virtual Agent](https://support.zoom.com/hc/en/article?id=zm_kb&sysparm_article=KB0081098)
+- [Managing global custom and system variables for Zoom Virtual Agent](https://support.zoom.com/hc/en/article?id=zm_kb&sysparm_article=KB0058251)
+- [Using the Profile tab for Zoom Contact Center](https://support.zoom.com/hc/en/article?id=zm_kb&sysparm_article=KB0059477)
 - [Managing the Skill Library in AI Studio](https://support.zoom.com/hc/en/article?id=zm_kb&sysparm_article=KB0087347)

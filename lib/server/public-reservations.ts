@@ -4,6 +4,7 @@ import { Prisma, type PrismaClient } from "@/lib/generated/prisma/client";
 import {
   encodeReservationCursor,
   reservationEtag,
+  type ReservationCallerAniDigest,
   type ReservationAvailabilityDto,
   type ReservationDto,
   type ReservationListInput,
@@ -30,6 +31,7 @@ type BookingRow = {
   reservationDate: Date;
   startMinute: number;
   externalReferenceId: string | null;
+  callerAniDigest: string | null;
   revision: number | null;
   createdAt: Date;
   updatedAt: Date | null;
@@ -164,9 +166,10 @@ export async function getPublicReservation(
   prisma: PrismaClient,
   apiKeyId: string,
   id: string,
+  callerAniDigest: ReservationCallerAniDigest,
 ) {
   const booking = await prisma.reservationBooking.findFirst({
-    where: { id, apiKeyId, isDemo: false },
+    where: { id, apiKeyId, callerAniDigest, isDemo: false },
   });
   return booking ? toReservationDto(booking) : null;
 }
@@ -175,6 +178,7 @@ export async function createPublicReservation(
   prisma: PrismaClient,
   input: {
     apiKeyId: string;
+    callerAniDigest: ReservationCallerAniDigest;
     idempotencyKey: string;
     reservation: ReservationWriteInput;
     requestId: string;
@@ -190,7 +194,10 @@ export async function createPublicReservation(
   const slot = validateReservationInput(input.reservation, now);
   if (!slot) throw new ReservationApiOperationError("INVALID");
   const keyDigest = sha256(input.idempotencyKey);
-  const requestDigest = sha256(JSON.stringify(input.reservation));
+  const requestDigest = sha256(JSON.stringify({
+    callerAniDigest: input.callerAniDigest,
+    reservation: input.reservation,
+  }));
 
   await prisma.reservationApiIdempotencyRecord.deleteMany({
     where: { expiresAt: { lt: now } },
@@ -236,6 +243,7 @@ export async function createPublicReservation(
           startMinute: input.reservation.startMinute,
           externalReferenceId: input.reservation.externalReferenceId,
           apiKeyId: input.apiKeyId,
+          callerAniDigest: input.callerAniDigest,
           revision: 1,
           isDemo: false,
         },
@@ -277,6 +285,7 @@ export async function updatePublicReservation(
   prisma: PrismaClient,
   input: {
     apiKeyId: string;
+    callerAniDigest: ReservationCallerAniDigest;
     id: string;
     patch: ReservationPatchInput;
     expectedRevision: number;
@@ -288,9 +297,12 @@ export async function updatePublicReservation(
     const booking = await prisma.$transaction(async (transaction) => {
       const [existing] = await transaction.$queryRaw<BookingRow[]>(Prisma.sql`
         SELECT "id", "serviceKey", "reservationDate", "startMinute",
-               "externalReferenceId", "revision", "createdAt", "updatedAt"
+               "externalReferenceId", "callerAniDigest", "revision", "createdAt", "updatedAt"
         FROM "reservation_bookings"
-        WHERE "id" = ${input.id} AND "isDemo" = false AND "apiKeyId" = ${input.apiKeyId}
+        WHERE "id" = ${input.id}
+          AND "isDemo" = false
+          AND "apiKeyId" = ${input.apiKeyId}
+          AND "callerAniDigest" = ${input.callerAniDigest}
         FOR UPDATE
       `);
       if (!existing) throw new ReservationApiOperationError("NOT_FOUND");
@@ -344,13 +356,21 @@ export async function updatePublicReservation(
 
 export async function deletePublicReservation(
   prisma: PrismaClient,
-  input: { apiKeyId: string; id: string; expectedRevision: number },
+  input: {
+    apiKeyId: string;
+    callerAniDigest: ReservationCallerAniDigest;
+    id: string;
+    expectedRevision: number;
+  },
 ) {
   return prisma.$transaction(async (transaction) => {
     const [existing] = await transaction.$queryRaw<Array<{ revision: number | null }>>(Prisma.sql`
       SELECT "revision"
       FROM "reservation_bookings"
-      WHERE "id" = ${input.id} AND "isDemo" = false AND "apiKeyId" = ${input.apiKeyId}
+      WHERE "id" = ${input.id}
+        AND "isDemo" = false
+        AND "apiKeyId" = ${input.apiKeyId}
+        AND "callerAniDigest" = ${input.callerAniDigest}
       FOR UPDATE
     `);
     if (!existing) return false;

@@ -11,12 +11,16 @@ import {
 } from "../app/admin/reservations/api-keys/logs/[id]/ReservationApiJsonCodeBlock";
 
 import {
+  authenticateReservationApiRequest,
+  digestReservationCallerAni,
   digestReservationApiKey,
   generateReservationApiKey,
   parseReservationApiKey,
   previewReservationApiKey,
   verifyReservationApiKey,
 } from "../lib/server/reservation-api-keys";
+import { parseReservationCallerPhone } from "../lib/reservation-api";
+import type { PrismaClient } from "../lib/generated/prisma/client";
 
 test("raw reservation API keys use cryptographic format and one-way digest", () => {
   const first = generateReservationApiKey();
@@ -35,6 +39,101 @@ test("key previews reveal only bounded public identifier fragments", () => {
   const preview = previewReservationApiKey("1234567890abcdef");
   assert.equal(preview, "zgcc_rsv_1234••••cdef");
   assert.equal(preview.includes("567890ab"), false);
+});
+
+test("caller ANI digest is API-key scoped and contains no raw phone", () => {
+  const firstKey = generateReservationApiKey().rawKey;
+  const secondKey = generateReservationApiKey().rawKey;
+  const firstPhone = parseReservationCallerPhone("+12025550123")!;
+  const secondPhone = parseReservationCallerPhone("+12025550124")!;
+
+  const digest = digestReservationCallerAni(firstKey, firstPhone);
+  assert.match(digest, /^[a-f0-9]{64}$/u);
+  assert.equal(digestReservationCallerAni(firstKey, firstPhone), digest);
+  assert.notEqual(digestReservationCallerAni(firstKey, secondPhone), digest);
+  assert.notEqual(digestReservationCallerAni(secondKey, firstPhone), digest);
+  assert.equal(digest.includes(firstPhone), false);
+  assert.throws(
+    () => digestReservationCallerAni("invalid-key", firstPhone),
+    /canonical reservation API key/u,
+  );
+});
+
+test("authenticated context returns only the caller ANI digest", async () => {
+  const generated = generateReservationApiKey();
+  const phone = parseReservationCallerPhone("+12025550123")!;
+  const now = new Date("2026-09-01T00:00:00.000Z");
+  const transaction = {
+    async $queryRaw(query: unknown) {
+      const text = (query as { strings: string[] }).strings.join("?");
+      if (text.includes('FROM "reservation_api_keys"')) {
+        return [{
+          id: "api_key_owner_binding",
+          name: "Zoom Virtual Agent",
+          publicId: generated.publicId,
+          secretHash: digestReservationApiKey(generated.rawKey),
+          monthlyLimit: null,
+          revokedAt: null,
+        }];
+      }
+      if (text.includes('FROM "reservation_api_usage_settings"')) {
+        return [{ monthlyLimit: null, revision: 1 }];
+      }
+      if (text.includes('FROM "reservation_api_key_monthly_usage"')) {
+        return [{ requestCount: BigInt(0) }];
+      }
+      if (text.includes('FROM "reservation_api_monthly_usage"')) {
+        return [{ requestCount: BigInt(0) }];
+      }
+      throw new Error(`Unexpected query: ${text}`);
+    },
+    async $executeRaw() {
+      return 1;
+    },
+    reservationApiKeyPermission: {
+      async findMany() {
+        return [{ permission: "READ" }, { permission: "CREATE" }];
+      },
+    },
+    reservationApiKey: {
+      async update() {
+        return {};
+      },
+    },
+    reservationApiMonthlyUsage: {
+      async update() {
+        return {};
+      },
+    },
+    reservationApiKeyMonthlyUsage: {
+      async update() {
+        return {};
+      },
+    },
+  };
+  const prisma = {
+    async $transaction(operation: (client: typeof transaction) => unknown) {
+      return operation(transaction);
+    },
+  } as unknown as PrismaClient;
+
+  const result = await authenticateReservationApiRequest(prisma, {
+    authorization: `Bearer ${generated.rawKey}`,
+    callerPhone: phone,
+    now,
+  });
+  assert.equal(result.status, "AUTHENTICATED");
+  if (result.status !== "AUTHENTICATED") return;
+  assert.equal(
+    result.callerAniDigest,
+    digestReservationCallerAni(generated.rawKey, phone),
+  );
+  assert.equal("rawKey" in result, false);
+  assert.equal("callerPhone" in result, false);
+  assert.equal("secretHash" in result, false);
+  const serialized = JSON.stringify(result);
+  assert.equal(serialized.includes(generated.rawKey), false);
+  assert.equal(serialized.includes(phone), false);
 });
 
 test("API key management keeps a VIEW-enabled link to request logs", () => {
