@@ -161,7 +161,7 @@ test("all locales contain complete reservation copy and access catalog entries",
   }
 });
 
-test("reservation persistence contains no PII and no Virtual Agent integration", () => {
+test("reservation persistence contains no raw PII and no Virtual Agent integration", () => {
   const schema = source("../prisma/schema.prisma");
   const migration = source("../prisma/migrations/20260830120000_add_reservation_bookings/migration.sql");
   const implementation = [
@@ -173,6 +173,8 @@ test("reservation persistence contains no PII and no Virtual Agent integration",
   const modelStart = schema.indexOf("model ReservationBooking");
   const nextModel = schema.indexOf("\nmodel ", modelStart + 1);
   const model = schema.slice(modelStart, nextModel === -1 ? undefined : nextModel);
+  assert.match(model, /callerAniDigest\s+String\?/u);
+  assert.doesNotMatch(model, /\b(?:callerAni|callerPhone|phoneNumber)\s+String/u);
   for (const forbidden of ["name", "address", "email", "phone", "consultationContent", "receiptNumber"]) {
     assert.doesNotMatch(model, new RegExp(`\\b${forbidden}\\b`, "iu"));
     assert.doesNotMatch(migration, new RegExp(`\\b${forbidden}\\b`, "iu"));

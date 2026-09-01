@@ -108,7 +108,9 @@ export RESERVATION_ETAG="$(awk 'BEGIN{IGNORECASE=1} /^etag:/ {sub(/^[^:]+:[[:spa
 
 ## 5. 予約を部分更新する
 
-既存の直接連携ではPATCHも使用できます。
+OpenAPIとローカルruntimeのAPI contractではPATCHを使用できます。次のcurlはローカルcontract確認用です。
+
+2026年9月1日に`https://demo.lg.keien.dev`へNode.jsの`fetch`と`https.request`で、それぞれ単一の直接HTTPS PATCHを送信した検証では、クライアントが`412`を受け取った一方、直後のGETではversionが1から2へ進んでいました。同じserver-side実行が更新と`412`の両方を発生させたとは断定できず、transportまたは中継経路での再送、別リクエスト、同時更新の可能性を含めて原因は未特定です。この挙動を正常仕様として扱いません。このProduction URLを対象に非2xxまたは応答不明になった場合は、PATCHをすぐ再送せず、GETで現在の予約とversionを確認してください。Zoom AI Studioの部分更新ツールは、この曖昧な結果を避けるため、[予約APIツールテンプレート作成](../knowledge-base/ZVA設定/04_予約APIツールテンプレート作成.md)に記載したGET、マージ、PUT方式を使用します。
 
 ```bash
 curl -sS -D "$RESPONSE_HEADERS" \
@@ -122,6 +124,8 @@ export RESERVATION_ETAG="$(awk 'BEGIN{IGNORECASE=1} /^etag:/ {sub(/^[^:]+:[[:spa
 ```
 
 ## 6. 一覧から確認する
+
+予約一覧は同じAPIキーで作成された予約を返し、会話中の利用者単位には分離しません。市民向けの共有スキルへ一覧ツールを追加せず、利用者本人が保管する予約IDを使って詳細取得してください。
 
 ```bash
 curl -sS --get "$BASE_URL/api/public/v1/reservations" \

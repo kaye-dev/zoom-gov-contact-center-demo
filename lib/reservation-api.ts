@@ -17,6 +17,8 @@ export type ReservationApiPermission =
 
 export const RESERVATION_API_ERROR_CODES = {
   invalidRequest: "RESERVATION_API_INVALID_REQUEST",
+  callerPhoneRequired: "RESERVATION_CALLER_PHONE_REQUIRED",
+  callerPhoneInvalid: "RESERVATION_CALLER_PHONE_INVALID",
   unauthorized: "RESERVATION_API_UNAUTHORIZED",
   forbidden: "RESERVATION_API_FORBIDDEN",
   notFound: "RESERVATION_API_NOT_FOUND",
@@ -35,6 +37,20 @@ export const RESERVATION_API_ERROR_CODES = {
   keyConflict: "RESERVATION_API_KEY_CONFLICT",
   usageLimitConflict: "RESERVATION_API_USAGE_LIMIT_CONFLICT",
 } as const;
+
+export const RESERVATION_CALLER_PHONE_HEADER = "X-Reservation-Caller-Phone";
+export const RESERVATION_CALLER_PHONE_PATTERN = /^\+[1-9]\d{7,14}$/u;
+
+declare const reservationCallerPhoneBrand: unique symbol;
+declare const reservationCallerAniDigestBrand: unique symbol;
+
+export type ReservationCallerPhone = string & {
+  readonly [reservationCallerPhoneBrand]: true;
+};
+
+export type ReservationCallerAniDigest = string & {
+  readonly [reservationCallerAniDigestBrand]: true;
+};
 
 export const MAX_MONTHLY_REQUEST_LIMIT = BigInt("9223372036854775800");
 
@@ -244,6 +260,14 @@ export function parseReservationPatch(value: unknown): ReservationPatchInput | n
 
 export function parseReservationIdempotencyKey(value: string | null): string | null {
   return value && RESERVATION_EXTERNAL_REFERENCE_PATTERN.test(value) ? value : null;
+}
+
+export function parseReservationCallerPhone(
+  value: string | null,
+): ReservationCallerPhone | null {
+  return value && RESERVATION_CALLER_PHONE_PATTERN.test(value)
+    ? value as ReservationCallerPhone
+    : null;
 }
 
 export function parseReservationIfMatch(

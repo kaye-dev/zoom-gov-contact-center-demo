@@ -11,7 +11,11 @@ import {
   getTokyoCalendarDate,
   utcDateToCalendarDate,
 } from "../../lib/reservations";
-import { generateReservationApiKey } from "../../lib/server/reservation-api-keys";
+import { parseReservationCallerPhone } from "../../lib/reservation-api";
+import {
+  digestReservationCallerAni,
+  generateReservationApiKey,
+} from "../../lib/server/reservation-api-keys";
 import {
   decodeReservationApiRequestLogCursor,
   listReservationApiRequestLogs,
@@ -23,6 +27,8 @@ import { withIsolatedPostgresDatabase } from "../helpers/isolated-postgres";
 const AUTH_SECRET = "runtime-reservation-api-test-secret-000000000";
 const FULL_ADMIN = "reservation-api-full-admin";
 const VIEW_ADMIN = "reservation-api-view-admin";
+const PRIMARY_CALLER_PHONE = "+12025550123";
+const SECONDARY_CALLER_PHONE = "+12025550124";
 
 type Route = typeof import("../../app/api/[[...route]]/route");
 type Handler = Route["GET"] | Route["POST"] | Route["PUT"] | Route["PATCH"] | Route["DELETE"];
@@ -132,32 +138,125 @@ test("reservation API keys, scopes, CRUD, quota, and revocation work end to end"
 
       const date = nextMyNumberDate(new Date());
       const payload = { serviceKey: "my-number-card", reservationDate: date, startMinute: 540, externalReferenceId: "zva_e2e_reservation_0001" };
-      assert.equal((await invoke(route.POST, "POST", "/api/public/v1/reservations", { bearer: limitedKey, body: payload })).status, 403);
+      const unauthenticatedMissingCaller = await invoke(
+        route.POST,
+        "POST",
+        "/api/public/v1/reservations",
+        { idempotencyKey: "zva_unauthenticated_missing_caller", body: payload },
+      );
+      assert.equal(unauthenticatedMissingCaller.status, 401);
+      assert.equal(
+        (await readPublicError(unauthenticatedMissingCaller)).error,
+        "RESERVATION_API_UNAUTHORIZED",
+      );
+      const forbiddenMissingCaller = await invoke(
+        route.POST,
+        "POST",
+        "/api/public/v1/reservations",
+        { bearer: limitedKey, body: payload },
+      );
+      assert.equal(forbiddenMissingCaller.status, 403);
+      assert.equal(
+        (await readPublicError(forbiddenMissingCaller)).error,
+        "RESERVATION_API_FORBIDDEN",
+      );
+      const authenticatedMissingCaller = await invoke(
+        route.POST,
+        "POST",
+        "/api/public/v1/reservations",
+        {
+          bearer: issued.rawKey,
+          idempotencyKey: "zva_authenticated_missing_caller",
+          body: payload,
+        },
+      );
+      assert.equal(authenticatedMissingCaller.status, 400);
+      assert.equal(
+        (await readPublicError(authenticatedMissingCaller)).error,
+        "RESERVATION_CALLER_PHONE_REQUIRED",
+      );
+      for (const [index, invalidCallerPhone] of [
+        "09012345678",
+        "+1202 5550123",
+        "+1234567890123456",
+      ].entries()) {
+        const invalidCaller = await invoke(
+          route.POST,
+          "POST",
+          "/api/public/v1/reservations",
+          {
+            bearer: issued.rawKey,
+            callerPhone: invalidCallerPhone,
+            idempotencyKey: `zva_invalid_caller_${index}`,
+            body: payload,
+          },
+        );
+        assert.equal(invalidCaller.status, 400);
+        assert.equal(
+          (await readPublicError(invalidCaller)).error,
+          "RESERVATION_CALLER_PHONE_INVALID",
+        );
+      }
       assert.equal((await invoke(route.GET, "GET", "/api/public/v1/reservations")).status, 401);
       assert.equal((await invoke(route.GET, "GET", "/api/public/v1/reservations", { bearer: "invalid" })).status, 401);
 
-      const createdResponse = await invoke(route.POST, "POST", "/api/public/v1/reservations", { bearer: issued.rawKey, idempotencyKey: "zva_e2e_idempotency_0001", body: payload });
+      const createdResponse = await invoke(route.POST, "POST", "/api/public/v1/reservations", {
+        bearer: issued.rawKey,
+        callerPhone: PRIMARY_CALLER_PHONE,
+        idempotencyKey: "zva_e2e_idempotency_0001",
+        body: payload,
+      });
       assert.equal(createdResponse.status, 201, await createdResponse.clone().text());
       const created = (await createdResponse.json()) as { reservation: { id: string; reservationDate: string; startMinute: number } };
       assert.equal(created.reservation.reservationDate, date);
+      assert.equal(JSON.stringify(created).includes(PRIMARY_CALLER_PHONE), false);
+      const storedCaller = await client.query<{ callerAniDigest: string | null }>(
+        `SELECT "callerAniDigest" FROM reservation_bookings WHERE id = $1`,
+        [created.reservation.id],
+      );
+      assert.match(storedCaller.rows[0]?.callerAniDigest ?? "", /^[0-9a-f]{64}$/u);
+      assert.equal(storedCaller.rows[0]?.callerAniDigest, callerAniDigest(
+        issued.rawKey,
+        PRIMARY_CALLER_PHONE,
+      ));
+      assert.equal(JSON.stringify(storedCaller.rows).includes(PRIMARY_CALLER_PHONE), false);
 
       await client.query(
         `INSERT INTO reservation_bookings (id, "serviceKey", "reservationDate", "startMinute", "isDemo") VALUES ('hidden-demo', 'my-number-card', $1::date, 570, true)`,
         [date],
+      );
+      await client.query(
+        `INSERT INTO reservation_bookings
+           (id, "serviceKey", "reservationDate", "startMinute", "isDemo", "apiKeyId", "externalReferenceId", "callerAniDigest")
+         VALUES
+           ('legacy-ownerless', 'legal-consultation', $1::date, 840, false, $2, 'zva_legacy_ownerless_0001', NULL)`,
+        [date, issued.apiKey.id],
       );
       const listResponse = await invoke(route.GET, "GET", `/api/public/v1/reservations?serviceKey=my-number-card&dateFrom=${date}&dateTo=${date}&limit=1`, { bearer: issued.rawKey });
       assert.equal(listResponse.status, 200);
       const list = await listResponse.json() as { items: Array<{ id: string }>; nextCursor: string | null };
       assert.deepEqual(list.items.map(({ id }) => id), [created.reservation.id]);
       assert.equal(list.nextCursor, null);
-      assert.equal((await invoke(route.GET, "GET", "/api/public/v1/reservations/hidden-demo", { bearer: issued.rawKey })).status, 404);
+      assert.equal((await invoke(route.GET, "GET", "/api/public/v1/reservations/hidden-demo", {
+        bearer: issued.rawKey,
+        callerPhone: PRIMARY_CALLER_PHONE,
+      })).status, 404);
+      assert.equal((await invoke(route.GET, "GET", "/api/public/v1/reservations/legacy-ownerless", {
+        bearer: issued.rawKey,
+        callerPhone: PRIMARY_CALLER_PHONE,
+      })).status, 404);
 
-      const read = await invoke(route.GET, "GET", `/api/public/v1/reservations/${created.reservation.id}`, { bearer: issued.rawKey });
+      const read = await invoke(route.GET, "GET", `/api/public/v1/reservations/${created.reservation.id}`, {
+        bearer: issued.rawKey,
+        callerPhone: PRIMARY_CALLER_PHONE,
+      });
       assert.equal(read.status, 200);
+      assert.equal((await read.clone().text()).includes(PRIMARY_CALLER_PHONE), false);
       const readEtag = read.headers.get("etag");
       assert.ok(readEtag);
       const patched = await invoke(route.PATCH, "PATCH", `/api/public/v1/reservations/${created.reservation.id}`, {
         bearer: issued.rawKey,
+        callerPhone: PRIMARY_CALLER_PHONE,
         ifMatch: readEtag!,
         body: { startMinute: 570 },
       });
@@ -165,16 +264,25 @@ test("reservation API keys, scopes, CRUD, quota, and revocation work end to end"
       assert.equal(((await patched.json()) as { reservation: { startMinute: number } }).reservation.startMinute, 570);
       assert.equal((await invoke(route.DELETE, "DELETE", `/api/public/v1/reservations/${created.reservation.id}`, {
         bearer: issued.rawKey,
+        callerPhone: PRIMARY_CALLER_PHONE,
         ifMatch: patched.headers.get("etag")!,
         body: { unexpected: true },
       })).status, 400);
-      assert.equal((await invoke(route.GET, "GET", `/api/public/v1/reservations/${created.reservation.id}`, { bearer: issued.rawKey })).status, 200);
+      assert.equal((await invoke(route.GET, "GET", `/api/public/v1/reservations/${created.reservation.id}`, {
+        bearer: issued.rawKey,
+        callerPhone: PRIMARY_CALLER_PHONE,
+      })).status, 200);
       assert.equal((await invoke(route.DELETE, "DELETE", `/api/public/v1/reservations/${created.reservation.id}`, {
         bearer: issued.rawKey,
+        callerPhone: PRIMARY_CALLER_PHONE,
         ifMatch: patched.headers.get("etag")!,
         rawBody: "",
       })).status, 204);
-      assert.equal((await invoke(route.DELETE, "DELETE", "/api/public/v1/reservations/hidden-demo", { bearer: issued.rawKey, ifMatch: '"reservation-hidden-demo-v1"' })).status, 404);
+      assert.equal((await invoke(route.DELETE, "DELETE", "/api/public/v1/reservations/hidden-demo", {
+        bearer: issued.rawKey,
+        callerPhone: PRIMARY_CALLER_PHONE,
+        ifMatch: '"reservation-hidden-demo-v1"',
+      })).status, 404);
 
       const usage = await invoke(route.GET, "GET", "/api/admin/reservation-api-usage-limit", { cookie: fullCookie });
       const usageBody = await usage.json() as { usageLimit: { requestCount: string; revision: number } };
@@ -283,8 +391,8 @@ test("reservation API keys, scopes, CRUD, quota, and revocation work end to end"
 
       const legalDate = nextServiceDate("legal-consultation", new Date());
       const concurrentCapacity = await Promise.all([
-        invoke(route.POST, "POST", "/api/public/v1/reservations", { bearer: issued.rawKey, idempotencyKey: "zva_capacity_idempotency_0001", body: { serviceKey: "legal-consultation", reservationDate: legalDate, startMinute: 780, externalReferenceId: "zva_capacity_reference_0001" } }),
-        invoke(route.POST, "POST", "/api/public/v1/reservations", { bearer: issued.rawKey, idempotencyKey: "zva_capacity_idempotency_0002", body: { serviceKey: "legal-consultation", reservationDate: legalDate, startMinute: 780, externalReferenceId: "zva_capacity_reference_0002" } }),
+        invoke(route.POST, "POST", "/api/public/v1/reservations", { bearer: issued.rawKey, callerPhone: PRIMARY_CALLER_PHONE, idempotencyKey: "zva_capacity_idempotency_0001", body: { serviceKey: "legal-consultation", reservationDate: legalDate, startMinute: 780, externalReferenceId: "zva_capacity_reference_0001" } }),
+        invoke(route.POST, "POST", "/api/public/v1/reservations", { bearer: issued.rawKey, callerPhone: PRIMARY_CALLER_PHONE, idempotencyKey: "zva_capacity_idempotency_0002", body: { serviceKey: "legal-consultation", reservationDate: legalDate, startMinute: 780, externalReferenceId: "zva_capacity_reference_0002" } }),
       ]);
       assert.deepEqual(concurrentCapacity.map(({ status }) => status).sort(), [201, 409]);
       const capacityCount = await client.query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM reservation_bookings WHERE "serviceKey" = 'legal-consultation' AND "reservationDate" = $1::date AND "startMinute" = 780`, [legalDate]);
@@ -344,7 +452,7 @@ test("authenticated reservation API outcomes create bounded request logs without
         route.POST,
         "POST",
         "/api/public/v1/reservations",
-        { bearer: fullKey.rawKey, idempotencyKey: "zva_request_log_idempotency_0001", body: createPayload },
+        { bearer: fullKey.rawKey, callerPhone: PRIMARY_CALLER_PHONE, idempotencyKey: "zva_request_log_idempotency_0001", body: createPayload },
       );
       assert.equal(createdCall.response.status, 201);
       const createdBody = await createdCall.response.json() as {
@@ -388,7 +496,7 @@ test("authenticated reservation API outcomes create bounded request logs without
         route.GET,
         "GET",
         `/api/public/v1/reservations/${createdBody.reservation.id}`,
-        { bearer: fullKey.rawKey },
+        { bearer: fullKey.rawKey, callerPhone: PRIMARY_CALLER_PHONE },
       );
       assert.equal(readCall.response.status, 200);
       assert.equal(readCall.log.permission, "READ");
@@ -399,7 +507,7 @@ test("authenticated reservation API outcomes create bounded request logs without
         route.PATCH,
         "PATCH",
         `/api/public/v1/reservations/${createdBody.reservation.id}`,
-        { bearer: fullKey.rawKey, ifMatch: readCall.response.headers.get("etag")!, body: { startMinute: 570 } },
+        { bearer: fullKey.rawKey, callerPhone: PRIMARY_CALLER_PHONE, ifMatch: readCall.response.headers.get("etag")!, body: { startMinute: 570 } },
       );
       assert.equal(patchCall.response.status, 200);
       assert.equal(patchCall.log.permission, "UPDATE");
@@ -410,7 +518,7 @@ test("authenticated reservation API outcomes create bounded request logs without
         route.DELETE,
         "DELETE",
         `/api/public/v1/reservations/${createdBody.reservation.id}`,
-        { bearer: fullKey.rawKey, ifMatch: patchCall.response.headers.get("etag")! },
+        { bearer: fullKey.rawKey, callerPhone: PRIMARY_CALLER_PHONE, ifMatch: patchCall.response.headers.get("etag")! },
       );
       assert.equal(deleteCall.response.status, 204);
       assert.equal(await deleteCall.response.text(), "");
@@ -440,6 +548,7 @@ test("authenticated reservation API outcomes create bounded request logs without
         "/api/public/v1/reservations",
         {
           bearer: fullKey.rawKey,
+          callerPhone: PRIMARY_CALLER_PHONE,
           idempotencyKey: "zva_request_log_invalid_0001",
           body: { ...createPayload, unknown: credentialSentinel },
         },
@@ -453,7 +562,7 @@ test("authenticated reservation API outcomes create bounded request logs without
         route.GET,
         "GET",
         "/api/public/v1/reservations/missing-request-log-booking",
-        { bearer: fullKey.rawKey },
+        { bearer: fullKey.rawKey, callerPhone: PRIMARY_CALLER_PHONE },
       );
       assert.equal(missingCall.response.status, 404);
       assert.equal(missingCall.log.errorCode, "RESERVATION_API_NOT_FOUND");
@@ -473,23 +582,29 @@ test("authenticated reservation API outcomes create bounded request logs without
         route.POST,
         "POST",
         "/api/public/v1/reservations",
-        { bearer: fullKey.rawKey, idempotencyKey: "zva_request_log_capacity_key_0001", body: capacityPayload },
+        { bearer: fullKey.rawKey, callerPhone: PRIMARY_CALLER_PHONE, idempotencyKey: "zva_request_log_capacity_key_0001", body: capacityPayload },
       )).response.status, 201);
       const conflictCall = await invokeExpectingOneLog(
         client,
         route.POST,
         "POST",
         "/api/public/v1/reservations",
-        { bearer: fullKey.rawKey, idempotencyKey: "zva_request_log_capacity_key_0002", body: { ...capacityPayload, externalReferenceId: "zva_request_log_capacity_0002" } },
+        { bearer: fullKey.rawKey, callerPhone: PRIMARY_CALLER_PHONE, idempotencyKey: "zva_request_log_capacity_key_0002", body: { ...capacityPayload, externalReferenceId: "zva_request_log_capacity_0002" } },
       );
       assert.equal(conflictCall.response.status, 409);
       assert.equal(conflictCall.log.errorCode, "RESERVATION_SLOT_FULL");
       assert.equal((conflictCall.log.responseBody as { error: string }).error, "RESERVATION_SLOT_FULL");
 
       await client.query(
-        `INSERT INTO reservation_bookings (id, "serviceKey", "reservationDate", "startMinute", "isDemo", "apiKeyId", "externalReferenceId")
-         VALUES ('request-log-server-error', 'my-number-card', $1::date, 540, false, $2, 'zva_server_error_reference_0001')`,
-        [date, fullKey.apiKey.id],
+        `INSERT INTO reservation_bookings
+           (id, "serviceKey", "reservationDate", "startMinute", "isDemo", "apiKeyId", "externalReferenceId", "callerAniDigest")
+         VALUES
+           ('request-log-server-error', 'my-number-card', $1::date, 540, false, $2, 'zva_server_error_reference_0001', $3)`,
+        [
+          date,
+          fullKey.apiKey.id,
+          callerAniDigest(fullKey.rawKey, PRIMARY_CALLER_PHONE),
+        ],
       );
       await installFailingReservationUpdateTrigger(client);
       let serverErrorCall: Awaited<ReturnType<typeof invokeExpectingOneLog>>;
@@ -499,7 +614,7 @@ test("authenticated reservation API outcomes create bounded request logs without
           route.PATCH,
           "PATCH",
           "/api/public/v1/reservations/request-log-server-error",
-          { bearer: fullKey.rawKey, ifMatch: '"reservation-request-log-server-error-v1"', body: { startMinute: 570 } },
+          { bearer: fullKey.rawKey, callerPhone: PRIMARY_CALLER_PHONE, ifMatch: '"reservation-request-log-server-error-v1"', body: { startMinute: 570 } },
         );
       } finally {
         await removeFailingReservationUpdateTrigger(client);
@@ -599,6 +714,8 @@ test("authenticated reservation API outcomes create bounded request logs without
         listOnlyKey.rawKey,
         quotaKey.rawKey,
         secret.rows[0]!.secretHash,
+        PRIMARY_CALLER_PHONE,
+        SECONDARY_CALLER_PHONE,
         credentialSentinel,
         "Authorization",
         "Cookie",
@@ -824,7 +941,7 @@ test("ZVA safety contract handles discovery, retries, ownership, preconditions, 
         route.POST,
         "POST",
         "/api/public/v1/reservations",
-        { bearer: primaryKey.rawKey, body: payload },
+        { bearer: primaryKey.rawKey, callerPhone: PRIMARY_CALLER_PHONE, body: payload },
       );
       assert.equal(missingIdempotency.status, 400);
       assert.equal((await readPublicError(missingIdempotency)).error, "RESERVATION_IDEMPOTENCY_KEY_REQUIRED");
@@ -834,6 +951,7 @@ test("ZVA safety contract handles discovery, retries, ownership, preconditions, 
         "/api/public/v1/reservations",
         {
           bearer: primaryKey.rawKey,
+          callerPhone: PRIMARY_CALLER_PHONE,
           idempotencyKey: "zva_unsupported_media_0001",
           body: payload,
           contentType: "text/plain",
@@ -845,11 +963,13 @@ test("ZVA safety contract handles discovery, retries, ownership, preconditions, 
       const retryResponses = await Promise.all([
         invoke(route.POST, "POST", "/api/public/v1/reservations", {
           bearer: primaryKey.rawKey,
+          callerPhone: PRIMARY_CALLER_PHONE,
           idempotencyKey: "zva_retry_idempotency_0001",
           body: payload,
         }),
         invoke(route.POST, "POST", "/api/public/v1/reservations", {
           bearer: primaryKey.rawKey,
+          callerPhone: PRIMARY_CALLER_PHONE,
           idempotencyKey: "zva_retry_idempotency_0001",
           body: payload,
         }),
@@ -897,8 +1017,26 @@ test("ZVA safety contract handles discovery, retries, ownership, preconditions, 
         row.responseLocation === retryBodies[0]!.location &&
         row.responseEtag === retryBodies[0]!.etag));
 
+      const differentCallerReplay = await invoke(
+        route.POST,
+        "POST",
+        "/api/public/v1/reservations",
+        {
+          bearer: primaryKey.rawKey,
+          callerPhone: SECONDARY_CALLER_PHONE,
+          idempotencyKey: "zva_retry_idempotency_0001",
+          body: payload,
+        },
+      );
+      assert.equal(differentCallerReplay.status, 409);
+      assert.equal(
+        (await readPublicError(differentCallerReplay)).error,
+        "RESERVATION_IDEMPOTENCY_KEY_REUSED",
+      );
+
       const reusedKey = await invoke(route.POST, "POST", "/api/public/v1/reservations", {
         bearer: primaryKey.rawKey,
+        callerPhone: PRIMARY_CALLER_PHONE,
         idempotencyKey: "zva_retry_idempotency_0001",
         body: { ...payload, startMinute: 570 },
       });
@@ -906,6 +1044,7 @@ test("ZVA safety contract handles discovery, retries, ownership, preconditions, 
       assert.equal((await readPublicError(reusedKey)).error, "RESERVATION_IDEMPOTENCY_KEY_REUSED");
       const reusedReference = await invoke(route.POST, "POST", "/api/public/v1/reservations", {
         bearer: primaryKey.rawKey,
+        callerPhone: PRIMARY_CALLER_PHONE,
         idempotencyKey: "zva_retry_idempotency_0002",
         body: payload,
       });
@@ -915,6 +1054,7 @@ test("ZVA safety contract handles discovery, retries, ownership, preconditions, 
       const concurrentExternalReference = await Promise.all([
         invoke(route.POST, "POST", "/api/public/v1/reservations", {
           bearer: primaryKey.rawKey,
+          callerPhone: PRIMARY_CALLER_PHONE,
           idempotencyKey: "zva_external_lock_key_0001",
           body: {
             ...payload,
@@ -924,6 +1064,7 @@ test("ZVA safety contract handles discovery, retries, ownership, preconditions, 
         }),
         invoke(route.POST, "POST", "/api/public/v1/reservations", {
           bearer: primaryKey.rawKey,
+          callerPhone: PRIMARY_CALLER_PHONE,
           idempotencyKey: "zva_external_lock_key_0002",
           body: {
             ...payload,
@@ -944,25 +1085,77 @@ test("ZVA safety contract handles discovery, retries, ownership, preconditions, 
 
       const reservationId = retryBodies[0]!.body.reservationId;
       const location = `/api/public/v1/reservations/${reservationId}`;
-      const hiddenRead = await invoke(route.GET, "GET", location, { bearer: secondaryKey.rawKey });
+      const hiddenRead = await invoke(route.GET, "GET", location, {
+        bearer: secondaryKey.rawKey,
+        callerPhone: PRIMARY_CALLER_PHONE,
+      });
       assert.equal(hiddenRead.status, 404);
       const secondaryList = await invoke(route.GET, "GET", "/api/public/v1/reservations", {
         bearer: secondaryKey.rawKey,
       });
       assert.deepEqual((await secondaryList.json() as { items: unknown[] }).items, []);
 
-      const read = await invoke(route.GET, "GET", location, { bearer: primaryKey.rawKey });
+      const read = await invoke(route.GET, "GET", location, {
+        bearer: primaryKey.rawKey,
+        callerPhone: PRIMARY_CALLER_PHONE,
+      });
       assert.equal(read.status, 200);
       const initialEtag = read.headers.get("etag");
       assert.equal(initialEtag, retryBodies[0]!.etag);
+
+      const differentCallerRead = await invoke(route.GET, "GET", location, {
+        bearer: primaryKey.rawKey,
+        callerPhone: SECONDARY_CALLER_PHONE,
+      });
+      assert.equal(differentCallerRead.status, 404);
+      const differentCallerPut = await invoke(route.PUT, "PUT", location, {
+        bearer: primaryKey.rawKey,
+        callerPhone: SECONDARY_CALLER_PHONE,
+        ifMatch: initialEtag!,
+        body: { ...payload, startMinute: 570 },
+      });
+      assert.equal(differentCallerPut.status, 404);
+      const differentCallerPatch = await invoke(route.PATCH, "PATCH", location, {
+        bearer: primaryKey.rawKey,
+        callerPhone: SECONDARY_CALLER_PHONE,
+        ifMatch: initialEtag!,
+        body: { startMinute: 570 },
+      });
+      assert.equal(differentCallerPatch.status, 404);
+      const differentCallerDelete = await invoke(route.DELETE, "DELETE", location, {
+        bearer: primaryKey.rawKey,
+        callerPhone: SECONDARY_CALLER_PHONE,
+        ifMatch: initialEtag!,
+      });
+      assert.equal(differentCallerDelete.status, 404);
+      const preservedAfterDifferentCaller = await invoke(route.GET, "GET", location, {
+        bearer: primaryKey.rawKey,
+        callerPhone: PRIMARY_CALLER_PHONE,
+      });
+      assert.equal(preservedAfterDifferentCaller.status, 200);
+      assert.equal(preservedAfterDifferentCaller.headers.get("etag"), initialEtag);
+      for (const response of [
+        differentCallerRead,
+        differentCallerPut,
+        differentCallerPatch,
+        differentCallerDelete,
+        preservedAfterDifferentCaller,
+      ]) {
+        const serializedResponse = await response.clone().text();
+        assert.equal(serializedResponse.includes(PRIMARY_CALLER_PHONE), false);
+        assert.equal(serializedResponse.includes(SECONDARY_CALLER_PHONE), false);
+      }
+
       const missingPrecondition = await invoke(route.PUT, "PUT", location, {
         bearer: primaryKey.rawKey,
+        callerPhone: PRIMARY_CALLER_PHONE,
         body: { ...payload, startMinute: 570 },
       });
       assert.equal(missingPrecondition.status, 428);
       assert.equal((await readPublicError(missingPrecondition)).error, "RESERVATION_PRECONDITION_REQUIRED");
       const failedPrecondition = await invoke(route.PUT, "PUT", location, {
         bearer: primaryKey.rawKey,
+        callerPhone: PRIMARY_CALLER_PHONE,
         ifMatch: '"reservation-wrong-v1"',
         body: { ...payload, startMinute: 570 },
       });
@@ -970,6 +1163,7 @@ test("ZVA safety contract handles discovery, retries, ownership, preconditions, 
       assert.equal((await readPublicError(failedPrecondition)).error, "RESERVATION_PRECONDITION_FAILED");
       const putUnsupported = await invoke(route.PUT, "PUT", location, {
         bearer: primaryKey.rawKey,
+        callerPhone: PRIMARY_CALLER_PHONE,
         ifMatch: initialEtag!,
         body: { ...payload, startMinute: 570 },
         contentType: "application/x-www-form-urlencoded",
@@ -977,6 +1171,7 @@ test("ZVA safety contract handles discovery, retries, ownership, preconditions, 
       assert.equal(putUnsupported.status, 415);
       const replaced = await invoke(route.PUT, "PUT", location, {
         bearer: primaryKey.rawKey,
+        callerPhone: PRIMARY_CALLER_PHONE,
         ifMatch: initialEtag!,
         body: { ...payload, startMinute: 570 },
       });
@@ -984,12 +1179,14 @@ test("ZVA safety contract handles discovery, retries, ownership, preconditions, 
       assert.match(replaced.headers.get("etag") ?? "", /-v2"$/u);
       const stalePatch = await invoke(route.PATCH, "PATCH", location, {
         bearer: primaryKey.rawKey,
+        callerPhone: PRIMARY_CALLER_PHONE,
         ifMatch: initialEtag!,
         body: { startMinute: 540 },
       });
       assert.equal(stalePatch.status, 412);
       const patched = await invoke(route.PATCH, "PATCH", location, {
         bearer: primaryKey.rawKey,
+        callerPhone: PRIMARY_CALLER_PHONE,
         ifMatch: replaced.headers.get("etag")!,
         body: { startMinute: 540 },
       });
@@ -997,15 +1194,18 @@ test("ZVA safety contract handles discovery, retries, ownership, preconditions, 
       assert.match(patched.headers.get("etag") ?? "", /-v3"$/u);
       const missingDeletePrecondition = await invoke(route.DELETE, "DELETE", location, {
         bearer: primaryKey.rawKey,
+        callerPhone: PRIMARY_CALLER_PHONE,
       });
       assert.equal(missingDeletePrecondition.status, 428);
       const staleDelete = await invoke(route.DELETE, "DELETE", location, {
         bearer: primaryKey.rawKey,
+        callerPhone: PRIMARY_CALLER_PHONE,
         ifMatch: replaced.headers.get("etag")!,
       });
       assert.equal(staleDelete.status, 412);
       const deleted = await invoke(route.DELETE, "DELETE", location, {
         bearer: primaryKey.rawKey,
+        callerPhone: PRIMARY_CALLER_PHONE,
         ifMatch: patched.headers.get("etag")!,
       });
       assert.equal(deleted.status, 204);
@@ -1013,6 +1213,7 @@ test("ZVA safety contract handles discovery, retries, ownership, preconditions, 
       assert.equal(await deleted.text(), "");
       const replayAfterDelete = await invoke(route.POST, "POST", "/api/public/v1/reservations", {
         bearer: primaryKey.rawKey,
+        callerPhone: PRIMARY_CALLER_PHONE,
         idempotencyKey: "zva_retry_idempotency_0001",
         body: payload,
       });
@@ -1030,6 +1231,7 @@ test("ZVA safety contract handles discovery, retries, ownership, preconditions, 
       const legalDate = nextServiceDate("legal-consultation", new Date());
       const firstFullSlot = await invoke(route.POST, "POST", "/api/public/v1/reservations", {
         bearer: primaryKey.rawKey,
+        callerPhone: PRIMARY_CALLER_PHONE,
         idempotencyKey: "zva_full_slot_key_0001",
         body: {
           serviceKey: "legal-consultation",
@@ -1041,6 +1243,7 @@ test("ZVA safety contract handles discovery, retries, ownership, preconditions, 
       assert.equal(firstFullSlot.status, 201);
       const fullSlot = await invoke(route.POST, "POST", "/api/public/v1/reservations", {
         bearer: primaryKey.rawKey,
+        callerPhone: PRIMARY_CALLER_PHONE,
         idempotencyKey: "zva_full_slot_key_0002",
         body: {
           serviceKey: "legal-consultation",
@@ -1060,6 +1263,9 @@ test("ZVA safety contract handles discovery, retries, ownership, preconditions, 
         startMinute: 780,
         availabilityPath: `/api/public/v1/reservation-services/legal-consultation/availability?dateFrom=${legalDate}&dateTo=${legalDate}`,
       });
+      const serializedLogs = JSON.stringify(await readRequestLogs(client));
+      assert.equal(serializedLogs.includes(PRIMARY_CALLER_PHONE), false);
+      assert.equal(serializedLogs.includes(SECONDARY_CALLER_PHONE), false);
     } finally {
       await client.end();
       restore();
@@ -1312,6 +1518,7 @@ type InvokeOptions = {
   cookie?: string;
   bearer?: string;
   authorization?: string;
+  callerPhone?: string;
   idempotencyKey?: string;
   ifMatch?: string;
   contentType?: string;
@@ -1334,6 +1541,9 @@ async function invoke(
   if (options.cookie) headers.set("cookie", options.cookie);
   if (options.authorization) headers.set("authorization", options.authorization);
   else if (options.bearer) headers.set("authorization", `Bearer ${options.bearer}`);
+  if (options.callerPhone) {
+    headers.set("x-reservation-caller-phone", options.callerPhone);
+  }
   if (options.idempotencyKey) headers.set("idempotency-key", options.idempotencyKey);
   if (options.ifMatch) headers.set("if-match", options.ifMatch);
   if (options.body !== undefined || options.contentType) {
@@ -1346,6 +1556,12 @@ async function invoke(
       options.body === undefined ? undefined : JSON.stringify(options.body)
     ),
   }));
+}
+
+function callerAniDigest(rawKey: string, callerPhone: string) {
+  const parsed = parseReservationCallerPhone(callerPhone);
+  assert.ok(parsed, "caller phone fixture must be canonical E.164");
+  return digestReservationCallerAni(rawKey, parsed);
 }
 
 async function readPublicError(response: Response) {

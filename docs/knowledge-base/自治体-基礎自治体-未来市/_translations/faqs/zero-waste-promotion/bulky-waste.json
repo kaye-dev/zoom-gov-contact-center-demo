@@ -1,5 +1,5 @@
 {
-  "sourceDigest": "13b9c56c50892a6d81544a4dfe26d11d8e86d8dd0612ae3f93fdd1e2f93f1c72",
+  "sourceDigest": "1a345e0881e4c661fee7eb811fe96ceb84b843625ffc25849d06663bfd2642b9",
   "translations": {
     "en": {
       "items": [
@@ -11,7 +11,7 @@
         {
           "no": 2,
           "question": "What should I check before applying for bulky-waste collection?",
-          "answer": "Check the item name, dimensions, quantity, and set-out location. Measuring the longest side and the second-longest side in advance helps the application proceed smoothly."
+          "answer": "Check the item name, dimensions, quantity, and set-out location yourself so you can provide them to the official application channel. Measuring the longest side and the second-longest side in advance helps the application proceed smoothly. The voice agent does not ask for, collect, or store these details for the date-only demo reservation."
         },
         {
           "no": 3,
@@ -31,7 +31,7 @@
         {
           "no": 6,
           "question": "When will I learn the bulky-waste collection date and fee?",
-          "answer": "The collection date and fee are provided during the application after the item and dimensions have been checked. This FAQ cannot confirm an exact fee or collection availability, so check the information provided by the official application channel."
+          "answer": "The official collection date and fee are provided during the official application after the item and dimensions have been checked. This FAQ cannot confirm an exact fee or collection availability for the official application, so check the information provided by the application channel. The voice agent handles only a demo reservation date and availability; that date does not mean an official collection date or fee has been confirmed."
         },
         {
           "no": 7,
@@ -45,8 +45,8 @@
         },
         {
           "no": 9,
-          "question": "Can this chat finalize my bulky-waste collection application?",
-          "answer": "This chat can explain the standard disposal process, but it cannot confirm a reservation, calculate a fee, issue an application number, or send an application-completion email. Apply through an official reception method designated by Mirai City."
+          "question": "Can this AI service alone finalize my bulky-waste collection application?",
+          "answer": "A voice agent configured with the reservation API can create, retrieve, change, or cancel a date-only demo reservation. However, this is not an official collection application. It does not handle the item, address, set-out location, fee, disposal ticket, official application number, or completion email, so you must also apply through an official reception method designated by Mirai City."
         },
         {
           "no": 10,
@@ -65,7 +65,7 @@
         {
           "no": 2,
           "question": "申请大件垃圾收集前应确认哪些信息？",
-          "answer": "请确认品目名称、尺寸、数量和投放地点。事先测量最长边和第二长边，可以使申请时的确认更加顺利。"
+          "answer": "请自行确认品目名称、尺寸、数量和投放地点，以便向正式申请渠道提供。事先测量最长边和第二长边，可以使申请时的确认更加顺利。语音智能体不会为仅日期的演示预约询问、收集或记录这些信息。"
         },
         {
           "no": 3,
@@ -85,7 +85,7 @@
         {
           "no": 6,
           "question": "何时可以知道大件垃圾的收集日期和手续费？",
-          "answer": "受理方会在确认品目和尺寸等信息后，于申请时告知收集日期和手续费。本FAQ无法确认准确费用或收集名额，请以正式申请渠道提供的信息为准。"
+          "answer": "正式收集日期和手续费会在确认品目、尺寸等信息后，于正式申请时告知。本FAQ无法确认准确费用或收集名额，请以正式申请渠道提供的信息为准。语音智能体仅处理演示预约日期和空余情况；该日期不代表正式收集日期或费用已经确定。"
         },
         {
           "no": 7,
@@ -99,8 +99,8 @@
         },
         {
           "no": 9,
-          "question": "可以仅通过本聊天完成大件垃圾收集申请吗？",
-          "answer": "本聊天可以说明标准投放方法，但无法确认预约、计算费用、签发受理编号或发送申请完成邮件。请通过未来市指定的正式受理方式申请。"
+          "question": "可以仅通过本AI服务完成大件垃圾收集申请吗？",
+          "answer": "配置预约API的语音智能体可以创建、查询、变更或取消仅含日期的演示预约记录，但这不是行政上的正式收集申请。该功能不处理品目、地址、投放地点、费用、处理券、正式受理编号或申请完成邮件，因此还需通过未来市指定的正式受理方式申请。"
         },
         {
           "no": 10,
@@ -119,7 +119,7 @@
         {
           "no": 2,
           "question": "申請大型垃圾收集前應確認哪些資訊？",
-          "answer": "請確認品目名稱、尺寸、數量和投放地點。事先測量最長邊和第二長邊，可以使申請時的確認更加順利。"
+          "answer": "請自行確認品目名稱、尺寸、數量和投放地點，以便向正式申請管道提供。事先測量最長邊和第二長邊，可以使申請時的確認更加順利。語音智慧代理不會為僅日期的示範預約詢問、收集或記錄這些資訊。"
         },
         {
           "no": 3,
@@ -139,7 +139,7 @@
         {
           "no": 6,
           "question": "何時可以知道大型垃圾的收集日期和手續費？",
-          "answer": "受理方會在確認品目和尺寸等資訊後，於申請時告知收集日期和手續費。本FAQ無法確認準確費用或收集名額，請以正式申請管道提供的資訊為準。"
+          "answer": "正式收集日期和手續費會在確認品目、尺寸等資訊後，於正式申請時告知。本FAQ無法確認準確費用或收集名額，請以正式申請管道提供的資訊為準。語音智慧代理僅處理示範預約日期和空位情況；該日期不代表正式收集日期或費用已經確定。"
         },
         {
           "no": 7,
@@ -153,8 +153,8 @@
         },
         {
           "no": 9,
-          "question": "可以僅透過本聊天完成大型垃圾收集申請嗎？",
-          "answer": "本聊天可以說明標準投放方法，但無法確認預約、計算費用、核發受理編號或寄送申請完成郵件。請透過未來市指定的正式受理方式申請。"
+          "question": "可以僅透過本AI服務完成大型垃圾收集申請嗎？",
+          "answer": "設定預約API的語音智慧代理可以建立、查詢、變更或取消僅含日期的示範預約記錄，但這不是行政上的正式收集申請。此功能不處理品目、地址、投放地點、費用、處理券、正式受理編號或申請完成郵件，因此仍須透過未來市指定的正式受理方式申請。"
         },
         {
           "no": 10,
@@ -173,7 +173,7 @@
         {
           "no": 2,
           "question": "대형 폐기물 수거를 신청하기 전에 무엇을 확인해야 하나요?",
-          "answer": "품목명, 크기, 수량 및 배출 장소를 확인하세요. 가장 긴 변과 두 번째로 긴 변을 미리 측정해 두면 신청할 때 원활하게 확인할 수 있습니다."
+          "answer": "공식 신청 창구에 전달할 수 있도록 품목명, 크기, 수량 및 배출 장소를 이용자가 직접 확인하세요. 가장 긴 변과 두 번째로 긴 변을 미리 측정해 두면 신청할 때 원활하게 확인할 수 있습니다. 음성 에이전트는 날짜 전용 데모 예약을 위해 이러한 정보를 묻거나 수집하거나 기록하지 않습니다."
         },
         {
           "no": 3,
@@ -193,7 +193,7 @@
         {
           "no": 6,
           "question": "대형 폐기물의 수거일과 수수료는 언제 알 수 있나요?",
-          "answer": "품목과 크기 등을 확인한 후 신청할 때 수거일과 수수료가 안내됩니다. 이 FAQ에서는 정확한 요금이나 수거 가능 여부를 확인할 수 없으므로 공식 신청 채널에서 제공하는 안내를 확인하세요."
+          "answer": "품목과 크기 등을 확인한 후 공식 신청 시 정식 수거일과 수수료가 안내됩니다. 이 FAQ에서는 정확한 요금이나 수거 가능 여부를 확인할 수 없으므로 공식 신청 채널의 안내를 확인하세요. 음성 에이전트는 데모 예약 날짜와 빈자리만 처리하며, 해당 날짜가 정식 수거일이나 요금 확정을 의미하지는 않습니다."
         },
         {
           "no": 7,
@@ -207,8 +207,8 @@
         },
         {
           "no": 9,
-          "question": "이 채팅만으로 대형 폐기물 수거 신청을 확정할 수 있나요?",
-          "answer": "이 채팅에서는 표준 배출 방법을 안내할 수 있지만 예약 확정, 요금 계산, 접수 번호 발급 또는 신청 완료 이메일 발송은 할 수 없습니다. 미래시가 안내하는 공식 접수 방법으로 신청하세요."
+          "question": "이 AI 안내만으로 대형 폐기물 수거 신청을 확정할 수 있나요?",
+          "answer": "예약 API가 설정된 음성 에이전트에서는 날짜만 포함한 데모 예약 기록을 생성, 조회, 변경 또는 취소할 수 있습니다. 그러나 이는 행정상의 정식 수거 신청이 아닙니다. 품목, 주소, 배출 장소, 요금, 처리권, 정식 접수 번호 또는 신청 완료 이메일은 처리하지 않으므로 미래시가 안내하는 공식 접수 방법으로도 신청해야 합니다."
         },
         {
           "no": 10,

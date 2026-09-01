@@ -13,6 +13,17 @@ test("reservation OpenAPI 3.1 contract matches the eight runtime operations", ()
   const source = readFileSync(specPath, "utf8");
   const spec = JSON.parse(source) as JsonRecord;
   assert.equal(spec.openapi, "3.1.0");
+  assert.equal((spec.info as JsonRecord).version, "2.0.0");
+  assert.deepEqual(spec.servers, [
+    {
+      url: "https://demo.lg.keien.dev",
+      description: "Production",
+    },
+    {
+      url: "http://localhost:3000",
+      description: "ローカル開発環境",
+    },
+  ]);
   assert.deepEqual(spec.security, [{ bearerAuth: [] }]);
   assert.deepEqual(
     valueAtPointer(spec, "#/components/securitySchemes/bearerAuth"),
@@ -43,6 +54,53 @@ test("reservation OpenAPI 3.1 contract matches the eight runtime operations", ()
   assert.equal(operationCount(paths), 8);
   assert.equal(new Set(operations.map(({ operationId }) => operationId)).size, 8);
 
+  const expectedParameters = new Map<string, string[]>([
+    ["GET /api/public/v1/reservation-services", []],
+    ["GET /api/public/v1/reservation-services/{serviceKey}/availability", [
+      "serviceKey", "dateFrom", "dateTo",
+    ]],
+    ["GET /api/public/v1/reservations", [
+      "serviceKey", "dateFrom", "dateTo", "limit", "cursor",
+    ]],
+    ["POST /api/public/v1/reservations", [
+      "Idempotency-Key", "X-Reservation-Caller-Phone",
+    ]],
+    ["GET /api/public/v1/reservations/{id}", [
+      "id", "X-Reservation-Caller-Phone",
+    ]],
+    ["PUT /api/public/v1/reservations/{id}", [
+      "id", "If-Match", "X-Reservation-Caller-Phone",
+    ]],
+    ["PATCH /api/public/v1/reservations/{id}", [
+      "id", "If-Match", "X-Reservation-Caller-Phone",
+    ]],
+    ["DELETE /api/public/v1/reservations/{id}", [
+      "id", "If-Match", "X-Reservation-Caller-Phone",
+    ]],
+  ]);
+  for (const [method, path] of expected) {
+    const operation = (paths[path] as JsonRecord)[method.toLowerCase()] as JsonRecord;
+    assert.deepEqual(
+      parameterNames(spec, operation),
+      expectedParameters.get(`${method} ${path}`),
+      `${method} ${path}`,
+    );
+  }
+
+  assert.deepEqual(
+    valueAtPointer(spec, "#/components/parameters/ReservationCallerPhone"),
+    {
+      name: "X-Reservation-Caller-Phone",
+      in: "header",
+      required: true,
+      description: "Zoom AI Studioの変数ピッカーでglobal_system.Engagement.ANI（Zoom公式Tool作成記事ではglobal.system.engagement.ani）を選び、取得した発信者番号をE.164形式で送信します。会話で申告された番号を代用してはいけません。raw値およびサーバー側で生成するダイジェストは応答に含めません。",
+      schema: {
+        type: "string",
+        pattern: "^\\+[1-9][0-9]{7,14}$",
+      },
+    },
+  );
+
   for (const operation of operations) {
     const responses = operation.responses as JsonRecord;
     assert.ok(responses && Object.keys(responses).length > 0);
@@ -53,7 +111,9 @@ test("reservation OpenAPI 3.1 contract matches the eight runtime operations", ()
   }
 
   const post = (paths["/api/public/v1/reservations"] as JsonRecord).post as JsonRecord;
-  assert.deepEqual(parameterNames(spec, post), ["Idempotency-Key"]);
+  assert.deepEqual(parameterNames(spec, post), [
+    "Idempotency-Key", "X-Reservation-Caller-Phone",
+  ]);
   assert.deepEqual(Object.keys(requestContent(post)), ["application/json"]);
   assert.deepEqual(Object.keys(post.responses as JsonRecord).sort(), [
     "201", "400", "401", "403", "409", "415", "429", "500",
@@ -90,6 +150,8 @@ test("reservation OpenAPI 3.1 contract matches the eight runtime operations", ()
     "RESERVATION_API_FORBIDDEN",
     "RESERVATION_API_NOT_FOUND",
     "RESERVATION_SLOT_FULL",
+    "RESERVATION_CALLER_PHONE_REQUIRED",
+    "RESERVATION_CALLER_PHONE_INVALID",
     "RESERVATION_IDEMPOTENCY_KEY_REQUIRED",
     "RESERVATION_IDEMPOTENCY_KEY_REUSED",
     "RESERVATION_EXTERNAL_REFERENCE_CONFLICT",
@@ -101,6 +163,15 @@ test("reservation OpenAPI 3.1 contract matches the eight runtime operations", ()
     "RESERVATION_API_OPERATION_FAILED",
     "RESERVATION_API_INTERNAL_ERROR",
   ]) assert.ok(errorCodes.includes(code), code);
+
+  const reservationProperties = valueAtPointer(
+    spec,
+    "#/components/schemas/Reservation/properties",
+  ) as JsonRecord;
+  assert.deepEqual(
+    Object.keys(reservationProperties).filter((name) => /phone|digest|ani/iu.test(name)),
+    [],
+  );
 
   assert.equal(source.includes("zgcc_rsv_"), false);
   assert.equal(source.includes("Authorization: Bearer"), false);

@@ -2,10 +2,14 @@
   "openapi": "3.1.0",
   "info": {
     "title": "予約公開API",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "description": "Zoom Virtual Agentなどの外部システム向け予約API。空き枠は参考スナップショットであり、予約確定時のPOSTが最終判定です。"
   },
   "servers": [
+    {
+      "url": "https://demo.lg.keien.dev",
+      "description": "Production"
+    },
     {
       "url": "http://localhost:3000",
       "description": "ローカル開発環境"
@@ -79,7 +83,8 @@
         "description": "同じIdempotency-Keyと同じpayloadを24時間以内に再送すると、予約を増やさず元の予約を201で返します。HTTP requestごとにrequestIdと利用数は新しく記録されます。",
         "x-reservation-permission": "CREATE",
         "parameters": [
-          { "$ref": "#/components/parameters/IdempotencyKey" }
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          { "$ref": "#/components/parameters/ReservationCallerPhone" }
         ],
         "requestBody": {
           "required": true,
@@ -113,7 +118,8 @@
         "summary": "指定した予約を取得する",
         "x-reservation-permission": "READ",
         "parameters": [
-          { "$ref": "#/components/parameters/ReservationId" }
+          { "$ref": "#/components/parameters/ReservationId" },
+          { "$ref": "#/components/parameters/ReservationCallerPhone" }
         ],
         "responses": {
           "200": { "$ref": "#/components/responses/ReservationRead" },
@@ -131,7 +137,8 @@
         "x-reservation-permission": "UPDATE",
         "parameters": [
           { "$ref": "#/components/parameters/ReservationId" },
-          { "$ref": "#/components/parameters/IfMatch" }
+          { "$ref": "#/components/parameters/IfMatch" },
+          { "$ref": "#/components/parameters/ReservationCallerPhone" }
         ],
         "requestBody": {
           "required": true,
@@ -161,7 +168,8 @@
         "x-reservation-permission": "UPDATE",
         "parameters": [
           { "$ref": "#/components/parameters/ReservationId" },
-          { "$ref": "#/components/parameters/IfMatch" }
+          { "$ref": "#/components/parameters/IfMatch" },
+          { "$ref": "#/components/parameters/ReservationCallerPhone" }
         ],
         "requestBody": {
           "required": true,
@@ -191,7 +199,8 @@
         "x-reservation-permission": "DELETE",
         "parameters": [
           { "$ref": "#/components/parameters/ReservationId" },
-          { "$ref": "#/components/parameters/IfMatch" }
+          { "$ref": "#/components/parameters/IfMatch" },
+          { "$ref": "#/components/parameters/ReservationCallerPhone" }
         ],
         "responses": {
           "204": { "$ref": "#/components/responses/ReservationDeleted" },
@@ -276,6 +285,16 @@
         "required": true,
         "description": "16〜100文字の不透明な再送識別子。同じAPIキー内で24時間保持されます。個人情報を含めないでください。",
         "schema": { "$ref": "#/components/schemas/OpaqueExternalId" }
+      },
+      "ReservationCallerPhone": {
+        "name": "X-Reservation-Caller-Phone",
+        "in": "header",
+        "required": true,
+        "description": "Zoom AI Studioの変数ピッカーでglobal_system.Engagement.ANI（Zoom公式Tool作成記事ではglobal.system.engagement.ani）を選び、取得した発信者番号をE.164形式で送信します。会話で申告された番号を代用してはいけません。raw値およびサーバー側で生成するダイジェストは応答に含めません。",
+        "schema": {
+          "type": "string",
+          "pattern": "^\\+[1-9][0-9]{7,14}$"
+        }
       },
       "IfMatch": {
         "name": "If-Match",
@@ -498,6 +517,8 @@
               "RESERVATION_API_FORBIDDEN",
               "RESERVATION_API_NOT_FOUND",
               "RESERVATION_SLOT_FULL",
+              "RESERVATION_CALLER_PHONE_REQUIRED",
+              "RESERVATION_CALLER_PHONE_INVALID",
               "RESERVATION_IDEMPOTENCY_KEY_REQUIRED",
               "RESERVATION_IDEMPOTENCY_KEY_REUSED",
               "RESERVATION_EXTERNAL_REFERENCE_CONFLICT",
@@ -571,12 +592,12 @@
         "headers": { "X-Request-ID": { "$ref": "#/components/headers/XRequestId" } }
       },
       "InvalidRequest": {
-        "description": "JSON、query、pathまたはbodyが不正",
+        "description": "JSON、query、pathまたはbodyが不正、または発信者番号が必要な操作でX-Reservation-Caller-Phoneが欠落・不正",
         "headers": { "X-Request-ID": { "$ref": "#/components/headers/XRequestId" } },
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PublicError" } } }
       },
       "InvalidOrMissingIdempotency": {
-        "description": "Idempotency-Key欠落・不正、またはJSON/bodyが不正",
+        "description": "Idempotency-Key欠落・不正、JSON/bodyが不正、またはX-Reservation-Caller-Phoneが欠落・不正",
         "headers": { "X-Request-ID": { "$ref": "#/components/headers/XRequestId" } },
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PublicError" } } }
       },
@@ -594,7 +615,7 @@
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PublicError" } } }
       },
       "NotFound": {
-        "description": "サービスまたはこのAPIキーが所有する予約が存在しない",
+        "description": "サービスが存在しない、または予約が同じAPIキーと同じANIに結び付いていない。予約ID不在、別ANI、所有者情報のない既存予約を区別せず、予約の存在を開示しません。",
         "headers": { "X-Request-ID": { "$ref": "#/components/headers/XRequestId" } },
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PublicError" } } }
       },

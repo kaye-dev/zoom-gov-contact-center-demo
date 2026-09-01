@@ -4,13 +4,15 @@
 
 ## 実行前の確認
 
-- デプロイ対象が`main`へmerge済みで、required status checkの`Deploy runner npm test`を含む必須CIが成功している。
+- デプロイ対象が`main`へmerge済みで、対象SHAの`Deploy runner npm test`と`Plan artifact guard / Verify plan artifacts`を含む必須CIが成功している。
 - GitHub Environmentsの`production-deploy`と`production-migration`が`main`だけを許可している。
 - `production-migration`にrequired reviewerが設定されている。
 - 実行中の別Production deployがない。並行起動したrunは同じconcurrency groupで直列化され、進行中のrunはcancelされない。
 - AWS IAM Role、KMS key、4件のParameter Store設定を変更した場合は、先に権限テストをやり直している。
 
 `Deploy runner npm test`はPRと`main` pushのexact SHAからdeploy runnerをbuildし、そのイメージ内で`npm test`を実行します。AWS OIDC、SSM、Vercel、Neon、GitHub Environmentやsecretは使わず、このcheckの成功・失敗だけではProduction変更なしです。失敗した場合はProduction workflowやAWS SSO再認証へ進まず、Docker buildまたはイメージ内testを修正した新しいPR SHAでcheckを成功させます。
+
+branch protectionの`required_status_checks`が`null`または必要なcheckを含まない場合も、CI不要とは判定しません。2026年9月1日のread backでは設定文書と実repositoryの保護設定に差があったため、workflow dispatch前に対象SHAのcheck runsをGitHub ActionsまたはAPIで直接確認します。`Deploy runner npm test`と`Plan artifact guard / Verify plan artifacts`のどちらかが未実行、pending、failure、cancelledなら停止し、required checkへ再登録するか、成功した新しいSHAを用意してから進みます。
 
 ## 実行する
 
@@ -77,6 +79,7 @@ pending migrationがあるrunは`production-migration` Environmentの承認待�
 
 | 停止箇所 | 外部状態 | 対応 |
 | --- | --- | --- |
+| branch protectionにrequired status checkがない、または対象SHAのcheckが未完了 | Production変更なし | 保護設定だけで合格とみなさず、対象SHAの2件のcheck runsを直接確認し、未実行または未成功ならdispatchしない |
 | required status checkの`Deploy runner npm test` | Production変更なし | Docker buildまたはイメージ内testを修正し、新しいPR SHAでcheckを再実行する |
 | validate / plan | 外部変更なし | errorを修正してmainへmergeし、新しいrunを起動する |
 | migration承認待ち / 拒否 | 外部変更なし | 内容を再確認し、同じrunを不用意に再利用せず判断する |
