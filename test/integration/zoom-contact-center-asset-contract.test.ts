@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   LiveZoomContractContext,
   LiveZoomContractError,
+  ZAAD_LIVE_SYNTHETIC_TTS_1_CHARACTER_CONTENT,
   ZAAD_LIVE_SYNTHETIC_TTS_500_CHARACTER_CONTENT,
   ZAAD_LIVE_SYNTHETIC_TTS_CONTENT,
 } from "./zaad-zoom-live-contract-helpers";
@@ -17,6 +18,18 @@ test(
     let cleanupAllowed = true;
 
     try {
+      const minimumAsset = await zoom.createTtsAsset({
+        content: ZAAD_LIVE_SYNTHETIC_TTS_1_CHARACTER_CONTENT,
+        name: zoom.names.assetUpdated,
+        voice: "Takumi",
+      });
+      assetId = minimumAsset.id;
+      const minimumReadback = await zoom.getAsset(assetId);
+      assert.equal(minimumReadback.content, ZAAD_LIVE_SYNTHETIC_TTS_1_CHARACTER_CONTENT);
+      await zoom.archiveAsset(assetId);
+      await zoom.hardDeleteAsset(assetId);
+      assetId = "";
+
       const createdAsset = await zoom.createTtsAsset({
         content: ZAAD_LIVE_SYNTHETIC_TTS_500_CHARACTER_CONTENT,
         name: zoom.names.asset,

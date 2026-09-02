@@ -72,14 +72,14 @@ export function DisasterPreventionRadioView({ initialReviewState }: { initialRev
         <Breadcrumbs
           items={[
             { label: t.contentPages.home, href: '/' },
-            { label: t.contentPages.lifeIndexTitle, href: '/life' },
-            { label: t.findInfo.lifeInfo.items.safety, href: '/life/emergency-safety-disaster' },
+            { label: copy.lifeBreadcrumb, href: '/life' },
+            { label: copy.safetyBreadcrumb, href: '/life/emergency-safety-disaster' },
             { label: copy.breadcrumb },
           ]}
         />
         <PageTitleBand title={copy.title} iconSrc="/life-information/life-safety.png" />
         <p className="mt-6 max-w-6xl text-base leading-8 text-fg-muted">{copy.lead}</p>
-        <ContentsNavigation items={contentsItems} />
+        <ContentsNavigation items={contentsItems} heading={copy.contentsHeading} />
 
         <div className="mt-12 flex max-w-6xl flex-col gap-12">
         <section id="registration-service" aria-labelledby="registration-heading" className="scroll-mt-24">
@@ -87,23 +87,25 @@ export function DisasterPreventionRadioView({ initialReviewState }: { initialRev
           <div className="mt-8 px-5 md:px-6">
             <p className="leading-8 text-fg">{formCopy.description}</p>
             <div id="disaster-registration-card" className="mt-6 border border-line bg-surface-raised px-5 py-6 md:px-6 md:py-8">
-              <div data-public-state={state} hidden={state === 'success'}>
+              <div data-public-state="" data-visible-states="ready,pending,empty,failure" hidden={state === 'success'}>
                 <div
                   ref={validationErrorRef}
                   id="registration-error-summary"
                   tabIndex={-1}
                   role="alert"
+                  data-visible-states="empty"
                   hidden={state !== 'empty'}
                   className="mb-6 border-l-4 border-red-600 bg-red-50 px-4 py-3 text-sm leading-7 text-red-800 dark:bg-red-950/40 dark:text-red-200"
                 >
                   <p className="font-bold">{formCopy.validationTitle}</p>
-                  <p>{formCopy.validationMessage}</p>
+                  <ul className="mt-1 list-disc pl-5"><li>{formCopy.validationMessage}</li></ul>
                 </div>
                 <div
                   ref={serverErrorRef}
                   id="registration-server-error"
                   tabIndex={-1}
                   role="alert"
+                  data-visible-states="failure"
                   hidden={state !== 'failure'}
                   className="mb-6 border-l-4 border-red-600 bg-red-50 px-4 py-3 text-sm leading-7 text-red-800 dark:bg-red-950/40 dark:text-red-200"
                 >
@@ -119,26 +121,25 @@ export function DisasterPreventionRadioView({ initialReviewState }: { initialRev
                     onSubmit={submit}
                   >
                     <div className="grid gap-6 md:grid-cols-2">
-                      <label className="block md:col-span-2" htmlFor="resident-name">
-                        <span className="block text-sm font-bold text-fg">{formCopy.name} <RequiredLabel>{formCopy.required}</RequiredLabel></span>
-                        <input id="resident-name" name="name" autoComplete="name" maxLength={100} required disabled={state === 'pending'} className={inputClass} />
-                      </label>
-                      <label className="block" htmlFor="resident-email">
-                        <span className="block text-sm font-bold text-fg">{formCopy.email} <RequiredLabel>{formCopy.required}</RequiredLabel></span>
+                      <div className="md:col-span-2">
+                        <label htmlFor="resident-name" className="block text-sm font-bold text-fg">{formCopy.name} <RequiredLabel>{formCopy.required}</RequiredLabel></label>
+                        <input id="resident-name" name="name" autoComplete="name" maxLength={100} required defaultValue="" disabled={state === 'pending'} className={inputClass} />
+                        <p data-visible-states="empty" className="mt-2 text-sm text-red-700 dark:text-red-300" hidden={state !== 'empty'}>{formCopy.nameValidationMessage}</p>
+                      </div>
+                      <div>
+                        <label htmlFor="resident-email" className="block text-sm font-bold text-fg">{formCopy.email} <RequiredLabel>{formCopy.required}</RequiredLabel></label>
                         <input id="resident-email" name="email" type="email" autoComplete="email" maxLength={254} required disabled={state === 'pending'} placeholder="example@example.jp" className={inputClass} />
-                        <span className="mt-2 block text-sm leading-6 text-fg-muted">{formCopy.emailHelp}</span>
-                      </label>
-                      <label className="block" htmlFor="resident-phone">
-                        <span className="block text-sm font-bold text-fg">{formCopy.phone} <RequiredLabel>{formCopy.required}</RequiredLabel></span>
+                        <p className="mt-2 text-sm leading-6 text-fg-muted">{formCopy.emailHelp}</p>
+                      </div>
+                      <div>
+                        <label htmlFor="resident-phone" className="block text-sm font-bold text-fg">{formCopy.phone} <RequiredLabel>{formCopy.required}</RequiredLabel></label>
                         <input id="resident-phone" name="phone" type="tel" inputMode="tel" autoComplete="tel" maxLength={20} required disabled={state === 'pending'} placeholder="090-1234-5678" className={inputClass} />
-                        <span className="mt-2 block text-sm leading-6 text-fg-muted">{formCopy.phoneHelp}</span>
-                      </label>
+                        <p className="mt-2 text-sm leading-6 text-fg-muted">{formCopy.phoneHelp}</p>
+                      </div>
                     </div>
-                    <label className="flex cursor-pointer items-start gap-3 rounded-md bg-surface-hover px-4 py-4 has-[:disabled]:cursor-not-allowed">
-                      <span className="mt-0.5 flex shrink-0">
-                        <Checkbox id="resident-consent" name="consent" required disabled={state === 'pending'} />
-                      </span>
-                      <span className="text-sm leading-7 text-fg">{formCopy.consent} <RequiredLabel>{formCopy.required}</RequiredLabel></span>
+                    <label className="flex items-start gap-3 rounded-md bg-surface-hover px-4 py-4">
+                      <Checkbox id="resident-consent" name="consent" required disabled={state === 'pending'} variant="plain" />
+                      <span className="text-sm leading-7 text-fg">{formCopy.consent} <span className="font-bold text-red-700 dark:text-red-300">{formCopy.required}</span></span>
                     </label>
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                       <button id="zaad-registration-submit" type="submit" disabled={state === 'pending'} aria-busy={state === 'pending' || undefined} className="min-h-11 cursor-pointer rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60">
@@ -148,7 +149,7 @@ export function DisasterPreventionRadioView({ initialReviewState }: { initialRev
                     </div>
                 </form>
               </div>
-              <section data-public-state="success" hidden={state !== 'success'} aria-labelledby="registration-success-heading" className="py-2">
+              <section data-public-state="" data-visible-states="success" hidden={state !== 'success'} aria-labelledby="registration-success-heading" className="py-2">
                 <div className="border-l-4 border-green-700 bg-green-50 px-5 py-5 text-green-900 dark:bg-green-950/40 dark:text-green-100">
                   <h3 ref={successRef} id="registration-success-heading" tabIndex={-1} className="text-lg font-bold">{formCopy.successTitle}</h3>
                   <p className="mt-2 leading-7">{formCopy.successMessage}</p>

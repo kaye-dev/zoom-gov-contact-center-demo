@@ -2,7 +2,12 @@ import { createHash } from "node:crypto";
 
 import type { PrismaClient } from "@/lib/generated/prisma/client";
 import { decryptDeveloperApiSecret } from "@/lib/server/developer-api-crypto";
-import { ZAAD_ERROR_CODES, ZAAD_LIMITS, type ZaadErrorCode } from "@/lib/zaad/contracts";
+import {
+  countZaadTextCharacters,
+  ZAAD_ERROR_CODES,
+  ZAAD_LIMITS,
+  type ZaadErrorCode,
+} from "@/lib/zaad/contracts";
 
 const DEFAULT_API_BASE = "https://api.zoom.us/v2";
 const DEFAULT_TOKEN_URL = "https://zoom.us/oauth/token";
@@ -10,6 +15,16 @@ const REQUEST_TIMEOUT_MS = 8_000;
 const TOKEN_SKEW_MS = 60_000;
 const CONTACT_BATCH_MAX_ITEMS = 100;
 const CONTACT_PAGINATION_MAX_PAGES = 100;
+const RESOURCE_PAGINATION_MAX_PAGES = 100;
+const E164_PATTERN = /^\+[1-9]\d{1,14}$/u;
+const ALLOWED_QUEUE_DISTRIBUTIONS = new Set([
+  "longest_idle",
+  "sequential",
+  "rotating",
+  "most_available",
+  "longest_ready",
+  "longest_idle_for_this_queue",
+]);
 
 export type ZaadZoomConnectionState = "connected" | "missing" | "scope" | "expired" | "outage";
 
@@ -39,6 +54,25 @@ export type ZoomCampaignDto = {
   dncPolicy: string | null;
   alwaysRunning: boolean;
   revision: string;
+};
+
+export type ZoomQueueDto = {
+  id: string;
+  name: string;
+  channel: string;
+};
+
+export type ZoomQueueDetailDto = ZoomQueueDto & {
+  engagementDistribution: string;
+  outboundEnabled: boolean;
+  callerIds: string[];
+};
+
+export type ZoomFlowDto = {
+  id: string;
+  name: string;
+  channel: string;
+  status: string;
 };
 
 export type ZoomContactDto = {
@@ -108,6 +142,9 @@ export type ZoomOneTimeCampaignReadback = {
   agentlessAmdOffAction: "use_flow" | "hang_up" | "play_media" | null;
   assetId: string | null;
   alwaysRunning: boolean;
+  queueId: string | null;
+  phoneNumberId: string | null;
+  newFlowId: string | null;
 };
 
 export type ZaadZoomWriteGates = Readonly<{
@@ -374,7 +411,7 @@ export class ZaadZoomClient {
   }
 
   async listCampaigns(input: { pageSize?: number; nextPageToken?: string } = {}) {
-    const query = new URLSearchParams({ page_size: String(boundedPageSize(input.pageSize)) });
+    const query = new URLSearchParams({ page_size: String(boundedCampaignPageSize(input.pageSize)) });
     if (input.nextPageToken) query.set("next_page_token", input.nextPageToken);
     const payload = await this.requestJson("GET", `/contact_center/outbound_campaign/campaigns?${query.toString()}`);
     const root = asRecord(payload);
@@ -391,6 +428,57 @@ export class ZaadZoomClient {
     return result;
   }
 
+  async listQueues(input: { pageSize?: number; nextPageToken?: string } = {}) {
+    const query = new URLSearchParams({
+      channel: "voice",
+      page_size: String(boundedPageSize(input.pageSize)),
+    });
+    if (input.nextPageToken) query.set("next_page_token", input.nextPageToken);
+    const payload = asRecord(await this.requestJson("GET", `/contact_center/queues?${query.toString()}`));
+    return {
+      queues: arrayAt(payload, ["queues"])
+        .map((entry) => parseQueue(asRecord(entry)))
+        .filter((entry): entry is ZoomQueueDto => entry !== null),
+      nextPageToken: parseNextPageToken(payload.next_page_token),
+    };
+  }
+
+  async getQueue(id: string): Promise<ZoomQueueDetailDto> {
+    const payload = asRecord(await this.requestJson(
+      "GET",
+      `/contact_center/queues/${encodeId(id)}?queue_identifier_type=id`,
+    ));
+    const queue = parseQueueDetail(payload);
+    if (!queue || queue.id !== id) throw new ZaadZoomError(ZAAD_ERROR_CODES.zoomInvalidResponse, 502);
+    return queue;
+  }
+
+  async listFlows(input: { pageSize?: number; nextPageToken?: string } = {}) {
+    const query = new URLSearchParams({
+      status: "published",
+      channel: "voice",
+      page_size: String(boundedPageSize(input.pageSize)),
+    });
+    if (input.nextPageToken) query.set("next_page_token", input.nextPageToken);
+    const payload = asRecord(await this.requestJson("GET", `/contact_center/flows?${query.toString()}`));
+    return {
+      flows: arrayAt(payload, ["flows"])
+        .map((entry) => parseFlow(asRecord(entry)))
+        .filter((entry): entry is ZoomFlowDto => entry !== null),
+      nextPageToken: parseNextPageToken(payload.next_page_token),
+    };
+  }
+
+  async getFlow(id: string): Promise<ZoomFlowDto> {
+    const payload = asRecord(await this.requestJson(
+      "GET",
+      `/contact_center/flows/${encodeId(id)}?flow_identifier_type=id`,
+    ));
+    const flow = parseFlow(payload);
+    if (!flow || flow.id !== id) throw new ZaadZoomError(ZAAD_ERROR_CODES.zoomInvalidResponse, 502);
+    return flow;
+  }
+
   async getCampaignPreparationProfile(id: string): Promise<{
     campaign: ZoomCampaignDto;
     profile: ZoomOneTimeCampaignProfile;
@@ -405,7 +493,80 @@ export class ZaadZoomClient {
     }
     const profile = parseOneTimeCampaignProfile(payload);
     if (!campaign || !profile) throw new ZaadZoomError(ZAAD_ERROR_CODES.zoomInvalidResponse, 502);
-    return { campaign, profile };
+    const references = await this.resolveCampaignReferences(profile.queueId, profile.newFlowId, payload);
+    return {
+      campaign: {
+        ...campaign,
+        queueName: campaign.queueName ?? references.queue.name,
+        callerIdMasked: campaign.callerIdMasked ?? maskPhone(references.callerId),
+      },
+      profile: {
+        ...profile,
+        phoneNumberId: references.callerId,
+      },
+    };
+  }
+
+  private async resolveCampaignReferences(
+    queueId: string,
+    flowId: string,
+    campaignPayload: Record<string, unknown>,
+  ) {
+    const queueListed = await this.hasListedQueue(queueId);
+    const queue = await this.getQueue(queueId);
+    if (
+      !queueListed ||
+      queue.channel !== "voice" ||
+      !queue.outboundEnabled ||
+      !ALLOWED_QUEUE_DISTRIBUTIONS.has(queue.engagementDistribution) ||
+      queue.callerIds.length === 0
+    ) {
+      throw new ZaadZoomError(ZAAD_ERROR_CODES.zoomInvalidResponse, 502);
+    }
+
+    const flowListed = await this.hasListedFlow(flowId);
+    const flow = await this.getFlow(flowId);
+    if (!flowListed || flow.channel !== "voice" || flow.status !== "published") {
+      throw new ZaadZoomError(ZAAD_ERROR_CODES.zoomInvalidResponse, 502);
+    }
+
+    const campaignCallerCandidates = [
+      stringAt(campaignPayload, ["phone_number_id"]),
+      stringAt(campaignPayload, ["outbound_number"]),
+      stringAt(campaignPayload, ["caller_id"]),
+    ].filter((candidate): candidate is string => Boolean(candidate && E164_PATTERN.test(candidate)));
+    const mappedCaller = campaignCallerCandidates.find((candidate) => queue.callerIds.includes(candidate));
+    const callerId = mappedCaller ?? (queue.callerIds.length === 1 ? queue.callerIds[0] : null);
+    if (!callerId) throw new ZaadZoomError(ZAAD_ERROR_CODES.zoomInvalidResponse, 502);
+    return { queue, flow, callerId };
+  }
+
+  private async hasListedQueue(id: string) {
+    let nextPageToken: string | undefined;
+    const seen = new Set<string>();
+    for (let page = 0; page < RESOURCE_PAGINATION_MAX_PAGES; page += 1) {
+      const result = await this.listQueues({ pageSize: 100, nextPageToken });
+      if (result.queues.some((queue) => queue.id === id && queue.channel === "voice")) return true;
+      if (!result.nextPageToken) return false;
+      if (seen.has(result.nextPageToken)) throw new ZaadZoomError(ZAAD_ERROR_CODES.zoomInvalidResponse, 502);
+      seen.add(result.nextPageToken);
+      nextPageToken = result.nextPageToken;
+    }
+    throw new ZaadZoomError(ZAAD_ERROR_CODES.zoomInvalidResponse, 502);
+  }
+
+  private async hasListedFlow(id: string) {
+    let nextPageToken: string | undefined;
+    const seen = new Set<string>();
+    for (let page = 0; page < RESOURCE_PAGINATION_MAX_PAGES; page += 1) {
+      const result = await this.listFlows({ pageSize: 100, nextPageToken });
+      if (result.flows.some((flow) => flow.id === id && flow.channel === "voice" && flow.status === "published")) return true;
+      if (!result.nextPageToken) return false;
+      if (seen.has(result.nextPageToken)) throw new ZaadZoomError(ZAAD_ERROR_CODES.zoomInvalidResponse, 502);
+      seen.add(result.nextPageToken);
+      nextPageToken = result.nextPageToken;
+    }
+    throw new ZaadZoomError(ZAAD_ERROR_CODES.zoomInvalidResponse, 502);
   }
 
   async setCampaignStatus(id: string, status: "Draft" | "Running" | "Paused" | "Ready"): Promise<void> {
@@ -599,6 +760,9 @@ export class ZaadZoomClient {
       agentlessAmdOffAction: canonicalAgentlessAmdOffAction(stringAt(settings, ["agentless_amd_off_action"])),
       assetId: stringAt(settings, ["agentless_amd_off_resource_id"]),
       alwaysRunning: campaign.alwaysRunning,
+      queueId: stringAt(payload, ["queue_id"]),
+      phoneNumberId: stringAt(payload, ["phone_number_id"]),
+      newFlowId: stringAt(settings, ["new_flow_id"]),
     };
   }
 
@@ -750,12 +914,13 @@ function resolveEndpoint(explicit: string | undefined, envName: string, fallback
 }
 
 function isAllowedPath(path: string) {
-  return /^(?:\/contact_center\/asset_library\/assets(?:\/items|\/[^/?]+)?|\/contact_center\/outbound_campaign\/(?:contact_lists(?:\/[^/?]+(?:\/contacts(?:\/[^/?]+)?)?)?|campaigns(?:\/[^/?]+(?:\/status)?)?))(?:\?[^#]*)?$/u.test(path);
+  return /^(?:\/contact_center\/(?:queues(?:\/[^/?]+)?|flows(?:\/[^/?]+)?|asset_library\/assets(?:\/items|\/[^/?]+)?|outbound_campaign\/(?:contact_lists(?:\/[^/?]+(?:\/contacts(?:\/[^/?]+)?)?)?|campaigns(?:\/[^/?]+(?:\/status)?)?)))(?:\?[^#]*)?$/u.test(path);
 }
 
 function ttsAssetFormData(input: ZoomTtsAssetInput) {
   const form = new FormData();
   form.set("asset_name", input.name);
+  form.set("asset_description", "ZAAD TTS message");
   form.set("asset_type", "audio");
   form.set("asset_items", JSON.stringify([{
     asset_item_name: input.name,
@@ -768,7 +933,8 @@ function ttsAssetFormData(input: ZoomTtsAssetInput) {
 }
 
 function assertTtsInputBoundary(input: ZoomTtsAssetInput) {
-  if (input.body.length < 1 || input.body.length > ZAAD_LIMITS.messageBody) {
+  const characters = countZaadTextCharacters(input.body);
+  if (characters < 1 || characters > ZAAD_LIMITS.messageBody) {
     throw new ZaadZoomError(ZAAD_ERROR_CODES.invalidRequest, 400);
   }
 }
@@ -798,6 +964,10 @@ function encodeId(value: string) {
 
 function boundedPageSize(value: number | undefined) {
   return Number.isSafeInteger(value) ? Math.min(Math.max(value ?? 25, 1), 100) : 25;
+}
+
+function boundedCampaignPageSize(value: number | undefined) {
+  return Number.isSafeInteger(value) ? Math.min(Math.max(value ?? 10, 1), 10) : 10;
 }
 
 function mapZoomStatus(status: number, writeResultUnknown = false) {
@@ -867,6 +1037,42 @@ function parseCampaign(value: Record<string, unknown>): ZoomCampaignDto | null {
     alwaysRunning: Boolean(value.enable_always_running),
     revision: stringAt(value, ["updated_at", "last_modified_time"]) ?? `${id}:${status}`,
   };
+}
+
+function parseQueue(value: Record<string, unknown>): ZoomQueueDto | null {
+  const id = stringAt(value, ["cc_queue_id"]);
+  const name = stringAt(value, ["queue_name"]);
+  const channel = stringAt(value, ["channel"])?.toLowerCase() ?? null;
+  return id && name && channel ? { id, name, channel } : null;
+}
+
+function parseQueueDetail(value: Record<string, unknown>): ZoomQueueDetailDto | null {
+  const queue = parseQueue(value);
+  const engagementDistribution = stringAt(value, ["engagement_distribution"])?.toLowerCase() ?? null;
+  const outboundSettings = asRecord(value.outbound_settings);
+  const outboundEnabled = booleanAt(outboundSettings, "enable_outbound_calls");
+  const rawCallerIds = outboundSettings.queue_caller_ids;
+  if (
+    !queue ||
+    !engagementDistribution ||
+    outboundEnabled === null ||
+    !Array.isArray(rawCallerIds) ||
+    rawCallerIds.some((entry) => typeof entry !== "string" || !E164_PATTERN.test(entry))
+  ) return null;
+  return {
+    ...queue,
+    engagementDistribution,
+    outboundEnabled,
+    callerIds: [...new Set(rawCallerIds as string[])],
+  };
+}
+
+function parseFlow(value: Record<string, unknown>): ZoomFlowDto | null {
+  const id = stringAt(value, ["flow_id"]);
+  const name = stringAt(value, ["flow_name"]);
+  const channel = stringAt(value, ["channel"])?.toLowerCase() ?? null;
+  const status = stringAt(value, ["status"])?.toLowerCase() ?? null;
+  return id && name && channel && status ? { id, name, channel, status } : null;
 }
 
 function parseOneTimeCampaignProfile(value: Record<string, unknown>): ZoomOneTimeCampaignProfile | null {

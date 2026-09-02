@@ -21,7 +21,13 @@ import {
   sanitizeZaadCsvErrorDetails,
   type ZaadCsvErrorDetail,
 } from "@/app/i18n/zaad-error-messages";
-import { ZAAD_ERROR_CODES, ZAAD_VOICES } from "@/lib/zaad/contracts";
+import {
+  countZaadTextCharacters,
+  truncateZaadTextCharacters,
+  ZAAD_ERROR_CODES,
+  ZAAD_LIMITS,
+  ZAAD_VOICES,
+} from "@/lib/zaad/contracts";
 
 export type ZaadViewKey =
   | "residents"
@@ -2097,16 +2103,17 @@ function OneTimeSection({
                     id="zaad-one-time-character-count"
                     className="text-xs font-normal text-fg-muted"
                   >
-                    {body.length} / 1,000
+                    {countZaadTextCharacters(body)} / {ZAAD_LIMITS.messageBody}
                   </span>
                 </span>
                 <textarea
                   id="zaad-one-time-message"
                   name="message"
                   value={body}
-                  onChange={(event) => setBody(event.target.value)}
+                  onChange={(event) => setBody(
+                    truncateZaadTextCharacters(event.target.value, ZAAD_LIMITS.messageBody),
+                  )}
                   required
-                  maxLength={1000}
                   rows={7}
                   disabled={!canInteract || preflighting}
                   className={`${inputClassName} leading-7`}
@@ -2964,7 +2971,12 @@ function MessageDialogForm({
           name="body"
           defaultValue={message?.body ?? message?.bodyPreview ?? ""}
           rows={6}
-          maxLength={1000}
+          onInput={(event) => {
+            event.currentTarget.value = truncateZaadTextCharacters(
+              event.currentTarget.value,
+              ZAAD_LIMITS.messageBody,
+            );
+          }}
           required
           disabled={disabled}
           className={`${inputClassName} leading-7`}

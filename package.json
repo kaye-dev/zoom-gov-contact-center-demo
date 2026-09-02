@@ -14,6 +14,8 @@
     "test:zaad:zoom-contract": "node --import tsx --test --test-concurrency=1 test/integration/zoom-contact-center-asset-contract.test.ts test/integration/zoom-contact-center-campaign-contract.test.ts",
     "test:zaad:zoom-contract:asset": "node --import tsx --test test/integration/zoom-contact-center-asset-contract.test.ts",
     "test:zaad:zoom-contract:campaign": "node --import tsx --test test/integration/zoom-contact-center-campaign-contract.test.ts",
+    "test:zoom-asset-contract": "npm run test:zaad:zoom-contract:asset",
+    "test:zoom-campaign-contract": "npm run test:zaad:zoom-contract:campaign",
     "eval:plan-skills": "node scripts/eval-plan-skills.mjs",
     "eval:git-shipping-skill": "node scripts/eval-git-commit-push-pr.mjs",
     "plans:cleanup": "node scripts/cleanup-plan-files.mjs",

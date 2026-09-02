@@ -7,6 +7,10 @@
 /* .dark / .light を html に付与して切り替える。既定テーマはライト。 */
 @custom-variant dark (&:where(.dark, .dark *));
 
+:root.review-theme nextjs-portal {
+  display: none;
+}
+
 :root.theme-loading {
   background: #ffffff;
 }

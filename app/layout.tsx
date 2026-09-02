@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Script from "next/script";
 import { headers } from "next/headers";
 import { connection } from "next/server";
 import {
@@ -34,6 +33,7 @@ export default async function RootLayout({
     requestHeaders.get(MAINTENANCE_REWRITE_HEADER) ===
     MAINTENANCE_REWRITE_HEADER_VALUE;
   let availableLocales: readonly (typeof SITE_LOCALES)[number][] = SITE_LOCALES;
+  const reviewThemeEnabled = process.env.NODE_ENV !== "production";
 
   if (!isMaintenanceRewrite) {
     await connection();
@@ -49,14 +49,16 @@ export default async function RootLayout({
       className="theme-loading language-loading scheme-light h-full antialiased dark:scheme-dark"
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">
-        <Script
+      <head>
+        <script
           id="theme-init"
-          strategy="beforeInteractive"
+          suppressHydrationWarning
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('theme');var d=t==='dark';document.documentElement.classList.toggle('dark',d);document.documentElement.classList.toggle('light',!d);}catch(e){document.documentElement.classList.remove('dark');document.documentElement.classList.add('light');}})();`,
+            __html: `(function(){try{var q=${reviewThemeEnabled ? "new URLSearchParams(location.search).getAll('theme')" : "[]"};var l=location.hostname==='localhost'||location.hostname==='127.0.0.1'||location.hostname==='[::1]';var r=l&&q.length===1&&(q[0]==='dark'||q[0]==='light')?q[0]:null;var t=r||localStorage.getItem('theme');var d=t==='dark';document.documentElement.classList.toggle('review-theme',r!==null);document.documentElement.classList.toggle('dark',d);document.documentElement.classList.toggle('light',!d);}catch(e){document.documentElement.classList.remove('review-theme','dark');document.documentElement.classList.add('light');}})();`,
           }}
         />
+      </head>
+      <body className="min-h-full flex flex-col">
         <ThemeSync />
         <LanguageProvider availableLocales={availableLocales}>
           {children}

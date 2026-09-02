@@ -94,6 +94,9 @@ export type LifeTopicDictionary = {
 export type DisasterRadioDictionary = {
   title: string;
   breadcrumb: string;
+  lifeBreadcrumb: string;
+  safetyBreadcrumb: string;
+  contentsHeading: string;
   lead: string;
   emailHeading: string;
   emailDescription: string;
@@ -127,6 +130,7 @@ export type DisasterRadioDictionary = {
     assignmentNote: string;
     validationTitle: string;
     validationMessage: string;
+    nameValidationMessage: string;
     serverErrorTitle: string;
     serverErrorMessage: string;
     successTitle: string;
@@ -999,8 +1003,11 @@ export const dictionaries: Record<Locale, Dictionary> = {
       disasterRadio: {
         title: '防災行政無線の放送内容を確認する',
         breadcrumb: '防災行政無線',
+        lifeBreadcrumb: '暮らしの情報',
+        safetyBreadcrumb: '防災・安全',
+        contentsHeading: '本ページの目次',
         lead:
-          '未来市では、防災・行政情報などを防災行政無線でお知らせしています。メール配信サービスや電話応答サービスを利用すると、放送内容を確認できます。',
+          '未来市では、防災・行政情報などを防災行政無線でお知らせしています。フォームからメールアドレスと電話番号を配信先情報として登録できます。',
         emailHeading: 'メール配信サービス',
         emailDescription:
           'メールアドレスを登録すると、防災行政無線の放送内容を携帯電話やパソコンで受信できます。',
@@ -1034,8 +1041,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
           consent: '防災行政無線のお知らせをメールと自動音声電話で受け取ること、および入力情報を配信登録の管理に利用することに同意します。',
           required: '必須', submit: '防災行政無線を登録する', submitting: '登録しています…',
           syncNote: '登録情報はZAADへ保存され、管理画面の登録先設定に応じてZoomの連絡先リストへ反映されます。',
-          assignmentNote: '連絡先リストが割り当てられていない場合もZAADへの登録は完了します。この画面からキャンペーンの開始や自動音声電話の発信は行いません。',
-          validationTitle: '入力内容を確認してください', validationMessage: '氏名、メールアドレス、電話番号、配信同意はすべて必須です。',
+          assignmentNote: '連絡先リストが割り当てられていない場合もZAADへの登録は完了します。このデモ画面からキャンペーンの開始や自動音声電話の発信は行いません。',
+          validationTitle: '入力内容を確認してください', validationMessage: '氏名、メールアドレス、電話番号、配信同意はすべて必須です。', nameValidationMessage: '氏名を入力してください。',
           serverErrorTitle: '登録を受け付けられませんでした', serverErrorMessage: '時間をおいてもう一度お試しください。入力内容は保持されています。',
           successTitle: '登録を受け付けました（デモ）', successMessage: '防災行政無線の配信登録情報を保存しました。連絡先リストへの反映状況は未来市が管理します。',
           registerAnother: '別の連絡先を登録する',
@@ -1808,6 +1815,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       disasterRadio: {
         title: 'Check Disaster Prevention Radio Broadcasts',
         breadcrumb: 'Disaster Prevention Radio',
+        lifeBreadcrumb: 'Daily Life',
+        safetyBreadcrumb: 'Emergency, Crime & Disaster Prevention',
+        contentsHeading: 'On this page',
         lead:
           'Mirai City uses its disaster prevention radio system to share emergency and municipal information. You can check broadcasts by email or through the automated phone service.',
         emailHeading: 'Email Notification Service',
@@ -1844,7 +1854,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           required: 'Required', submit: 'Register for disaster radio', submitting: 'Registering…',
           syncNote: 'The registration is saved in ZAAD and reflected in the Zoom contact list selected by the administrator.',
           assignmentNote: 'Registration in ZAAD completes even when no contact list is assigned. This page does not start a campaign or place an automated call.',
-          validationTitle: 'Check your entries', validationMessage: 'Name, email address, phone number, and consent are all required.',
+          validationTitle: 'Check your entries', validationMessage: 'Name, email address, phone number, and consent are all required.', nameValidationMessage: 'Enter your name.',
           serverErrorTitle: 'We could not accept the registration', serverErrorMessage: 'Please try again later. Your entries have been retained.',
           successTitle: 'Registration accepted (demo)', successMessage: 'Your disaster radio registration was saved. Mirai City manages synchronization with its contact lists.',
           registerAnother: 'Register another contact',
@@ -2611,6 +2621,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       disasterRadio: {
         title: '查看防灾行政无线广播内容',
         breadcrumb: '防灾行政无线',
+        lifeBreadcrumb: '生活信息',
+        safetyBreadcrumb: '急救・防范・防灾',
+        contentsHeading: '本页目录',
         lead:
           '未来市通过防灾行政无线发布防灾和行政信息。您可以使用邮件推送或电话语音服务查看广播内容。',
         emailHeading: '邮件推送服务',
@@ -2646,7 +2659,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           required: '必填', submit: '登记防灾行政无线', submitting: '正在登记…',
           syncNote: '登记信息将保存至ZAAD，并根据管理画面的登记目标设置同步到Zoom联系人列表。',
           assignmentNote: '即使未分配联系人列表，ZAAD登记也会完成。本页面不会启动活动或拨打自动语音电话。',
-          validationTitle: '请检查输入内容', validationMessage: '姓名、电子邮件地址、电话号码和推送同意均为必填项。',
+          validationTitle: '请检查输入内容', validationMessage: '姓名、电子邮件地址、电话号码和推送同意均为必填项。', nameValidationMessage: '请输入姓名。',
           serverErrorTitle: '无法受理登记', serverErrorMessage: '请稍后重试。您输入的内容已保留。',
           successTitle: '已受理登记（演示）', successMessage: '防灾行政无线推送登记信息已保存。联系人列表的同步状态由未来市管理。',
           registerAnother: '登记其他联系人',
@@ -3358,6 +3371,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       disasterRadio: {
         title: '查看防災行政無線廣播內容',
         breadcrumb: '防災行政無線',
+        lifeBreadcrumb: '生活資訊',
+        safetyBreadcrumb: '急救・防範・防災',
+        contentsHeading: '本頁目錄',
         lead:
           '未來市透過防災行政無線發布防災及行政資訊。您可以使用電子郵件推播或電話語音服務查看廣播內容。',
         emailHeading: '電子郵件推播服務',
@@ -3393,7 +3409,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           required: '必填', submit: '登記防災行政無線', submitting: '正在登記…',
           syncNote: '登記資訊會儲存至ZAAD，並依管理畫面的登記目標設定同步到Zoom聯絡人清單。',
           assignmentNote: '即使未分配聯絡人清單，ZAAD登記仍會完成。本頁面不會啟動行銷活動或撥打自動語音電話。',
-          validationTitle: '請檢查輸入內容', validationMessage: '姓名、電子郵件地址、電話號碼和推播同意皆為必填。',
+          validationTitle: '請檢查輸入內容', validationMessage: '姓名、電子郵件地址、電話號碼和推播同意皆為必填。', nameValidationMessage: '請輸入姓名。',
           serverErrorTitle: '無法受理登記', serverErrorMessage: '請稍後再試。您輸入的內容已保留。',
           successTitle: '已受理登記（示範）', successMessage: '防災行政無線推播登記資訊已儲存。聯絡人清單的同步狀態由未來市管理。',
           registerAnother: '登記其他聯絡人',
@@ -4106,6 +4122,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       disasterRadio: {
         title: '방재 행정 무선 방송 내용 확인',
         breadcrumb: '방재 행정 무선',
+        lifeBreadcrumb: '생활 정보',
+        safetyBreadcrumb: '응급・방범・방재',
+        contentsHeading: '페이지 목차',
         lead:
           '미래시는 방재 행정 무선으로 재난 및 행정 정보를 안내합니다. 이메일 알림 서비스나 전화 음성 서비스를 이용해 방송 내용을 확인할 수 있습니다.',
         emailHeading: '이메일 알림 서비스',
@@ -4141,7 +4160,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
           required: '필수', submit: '방재 행정 무선 등록', submitting: '등록 중…',
           syncNote: '등록 정보는 ZAAD에 저장되며 관리 화면의 등록 대상 설정에 따라 Zoom 연락처 목록에 반영됩니다.',
           assignmentNote: '연락처 목록이 지정되지 않아도 ZAAD 등록은 완료됩니다. 이 화면에서는 캠페인을 시작하거나 자동 음성 전화를 걸지 않습니다.',
-          validationTitle: '입력 내용을 확인해 주세요', validationMessage: '이름, 이메일 주소, 전화번호, 알림 동의는 모두 필수입니다.',
+          validationTitle: '입력 내용을 확인해 주세요', validationMessage: '이름, 이메일 주소, 전화번호, 알림 동의는 모두 필수입니다.', nameValidationMessage: '이름을 입력해 주세요.',
           serverErrorTitle: '등록을 접수할 수 없습니다', serverErrorMessage: '잠시 후 다시 시도해 주세요. 입력 내용은 유지됩니다.',
           successTitle: '등록이 접수되었습니다(데모)', successMessage: '방재 행정 무선 알림 등록 정보를 저장했습니다. 연락처 목록 반영 상태는 미래시가 관리합니다.',
           registerAnother: '다른 연락처 등록',

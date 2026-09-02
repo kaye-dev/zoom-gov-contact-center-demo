@@ -1,14 +1,30 @@
 'use client';
 
+import { useCallback, useSyncExternalStore } from 'react';
 import { useI18n } from '../i18n/LanguageProvider';
+import { resolveReviewTheme } from './ThemeSync';
 import { setStoredTheme, useIsDarkTheme } from './theme-store';
+
+const subscribeToStaticReviewTheme = () => () => {};
 
 export function ThemeToggle() {
   const { t } = useI18n();
   const isDark = useIsDarkTheme();
+  const getEffectiveIsDark = useCallback(() => {
+    const reviewTheme = resolveReviewTheme({
+      hostname: window.location.hostname,
+      search: window.location.search,
+    });
+    return reviewTheme ? reviewTheme === 'dark' : isDark;
+  }, [isDark]);
+  const effectiveIsDark = useSyncExternalStore(
+    subscribeToStaticReviewTheme,
+    getEffectiveIsDark,
+    () => isDark,
+  );
 
   const toggle = () => {
-    const next = !isDark;
+    const next = !effectiveIsDark;
     setStoredTheme(next);
   };
 
@@ -19,7 +35,7 @@ export function ThemeToggle() {
       <button
         type="button"
         role="switch"
-        aria-checked={isDark}
+        aria-checked={effectiveIsDark}
         aria-label="ライト/ダークモードの切り替え"
         onClick={toggle}
         className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full border border-gray-300 bg-gradient-to-r from-gray-200 to-gray-400 transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:border-gray-600 dark:from-gray-600 dark:to-gray-800`}

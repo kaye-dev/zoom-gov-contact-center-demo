@@ -1,4 +1,6 @@
 import { randomBytes } from "node:crypto";
+import { chmod, lstat, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
 import { decryptDeveloperApiSecret } from "../../lib/server/developer-api-crypto";
 import {
@@ -13,10 +15,20 @@ const SAFE_PREFIX_PATTERN = /^ZAAD-LIVE-CONTRACT-[A-Za-z0-9-]{1,28}$/u;
 const SAFE_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/u;
 const LIVE_ACKNOWLEDGEMENT = "I_UNDERSTAND_THIS_CREATES_AND_DELETES_ZOOM_RESOURCES";
 const RETRYABLE_READ_STATUSES = new Set([429, 502, 503, 504]);
+const E164_PATTERN = /^\+[1-9]\d{1,14}$/u;
+const ALLOWED_QUEUE_DISTRIBUTIONS = new Set([
+  "longest_idle",
+  "sequential",
+  "rotating",
+  "most_available",
+  "longest_ready",
+  "longest_idle_for_this_queue",
+]);
 export const ZAAD_LIVE_SYNTHETIC_TTS_CONTENT = {
   created: "これはZAADの接続確認用に生成された合成音声です。実際の防災情報ではありません。",
   updated: "これは更新後のZAAD接続確認用合成音声です。実際の防災情報ではありません。",
 } as const;
+export const ZAAD_LIVE_SYNTHETIC_TTS_1_CHARACTER_CONTENT = "テ";
 const SYNTHETIC_TTS_BOUNDARY_PREFIX =
   "これはZAADの500文字境界接続確認用に生成された合成音声です。実際の防災情報ではありません。";
 export const ZAAD_LIVE_SYNTHETIC_TTS_500_CHARACTER_CONTENT =
@@ -58,11 +70,21 @@ export type LiveCampaignSnapshot = {
   agentlessAmdOffAction: "hang_up" | "play_media" | "use_flow" | null;
   alwaysRunning: boolean;
   assetId: string | null;
+  callerNumber: string | null;
   contactListIds: string[];
   dialingMethod: string;
   id: string;
   name: string;
+  newFlowId: string | null;
+  phoneNumberId: string | null;
+  queueId: string | null;
   status: string;
+};
+
+type LiveCampaignConfiguration = {
+  flowId: string;
+  phoneNumber: string;
+  queueId: string;
 };
 
 export class LiveZoomContractError extends Error {
@@ -140,15 +162,13 @@ export class LiveZoomContractContext {
     contactListUpdated: string;
   };
 
+  private campaignConfiguration: LiveCampaignConfiguration | null = null;
+  private campaignMutationCount = 0;
+  private campaignStatusMutationCount = 0;
+
   private constructor(
     private readonly accessToken: string,
     private readonly owned: OwnedResourceRegistry,
-    private readonly campaignConfiguration: {
-      assignType: "customer" | "default" | "queue";
-      flowId: string;
-      phoneNumberId: string;
-      queueId: string;
-    } | null,
     prefix: string,
     runToken: string,
   ) {
@@ -182,17 +202,16 @@ export class LiveZoomContractContext {
       throw new Error("The configured Zoom account does not match ZAAD_ZOOM_LIVE_ACCOUNT_ID.");
     }
     const accessToken = await fetchAccessToken(credentials);
-    const campaignConfiguration = options.requireCampaignConfiguration
-      ? readCampaignConfiguration()
-      : null;
     const context = new LiveZoomContractContext(
       accessToken,
       new OwnedResourceRegistry(prefix),
-      campaignConfiguration,
       prefix,
       randomBytes(6).toString("hex"),
     );
-    await context.preflightReadScopes(Boolean(options.requireCampaignConfiguration));
+    await context.preflightReadScopes(options.requiredWriteFeatures);
+    if (options.requireCampaignConfiguration) {
+      context.campaignConfiguration = await context.resolveCampaignConfiguration();
+    }
     return context;
   }
 
@@ -509,15 +528,13 @@ export class LiveZoomContractContext {
     await this.deleteContactList(id);
   }
 
-  async createDraftCampaign(input: { contactListId: string; name: string }) {
+  async createDraftCampaign(input: { name: string }) {
     const configuration = this.requireCampaignConfiguration();
-    this.owned.assertOwned("contact-list", input.contactListId);
     this.owned.assertSyntheticName(input.name);
     const response = await this.request("create draft campaign", "POST", "/contact_center/outbound_campaign/campaigns", {
       body: {
-        assign_type: configuration.assignType,
         business_hour_source: "queue",
-        campaign_contact_list_ids: [input.contactListId],
+        campaign_contact_list_ids: [],
         contact_timezone_source: "none",
         dialing_method: "agentless",
         dialing_method_settings: {
@@ -530,15 +547,21 @@ export class LiveZoomContractContext {
         max_attempts_per_contact: 1,
         outbound_campaign_description: "Synthetic ZAAD live contract resource; never run",
         outbound_campaign_name: input.name,
-        phone_number_id: configuration.phoneNumberId,
+        phone_number_id: configuration.phoneNumber,
         queue_id: configuration.queueId,
       },
       expectedStatus: 201,
       mutation: true,
     });
     const id = requiredString(response.payload, ["outbound_campaign_id"], "create draft campaign", true);
+    const canonicalPhoneNumberId = requiredString(
+      response.payload,
+      ["phone_number_id"],
+      "read canonical phone number ID from create campaign",
+      true,
+    );
     this.owned.claim("campaign", id, input.name);
-    return id;
+    return { canonicalPhoneNumberId, id };
   }
 
   async getCampaign(id: string): Promise<LiveCampaignSnapshot> {
@@ -562,12 +585,16 @@ export class LiveZoomContractContext {
       agentlessAmdOffAction: canonicalAgentlessAmdOffAction(
         optionalString(dialingMethodSettings, ["agentless_amd_off_action"]),
       ),
-      alwaysRunning: Boolean(root.enable_always_running),
+      alwaysRunning: requiredBoolean(root, "enable_always_running", "get campaign"),
       assetId: optionalString(dialingMethodSettings, ["agentless_amd_off_resource_id"]),
+      callerNumber: optionalString(root, ["outbound_number", "caller_id"]),
       contactListIds,
       dialingMethod: requiredString(root, ["dialing_method"], "get campaign").toLowerCase(),
       id: requiredString(root, ["outbound_campaign_id", "campaign_id", "id"], "get campaign"),
       name: requiredString(root, ["outbound_campaign_name", "campaign_name", "name"], "get campaign"),
+      newFlowId: optionalString(dialingMethodSettings, ["new_flow_id"]),
+      phoneNumberId: optionalString(root, ["phone_number_id"]),
+      queueId: optionalString(root, ["queue_id"]),
       status: requiredString(root, ["outbound_campaign_status", "status"], "get campaign").toLowerCase(),
     };
   }
@@ -586,46 +613,6 @@ export class LiveZoomContractContext {
     });
   }
 
-  async configureDraftCampaignForTts(id: string, assetId: string) {
-    const configuration = this.requireCampaignConfiguration();
-    this.owned.assertOwned("campaign", id);
-    this.owned.assertOwned("asset", assetId);
-    await this.request(
-      "configure draft campaign for TTS",
-      "PATCH",
-      `/contact_center/outbound_campaign/campaigns/${encodeURIComponent(id)}`,
-      {
-        body: {
-          agentless_amd_off_action: "play_media",
-          agentless_amd_off_resource_id: assetId,
-          enable_always_running: false,
-          max_concurrent_calls: 1,
-          new_flow_id: configuration.flowId,
-        },
-        expectedStatus: 204,
-        mutation: true,
-      },
-    );
-  }
-
-  async setCampaignDraftStatus(id: string) {
-    this.owned.assertOwned("campaign", id);
-    await this.request("set campaign Draft status", "PATCH", `/contact_center/outbound_campaign/campaigns/${encodeURIComponent(id)}/status`, {
-      body: { status: "Draft" },
-      expectedStatus: 204,
-      mutation: true,
-    });
-  }
-
-  async setCampaignReadyStatus(id: string) {
-    this.owned.assertOwned("campaign", id);
-    await this.request("set campaign Ready status", "PATCH", `/contact_center/outbound_campaign/campaigns/${encodeURIComponent(id)}/status`, {
-      body: { status: "Ready" },
-      expectedStatus: 204,
-      mutation: true,
-    });
-  }
-
   async deleteCampaign(id: string) {
     this.owned.assertOwned("campaign", id);
     await this.request("delete campaign", "DELETE", `/contact_center/outbound_campaign/campaigns/${encodeURIComponent(id)}`, {
@@ -639,6 +626,149 @@ export class LiveZoomContractContext {
     if (this.owned.owns("campaign", id)) await this.deleteCampaign(id);
   }
 
+  async assertCampaignDeleted(id: string) {
+    try {
+      await this.getCampaign(id);
+    } catch (error) {
+      if (error instanceof LiveZoomContractError && error.status === 404) return;
+      throw error;
+    }
+    throw new LiveZoomContractMismatchError("deleted campaign remained readable", 200);
+  }
+
+  assertCampaignOnlyMutationBoundary(expectedMutations: number) {
+    if (this.campaignMutationCount !== expectedMutations || this.campaignStatusMutationCount !== 0) {
+      throw new Error("Campaign live contract mutation boundary was violated.");
+    }
+  }
+
+  assertCampaignReferenceReadback(snapshot: LiveCampaignSnapshot, canonicalPhoneNumberId: string) {
+    const configuration = this.requireCampaignConfiguration();
+    if (
+      snapshot.queueId !== configuration.queueId
+      || snapshot.newFlowId !== configuration.flowId
+      || !snapshot.phoneNumberId
+      || snapshot.phoneNumberId !== canonicalPhoneNumberId
+    ) {
+      throw new LiveZoomContractMismatchError("created campaign references did not match canonical readback", 200);
+    }
+  }
+
+  private async resolveCampaignConfiguration(): Promise<LiveCampaignConfiguration> {
+    const baseCampaignId = requiredSafeIdEnvironment("ZAAD_ZOOM_LIVE_BASE_CAMPAIGN_ID");
+    const base = await this.getCampaign(baseCampaignId);
+    this.owned.assertSyntheticName(base.name);
+    const allowedStatuses = new Set(["draft", "ready", "paused", "completed", "not_running"]);
+    if (
+      base.dialingMethod !== "agentless"
+      || !allowedStatuses.has(base.status)
+      || base.alwaysRunning
+      || base.agentlessAmdOffAction !== "use_flow"
+      || !base.queueId
+      || !base.newFlowId
+      || !base.phoneNumberId
+    ) {
+      throw new LiveZoomContractMismatchError("base campaign is not a safe non-running Agentless flow campaign", 200);
+    }
+
+    const queueListed = await this.findListedResource(
+      "queue",
+      base.queueId,
+      "/contact_center/queues?channel=voice&page_size=100",
+      "queues",
+      "cc_queue_id",
+    );
+    if (!queueListed) throw new LiveZoomContractMismatchError("base campaign queue was not returned by the voice queue list", 200);
+    const queueResponse = await this.request(
+      "read base campaign queue detail",
+      "GET",
+      `/contact_center/queues/${encodeURIComponent(base.queueId)}?queue_identifier_type=id`,
+      { expectedStatus: 200 },
+    );
+    const queue = asRecord(queueResponse.payload);
+    const queueId = requiredString(queue, ["cc_queue_id"], "validate queue detail");
+    const queueChannel = requiredString(queue, ["channel"], "validate queue detail").toLowerCase();
+    const distribution = requiredString(queue, ["engagement_distribution"], "validate queue detail").toLowerCase();
+    const outbound = asRecord(queue.outbound_settings);
+    const outboundEnabled = requiredBoolean(outbound, "enable_outbound_calls", "validate queue detail");
+    const rawCallerIds = outbound.queue_caller_ids;
+    if (
+      queueId !== base.queueId
+      || queueChannel !== "voice"
+      || !outboundEnabled
+      || !ALLOWED_QUEUE_DISTRIBUTIONS.has(distribution)
+      || !Array.isArray(rawCallerIds)
+      || rawCallerIds.length === 0
+      || rawCallerIds.some((candidate) => typeof candidate !== "string" || !E164_PATTERN.test(candidate))
+    ) {
+      throw new LiveZoomContractMismatchError("base campaign queue failed outbound voice validation", 200);
+    }
+    const callerIds = [...new Set(rawCallerIds as string[])];
+    const candidates = [base.phoneNumberId, base.callerNumber]
+      .filter((candidate): candidate is string => Boolean(candidate && E164_PATTERN.test(candidate)));
+    const matchedCaller = candidates.find((candidate) => callerIds.includes(candidate));
+    const phoneNumber = matchedCaller ?? (callerIds.length === 1 ? callerIds[0] : null);
+    if (!phoneNumber) {
+      throw new LiveZoomContractMismatchError("base campaign caller could not be mapped to exactly one E.164 queue caller", 200);
+    }
+
+    const flowListed = await this.findListedResource(
+      "flow",
+      base.newFlowId,
+      "/contact_center/flows?status=published&channel=voice&page_size=100",
+      "flows",
+      "flow_id",
+    );
+    if (!flowListed) throw new LiveZoomContractMismatchError("base campaign flow was not returned by the published voice flow list", 200);
+    const flowResponse = await this.request(
+      "read base campaign flow detail",
+      "GET",
+      `/contact_center/flows/${encodeURIComponent(base.newFlowId)}?flow_identifier_type=id`,
+      { expectedStatus: 200 },
+    );
+    const flow = asRecord(flowResponse.payload);
+    if (
+      requiredString(flow, ["flow_id"], "validate flow detail") !== base.newFlowId
+      || requiredString(flow, ["channel"], "validate flow detail").toLowerCase() !== "voice"
+      || requiredString(flow, ["status"], "validate flow detail").toLowerCase() !== "published"
+    ) {
+      throw new LiveZoomContractMismatchError("base campaign flow failed published voice validation", 200);
+    }
+
+    return { flowId: base.newFlowId, phoneNumber, queueId: base.queueId };
+  }
+
+  private async findListedResource(
+    kind: "flow" | "queue",
+    expectedId: string,
+    initialPath: string,
+    collectionKey: string,
+    idKey: string,
+  ) {
+    let path = initialPath;
+    const seenTokens = new Set<string>();
+    for (let page = 0; page < 100; page += 1) {
+      const response = await this.request(`list ${kind}s`, "GET", path, { expectedStatus: 200 });
+      const root = asRecord(response.payload);
+      if (recordsAt(root, collectionKey).some((entry) => (
+        optionalString(entry, [idKey]) === expectedId
+        && optionalString(entry, ["channel"])?.toLowerCase() === "voice"
+        && (kind !== "flow" || optionalString(entry, ["status"])?.toLowerCase() === "published")
+      ))) return true;
+      const nextPageToken = optionalString(root, ["next_page_token"]);
+      if (!nextPageToken) return false;
+      assertSafePageToken(nextPageToken);
+      if (seenTokens.has(nextPageToken)) {
+        throw new LiveZoomContractMismatchError(`${kind} list repeated a pagination token`, 200);
+      }
+      seenTokens.add(nextPageToken);
+      const query = new URLSearchParams(new URL(initialPath, API_BASE_URL).search);
+      query.set("next_page_token", nextPageToken);
+      path = `${initialPath.split("?")[0]}?${query.toString()}`;
+    }
+    throw new LiveZoomContractMismatchError(`${kind} list exceeded the pagination limit`, 200);
+  }
+
   private requireCampaignConfiguration() {
     if (!this.campaignConfiguration) {
       throw new Error("Campaign configuration was not loaded for this live contract context.");
@@ -646,36 +776,41 @@ export class LiveZoomContractContext {
     return this.campaignConfiguration;
   }
 
-  private async preflightReadScopes(includeCampaigns: boolean) {
-    const assets = await this.request(
-      "preflight asset read scope",
-      "GET",
-      "/contact_center/asset_library/assets?page_size=1",
-      { expectedStatus: 200 },
-    );
-    if (!Array.isArray(asRecord(assets.payload).assets)) {
-      throw new LiveZoomContractError("validate asset preflight response", 200, false);
+  private async preflightReadScopes(features: readonly LiveWriteFeature[]) {
+    if (features.includes("tts")) {
+      const assets = await this.request(
+        "preflight asset read scope",
+        "GET",
+        "/contact_center/asset_library/assets?page_size=1",
+        { expectedStatus: 200 },
+      );
+      if (!Array.isArray(asRecord(assets.payload).assets)) {
+        throw new LiveZoomContractError("validate asset preflight response", 200, false);
+      }
     }
 
-    const contactLists = await this.request(
-      "preflight contact-list read scope",
-      "GET",
-      "/contact_center/outbound_campaign/contact_lists?page_size=1&contact_list_type=contact",
-      { expectedStatus: 200 },
-    );
-    if (!Array.isArray(asRecord(contactLists.payload).contact_lists)) {
-      throw new LiveZoomContractError("validate contact-list preflight response", 200, false);
+    if (features.includes("contact")) {
+      const contactLists = await this.request(
+        "preflight contact-list read scope",
+        "GET",
+        "/contact_center/outbound_campaign/contact_lists?page_size=1&contact_list_type=contact",
+        { expectedStatus: 200 },
+      );
+      if (!Array.isArray(asRecord(contactLists.payload).contact_lists)) {
+        throw new LiveZoomContractError("validate contact-list preflight response", 200, false);
+      }
     }
 
-    if (!includeCampaigns) return;
-    const campaigns = await this.request(
-      "preflight campaign read scope",
-      "GET",
-      "/contact_center/outbound_campaign/campaigns?page_size=1",
-      { expectedStatus: 200 },
-    );
-    if (!Array.isArray(asRecord(campaigns.payload).outbound_campaign_items)) {
-      throw new LiveZoomContractError("validate campaign preflight response", 200, false);
+    if (features.includes("campaign")) {
+      const campaigns = await this.request(
+        "preflight campaign read scope",
+        "GET",
+        "/contact_center/outbound_campaign/campaigns?page_size=1",
+        { expectedStatus: 200 },
+      );
+      if (!Array.isArray(asRecord(campaigns.payload).outbound_campaign_items)) {
+        throw new LiveZoomContractError("validate campaign preflight response", 200, false);
+      }
     }
   }
 
@@ -713,6 +848,10 @@ export class LiveZoomContractContext {
       throw new Error("Live Zoom request mutation classification is inconsistent.");
     }
     assertSafeCampaignMutation(method, path, options.body);
+    if (method !== "GET" && path.startsWith("/contact_center/outbound_campaign/campaigns")) {
+      this.campaignMutationCount += 1;
+      if (/\/status$/u.test(path)) this.campaignStatusMutationCount += 1;
+    }
     const attempts = method === "GET" ? 2 : 1;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       let response: Response;
@@ -855,24 +994,6 @@ async function fetchAccessToken(credentials: { accountId: string; clientId: stri
   return requiredString(payload, ["access_token"], "request Server-to-Server OAuth token");
 }
 
-function readCampaignConfiguration(): {
-  assignType: "customer" | "default" | "queue";
-  flowId: string;
-  phoneNumberId: string;
-  queueId: string;
-} {
-  const assignType = requiredEnvironment("ZAAD_ZOOM_LIVE_CAMPAIGN_ASSIGN_TYPE");
-  if (assignType !== "customer" && assignType !== "default" && assignType !== "queue") {
-    throw new Error("ZAAD_ZOOM_LIVE_CAMPAIGN_ASSIGN_TYPE must be customer, default, or queue.");
-  }
-  return {
-    assignType,
-    flowId: requiredSafeIdEnvironment("ZAAD_ZOOM_LIVE_FLOW_ID"),
-    phoneNumberId: requiredSafeIdEnvironment("ZAAD_ZOOM_LIVE_PHONE_NUMBER_ID"),
-    queueId: requiredSafeIdEnvironment("ZAAD_ZOOM_LIVE_QUEUE_ID"),
-  };
-}
-
 function requiredSafeIdEnvironment(name: string) {
   const value = requiredEnvironment(name);
   assertSafeId(name, value);
@@ -900,6 +1021,8 @@ function assertAllowedPath(path: string) {
     /^\/contact_center\/outbound_campaign\/contact_lists\/[A-Za-z0-9_-]{1,64}\/contacts(?:\?page_size=100(?:&next_page_token=[A-Za-z0-9._~%+-]{1,300})?)?$/u,
     /^\/contact_center\/outbound_campaign\/contact_lists\/[A-Za-z0-9_-]{1,64}\/contacts\/(?:batch|[A-Za-z0-9_-]{1,64})$/u,
     /^\/contact_center\/outbound_campaign\/campaigns(?:\/[A-Za-z0-9_-]{1,64}(?:\/status)?|\?page_size=1)?$/u,
+    /^\/contact_center\/queues(?:\/[A-Za-z0-9_-]{1,64}\?queue_identifier_type=id|\?channel=voice&page_size=100(?:&next_page_token=[A-Za-z0-9._~%+-]{1,300})?)$/u,
+    /^\/contact_center\/flows(?:\/[A-Za-z0-9_-]{1,64}\?flow_identifier_type=id|\?status=published&channel=voice&page_size=100(?:&next_page_token=[A-Za-z0-9._~%+-]{1,300})?)$/u,
   ];
   if (!allowed.some((pattern) => pattern.test(path))) {
     throw new Error("Refusing to call a Zoom path outside the live contract allowlist.");
@@ -918,48 +1041,46 @@ function assertSafeCampaignMutation(
   const root = asRecord(body);
   if (method === "POST" && path === "/contact_center/outbound_campaign/campaigns") {
     const settings = asRecord(root.dialing_method_settings);
+    const allowedKeys = new Set([
+      "business_hour_source",
+      "campaign_contact_list_ids",
+      "contact_timezone_source",
+      "dialing_method",
+      "dialing_method_settings",
+      "enable_always_running",
+      "enable_diagnostics",
+      "max_attempts_per_contact",
+      "outbound_campaign_description",
+      "outbound_campaign_name",
+      "phone_number_id",
+      "queue_id",
+    ]);
     if (
       root.dialing_method !== "agentless"
       || root.enable_always_running !== false
       || root.outbound_campaign_status !== undefined
+      || !Array.isArray(root.campaign_contact_list_ids)
+      || root.campaign_contact_list_ids.length !== 0
+      || typeof root.phone_number_id !== "string"
+      || !E164_PATTERN.test(root.phone_number_id)
+      || typeof root.queue_id !== "string"
+      || !SAFE_ID_PATTERN.test(root.queue_id)
       || settings.agentless_amd_off_action !== "useFlow"
       || settings.max_concurrent_calls !== 1
       || typeof settings.new_flow_id !== "string"
+      || !SAFE_ID_PATTERN.test(settings.new_flow_id)
+      || Object.keys(root).some((key) => !allowedKeys.has(key))
     ) {
       throw new Error("Refusing to create a campaign outside the safe Draft-only contract profile.");
     }
     return;
   }
   if (method === "PATCH" && /\/campaigns\/[A-Za-z0-9_-]{1,64}\/status$/u.test(path)) {
-    if ((root.status !== "Draft" && root.status !== "Ready") || Object.keys(root).length !== 1) {
-      throw new Error("Live contract tests may only submit Draft or Ready campaign status; Running and Paused are forbidden.");
-    }
-    return;
+    throw new Error("Live campaign contract tests must not call the campaign status endpoint.");
   }
   if (method === "PATCH" && /\/campaigns\/[A-Za-z0-9_-]{1,64}$/u.test(path)) {
     if (root.status !== undefined || root.enable_always_running !== false) {
       throw new Error("Refusing an unsafe live campaign update.");
-    }
-    if (root.agentless_amd_off_action !== undefined) {
-      const allowedKeys = new Set([
-        "agentless_amd_off_action",
-        "agentless_amd_off_resource_id",
-        "enable_always_running",
-        "max_concurrent_calls",
-        "new_flow_id",
-      ]);
-      if (
-        root.agentless_amd_off_action !== "play_media"
-        || typeof root.agentless_amd_off_resource_id !== "string"
-        || !SAFE_ID_PATTERN.test(root.agentless_amd_off_resource_id)
-        || root.max_concurrent_calls !== 1
-        || typeof root.new_flow_id !== "string"
-        || !SAFE_ID_PATTERN.test(root.new_flow_id)
-        || Object.keys(root).some((key) => !allowedKeys.has(key))
-      ) {
-        throw new Error("Refusing a campaign TTS configuration outside the safe live contract profile.");
-      }
-      return;
     }
     const allowedKeys = new Set([
       "enable_always_running",
@@ -979,6 +1100,7 @@ function assertSyntheticTtsContent(value: string) {
   if (
     value !== ZAAD_LIVE_SYNTHETIC_TTS_CONTENT.created
     && value !== ZAAD_LIVE_SYNTHETIC_TTS_CONTENT.updated
+    && value !== ZAAD_LIVE_SYNTHETIC_TTS_1_CHARACTER_CONTENT
     && value !== ZAAD_LIVE_SYNTHETIC_TTS_500_CHARACTER_CONTENT
   ) {
     throw new Error("Live contract TTS content must use the fixed synthetic safety message.");
@@ -998,6 +1120,40 @@ function assertSafePageToken(value: string) {
   if (value.length > 100 || /[\u0000-\u001F\u007F]/u.test(value)) {
     throw new LiveZoomContractError("validate contact pagination token", 200, false);
   }
+}
+
+export async function persistLocalCampaignWriteGate() {
+  const envPath = fileURLToPath(new URL("../../.env", import.meta.url));
+  const temporaryPath = fileURLToPath(
+    new URL(`../../.env.zaad-campaign-gate-${process.pid}-${randomBytes(6).toString("hex")}`, import.meta.url),
+  );
+  const metadata = await lstat(envPath);
+  if (!metadata.isFile() || metadata.isSymbolicLink()) {
+    throw new Error("Refusing to update a non-regular local .env file.");
+  }
+  const current = await readFile(envPath, "utf8");
+  const gatePattern = /^ZAAD_ZOOM_CAMPAIGN_WRITE_CONTRACT_CONFIRMED=.*$/gmu;
+  const matches = current.match(gatePattern) ?? [];
+  if (matches.length > 1) throw new Error("Local .env contains duplicate campaign write gates.");
+  const newline = current.includes("\r\n") ? "\r\n" : "\n";
+  const updated = matches.length === 1
+    ? current.replace(gatePattern, "ZAAD_ZOOM_CAMPAIGN_WRITE_CONTRACT_CONFIRMED=1")
+    : `${current}${current.endsWith("\n") ? "" : newline}ZAAD_ZOOM_CAMPAIGN_WRITE_CONTRACT_CONFIRMED=1${newline}`;
+  try {
+    await writeFile(temporaryPath, updated, { encoding: "utf8", flag: "wx", mode: 0o600 });
+    await rename(temporaryPath, envPath);
+    await chmod(envPath, 0o600);
+  } catch (error) {
+    await unlink(temporaryPath).catch(() => undefined);
+    throw error;
+  }
+  process.env.ZAAD_ZOOM_CAMPAIGN_WRITE_CONTRACT_CONFIRMED = "1";
+}
+
+function requiredBoolean(value: JsonRecord, key: string, operation: string) {
+  const candidate = value[key];
+  if (typeof candidate !== "boolean") throw new LiveZoomContractError(operation, 200, false);
+  return candidate;
 }
 
 function requiredString(value: unknown, keys: string[], operation: string, resultUnknown = false) {

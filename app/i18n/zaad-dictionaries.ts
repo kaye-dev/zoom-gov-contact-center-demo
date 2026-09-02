@@ -223,6 +223,7 @@ export type ZaadDictionary = {
     notFound: string;
     invalid: string;
     resourceInUse: string;
+    messageBodyRequiresShortening: string;
     authenticationRequired: string;
     passwordChangeRequired: string;
   };
@@ -484,6 +485,8 @@ export const zaadDictionaries: Record<
       invalid: "入力または選択内容を確認してからやり直してください。",
       resourceInUse:
         "Zoomで使用中のため処理できません。Zoom Webポータルで参照を解除してからやり直してください。",
+      messageBodyRequiresShortening:
+        "読み上げ本文が500文字を超えています。500文字以内に短縮して保存してから再試行してください。",
       authenticationRequired:
         "ログイン状態を確認できません。再度ログインしてください。",
       passwordChangeRequired: "操作を続ける前にパスワードを変更してください。",
@@ -742,6 +745,8 @@ export const zaadDictionaries: Record<
       invalid: "Review the input or selection, then try again.",
       resourceInUse:
         "Zoom is using this item. Remove its references in the Zoom web portal, then try again.",
+      messageBodyRequiresShortening:
+        "The message exceeds 500 characters. Shorten it to 500 characters or fewer, save it, then retry.",
       authenticationRequired:
         "Your session could not be verified. Sign in again.",
       passwordChangeRequired: "Change your password before continuing.",
@@ -981,6 +986,8 @@ export const zaadDictionaries: Record<
       notFound: "找不到指定对象。请重新加载最新信息。",
       invalid: "请检查输入或选择内容后再试。",
       resourceInUse: "Zoom正在使用此对象。请先在Zoom Web门户中解除引用后再试。",
+      messageBodyRequiresShortening:
+        "朗读正文超过500个字符。请缩短至500个字符以内并保存，然后重试。",
       authenticationRequired: "无法确认登录状态。请重新登录。",
       passwordChangeRequired: "请先更改密码再继续操作。",
     },
@@ -1221,6 +1228,8 @@ export const zaadDictionaries: Record<
       invalid: "請檢查輸入或選擇內容後再試。",
       resourceInUse:
         "Zoom正在使用此項目。請先在Zoom Web入口網站中解除參照後再試。",
+      messageBodyRequiresShortening:
+        "朗讀本文超過500個字元。請縮短至500個字元以內並儲存，然後再試。",
       authenticationRequired: "無法確認登入狀態。請重新登入。",
       passwordChangeRequired: "請先變更密碼再繼續操作。",
     },
@@ -1477,6 +1486,8 @@ export const zaadDictionaries: Record<
       invalid: "입력 또는 선택 내용을 확인한 후 다시 시도해 주세요.",
       resourceInUse:
         "Zoom에서 이 항목을 사용 중입니다. Zoom 웹 포털에서 참조를 해제한 후 다시 시도해 주세요.",
+      messageBodyRequiresShortening:
+        "읽을 본문이 500자를 초과합니다. 500자 이하로 줄여 저장한 후 다시 시도해 주세요.",
       authenticationRequired:
         "로그인 상태를 확인할 수 없습니다. 다시 로그인해 주세요.",
       passwordChangeRequired: "계속하기 전에 비밀번호를 변경해 주세요.",

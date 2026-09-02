@@ -95,6 +95,12 @@ const campaignProfileFixture: ZoomOneTimeCampaignProfile = {
   localCallingWindows: [],
 };
 
+const campaignReferenceReadback = {
+  queueId: campaignProfileFixture.queueId,
+  phoneNumberId: "CANONICAL PRIVATE PHONE NUMBER ID",
+  newFlowId: campaignProfileFixture.newFlowId,
+};
+
 function contactListFixture(id: string): ZoomContactListDto {
   return {
     id,
@@ -341,6 +347,7 @@ function writableZoom(
         agentlessAmdOffAction: configured ? "play_media" : "hang_up",
         assetId: configured ? "temporary-asset-id" : null,
         alwaysRunning: false,
+        ...campaignReferenceReadback,
       };
     },
     ...overrides,
@@ -385,9 +392,9 @@ test("one-time campaign accepts combined lists and residents but requires at lea
   );
 });
 
-test("message and one-time contracts share the configured 1,000-character local boundary", () => {
-  assert.equal(ZAAD_LIMITS.messageBody, 1_000);
-  const exactBoundary = "あ".repeat(1_000);
+test("message and one-time contracts share Zoom's 500-character boundary", () => {
+  assert.equal(ZAAD_LIMITS.messageBody, 500);
+  const exactBoundary = "あ".repeat(500);
   const overBoundary = `${exactBoundary}あ`;
 
   assert.equal(parseZaadMessageInput({
@@ -888,6 +895,7 @@ test("a non-Draft campaign readback stops before configure and preserves the cam
         agentlessAmdOffAction: "hang_up",
         assetId: null,
         alwaysRunning: false,
+        ...campaignReferenceReadback,
       };
     },
   }));
@@ -934,6 +942,7 @@ test("configuration readback requires play_media and the dedicated asset before 
         agentlessAmdOffAction: readCount === 1 ? "hang_up" : "use_flow",
         assetId: readCount === 1 ? null : "temporary-asset-id",
         alwaysRunning: false,
+        ...campaignReferenceReadback,
       };
     },
   }));
@@ -974,6 +983,7 @@ test("the final readback must match Agentless, Ready, play_media, the temporary 
         agentlessAmdOffAction: readCount === 1 ? "hang_up" : "play_media",
         assetId: readCount < 3 ? (readCount === 1 ? null : "temporary-asset-id") : "unexpected-asset-id",
         alwaysRunning: false,
+        ...campaignReferenceReadback,
       };
     },
   }));

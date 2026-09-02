@@ -6,6 +6,7 @@ import {
   createZaadContactList,
   deleteZaadContactList,
   deleteZaadMessage,
+  getZaadMessage,
   retryZaadMessage,
   updateZaadMessage,
   updateZaadCampaignStatus,
@@ -33,7 +34,7 @@ type AuditRecord = {
   stableErrorCode: string | null;
 };
 
-function prismaFixture() {
+function prismaFixture(options: { messageInUse?: boolean } = {}) {
   const audits: AuditRecord[] = [];
   const events: string[] = [];
   let messageDeleted = false;
@@ -68,6 +69,10 @@ function prismaFixture() {
           syncErrorCode?: string | null;
           syncedAt?: Date | null;
           revision?: { increment: number };
+          name?: string;
+          body?: string;
+          languageCode?: string;
+          voiceId?: string;
         };
       }) => {
         if (messageDeleted || where.id !== message.id || (where.revision !== undefined && where.revision !== message.revision)) {
@@ -79,6 +84,10 @@ function prismaFixture() {
         if (data.syncErrorCode !== undefined) message.syncErrorCode = data.syncErrorCode;
         if (data.syncedAt !== undefined) message.syncedAt = data.syncedAt;
         if (data.revision) message.revision += data.revision.increment;
+        if (data.name !== undefined) message.name = data.name;
+        if (data.body !== undefined) message.body = data.body;
+        if (data.languageCode !== undefined) message.languageCode = data.languageCode;
+        if (data.voiceId !== undefined) message.voiceId = data.voiceId;
         return { count: 1 };
       },
       deleteMany: async ({ where }: { where: { id: string; revision: number } }) => {
@@ -105,7 +114,7 @@ function prismaFixture() {
       }),
     },
     disasterRadioSubscription: { count: async () => 0 },
-    zaadOneTimeDispatch: { count: async () => 0 },
+    zaadOneTimeDispatch: { count: async () => options.messageInUse ? 1 : 0 },
     zaadOneTimeDispatchSourceList: { count: async () => 0 },
     $transaction: async <T>(run: (transaction: unknown) => Promise<T>) => run(prisma),
   };
@@ -401,6 +410,87 @@ test("message sync retry records result-unknown with a distinct stable code", as
   assert.equal(audits[0]?.result, "RESULT_UNKNOWN");
   assert.equal(audits[0]?.stableErrorCode, ZAAD_ERROR_CODES.zoomResultUnknown);
   assertAuditSafe(audits, [message.id, message.name, message.body]);
+});
+
+test("legacy messages over 500 characters remain readable but cannot sync until shortened", async (t) => {
+  const { prisma, audits, message } = prismaFixture();
+  message.body = "あ".repeat(501);
+  let zoomWrites = 0;
+  stubZoom(t, {
+    createTtsAsset: async () => {
+      zoomWrites += 1;
+      return { assetId: "unexpected", assetItemId: "unexpected" };
+    },
+  });
+
+  const detail = await getZaadMessage(prisma, message.id);
+  assert.equal(detail.body.length, 501);
+  await assert.rejects(
+    retryZaadMessage(prisma, "actor-user", message.id, message.revision),
+    (error) => assertResourceError(error, ZAAD_ERROR_CODES.messageBodyRequiresShortening),
+  );
+
+  assert.equal(zoomWrites, 0);
+  assert.equal(message.revision, 3);
+  assert.deepEqual(audits.map(({ action, result, stableErrorCode }) => ({ action, result, stableErrorCode })), [{
+    action: "SYNC_RETRY",
+    result: "REJECTED",
+    stableErrorCode: ZAAD_ERROR_CODES.messageBodyRequiresShortening,
+  }]);
+});
+
+test("legacy message updates reject an oversized body and allow a 500-character shortening", async (t) => {
+  const { prisma, audits, message } = prismaFixture();
+  message.body = "あ".repeat(501);
+  message.syncErrorCode = ZAAD_ERROR_CODES.zoomResultUnknown;
+  let zoomWrites = 0;
+  stubZoom(t, {
+    createTtsAsset: async () => {
+      zoomWrites += 1;
+      return { assetId: "unexpected", assetItemId: "unexpected" };
+    },
+  });
+
+  await assert.rejects(
+    updateZaadMessage(prisma, "actor-user", message.id, {
+      name: "metadata-only edit",
+      body: message.body,
+      languageCode: "ja-JP",
+      voiceId: "Tomoko",
+      revision: message.revision,
+    }),
+    (error) => assertResourceError(error, ZAAD_ERROR_CODES.messageBodyRequiresShortening),
+  );
+  assert.equal(message.revision, 3);
+
+  const shortened = await updateZaadMessage(prisma, "actor-user", message.id, {
+    name: "shortened message",
+    body: "あ".repeat(500),
+    languageCode: "ja-JP",
+    voiceId: "Tomoko",
+    revision: message.revision,
+  });
+  assert.equal(shortened.body.length, 500);
+  assert.equal(shortened.revision, 4);
+  assert.equal(zoomWrites, 0);
+  assert.deepEqual(audits.map(({ action, result, stableErrorCode }) => ({ action, result, stableErrorCode })), [
+    { action: "UPDATE", result: "REJECTED", stableErrorCode: ZAAD_ERROR_CODES.messageBodyRequiresShortening },
+    { action: "UPDATE", result: "SUCCESS", stableErrorCode: null },
+  ]);
+});
+
+test("message deletion reports the message-specific in-use code before Zoom or local deletion", async () => {
+  const { prisma, audits, events, message, isMessageDeleted } = prismaFixture({ messageInUse: true });
+  message.zoomAssetId = "asset-existing";
+
+  await assert.rejects(
+    deleteZaadMessage(prisma, "actor-user", message.id, message.revision),
+    (error) => assertResourceError(error, ZAAD_ERROR_CODES.messageInUse),
+  );
+
+  assert.deepEqual(events, []);
+  assert.equal(isMessageDeleted(), false);
+  assert.equal(audits[0]?.stableErrorCode, ZAAD_ERROR_CODES.messageInUse);
 });
 
 test("message sync never retries an unreconciled TTS create result", async (t) => {

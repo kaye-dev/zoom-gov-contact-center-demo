@@ -263,6 +263,9 @@ export async function prepareZaadOneTime(prisma: PrismaClient, actorUserId: stri
       draftReadback.dialingMethod.toLowerCase() !== "agentless" ||
       draftReadback.status.toLowerCase() !== "draft" ||
       draftReadback.contactListId !== contactList.id ||
+      draftReadback.queueId !== snapshot.campaignProfile.queueId ||
+      draftReadback.newFlowId !== snapshot.campaignProfile.newFlowId ||
+      !draftReadback.phoneNumberId ||
       draftReadback.alwaysRunning
     ) {
       throw new ZaadZoomError(ZAAD_ERROR_CODES.zoomInvalidResponse, 502);
@@ -270,6 +273,7 @@ export async function prepareZaadOneTime(prisma: PrismaClient, actorUserId: stri
     created = await persistCheckpoint(prisma, created.id, {
       lastCompletedStep: "DRAFT_READBACK_VERIFIED",
     });
+    const canonicalPhoneNumberId = draftReadback.phoneNumberId;
 
     await client.configureDraftOneTimeCampaign(campaignId, {
       profile: snapshot.campaignProfile,
@@ -287,6 +291,9 @@ export async function prepareZaadOneTime(prisma: PrismaClient, actorUserId: stri
       configuredReadback.contactListId !== contactList.id ||
       configuredReadback.agentlessAmdOffAction?.toLowerCase() !== "play_media" ||
       configuredReadback.assetId !== asset.assetId ||
+      configuredReadback.queueId !== snapshot.campaignProfile.queueId ||
+      configuredReadback.newFlowId !== snapshot.campaignProfile.newFlowId ||
+      configuredReadback.phoneNumberId !== canonicalPhoneNumberId ||
       configuredReadback.alwaysRunning
     ) {
       throw new ZaadZoomError(ZAAD_ERROR_CODES.zoomInvalidResponse, 502);
@@ -308,6 +315,9 @@ export async function prepareZaadOneTime(prisma: PrismaClient, actorUserId: stri
       readback.contactListId !== contactList.id ||
       readback.agentlessAmdOffAction?.toLowerCase() !== "play_media" ||
       readback.assetId !== asset.assetId ||
+      readback.queueId !== snapshot.campaignProfile.queueId ||
+      readback.newFlowId !== snapshot.campaignProfile.newFlowId ||
+      readback.phoneNumberId !== canonicalPhoneNumberId ||
       readback.alwaysRunning
     ) {
       throw new ZaadZoomError(ZAAD_ERROR_CODES.zoomInvalidResponse, 502);

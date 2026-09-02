@@ -56,6 +56,50 @@ const ttsInput = {
   voiceId: "Tomoko" as const,
 };
 
+function referenceResponse(url: URL, input: {
+  queueId?: string;
+  queueListId?: string | null;
+  queueDetailId?: string;
+  queueListChannel?: string;
+  queueDetailChannel?: string;
+  flowId?: string;
+  flowListId?: string | null;
+  flowDetailId?: string;
+  flowListChannel?: string;
+  flowDetailChannel?: string;
+  callerIds?: string[];
+  distribution?: string;
+  outboundEnabled?: boolean;
+  flowStatus?: string;
+} = {}) {
+  const queueId = input.queueId ?? "queue-1";
+  const flowId = input.flowId ?? "flow-new";
+  if (url.pathname.endsWith("/contact_center/queues")) {
+    const listId = input.queueListId === undefined ? queueId : input.queueListId;
+    return Response.json({ queues: listId ? [{ cc_queue_id: listId, queue_name: "合成テストキュー", channel: input.queueListChannel ?? "voice" }] : [] });
+  }
+  if (url.pathname.endsWith(`/contact_center/queues/${queueId}`)) {
+    return Response.json({
+      cc_queue_id: input.queueDetailId ?? queueId,
+      queue_name: "合成テストキュー",
+      channel: input.queueDetailChannel ?? "voice",
+      engagement_distribution: input.distribution ?? "longest_idle",
+      outbound_settings: {
+        enable_outbound_calls: input.outboundEnabled ?? true,
+        queue_caller_ids: input.callerIds ?? ["+81300000000"],
+      },
+    });
+  }
+  if (url.pathname.endsWith("/contact_center/flows")) {
+    const listId = input.flowListId === undefined ? flowId : input.flowListId;
+    return Response.json({ flows: listId ? [{ flow_id: listId, flow_name: "合成テストフロー", channel: input.flowListChannel ?? "voice", status: input.flowStatus ?? "published" }] : [] });
+  }
+  if (url.pathname.endsWith(`/contact_center/flows/${flowId}`)) {
+    return Response.json({ flow_id: input.flowDetailId ?? flowId, flow_name: "合成テストフロー", channel: input.flowDetailChannel ?? "voice", status: input.flowStatus ?? "published" });
+  }
+  return null;
+}
+
 test("Zoom mutations fail closed before OAuth when the write contract is unconfirmed", async () => {
   let fetchCount = 0;
   const zoom = client((async () => {
@@ -188,7 +232,7 @@ test("TTS writes reject content above the configured local boundary before OAuth
     fetchCount += 1;
     throw new Error("fetch must not run");
   }) as typeof fetch, { contact: false, tts: true, campaign: false });
-  const overBoundary = { ...ttsInput, body: "あ".repeat(1_001) };
+  const overBoundary = { ...ttsInput, body: "あ".repeat(501) };
 
   for (const operation of [
     () => zoom.createTtsAsset(overBoundary),
@@ -203,6 +247,30 @@ test("TTS writes reject content above the configured local boundary before OAuth
     });
   }
   assert.equal(fetchCount, 0);
+});
+
+test("TTS boundary counts supplementary Unicode characters as one character", async () => {
+  clearZaadZoomTokenCache();
+  let apiRequests = 0;
+  const zoom = client((async (input) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/oauth/token") {
+      return Response.json({ access_token: "token", expires_in: 3600 });
+    }
+    apiRequests += 1;
+    return Response.json({
+      asset_id: "asset-emoji",
+      asset_type: "audio",
+      asset_items: [{ asset_item_id: "asset-item-emoji" }],
+    }, { status: 201 });
+  }) as typeof fetch, { contact: false, tts: true, campaign: false });
+
+  await assert.doesNotReject(zoom.createTtsAsset({
+    ...ttsInput,
+    body: "🚨".repeat(500),
+  }));
+  assert.equal(apiRequests, 1);
+  clearZaadZoomTokenCache();
 });
 
 test("TTS asset CRUD uses the official create, item-update, and two-stage delete contracts", async () => {
@@ -279,6 +347,7 @@ test("TTS asset CRUD uses the official create, item-update, and two-stage delete
   assert.equal(requests[4]?.url.searchParams.get("archive"), "false");
   assert.deepEqual(requests[0]?.form, {
     asset_name: ttsInput.name,
+    asset_description: "ZAAD TTS message",
     asset_type: "audio",
     asset_items: JSON.stringify([{
       asset_item_name: ttsInput.name,
@@ -755,6 +824,8 @@ test("batch contact creation uses the official 100-item contract and maps failed
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = new URL(String(input));
     if (url.pathname === "/oauth/token") return Response.json({ access_token: "token", expires_in: 3600 });
+    const reference = referenceResponse(url);
+    if (reference) return reference;
     requests.push({
       method: init?.method ?? "GET",
       url,
@@ -837,6 +908,8 @@ test("campaign list, detail, and status use current Zoom fields and exact status
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = new URL(String(input));
     if (url.pathname === "/oauth/token") return Response.json({ access_token: "token", expires_in: 3600 });
+    const reference = referenceResponse(url);
+    if (reference) return reference;
     const method = init?.method ?? "GET";
     requests.push({
       method,
@@ -882,10 +955,14 @@ test("campaign list, detail, and status use current Zoom fields and exact status
   };
   const zoom = client(fetchImpl, true);
 
-  const page = await zoom.listCampaigns({ pageSize: 10 });
+  const page = await zoom.listCampaigns({ pageSize: 100 });
   assert.equal(page.campaigns[0]?.id, "campaign-1");
   assert.equal(page.campaigns[0]?.status, "ready");
   assert.equal(page.nextPageToken, "campaign-page-2");
+  assert.equal(
+    requests.find(({ method, url }) => method === "GET" && url.pathname.endsWith("/campaigns"))?.url.searchParams.get("page_size"),
+    "10",
+  );
   const detail = await zoom.getCampaign("campaign-1");
   assert.deepEqual({
     dialingMethod: detail.dialingMethod,
@@ -910,6 +987,87 @@ test("campaign list, detail, and status use current Zoom fields and exact status
   const statusRequest = requests.find(({ method }) => method === "PATCH");
   assert.equal(statusRequest?.url.pathname, "/v2/contact_center/outbound_campaign/campaigns/campaign-1/status");
   assert.deepEqual(statusRequest?.body, { status: "Running" });
+  clearZaadZoomTokenCache();
+});
+
+test("campaign preparation accepts only the base campaign's validated voice queue, flow, and caller", async () => {
+  const baseCampaign = {
+    outbound_campaign_id: "base-campaign",
+    outbound_campaign_name: "合成テスト参照元",
+    outbound_campaign_status: "ready",
+    dialing_method: "agentless",
+    queue_id: "queue-1",
+    phone_number_id: "opaque-phone-id",
+    outbound_number: "+81300000000",
+    dialing_method_settings: { max_concurrent_calls: 1, new_flow_id: "flow-new" },
+    enable_always_running: false,
+  };
+  const scenarios: Array<{
+    name: string;
+    references: Parameters<typeof referenceResponse>[1];
+  }> = [
+    { name: "queue missing from list", references: { queueListId: null } },
+    { name: "queue list is not voice", references: { queueListChannel: "video" } },
+    { name: "queue list/detail ID drift", references: { queueDetailId: "different-queue" } },
+    { name: "queue is not voice", references: { queueDetailChannel: "video" } },
+    { name: "queue outbound is disabled", references: { outboundEnabled: false } },
+    { name: "queue distribution is simultaneous", references: { distribution: "simultaneous" } },
+    { name: "queue distribution is manual", references: { distribution: "manual" } },
+    { name: "queue distribution is unknown", references: { distribution: "future_mode" } },
+    { name: "queue has no caller", references: { callerIds: [] } },
+    { name: "queue caller is not E.164", references: { callerIds: ["03-0000-0000"] } },
+    { name: "opaque campaign caller cannot select among multiple queue callers", references: { callerIds: ["+81311111111", "+81322222222"] } },
+    { name: "flow missing from list", references: { flowListId: null } },
+    { name: "flow list is not voice", references: { flowListChannel: "video" } },
+    { name: "flow list/detail ID drift", references: { flowDetailId: "different-flow" } },
+    { name: "flow is not voice", references: { flowDetailChannel: "video" } },
+    { name: "flow is not published", references: { flowStatus: "draft" } },
+  ];
+
+  for (const scenario of scenarios) {
+    clearZaadZoomTokenCache();
+    const apiWrites: string[] = [];
+    const zoom = client((async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/oauth/token") return Response.json({ access_token: "token", expires_in: 3600 });
+      const method = init?.method ?? "GET";
+      if (method !== "GET") apiWrites.push(`${method} ${url.pathname}`);
+      if (url.pathname.endsWith("/campaigns/base-campaign")) return Response.json(baseCampaign);
+      const reference = referenceResponse(url, scenario.references);
+      if (reference) return reference;
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    }) as typeof fetch, false);
+
+    await assert.rejects(zoom.getCampaignPreparationProfile("base-campaign"), (error: unknown) => {
+      assert.ok(error instanceof ZaadZoomError, scenario.name);
+      assert.equal(error.code, ZAAD_ERROR_CODES.zoomInvalidResponse, scenario.name);
+      return true;
+    });
+    assert.deepEqual(apiWrites, [], scenario.name);
+  }
+
+  clearZaadZoomTokenCache();
+  const requested: string[] = [];
+  const zoom = client((async (input, init) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/oauth/token") return Response.json({ access_token: "token", expires_in: 3600 });
+    requested.push(`${init?.method ?? "GET"} ${url.pathname}${url.search}`);
+    if (url.pathname.endsWith("/campaigns/base-campaign")) return Response.json(baseCampaign);
+    const reference = referenceResponse(url);
+    if (reference) return reference;
+    throw new Error(`Unexpected request: ${url}`);
+  }) as typeof fetch, false);
+  const resolved = await zoom.getCampaignPreparationProfile("base-campaign");
+  assert.equal(resolved.profile.phoneNumberId, "+81300000000");
+  assert.equal(resolved.campaign.queueName, "合成テストキュー");
+  assert.equal(resolved.campaign.callerIdMasked, "***-***-0000");
+  assert.deepEqual(requested, [
+    "GET /v2/contact_center/outbound_campaign/campaigns/base-campaign",
+    "GET /v2/contact_center/queues?channel=voice&page_size=100",
+    "GET /v2/contact_center/queues/queue-1?queue_identifier_type=id",
+    "GET /v2/contact_center/flows?status=published&channel=voice&page_size=100",
+    "GET /v2/contact_center/flows/flow-new?flow_identifier_type=id",
+  ]);
   clearZaadZoomTokenCache();
 });
 
@@ -955,6 +1113,7 @@ test("one-time campaign preparation clones only the allowlisted Agentless profil
     outbound_campaign_id: "one-time-campaign",
     outbound_campaign_name: "ZAAD-OT-test",
     outbound_campaign_status: "draft",
+    phone_number_id: "canonical-phone-1",
     campaign_contact_list: [{ contact_list_id: "temporary-list", contact_list_name: "ZAAD temporary" }],
     dialing_method_settings: {
       ...baseCampaign.dialing_method_settings,
@@ -965,6 +1124,8 @@ test("one-time campaign preparation clones only the allowlisted Agentless profil
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = new URL(String(input));
     if (url.pathname === "/oauth/token") return Response.json({ access_token: "token", expires_in: 3600 });
+    const reference = referenceResponse(url);
+    if (reference) return reference;
     const method = init?.method ?? "GET";
     const body = typeof init?.body === "string" ? JSON.parse(init.body) as unknown : null;
     requests.push({ method, url, authorization: new Headers(init?.headers).get("authorization"), body });
@@ -991,7 +1152,7 @@ test("one-time campaign preparation clones only the allowlisted Agentless profil
   assert.equal(preparation.campaign.callerIdMasked, "***-***-0000");
   assert.deepEqual(preparation.profile, {
     queueId: "queue-1",
-    phoneNumberId: "phone-1",
+    phoneNumberId: "+81300000000",
     assignType: "queue",
     maxConcurrentCalls: 3,
     newFlowId: "flow-new",
@@ -1037,6 +1198,9 @@ test("one-time campaign preparation clones only the allowlisted Agentless profil
     agentlessAmdOffAction: "play_media",
     assetId: "one-time-asset",
     alwaysRunning: false,
+    queueId: "queue-1",
+    phoneNumberId: "canonical-phone-1",
+    newFlowId: "flow-new",
   });
   await zoom.setCampaignStatus(campaignId, "Ready");
   await zoom.deleteCampaign(campaignId);
@@ -1046,7 +1210,7 @@ test("one-time campaign preparation clones only the allowlisted Agentless profil
     outbound_campaign_name: "ZAAD-OT-test",
     outbound_campaign_description: "ZAAD one-time dispatch",
     queue_id: "queue-1",
-    phone_number_id: "phone-1",
+    phone_number_id: "+81300000000",
     assign_type: "queue",
     dialing_method: "agentless",
     dialing_method_settings: {
@@ -1095,6 +1259,8 @@ test("one-time preparation accepts required raw settings without optional displa
   const zoom = client((async (input) => {
     const url = new URL(String(input));
     if (url.pathname === "/oauth/token") return Response.json({ access_token: "token", expires_in: 3600 });
+    const reference = referenceResponse(url);
+    if (reference) return reference;
     if (url.pathname.endsWith("/campaigns/base-campaign")) {
       return Response.json({
         outbound_campaign_id: "base-campaign",
@@ -1115,8 +1281,8 @@ test("one-time preparation accepts required raw settings without optional displa
 
   const preparation = await zoom.getCampaignPreparationProfile("base-campaign");
 
-  assert.equal(preparation.campaign.queueName, null);
-  assert.equal(preparation.campaign.callerIdMasked, null);
+  assert.equal(preparation.campaign.queueName, "合成テストキュー");
+  assert.equal(preparation.campaign.callerIdMasked, "***-***-0000");
   assert.equal(preparation.campaign.businessHours, null);
   assert.equal(preparation.campaign.retryPolicy, null);
   assert.equal(preparation.campaign.dncPolicy, "none");

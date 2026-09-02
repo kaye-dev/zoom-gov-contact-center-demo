@@ -1,10 +1,12 @@
 import type { PrismaClient } from "@/lib/generated/prisma/client";
 import {
+  countZaadTextCharacters,
   parseZaadCampaignStatusInput,
   parseZaadContactListInput,
   parseZaadMessageInput,
   parseZaadRegistrationSettingInput,
   ZAAD_ERROR_CODES,
+  ZAAD_LIMITS,
   ZAAD_VOICES,
 } from "@/lib/zaad/contracts";
 
@@ -78,7 +80,22 @@ export async function createZaadMessage(prisma: PrismaClient, actorUserId: strin
 
 export async function updateZaadMessage(prisma: PrismaClient, actorUserId: string, id: string, payload: unknown) {
   const parsed = parseZaadMessageInput(payload, true);
-  if (!parsed.ok) throw new ZaadResourceError(parsed.code, 400);
+  if (!parsed.ok) {
+    const current = await prisma.zaadOutboundMessage.findUnique({ where: { id } });
+    if (current && countZaadTextCharacters(current.body) > ZAAD_LIMITS.messageBody && payloadKeepsOversizedMessageBody(payload)) {
+      await writeZaadAudit(prisma, {
+        actorUserId,
+        resourceKind: "message",
+        targetId: id,
+        action: "UPDATE",
+        result: "REJECTED",
+        changedFieldNames: ["body"],
+        stableErrorCode: ZAAD_ERROR_CODES.messageBodyRequiresShortening,
+      });
+      throw new ZaadResourceError(ZAAD_ERROR_CODES.messageBodyRequiresShortening, 409);
+    }
+    throw new ZaadResourceError(parsed.code, 400);
+  }
   const updated = await prisma.$transaction(async (transaction) => {
     const current = await transaction.zaadOutboundMessage.findUnique({ where: { id } });
     const createResultUnknown = current !== null
@@ -118,6 +135,18 @@ export async function updateZaadMessage(prisma: PrismaClient, actorUserId: strin
 
 export async function retryZaadMessage(prisma: PrismaClient, actorUserId: string, id: string, revision: number) {
   const current = await prisma.zaadOutboundMessage.findUnique({ where: { id } });
+  if (current?.revision === revision && countZaadTextCharacters(current.body) > ZAAD_LIMITS.messageBody) {
+    await writeZaadAudit(prisma, {
+      actorUserId,
+      resourceKind: "message",
+      targetId: id,
+      action: "SYNC_RETRY",
+      result: "REJECTED",
+      changedFieldNames: ["body", "syncStatus"],
+      stableErrorCode: ZAAD_ERROR_CODES.messageBodyRequiresShortening,
+    });
+    throw new ZaadResourceError(ZAAD_ERROR_CODES.messageBodyRequiresShortening, 409);
+  }
   if (current?.revision === revision && isUnreconciledTtsCreate(current)) {
     await writeZaadAudit(prisma, {
       actorUserId,
@@ -168,18 +197,36 @@ export async function deleteZaadMessage(prisma: PrismaClient, actorUserId: strin
   const inUse = row.zoomAssetId
     ? await prisma.zaadOneTimeDispatch.count({ where: { zoomAssetId: row.zoomAssetId } })
     : 0;
-  if (inUse > 0) throw new ZaadResourceError(ZAAD_ERROR_CODES.zoomInUse, 409);
+  if (inUse > 0) {
+    await writeZaadAudit(prisma, {
+      actorUserId,
+      resourceKind: "message",
+      targetId: id,
+      action: "DELETE",
+      result: "REJECTED",
+      changedFieldNames: ["record"],
+      stableErrorCode: ZAAD_ERROR_CODES.messageInUse,
+    });
+    throw new ZaadResourceError(ZAAD_ERROR_CODES.messageInUse, 409);
+  }
   if (row.zoomAssetId) {
     try {
       await callZoom(prisma, (client) => client.deleteTtsAsset(row.zoomAssetId!));
     } catch (error) {
-      throw await auditExternalFailure(prisma, {
+      const mapped = mapResourceError(error);
+      const normalized = mapped.code === ZAAD_ERROR_CODES.zoomInUse
+        ? new ZaadResourceError(ZAAD_ERROR_CODES.messageInUse, 409)
+        : mapped;
+      await writeZaadAudit(prisma, {
         actorUserId,
         resourceKind: "message",
         targetId: id,
         action: "DELETE",
+        result: normalized.resultUnknown ? "RESULT_UNKNOWN" : "FAILED",
         changedFieldNames: ["record"],
-      }, error);
+        stableErrorCode: normalized.code,
+      });
+      throw normalized;
     }
   }
   await prisma.$transaction(async (transaction) => {
@@ -728,6 +775,13 @@ function isUnreconciledTtsCreate(row: Pick<
   return row.syncErrorCode === ZAAD_ERROR_CODES.zoomResultUnknown
     && row.zoomAssetId === null
     && row.zoomAssetItemId === null;
+}
+
+function payloadKeepsOversizedMessageBody(payload: unknown) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+  const body = (payload as Record<string, unknown>).body;
+  if (typeof body !== "string") return false;
+  return countZaadTextCharacters(body.trim().normalize("NFKC")) > ZAAD_LIMITS.messageBody;
 }
 
 function messageDto(row: MessageRow) {

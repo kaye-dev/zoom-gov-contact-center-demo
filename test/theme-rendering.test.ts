@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { resolveReviewTheme } from "../app/components/ThemeSync";
 
 const layoutSource = readFileSync(
   new URL("../app/layout.tsx", import.meta.url),
@@ -52,7 +53,8 @@ test("theme content stays hidden until the stored theme is synchronized", () => 
     layoutSource,
     /className="theme-loading language-loading scheme-light h-full antialiased dark:scheme-dark"/,
   );
-  assert.match(layoutSource, /strategy="beforeInteractive"/);
+  assert.match(layoutSource, /<head>[\s\S]*?<script[\s\S]*?id="theme-init"/);
+  assert.doesNotMatch(layoutSource, /next\/script|strategy="beforeInteractive"/);
   assert.match(
     globalsSource,
     /:root\.theme-loading body,[\s\S]*?:root\.language-loading body\s*{\s*visibility: hidden;/,
@@ -74,6 +76,17 @@ test("theme content stays hidden until the stored theme is synchronized", () => 
   assert.ok(matchIndex > syncIndex);
   assert.ok(revealIndex > matchIndex);
   assert.match(themeSyncSource, /}, \[isDark\]\);/);
+  assert.match(
+    themeSyncSource,
+    /function ReviewThemeSync\(\)[\s\S]*?useLayoutEffect\(\(\) =>\s*{[\s\S]*?const reviewIsDark = applyReviewTheme\(\);[\s\S]*?classList\.remove\('theme-loading'\)[\s\S]*?}, \[\]\);/,
+  );
+  assert.match(
+    themeSyncSource,
+    /return reviewTheme \? <ReviewThemeSync \/> : <StoredThemeSync \/>;/,
+  );
+  assert.match(themeSyncSource, /new MutationObserver/);
+  assert.match(themeSyncSource, /attributeFilter: \['class'\]/);
+  assert.match(themeSyncSource, /return \(\) => observer\.disconnect\(\);/);
 });
 
 test("theme toggle has its initial visual state before transitions are enabled", () => {
@@ -97,9 +110,24 @@ test("theme defaults to light without following the operating system", () => {
 
 test("the pre-paint script restores dark only for an explicit dark preference", () => {
   assert.match(layoutSource, /localStorage\.getItem\('theme'\)/);
+  assert.match(layoutSource, /new URLSearchParams\(location\.search\)\.getAll\('theme'\)/);
+  assert.match(layoutSource, /location\.hostname==='localhost'/);
   assert.match(layoutSource, /var d=t==='dark'/);
   assert.match(layoutSource, /classList\.toggle\('dark',d\)/);
   assert.match(layoutSource, /classList\.toggle\('light',!d\)/);
+  assert.match(layoutSource, /classList\.toggle\('review-theme',r!==null\)/);
+});
+
+test("review theme query is development-only, loopback-only, and non-persistent", () => {
+  assert.equal(resolveReviewTheme({ hostname: "localhost", search: "?theme=dark" }, "development"), "dark");
+  assert.equal(resolveReviewTheme({ hostname: "127.0.0.1", search: "?theme=light" }, "test"), "light");
+  assert.equal(resolveReviewTheme({ hostname: "[::1]", search: "?theme=dark" }, "development"), "dark");
+  assert.equal(resolveReviewTheme({ hostname: "demo.example", search: "?theme=dark" }, "development"), null);
+  assert.equal(resolveReviewTheme({ hostname: "localhost", search: "?theme=dark" }, "production"), null);
+  assert.equal(resolveReviewTheme({ hostname: "localhost", search: "?theme=blue" }, "development"), null);
+  assert.equal(resolveReviewTheme({ hostname: "localhost", search: "?theme=dark&theme=light" }, "development"), null);
+  assert.doesNotMatch(themeSyncSource, /localStorage\.setItem/);
+  assert.match(globalsSource, /:root\.review-theme nextjs-portal\s*{\s*display: none;/);
 });
 
 test("dark mode uses GitHub-style semantic canvas roles and native control scheme", () => {

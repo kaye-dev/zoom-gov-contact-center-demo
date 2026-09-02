@@ -7,6 +7,8 @@ export const ZAAD_ERROR_CODES = {
   residentNotFound: "ZAAD_RESIDENT_NOT_FOUND",
   messageConflict: "ZAAD_MESSAGE_CONFLICT",
   messageNotFound: "ZAAD_MESSAGE_NOT_FOUND",
+  messageInUse: "ZAAD_MESSAGE_IN_USE",
+  messageBodyRequiresShortening: "ZAAD_MESSAGE_BODY_REQUIRES_SHORTENING",
   contactListConflict: "ZAAD_CONTACT_LIST_CONFLICT",
   contactListNotFound: "ZAAD_CONTACT_LIST_NOT_FOUND",
   registrationSettingConflict: "ZAAD_REGISTRATION_SETTING_CONFLICT",
@@ -38,12 +40,20 @@ export type ZaadVoiceId = (typeof ZAAD_VOICES)[number];
 export const ZAAD_LIMITS = {
   label: 100,
   description: 500,
-  messageBody: 1_000,
+  messageBody: 500,
   sourceLists: 20,
   residentSelections: 1_000,
   recipients: 1_000,
   operationKey: 100,
 } as const;
+
+export function countZaadTextCharacters(value: string) {
+  return [...value].length;
+}
+
+export function truncateZaadTextCharacters(value: string, maximum: number) {
+  return [...value].slice(0, maximum).join("");
+}
 
 export type ZaadMessageInput = {
   name: string;
@@ -215,7 +225,7 @@ export function hasExactKeys(value: unknown, keys: readonly string[]): value is 
 function parseLabel(value: unknown, maximum: number, allowNewlines = false): string | null {
   if (typeof value !== "string") return null;
   const result = value.trim().normalize("NFKC");
-  if (!result || [...result].length > maximum) return null;
+  if (!result || countZaadTextCharacters(result) > maximum) return null;
   if (allowNewlines ? /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/u.test(result) : containsControl(result)) return null;
   return result;
 }

@@ -49,6 +49,8 @@ export function getZaadErrorMessage(
     return copy.errors.transient;
   }
   if (code === ZAAD_ERROR_CODES.zoomInUse) return copy.errors.resourceInUse;
+  if (code === ZAAD_ERROR_CODES.messageInUse) return copy.errors.resourceInUse;
+  if (code === ZAAD_ERROR_CODES.messageBodyRequiresShortening) return copy.errors.messageBodyRequiresShortening;
   if (code && ERROR_GROUPS.conflict.has(code)) return copy.errors.conflict;
   if (code && ERROR_GROUPS.resultUnknown.has(code)) return copy.errors.resultUnknown;
   if (code && ERROR_GROUPS.notFound.has(code)) return copy.errors.notFound;
