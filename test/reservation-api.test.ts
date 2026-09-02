@@ -5,11 +5,14 @@ import test from "node:test";
 import { dictionaries, locales } from "../app/i18n/dictionaries";
 import type { PrismaClient } from "../lib/generated/prisma/client";
 import {
+  RESERVATION_API_ERROR_CODES,
   RESERVATION_API_PERMISSIONS,
+  RESERVATION_CALLER_PHONE_HEADER,
   decodeReservationCursor,
   encodeReservationCursor,
   parseReservationApiKeyIssue,
   parseReservationAvailability,
+  parseReservationCallerPhone,
   parseReservationIdempotencyKey,
   parseReservationIfMatch,
   parseReservationApiUsageLimit,
@@ -127,6 +130,39 @@ test("reservation writes, patches, list query, and cursor are strict", () => {
   assert.equal(parseReservationList(new URL("https://example.test/api?limit=101")), null);
   assert.equal(parseReservationList(new URL("https://example.test/api?limit=1&limit=2")), null);
   assert.equal(parseReservationList(new URL("https://example.test/api?unknown=1")), null);
+});
+
+test("caller phone header accepts only canonical E.164 input", () => {
+  assert.equal(RESERVATION_CALLER_PHONE_HEADER, "X-Reservation-Caller-Phone");
+  assert.equal(
+    RESERVATION_API_ERROR_CODES.callerPhoneRequired,
+    "RESERVATION_CALLER_PHONE_REQUIRED",
+  );
+  assert.equal(
+    RESERVATION_API_ERROR_CODES.callerPhoneInvalid,
+    "RESERVATION_CALLER_PHONE_INVALID",
+  );
+  for (const valid of [
+    "+12345678",
+    "+12025550123",
+    "+123456789012345",
+  ]) {
+    assert.equal(parseReservationCallerPhone(valid), valid);
+  }
+  for (const invalid of [
+    null,
+    "",
+    "+1234567",
+    "+1234567890123456",
+    "+02025550123",
+    "12025550123",
+    " +12025550123",
+    "+12025550123 ",
+    "+12025550123,+12025550124",
+    "+１２０２５５５０１２３",
+  ]) {
+    assert.equal(parseReservationCallerPhone(invalid), null, String(invalid));
+  }
 });
 
 test("reservation API log query, cursor, and retention boundary are strict", () => {
@@ -265,6 +301,8 @@ test("all locales contain complete reservation API key copy", () => {
     assert.ok(copy.title && copy.description && copy.issue && copy.usage.title && copy.keys.monthlyLimit && copy.keyUsageDialog.title, locale);
     assert.deepEqual(Object.keys(copy.api.descriptions), [...RESERVATION_API_PERMISSIONS], locale);
     assert.equal(Object.keys(copy.api.operations).length, 8, locale);
+    assert.match(copy.api.description, /X-Reservation-Caller-Phone/u, locale);
+    assert.ok(copy.logs.detail.credentialNotice.length > 0, locale);
   }
 });
 

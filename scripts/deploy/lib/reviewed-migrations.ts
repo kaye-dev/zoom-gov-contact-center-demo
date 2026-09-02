@@ -104,6 +104,11 @@ const EXACT_POST_REVIEWED_CHAIN = [
     sha256: "d1d79dc4de25dbd10f1984b502342576b6fcf6b40916ae0f31613e9749f7a05b",
     classification: "expand-compatible",
   },
+  {
+    name: "20260901160000_add_reservation_caller_ani_binding",
+    sha256: "5afbac07aaa22cfd36226cd2d6f919f0e59950fd083c3837903025248885e5f3",
+    classification: "expand-compatible",
+  },
 ] as const satisfies readonly ExactBatchMigration[];
 
 export type ReviewedMigrationBatchPlan = {

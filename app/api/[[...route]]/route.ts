@@ -90,11 +90,13 @@ import {
   regenerateDemoReservations,
 } from "@/lib/server/reservations";
 import {
+  RESERVATION_CALLER_PHONE_HEADER,
   RESERVATION_API_ERROR_CODES,
   parseReservationApiKeyIssue,
   parseReservationApiKeyRevoke,
   parseReservationApiUsageLimit,
   parseReservationAvailability,
+  parseReservationCallerPhone,
   parseReservationId,
   parseReservationIdempotencyKey,
   parseReservationIfMatch,
@@ -102,6 +104,7 @@ import {
   parseReservationPatch,
   parseReservationWrite,
   reservationEtag,
+  type ReservationCallerAniDigest,
   type ReservationDto,
   type ReservationApiPermission,
   type ReservationListInput,
@@ -1365,8 +1368,9 @@ app.get("/public/v1/reservations/:id", async (c) => {
       permission: "READ",
       method: "GET",
       path: "/api/public/v1/reservations/{id}",
+      callerPhoneRequired: true,
     },
-    async ({ keyId, requestId }) => {
+    async ({ keyId, requestId, callerAniDigest }) => {
       const id = parseReservationId(c.req.param("id"));
       if (!id) {
         return publicReservationApiError(
@@ -1377,7 +1381,12 @@ app.get("/public/v1/reservations/:id", async (c) => {
       }
       const baseRequest = { pathParameters: { id }, query: {} };
       try {
-        const reservation = await getPublicReservation(c.get("prisma"), keyId, id);
+        const reservation = await getPublicReservation(
+          c.get("prisma"),
+          keyId,
+          id,
+          callerAniDigest!,
+        );
         return reservation
           ? publicReservationApiSuccess(
               200,
@@ -1410,8 +1419,13 @@ app.post("/public/v1/reservations", async (c) => {
   setPrivateNoStore(c);
   return runPublicReservationApiRequest(
     c,
-    { permission: "CREATE", method: "POST", path: "/api/public/v1/reservations" },
-    async ({ keyId, requestId }) => {
+    {
+      permission: "CREATE",
+      method: "POST",
+      path: "/api/public/v1/reservations",
+      callerPhoneRequired: true,
+    },
+    async ({ keyId, requestId, callerAniDigest }) => {
       const idempotencyKey = parseReservationIdempotencyKey(
         c.req.raw.headers.get("idempotency-key"),
       );
@@ -1448,6 +1462,7 @@ app.post("/public/v1/reservations", async (c) => {
       try {
         const result = await createPublicReservation(c.get("prisma"), {
           apiKeyId: keyId,
+          callerAniDigest: callerAniDigest!,
           idempotencyKey,
           reservation: input,
           requestId,
@@ -1477,8 +1492,9 @@ app.put("/public/v1/reservations/:id", async (c) => {
       permission: "UPDATE",
       method: "PUT",
       path: "/api/public/v1/reservations/{id}",
+      callerPhoneRequired: true,
     },
-    async ({ keyId, requestId }) => {
+    async ({ keyId, requestId, callerAniDigest }) => {
       const id = parseReservationId(c.req.param("id"));
       if (!id) {
         return publicReservationApiError(
@@ -1530,6 +1546,7 @@ app.put("/public/v1/reservations/:id", async (c) => {
       try {
         const reservation = await updatePublicReservation(c.get("prisma"), {
           apiKeyId: keyId,
+          callerAniDigest: callerAniDigest!,
           id,
           patch: input,
           expectedRevision,
@@ -1561,8 +1578,9 @@ app.patch("/public/v1/reservations/:id", async (c) => {
       permission: "UPDATE",
       method: "PATCH",
       path: "/api/public/v1/reservations/{id}",
+      callerPhoneRequired: true,
     },
-    async ({ keyId, requestId }) => {
+    async ({ keyId, requestId, callerAniDigest }) => {
       const id = parseReservationId(c.req.param("id"));
       if (!id) {
         return publicReservationApiError(
@@ -1615,6 +1633,7 @@ app.patch("/public/v1/reservations/:id", async (c) => {
       try {
         const reservation = await updatePublicReservation(c.get("prisma"), {
           apiKeyId: keyId,
+          callerAniDigest: callerAniDigest!,
           id,
           patch: input,
           expectedRevision,
@@ -1642,8 +1661,9 @@ app.delete("/public/v1/reservations/:id", async (c) => {
       permission: "DELETE",
       method: "DELETE",
       path: "/api/public/v1/reservations/{id}",
+      callerPhoneRequired: true,
     },
-    async ({ keyId, requestId }) => {
+    async ({ keyId, requestId, callerAniDigest }) => {
       const id = parseReservationId(c.req.param("id"));
       if (!id) {
         return publicReservationApiError(
@@ -1682,6 +1702,7 @@ app.delete("/public/v1/reservations/:id", async (c) => {
       try {
         return await deletePublicReservation(c.get("prisma"), {
           apiKeyId: keyId,
+          callerAniDigest: callerAniDigest!,
           id,
           expectedRevision,
         })
@@ -2083,9 +2104,13 @@ async function guardPublicReservationApi(
   c: Context<AppEnvironment>,
   permission: ReservationApiPermission,
   requestId: string,
+  callerPhoneRequired: boolean,
 ) {
+  const rawCallerPhone = c.req.raw.headers.get(RESERVATION_CALLER_PHONE_HEADER);
+  const callerPhone = parseReservationCallerPhone(rawCallerPhone);
   const result = await authenticateReservationApiRequest(c.get("prisma"), {
     authorization: c.req.raw.headers.get("authorization"),
+    callerPhone,
   });
   if (result.status === "UNAUTHORIZED") {
     c.header("WWW-Authenticate", "Bearer");
@@ -2137,6 +2162,39 @@ async function guardPublicReservationApi(
       ),
     };
   }
+  if (callerPhoneRequired && rawCallerPhone === null) {
+    return {
+      ok: false as const,
+      result,
+      descriptor: publicReservationApiError(
+        400,
+        RESERVATION_API_ERROR_CODES.callerPhoneRequired,
+        requestId,
+      ),
+    };
+  }
+  if (callerPhoneRequired && callerPhone === null) {
+    return {
+      ok: false as const,
+      result,
+      descriptor: publicReservationApiError(
+        400,
+        RESERVATION_API_ERROR_CODES.callerPhoneInvalid,
+        requestId,
+      ),
+    };
+  }
+  if (callerPhoneRequired && result.callerAniDigest === null) {
+    return {
+      ok: false as const,
+      result,
+      descriptor: publicReservationApiError(
+        500,
+        RESERVATION_API_ERROR_CODES.internalError,
+        requestId,
+      ),
+    };
+  }
   return { ok: true as const, result };
 }
 
@@ -2171,16 +2229,23 @@ async function runPublicReservationApiRequest(
     permission: ReservationApiPermission;
     method: ReservationApiRequestLogMethod;
     path: string;
+    callerPhoneRequired?: boolean;
   },
   operation: (context: {
     keyId: string;
     requestId: string;
+    callerAniDigest: ReservationCallerAniDigest | null;
   }) => Promise<PublicReservationApiResponseDescriptor>,
 ) {
   const requestedAt = new Date();
   const requestId = `rlog_${randomUUID().replaceAll("-", "")}`;
   c.header("X-Request-ID", requestId);
-  const guard = await guardPublicReservationApi(c, metadata.permission, requestId);
+  const guard = await guardPublicReservationApi(
+    c,
+    metadata.permission,
+    requestId,
+    metadata.callerPhoneRequired === true,
+  );
   if (!guard.ok && "response" in guard) return guard.response;
 
   let descriptor: PublicReservationApiResponseDescriptor;
@@ -2189,6 +2254,7 @@ async function runPublicReservationApiRequest(
       descriptor = await operation({
         keyId: guard.result.keyId,
         requestId,
+        callerAniDigest: guard.result.callerAniDigest,
       });
     } catch {
       console.error("Failed to execute a public reservation API request.");
@@ -2368,6 +2434,8 @@ function reservationOperationErrorDescriptor(
 function publicReservationApiErrorMessage(errorCode: string): string {
   const messages: Record<string, string> = {
     [RESERVATION_API_ERROR_CODES.invalidRequest]: "The request is invalid.",
+    [RESERVATION_API_ERROR_CODES.callerPhoneRequired]: "The X-Reservation-Caller-Phone header is required.",
+    [RESERVATION_API_ERROR_CODES.callerPhoneInvalid]: "The X-Reservation-Caller-Phone header must contain a valid E.164 number.",
     [RESERVATION_API_ERROR_CODES.unauthorized]: "Bearer authentication is required.",
     [RESERVATION_API_ERROR_CODES.forbidden]: "The API key does not grant this operation.",
     [RESERVATION_API_ERROR_CODES.notFound]: "The reservation or service was not found.",

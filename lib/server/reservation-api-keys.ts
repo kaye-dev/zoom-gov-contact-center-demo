@@ -1,8 +1,11 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 import { Prisma, type PrismaClient } from "@/lib/generated/prisma/client";
 import {
   RESERVATION_API_PERMISSIONS,
+  parseReservationCallerPhone,
+  type ReservationCallerAniDigest,
+  type ReservationCallerPhone,
   type ReservationApiKeyUsageDto,
   type ReservationApiPermission,
 } from "@/lib/reservation-api";
@@ -43,6 +46,19 @@ export function verifyReservationApiKey(rawKey: string, expectedDigest: string):
   const actual = Buffer.from(digestReservationApiKey(rawKey), "hex");
   const expected = Buffer.from(expectedDigest, "hex");
   return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+export function digestReservationCallerAni(
+  rawKey: string,
+  callerPhone: ReservationCallerPhone,
+): ReservationCallerAniDigest {
+  if (!parseReservationApiKey(rawKey) || parseReservationCallerPhone(callerPhone) !== callerPhone) {
+    throw new Error("A canonical reservation API key and caller phone are required.");
+  }
+  return createHmac("sha256", rawKey)
+    .update("zoom-gov-contact-center-demo:reservation-caller-ani:v1\0", "utf8")
+    .update(callerPhone, "utf8")
+    .digest("hex") as ReservationCallerAniDigest;
 }
 
 export function parseReservationApiKey(rawKey: string): { publicId: string } | null {
@@ -182,7 +198,11 @@ export async function revokeReservationApiKey(
 
 export async function authenticateReservationApiRequest(
   prisma: PrismaClient,
-  input: { authorization: string | null; now?: Date },
+  input: {
+    authorization: string | null;
+    callerPhone?: ReservationCallerPhone | null;
+    now?: Date;
+  },
 ): Promise<
   | { status: "UNAUTHORIZED" }
   | {
@@ -192,6 +212,7 @@ export async function authenticateReservationApiRequest(
       keyName: string;
       keyPreview: string;
       permissions: Set<ReservationApiPermission>;
+      callerAniDigest: ReservationCallerAniDigest | null;
     }
   | {
       status: "AUTHENTICATED";
@@ -199,6 +220,7 @@ export async function authenticateReservationApiRequest(
       keyName: string;
       keyPreview: string;
       permissions: Set<ReservationApiPermission>;
+      callerAniDigest: ReservationCallerAniDigest | null;
     }
   | {
       status: "INTERNAL_ERROR";
@@ -206,6 +228,7 @@ export async function authenticateReservationApiRequest(
       keyName: string;
       keyPreview: string;
       permissions: Set<ReservationApiPermission>;
+      callerAniDigest: ReservationCallerAniDigest | null;
     }
 > {
   const rawKey = parseBearerHeader(input.authorization);
@@ -219,6 +242,7 @@ export async function authenticateReservationApiRequest(
     keyName: string;
     keyPreview: string;
     permissions: Set<ReservationApiPermission>;
+    callerAniDigest: ReservationCallerAniDigest | null;
   };
   const authenticatedContext: { value: AuthenticatedContext | null } = {
     value: null,
@@ -246,6 +270,9 @@ export async function authenticateReservationApiRequest(
         keyName: locked.name,
         keyPreview: previewReservationApiKey(locked.publicId),
         permissions: new Set<ReservationApiPermission>(),
+        callerAniDigest: input.callerPhone
+          ? digestReservationCallerAni(rawKey, input.callerPhone)
+          : null,
       };
       authenticatedContext.value = keyContext;
       const permissions = await transaction.reservationApiKeyPermission.findMany({
