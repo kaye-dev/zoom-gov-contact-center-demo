@@ -20,6 +20,7 @@ export const ADMIN_RESOURCE_KEYS = [
   "maintenance-settings",
   "developer-api",
   "reservations",
+  "zaad",
 ] as const;
 
 export type AdminResourceKey = (typeof ADMIN_RESOURCE_KEYS)[number];

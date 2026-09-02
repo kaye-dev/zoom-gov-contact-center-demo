@@ -12,6 +12,7 @@ export type CheckboxProps = Omit<
   "children" | "className" | "size" | "style" | "type"
 > & {
   indeterminate?: boolean;
+  variant?: "default" | "plain";
 };
 
 /**
@@ -23,9 +24,11 @@ export function Checkbox({
   indeterminate = false,
   onChange,
   ref,
+  variant = "default",
   ...inputProps
 }: CheckboxProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const plain = variant === "plain";
 
   useImperativeHandle(ref, () => inputRef.current!, []);
 
@@ -37,29 +40,35 @@ export function Checkbox({
 
   return (
     <span
-      data-checkbox-root=""
+      data-checkbox-root={plain ? undefined : ""}
       className="relative inline-grid h-6 w-6 shrink-0 place-items-center align-middle"
     >
       <input
         {...inputProps}
         ref={inputRef}
-        data-checkbox-target=""
+        data-checkbox-target={plain ? undefined : ""}
         type="checkbox"
         disabled={disabled}
         onChange={(event) => {
           event.currentTarget.indeterminate = indeterminate;
           onChange?.(event);
         }}
-        className="peer absolute inset-0 z-10 m-0 h-6 w-6 cursor-pointer appearance-none opacity-0 disabled:cursor-not-allowed forced-colors:appearance-auto forced-colors:opacity-100"
+        className={
+          plain
+            ? "peer absolute inset-0 z-10 m-0 h-6 w-6 cursor-pointer appearance-none opacity-0 disabled:cursor-not-allowed"
+            : "peer absolute inset-0 z-10 m-0 h-6 w-6 cursor-pointer appearance-none opacity-0 disabled:cursor-not-allowed forced-colors:appearance-auto forced-colors:opacity-100"
+        }
       />
       <span
-        data-checkbox-indicator=""
+        data-checkbox-indicator={plain ? undefined : ""}
         aria-hidden="true"
         className={[
           "pointer-events-none flex h-4 w-4 items-center justify-center rounded-[4px] border border-fg-muted bg-surface text-transparent transition-colors",
-          "peer-checked:border-accent peer-checked:bg-accent peer-checked:text-surface peer-indeterminate:border-accent peer-indeterminate:bg-accent peer-indeterminate:text-surface",
+          plain
+            ? "peer-checked:border-accent peer-checked:bg-accent peer-checked:text-surface"
+            : "peer-checked:border-accent peer-checked:bg-accent peer-checked:text-surface peer-indeterminate:border-accent peer-indeterminate:bg-accent peer-indeterminate:text-surface",
           "peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent",
-          "peer-disabled:opacity-60 forced-colors:hidden",
+          plain ? "peer-disabled:opacity-60" : "peer-disabled:opacity-60 forced-colors:hidden",
           indeterminate ? "border-accent bg-accent text-surface" : null,
         ]
           .filter(Boolean)
@@ -72,7 +81,7 @@ export function Checkbox({
             viewBox="0 0 12 12"
             className="h-3 w-3"
             fill="none"
-            focusable="false"
+            focusable={plain ? undefined : "false"}
           >
             <path
               d="m2 6 2.5 2.5L10 3"

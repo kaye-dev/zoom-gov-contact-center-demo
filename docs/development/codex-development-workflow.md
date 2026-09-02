@@ -68,8 +68,8 @@ plan成果物のcleanupは、この流れとは別の明示操作として行う
 1. 最新要求、確定済み判断、採用済み資料を整理する。
 2. repository、runtime、code、testを確認し、UI変更時はclosest live UIも確認する。複数subsystemまたは大量資料を横断し、独立した要約で親のcontextを節約できる場合だけ、最大1体の`project_explorer`を使う。
 3. 自己完結した最終設計と`## 要件クロージャ`を`plans/<slug>/goal.md`へ書く。
-4. UI変更時は完成UI、`ui-contract.json`、`parity-spec.json`を作る。
-5. goalを監査し、UI変更時はCSS build、contract/profile validation、revision計算を終えてから、返却直前に影響scopeのsmokeを1回行う。
+4. UI変更時は完成UI、完全Cartesian matrixを持つ`ui-contract.json` version 1、coverage/risk/anchorを宣言する`parity-spec.json` version 3を作る。
+5. goalを監査し、UI変更時はCSS build、contract/profile validation、coverage/full行数、revision計算を終えてから、返却直前に影響scopeのtargeted smokeを1回行う。
 6. UI planは`./dev-prototype.sh --retain <slug>`でprototypeを確認可能な状態にし、goal、live URL、PID、owner、revision、smoke結果、未確認事項、停止commandを返す。非UI planは確認セッションを作らない。
 
 フィードバックでは同じplanを最終設計として更新する。Browserをauthoring中に使わず、静的作業が完了した返却直前に影響scopeのsmokeを1回だけ行う。全matrixや承認状態は作らない。
@@ -91,19 +91,21 @@ plan成果物のcleanupは、この流れとは別の明示操作として行う
 
 ### `$implement`
 
-1. goal、prototype revision、validation profile digestを検証し、fresh runへ承認を記録する。
-2. UI変更時はBrowserを開かず、HEAD、checkout mount、source、contract、matrix scopeを静的に検証する。
-3. 影響target・state・viewportを特定し、`targeted`または`full`のmatrix scopeを固定する。
+1. goal、prototype revision、validation profile digestを検証し、fresh runへ承認を記録する。新規UI planは`parity-spec.json` version 3、target全件の`browserSetups`、state identity assertion、coverage/anchor probe、risk row、source impact、batch/artifact policyを必須とする。
+2. UI変更時はBrowserを開かず、HEAD、checkout mount、source、contract、deterministic coverage selectionを静的に検証する。
+3. 通常は`coverage`を固定し、全target-state、target-viewport、target-theme、risk、anchorを選ぶ。`full`はrelease、CI、定期、明示要求の独立実行だけにする。
 4. goalとUI契約に従って実装し、Browserを使わず対象testで確認する。
 5. 変更riskに比例するtest、lint、typecheck、必要な場合だけbuild、diff checkを行う。
-6. 完了候補ができた最後に`./dev-compose.sh status --url`でcheckout固有runtimeと比較条件を確認し、選択rowのfinal parityを1回実行する。
-7. schema version 3の最終証跡を書く。現在のinvocationにexact phrase `確認セッションを保持`がある場合だけ同じprototypeとownership検証済みappを確認セッションへhandoffし、なければagent-ownedなbaseline差分だけをcleanupして結果を返す。
+6. 完了候補ができた最後にruntime ownership/healthを読み戻し、common adapterと`prepare-run` / `next-batch` / `record-batch` / `record-failure` / `resume-run` / `invalidate-run` / `finalize-run`へ渡す。runnerがbounded batchを機械実行し、LLMへはcompact summaryだけを返す。
+7. required coverageとcleanupのpass後だけschema version 4の最終証跡を書く。現在のinvocationにexact phrase `確認セッションを保持`がある場合だけ同じprototypeとownership検証済みappを確認セッションへhandoffし、なければagent-ownedなbaseline差分だけをcleanupする。
 
-明示的な`$implement`実行自体を現在のgoal、revision、profile digestへの承認とする。「承認します」という別回答やrevision転記は不要である。静的gateの失敗はproduction差分0件のまま停止する。Browser unavailable、final parity失敗、drift、欠落rowは完了扱いにせず、実装差分と未確認条件を報告する。
+明示的な`$implement`実行自体を現在のgoal、revision、profile digestへの承認とする。「承認します」という別回答やrevision転記は不要である。静的gateの失敗はproduction差分0件のまま停止する。Browser unavailable、required probe失敗、再試行後のterminal tool failure、drift、欠落coverageは自動UI検証完了にせず、実装差分、検証済みcoverage、未実行row、stable code、人間確認項目を報告する。
 
-`targeted`を既定とし、copy、局所的なcomponent挙動、accessibility、keyboard、focus、viewport固有の変更は影響rowだけを選ぶ。`full`はprototype・contract、global style・semantic token、共通shell layout・navigation構造、breakpointを横断するresponsive規則、複数の無関係target、または明示要求を変える場合だけ使う。共有componentであることやUI fileを編集したことだけを全matrixの理由にしない。
+`coverage`を通常既定とし、局所変更でも各targetの全state、全viewport、light/darkを最低1回確認する。具体的な交互作用はrisk row、詳細probeはanchor rowへ追加する。prototype・contract、global style、semantic token、共通shell、responsive規則を変更したという分類だけでは自動的にfullへ昇格しない。具体的な横断リスクと許可execution contextがある場合だけ、別の非LLM実行でfullを使う。
 
-pre-editとaffectedのBrowser phaseは新規runで実行しない。同じBrowser assertionをparity、追加sweep、個別manual checkで重複確認しない。既存adapterがなければ完了直前に選択rowをCodexアプリ内Browserで直接確認し、feature実装中に大規模なadapterやruntime shimを新設・debugしない。Browser plumbingは初回と1回のretryで止める。
+pre-editとaffectedのBrowser phaseは新規runで実行しない。同じassertionを追加sweepや個別manual checkで重複確認しない。common adapterはpure ESMとdata-only JSON batchだけを読み込み、freshな選択済みtab 1つでproductionからprototypeへ直列に移動する。task固有adapter、実行可能bundle、runtime shimを新設しない。時間による打ち切りは設けず、required coverage全pass、required probe failure、同じfailure batchの1回再試行後のterminal failure、cleanup/readback terminal failureのいずれかで終了する。
+
+実装不具合の修正後は、target固有ならそのtarget、shared sourceなら宣言consumer、global style/theme/shellなら全targetを無効化する。影響しないpass rowとsource変更のない静的検証結果は再利用し、先頭からやり直さない。
 
 局所変更は対象testとlint、typecheck、diff checkを基本とする。全testは無関係suiteへ波及し得る場合または信頼できる対象testがない場合、production buildはroute、configuration、bundling、server boundaryを変える場合またはrepositoryの明示要件がある場合だけ行う。
 
@@ -175,38 +177,44 @@ node .agents/skills/plan/scripts/parity-runner.mjs validate plans/<slug>/prototy
 
 `ui-contract.json` version 1には完全なproduction `sources` inventory、runtime owner、checkout、route、state、theme、responsive、interaction、安定したtargetとmatrix行を記録する。比較条件はviewport、DPR、locale、theme、fixture、authorization、queryと、両surfaceの`window.scrollX` / `window.scrollY`から実測したexact `scroll: {x, y}`を一致させる。
 
-`parity-spec.json` version 1にはdeterministic setup、allowlist action、screenshot・DOM・accessibility・style・geometry・focus・console・network probeと全row mappingを記録する。schemaとBrowser adapterの正本は`.agents/skills/plan/references/parity-runner.md`とする。
+`parity-spec.json` version 3にはdeterministic setup、state identity assertion、targetごとの`browserSetups`、全row mapping、coverage/anchor probe tier、axis順序、targetごとのanchor、risk row、全sourceのimpact、固定batch、artifact policyを記録する。coverage probeは全rowでroute、setup、state、viewport、theme、control、overflow、consoleをrequiredにし、screenshot・DOM・accessibility・style・geometry・focus・keyboard・networkはanchorへ限定する。version 1と2はlegacy read-only互換として維持する。正本は`.agents/skills/plan/references/parity-runner.md`とする。
 
-plan中のsmokeは代表desktopと390×844を基本とし、theme/token/native controlはlight/dark、responsive/layoutは影響breakpoint、dialog/menu/keyboard/focusはinteraction probeを追加する。
+plan中のsmokeはtargetedな代表desktopと390×844を基本とし、具体的なtheme、breakpoint、dialog、menu、keyboard、focusリスクだけを追加する。coverageとfullは`$plan`では実行しない。
 
 ### 承認と証跡
 
-`$implement`はfreshな`plans/<slug>/evidence/<run-id>/`へ次を作る。
+`$implement`はfreshな`plans/<slug>/evidence/<run-id>/`へ次を作る。`evidence/`とrun directoryはumaskに依存せず`0700`、canonical JSONは`0600`で排他的に作成し、既存pathのtype、symlink、realpath、mode不一致では修復せず停止する。
 
 - `approval.json`: goal digest、prototype revision、profile digest
-- `implementation-parity.json`: 完了候補の最後に選択rowで実行した結果
+- `implementation-parity.json`: 完了候補の最後にcoverageまたはfullを実行した結果
 
-新規parity fileはfinal-onlyのschema version 3とし、`matrixScope`とtarget・state・viewport・riskのselectionを記録する。`full`ならmanifest全row、`targeted`ならselectionから再計算したexact rowだけを含める。既存のschema version 1と2はlegacyなpre-edit/final pairとしてread-only検証し、暗黙に書き換えない。executed rowは1回だけ記録し、statusは`pass`または`fail`とする。未実行はfile欠落で表し、巨大なpending一覧を作らない。scrollには`source: "window.scrollX/window.scrollY"`を残す。goal、prototype、contract/profile、source、fixture、authorization、query、route、Browser条件のdriftは承認または証跡を失効させる。
+新規parity fileはfinal-onlyのschema version 4とし、`matrixScope: coverage | full`、exact row、全target-state/viewport/theme coverage、risk、anchor、checkpoint/resume、required probe、digest、artifact index、cleanupを記録する。自動coverage、人間のUI承認、full parityは独立statusにする。既存schema version 1、2、3はlegacy read-onlyで暗黙に書き換えない。raw screenshot、DOM、accessibility treeはprivate artifactへ保存し、LLMには件数、失敗row ID、stable code、bounded diagnostic、checkpoint、cleanupだけを返す。全required coverage、capability、`390x844 / DPR 1`実測、artifact digest、CDP/viewport cleanup、workspace absenceが揃った場合だけ`finalize-run`がcanonical evidenceを排他的に作る。goal、prototype、contract/profile、source、fixture、authorization、query、route、Browser条件のdriftは承認または証跡を失効させる。
+
+各targetのcovering matrix基本行数は`max(state数, viewport数, theme数)`である。18 target、5 state、8 viewport、2 themeの基準profileは通常144行、full 1,440行になる。risk/anchor座標が基本selection内なら重複させず昇格し、外なら一意な追加rowにする。
+
+UIの最終的な視覚品質は人間が代表screenshotまたはURLを確認する。最終報告ではstate、viewport、theme、risk、anchorの自動結果と、pixel、余白、font rendering、視覚的完成度の人間判断、full parityの状態を分ける。
 
 ### Runtime所有権
 
 1. Localはport 3000、worktreeはruntime manifestの割当portについて、関連process、container、Compose、dependencyのbaselineとownerを記録する。
 2. implementationと静的検証が終わるまでBrowserとprototype serverを起動しない。
 3. buildが必要な場合だけidentityを再確認し、agent-owned runtimeだけを停止する。
-4. 完了直前に`./dev-compose.sh ensure`で実アプリを再利用または起動し、`status --url`のURLとprototypeでfinal parityを行う。
+4. 完了直前に`./dev-compose.sh ensure`で実アプリを再利用または起動し、`./dev-compose.sh status`の`RUNTIME_OWNERSHIP=verified`、`ACTIVE_RUNTIME_HEALTH=healthy`、`RUNTIME_RESTART_REQUIRED=0`、PID/container、cwd、mount、Compose project、portを読み戻す。続いて`./dev-compose.sh status --url`のURLとprototypeでfinal parityを行い、`finalize-run`直前にも同じreadbackを繰り返す。
 5. 最終確認後はworktreeだけ`./dev-compose.sh cleanup`を使い、baselineとの差分だけをcleanupする。
 
 Localでは同じcheckoutのhealthyなnative Next.jsまたは正しいCompose `web`を`http://localhost:3000`で再利用する。worktreeではcanonical checkout pathから固有Compose projectとweb・PostgreSQL・Studio portを割り当て、DB、named volume、network、originを他checkoutと分離する。保持するnamed volumeのcreation identityはsession間で固定し、可変なcurrent session labelを理由にdatabase再作成を要求しない。worktreeはloopbackだけにbindし、LANとCloudflareはLocal専用とする。
 
-記録にはPID、command、cwd、Compose project、checkout mount、container ID、URL、fixture、authorizationを含める。通常変更はHMRを使い、wrapperが自動再起動できるのはpending migration適用後のverified `web`だけとする。新規route、stale cache、package、runtime設定の変更は理由を報告し、明示的な`./dev-compose.sh restart web`（`Web restart`）操作を待つ。他serviceやproject全体を停止しない。ユーザー所有dev serverはbuildのために停止せず、安全な隔離buildができなければblockedとする。広域な`docker compose down`や既存resource、named volumeの削除は行わない。
+記録にはPID、command、cwd、Compose project、checkout mount、container ID、URL、fixture、authorizationを含める。`prepare-run`の`--runtime-owner`と`--runtime-checkout`はこの外部readback値をcontract、current checkout、manifest、evidenceへ結び付ける宣言値であり、CLI自身はprocess、container、listener、mount、healthを検査しない。引数同士やcontractとの一致だけを実runtime所有権の確認として扱わない。
+
+通常変更はHMRを使い、wrapperが自動再起動できるのはpending migration適用後のverified `web`だけとする。新規route、stale cache、package、runtime設定の変更は理由を報告し、明示的な`./dev-compose.sh restart web`（`Web restart`）操作を待つ。他serviceやproject全体を停止しない。ユーザー所有dev serverはbuildのために停止せず、安全な隔離buildができなければblockedとする。広域な`docker compose down`や既存resource、named volumeの削除は行わない。
 
 ## Workflowの検証
 
-通常のcontract testは`npm test`、認証済みCodex CLIでのforward evalは`npm run eval:plan-skills`を使う。forward evalはplan返却直前のsmoke、invocation承認、targeted/full selection、静的gate停止、final Browser unavailable、driftなどのnegative caseも検証する。
+通常のcontract testは`npm test`、認証済みCodex CLIでのforward evalは`npm run eval:plan-skills`を使う。contract testは18×5×8×2 profileのcoverage 144行/full 1,440行、重複なし、risk/anchor tier、checkpoint/resume、target/shared/global invalidation、1回retry、compact summary、legacy readerを検証する。forward evalはplan smoke、invocation承認、coverage既定、full context制限、静的gate停止、terminal Browser failure、drift、raw output非返却、静的検証再利用を検証する。
 
 CLI evalはCodexアプリ内Browserを代替しない。runtime所有権、build、migration起因のverified Compose `web` restart、live parity、cleanupの契約を変えた場合は、shipping前にCodex DesktopでLocal再利用、worktree分離、foreign owner停止、session限定cleanupの成功・停止経路をmanual確認する。
 
-局所的な2ファイル変更の評価では、task固有adapter/shimを作らないこと、pre-editとaffectedのBrowser実行が0回、完了直前のtargeted finalが1回、追加sweepが0回、不要な全test・buildを実行しないことを確認する。phase別経過時間、shell command数、Browser操作数、full matrix回数も記録し、検証量が変更riskへ比例していることを評価する。
+局所変更の評価でも宣言済み全state、viewport、theme coverageを省略しない。task固有adapter/shim、pre-edit/affected Browser、追加sweep、不要な全test/build、rowごとのLLM実況が0回であることを確認する。通常coverage、risk/anchor、checkpoint再利用とfull分離により、品質を落とさず直積・重複・context消費を削減できているかを評価する。
 
 ## 権限とcleanup
 

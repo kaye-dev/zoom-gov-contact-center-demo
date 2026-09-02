@@ -686,6 +686,7 @@ async function createBaseFixture(name) {
       mkdir(path.join(requestedRepo, ".agents", "skills"), { recursive: true }),
       mkdir(path.join(requestedRepo, ".claude", "rules"), { recursive: true }),
       mkdir(path.join(requestedRepo, ".codex", "agents"), { recursive: true }),
+      mkdir(path.join(requestedRepo, "docs", "development"), { recursive: true }),
       mkdir(path.join(requestedRepo, "plans"), { recursive: true }),
     ]);
     const repo = await realpath(requestedRepo);
@@ -714,6 +715,10 @@ config_file = "./agents/independent_reviewer.toml"
     await cp(
       path.join(repositoryRoot, ".claude", "rules", "dev-server.md"),
       path.join(repo, ".claude", "rules", "dev-server.md"),
+    );
+    await cp(
+      path.join(repositoryRoot, "docs", "development", "codex-development-workflow.md"),
+      path.join(repo, "docs", "development", "codex-development-workflow.md"),
     );
     await installEvalBuilder(repo);
     await write(
@@ -1140,14 +1145,27 @@ function planUiContract(
 ) {
   const contract = uiContract(label, { commit, checkout });
   contract.baselineStateInventory = ["default"];
+  contract.comparisonConditions.query = "theme";
   contract.parityMatrix = contract.parityMatrix.filter(({ state }) => state === "default");
   return contract;
 }
 
 function paritySpec(contract) {
-  const probeIds = ["dom-main", "accessibility-main", "geometry-button", "console-clean", "network-clean"];
+  const coverageProbeIds = [
+    "route-ready",
+    "setup-ready",
+    "state-visible",
+    "viewport-exact",
+    "theme-exact",
+    "control-ready",
+    "overflow-clean",
+    "console-clean",
+  ];
+  const anchorProbeIds = ["dom-main", "accessibility-main", "geometry-button", "network-clean"];
+  const firstRow = contract.parityMatrix[0];
+  ensure(firstRow, "parity fixture requires at least one row");
   return {
-    version: 1,
+    version: 3,
     stateSetups: [...new Set(contract.parityMatrix.map(({ targetId, state }) => `${targetId}\u0000${state}`))]
       .map((value) => {
         const [targetId, state] = value.split("\u0000");
@@ -1157,9 +1175,34 @@ function paritySpec(contract) {
           state,
           production: { query: {}, actions },
           prototype: { query: {}, actions },
+          assertionProbeIds: ["state-visible"],
         };
       }),
+    browserSetups: contract.comparisonTargets.map(({ id: targetId }) => ({
+      targetId,
+      production: { type: "query", parameter: "theme" },
+      prototype: { type: "query", parameter: "theme" },
+    })),
     probes: [
+      ...[
+        { id: "route-ready", kind: "route", selector: "body", options: {} },
+        { id: "setup-ready", kind: "setup", selector: "body", options: {} },
+        { id: "state-visible", kind: "state", selector: "body", options: { expected: "visible" } },
+        { id: "viewport-exact", kind: "viewport", selector: "body", options: {} },
+        { id: "theme-exact", kind: "theme", selector: "html", options: { rootClass: "row-theme", colorScheme: "row-theme" } },
+        { id: "control-ready", kind: "control", selector: "button", options: { expected: "enabled" } },
+        { id: "overflow-clean", kind: "overflow", selector: "body", options: { tolerancePx: 0 } },
+        { id: "console-clean", kind: "console", selector: "body", options: {} },
+      ].map(({ id, kind, selector, options }) => ({
+        id,
+        kind,
+        mode: "equal",
+        productionSelector: selector,
+        prototypeSelector: selector,
+        required: true,
+        tier: "coverage",
+        options,
+      })),
       {
         id: "dom-main",
         kind: "dom",
@@ -1167,6 +1210,7 @@ function paritySpec(contract) {
         productionSelector: "body",
         prototypeSelector: "body",
         required: true,
+        tier: "anchor",
         options: {},
       },
       {
@@ -1176,6 +1220,7 @@ function paritySpec(contract) {
         productionSelector: "button",
         prototypeSelector: "button",
         required: true,
+        tier: "anchor",
         options: {},
       },
       {
@@ -1185,16 +1230,8 @@ function paritySpec(contract) {
         productionSelector: "button",
         prototypeSelector: "button",
         required: true,
+        tier: "anchor",
         options: { tolerancePx: 1 },
-      },
-      {
-        id: "console-clean",
-        kind: "console",
-        mode: "equal",
-        productionSelector: "body",
-        prototypeSelector: "body",
-        required: true,
-        options: {},
       },
       {
         id: "network-clean",
@@ -1203,10 +1240,28 @@ function paritySpec(contract) {
         productionSelector: "body",
         prototypeSelector: "body",
         required: true,
+        tier: "anchor",
         options: {},
       },
     ],
-    rowProbeMap: contract.parityMatrix.map(({ id }) => ({ rowId: id, probeIds })),
+    rowProbeMap: contract.parityMatrix.map(({ id }) => ({
+      rowId: id,
+      probeIds: id === firstRow.id ? [...coverageProbeIds, ...anchorProbeIds] : coverageProbeIds,
+    })),
+    coverage: {
+      targetOrder: contract.comparisonTargets.map(({ id }) => id),
+      viewportOrder: [...contract.comparisonConditions.viewports],
+      themeOrder: [...contract.comparisonConditions.themes],
+      anchorRows: [{ id: "anchor-main", targetId: firstRow.targetId, rowId: firstRow.id, reason: "representative target detail" }],
+      riskRows: [],
+    },
+    sourceImpactMap: contract.productionBaseline.sources.map((source) => ({
+      source,
+      scope: source === "app/globals.css" ? "global" : "target",
+      targetIds: source === "app/globals.css" ? [] : contract.comparisonTargets.map(({ id }) => id),
+    })),
+    batchPolicy: { maxRows: 16, maxBytes: 262144, summaryMaxBytes: 4096 },
+    artifactPolicy: { kinds: ["screenshot", "dom", "accessibility"], maxBytes: 1048576, retainOnFailure: true },
   };
 }
 
@@ -1306,10 +1361,10 @@ ${closureAuditValue}
 - UI変更: あり
 - prototype: \`plans/${slug}/prototype/\`
 - approval contract: plans/${slug}/prototype/ui-contract.json — version 1
-- validation profile: plans/${slug}/prototype/parity-spec.json — version 1
+- validation profile: plans/${slug}/prototype/parity-spec.json — version 3
 - UI承認方式: 明示的な \`$implement\` invocation
 - production baseline: URL=\`http://localhost:3000/fixture\`、sources=[${sourceText}]、runtime owner=eval fixture runtime、checkout=\`${checkout}\`、commit=${commit}、route=/fixture
-- comparison conditions: 1280×800、390×844、767×844、768×844、DPR 1、scrollX 0、scrollY 0、ja、light/dark、fixture A、authorization=admin fixture、query=none
+- comparison conditions: 1280×800、390×844、767×844、768×844、DPR 1、scrollX 0、scrollY 0、ja、light/dark、fixture A、authorization=admin fixture、query=${contract.comparisonConditions.query}
 - baseline state inventory: ${states.join("、")}
 - theme contract: light/dark
 - responsive contract: ${contract.responsiveContract.map(({ id, viewport }) => `${id}=${viewport}`).join("、")}
@@ -1468,10 +1523,12 @@ function evidenceRows(contract, spec, { omitId, duplicateId, extraId } = {}) {
         return {
           probeId,
           kind: probe.kind,
+          tier: probe.tier,
           status: "pass",
           production: {},
           prototype: {},
           artifactPaths,
+          artifacts: [],
         };
       });
       return {
@@ -1493,6 +1550,7 @@ function evidenceRows(contract, spec, { omitId, duplicateId, extraId } = {}) {
         },
         probes: evidenceProbes,
         artifactPaths: evidenceProbes.flatMap(({ artifactPaths }) => artifactPaths),
+        artifacts: [],
       };
     });
   if (duplicateId) rows.push(structuredClone(rows.find(({ rowId }) => rowId === duplicateId)));
@@ -1506,8 +1564,15 @@ async function writeReviewEvidence(repo, contract, revision) {
   const goalText = await readFile(path.join(repo, `plans/${reviewUiSlug}/goal.md`), "utf8");
   const specText = await readFile(path.join(repo, `plans/${reviewUiSlug}/prototype/parity-spec.json`), "utf8");
   const spec = JSON.parse(specText);
+  const targetStates = contract.comparisonTargets.flatMap(({ id: targetId }) =>
+    [...new Set(contract.parityMatrix.filter((row) => row.targetId === targetId).map(({ state }) => state))]
+      .map((state) => ({ targetId, state, covered: true })));
+  const targetViewports = contract.comparisonTargets.flatMap(({ id: targetId }) =>
+    contract.comparisonConditions.viewports.map((viewport) => ({ targetId, viewport, covered: true })));
+  const targetThemes = contract.comparisonTargets.flatMap(({ id: targetId }) =>
+    contract.comparisonConditions.themes.map((theme) => ({ targetId, theme, covered: true })));
   const shared = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     runId,
     generatedAt: "2026-08-29T12:00:00+09:00",
     goalSha256: sha256Text(goalText),
@@ -1515,10 +1580,10 @@ async function writeReviewEvidence(repo, contract, revision) {
     validationProfileDigest: sha256Text(specText),
     matrixScope: "full",
     selection: {
-      changedTargetIds: [],
-      changedStates: [],
-      changedViewports: [],
-      risks: ["normal"],
+      executionContext: "explicit",
+      exactRowIds: rowIds,
+      riskRowIds: [],
+      anchorRowIds: spec.coverage.anchorRows.map(({ id, rowId, targetId }) => ({ id, rowId, targetId })),
     },
     runtime: { owner: "eval fixture runtime", checkout: repo },
     sources: contract.productionBaseline.sources.map((source) => ({ path: source, sha256: sha256Text(source) })),
@@ -1529,6 +1594,21 @@ async function writeReviewEvidence(repo, contract, revision) {
       networkSource: "browser-network-log",
       sessionId: "fixture-session",
     },
+    coverage: {
+      targetStates,
+      targetViewports,
+      targetThemes,
+      missing: { targetStates: [], targetViewports: [], targetThemes: [] },
+      status: "pass",
+    },
+    riskRows: [],
+    anchorRows: spec.coverage.anchorRows.map(({ id, rowId, targetId }) => ({ id, rowId, targetId, status: "pass" })),
+    checkpoints: { resumed: false, batches: [], invalidations: [] },
+    artifactIndex: [],
+    cleanup: { status: "pass" },
+    automationCoverageStatus: "pass",
+    humanVisualApprovalStatus: "pending",
+    fullParityStatus: "pass",
     metrics: {
       startedAt: "2026-08-29T12:00:00+09:00",
       finishedAt: "2026-08-29T12:00:00.100+09:00",
@@ -1625,6 +1705,21 @@ async function reviewUiReportData(repo) {
         status: "unverified",
         summary: "CLI eval環境ではBrowserを利用できないためHTML操作確認は未実施。",
       },
+      {
+        command: "implementation-parity.json automation coverage",
+        status: "failed",
+        summary: "duplicate、extra、missing rowとstale revisionによりautomationCoverageStatusを再確認できない。",
+      },
+      {
+        command: "human visual approval",
+        status: "unverified",
+        summary: "humanVisualApprovalStatusはpendingで、代表artifactの目視確認は未実施。",
+      },
+      {
+        command: "full parity status",
+        status: "failed",
+        summary: "fullParityStatusは記録上passだがexact full row setが成立していない。",
+      },
     ],
     groups: [
       {
@@ -1656,7 +1751,7 @@ async function reviewUiReportData(repo) {
             source: "conformance",
             severity: "major",
             title: "conformance-stale-revision",
-            body: `prototype-revision.mjsで再計算したcurrent revision ${currentRevision}に対し、approval.jsonとimplementation-parity.jsonはstale revision ${oldRevision}を指す。ui-contract.json manifestとのapproval bindingが失効している。`,
+            body: `prototype-revision.mjsで再計算したcurrent revision ${currentRevision}に対し、approval.jsonとimplementation-parity.jsonはstale revision ${oldRevision}を指す。ui-contract.jsonとparity-spec.jsonのapproval bindingが失効している。`,
             location: `plans/${reviewUiSlug}/goal.md@UI契約`,
             recommendation: "新しい$implement invocationでapprovalを再取得し、完了直前のfinal selectionを1回実行する。",
           },
@@ -1664,7 +1759,7 @@ async function reviewUiReportData(repo) {
             source: "conformance",
             severity: "major",
             title: "conformance-current-run-row-set",
-            body: `plans/${reviewUiSlug}/evidence/review-run/implementation-parity.jsonはstale revision ${oldRevision}で、ui-contract.jsonの${firstRow}がduplicate、main-unauthorized-extraがextraであり、final selectionのexact setではない。scroll provenanceは構造化済みで自然言語説明を必要としない。`,
+            body: `plans/${reviewUiSlug}/evidence/review-run/implementation-parity.jsonはstale revision ${oldRevision}で、ui-contract.jsonとparity-spec.jsonから期待される${firstRow}がduplicate、main-unauthorized-extraがextraであり、full selectionのexact setではない。`,
             location: `plans/${reviewUiSlug}/evidence/review-run/implementation-parity.json:1`,
             recommendation: "current revisionのfinal selectionを完了直前に1回だけ再取得する。",
           },
@@ -1672,7 +1767,7 @@ async function reviewUiReportData(repo) {
             source: "conformance",
             severity: "major",
             title: "conformance-implementation-row-set",
-            body: `plans/${reviewUiSlug}/evidence/review-run/implementation-parity.jsonはstale revision ${oldRevision}で、final parityからmanifest row ${missingRow}がmissingしている。`,
+            body: `plans/${reviewUiSlug}/evidence/review-run/implementation-parity.jsonはstale revision ${oldRevision}で、ui-contract.jsonとparity-spec.jsonから期待されるfull parityのrow ${missingRow}がmissingしている。`,
             location: `plans/${reviewUiSlug}/evidence/review-run/implementation-parity.json:1`,
             recommendation: "post implementation parityをcurrent revisionで欠落なく再実行する。",
           },
@@ -1868,7 +1963,7 @@ const scenarios = {
         'import test from "node:test";\ntest("UI-01", () => {});\n',
       );
     },
-    prompt: `$plan を .agents/skills/plan/SKILL.md から明示的に使用してください。slugは ${planUiSlug} です。authoritative requirementはsrc/ui.txtが所有するbutton copyを「${planUiLabel}」へ変更し、default state、light/dark、desktop 1280x800、mobile 390x844、breakpoint直前767x844、境界768x844で既存shell・typography・button geometryを維持することです。production baselineは現在のHEADとcheckout、route=/fixture、URL=http://localhost:3000/fixture、runtime owner=eval fixture runtime、complete sources inventoryはexactにsrc/ui.txtとapp/globals.cssです。HEADはgit rev-parse HEAD、checkoutはpwd -Pで得た絶対pathをmanifestとgoalのproduction baseline双方へ同じ値で記録してください。fixture=fixture A、authorization=admin fixture、query=none、DPR=1、window.scrollX=0、window.scrollY=0、locale=jaとします。comparisonConditions.scrollはexact object {"x":0,"y":0}とし、goalにもscrollX 0、scrollY 0を記録してください。comparison targetはmain(entry=index.html、route=/fixture、surface=page)、invariant IDはinv-shell/inv-typography/inv-button-geometry、intentional difference IDはdelta-copyです。target × default state × 4 breakpoint × 2 themeの8 rowをstable ID main-default-<breakpoint>-<theme>で作ってください。canonical artifactはplans/${planUiSlug}/goal.mdとprototype配下のindex.html、app.js、tailwind.css、styles.css、ui-contract.json、parity-spec.jsonだけです。parity-spec.jsonはversion 1、全target/state、allowlist操作、DOM・accessibility・geometry・console・network probe、全rowのrowProbeMapを持たせてください。index.htmlはlocal styles.cssとapp.jsを参照しbuttonを表示し、app.jsはdocument.documentElement.dataset.readyをtrueにします。Tailwind inputはrepositoryのbuilder契約に従ってください。${browserUnavailable} Browser smokeは未確認と明記してplan作成を完了し、全matrixやpending row一覧、手動UI承認記録は作らないでください。UI承認方式は明示的な$implement invocationです。revisionをhelperで再計算し、要件クロージャはこのbutton UI要件の1行だけとしてtest/ui-label.test.tsのUI-01へ対応付けてください。production code、test、review artifact、Gitは変更しないでください。`,
+    prompt: `$plan を .agents/skills/plan/SKILL.md から明示的に使用してください。slugは ${planUiSlug} です。authoritative requirementはsrc/ui.txtが所有するbutton copyを「${planUiLabel}」へ変更し、default state、light/dark、desktop 1280x800、mobile 390x844、breakpoint直前767x844、境界768x844で既存shell・typography・button geometryを維持することです。production baselineは現在のHEADとcheckout、route=/fixture、URL=http://localhost:3000/fixture、runtime owner=eval fixture runtime、complete sources inventoryはexactにsrc/ui.txtとapp/globals.cssです。HEADはgit rev-parse HEAD、checkoutはpwd -Pで得た絶対pathをmanifestとgoalのproduction baseline双方へ同じ値で記録してください。fixture=fixture A、authorization=admin fixture、query=theme、DPR=1、window.scrollX=0、window.scrollY=0、locale=jaとします。comparisonConditions.scrollはexact object {"x":0,"y":0}とし、goalにもscrollX 0、scrollY 0を記録してください。comparison targetはmain(entry=index.html、route=/fixture、surface=page)、invariant IDはinv-shell/inv-typography/inv-button-geometry、intentional difference IDはdelta-copyです。target × default state × 4 breakpoint × 2 themeの8 rowをstable ID main-default-<breakpoint>-<theme>で作ってください。canonical artifactはplans/${planUiSlug}/goal.mdとprototype配下のindex.html、app.js、tailwind.css、styles.css、ui-contract.json、parity-spec.jsonだけです。parity-spec.jsonはversion 3、全target/stateのidentity assertion、production/prototype両方のquery theme browserSetups、route/setup/state/viewport/theme/control/overflow/consoleのrequired coverage probe、代表anchorのDOM/accessibility/geometry/network probe、全rowのrowProbeMap、deterministic axis order、targetごとのanchor、sourceImpactMap、fixed batch/artifact policyを持たせてください。risk rowは具体的interactionがないため空配列にしてください。index.htmlはlocal styles.cssとapp.jsを参照しbuttonを表示し、app.jsはdocument.documentElement.dataset.readyをtrueにします。Tailwind inputはrepositoryのbuilder契約に従ってください。${browserUnavailable} Browser smokeは未確認と明記してplan作成を完了し、coverage/full matrixやpending row一覧、手動UI承認記録は作らないでください。UI承認方式は明示的な$implement invocationです。revisionをhelperで再計算し、要件クロージャはこのbutton UI要件の1行だけとしてtest/ui-label.test.tsのUI-01へ対応付けてください。production code、test、review artifact、Gitは変更しないでください。`,
     async grade(repo) {
       const goalPath = path.join(repo, `plans/${planUiSlug}/goal.md`);
       const prototypeRoot = path.join(repo, `plans/${planUiSlug}/prototype`);
@@ -1896,7 +1991,7 @@ const scenarios = {
       );
       ensure(
         uiContractField(goal, "validation profile") ===
-          `plans/${planUiSlug}/prototype/parity-spec.json — version 1`,
+          `plans/${planUiSlug}/prototype/parity-spec.json — version 3`,
         "UI plan validation profile is not canonical",
       );
       ensure(
@@ -1974,10 +2069,39 @@ const scenarios = {
         !/^- (?:parity evidence|machine parity|UI承認記録):|[a-z0-9-]+=pending/mu.test(goal),
         "UI plan retained mutable plan-time evidence",
       );
-      ensure(spec.version === 1, "UI plan parity spec version is incorrect");
+      ensure(spec.version === 3, "UI plan parity spec version is incorrect");
+      ensure(
+        isDeepStrictEqual(
+          spec.browserSetups.map(({ targetId }) => targetId).sort(),
+          contract.comparisonTargets.map(({ id }) => id).sort(),
+        ),
+        "UI plan browserSetups do not cover every comparison target",
+      );
       ensure(
         isDeepStrictEqual(spec.rowProbeMap.map(({ rowId }) => rowId).sort(), contract.parityMatrix.map(({ id }) => id).sort()),
         "UI plan parity spec does not cover the immutable matrix exactly once",
+      );
+      ensure(
+        isDeepStrictEqual(spec.coverage.targetOrder, ["main"]) &&
+          isDeepStrictEqual(spec.coverage.viewportOrder, contract.comparisonConditions.viewports) &&
+          isDeepStrictEqual(spec.coverage.themeOrder, ["light", "dark"]) &&
+          spec.coverage.anchorRows.length >= 1 &&
+          Array.isArray(spec.coverage.riskRows),
+        "UI plan parity spec omitted deterministic coverage, anchor, or risk declarations",
+      );
+      ensure(
+        spec.stateSetups.every(({ assertionProbeIds }) => Array.isArray(assertionProbeIds) && assertionProbeIds.length > 0),
+        "UI plan parity spec omitted state identity assertions",
+      );
+      ensure(
+        spec.probes.some(({ tier }) => tier === "anchor") &&
+          spec.probes.filter(({ tier }) => tier === "coverage").every(({ required }) => required === true),
+        "UI plan parity spec did not separate coverage and anchor probes",
+      );
+      ensure(
+        spec.sourceImpactMap.length === contract.productionBaseline.sources.length &&
+          spec.batchPolicy.maxRows > 0 && spec.artifactPolicy.maxBytes > 0,
+        "UI plan parity spec omitted source impact or fixed batch/artifact policy",
       );
       ensure(
         spec.stateSetups.every(({ production, prototype }) =>
@@ -2076,6 +2200,10 @@ const scenarios = {
         const contract = JSON.parse(await readFile(contractPath, "utf8"));
         contract.productionBaseline.sources = ["src/ui.txt"];
         await writeFile(contractPath, `${JSON.stringify(contract, null, 2)}\n`);
+        const specPath = path.join(repo, `plans/${planUiSlug}/prototype/parity-spec.json`);
+        const spec = JSON.parse(await readFile(specPath, "utf8"));
+        spec.sourceImpactMap = spec.sourceImpactMap.filter(({ source }) => source === "src/ui.txt");
+        await writeFile(specPath, `${JSON.stringify(spec, null, 2)}\n`);
         const goalPath = path.join(repo, `plans/${planUiSlug}/goal.md`);
         const oldRevision = uiContractField(await readFile(goalPath, "utf8"), "prototype revision").match(/sha256:[a-f0-9]{64}/u)?.[0];
         ensure(oldRevision, "plan source-inventory control could not find the recorded revision");
@@ -2116,9 +2244,12 @@ const scenarios = {
       ensure((await readFile(path.join(repo, "src/ui.txt"), "utf8")) === "before\n", "implement edited production despite stale revision");
       ensure(/revision|digest|sha256|不一致|失効/iu.test(final), "implement did not report stale revision");
       ensureNoCompletionClaim(final);
-      await assertOnlyPaths(repo, []);
+      const approvalPath = await assertSingleApprovalEvidence(repo, "stale-revision");
+      await assertOnlyPaths(repo, [approvalPath]);
     },
-    async simulate() {},
+    async simulate(repo) {
+      await writeApprovalFixture(repo, "stale-revision");
+    },
     async break(repo) {
       await writeFile(path.join(repo, "src/ui.txt"), "after\n");
     },
@@ -2155,9 +2286,12 @@ const scenarios = {
         "implement did not identify the goal/manifest contract mismatch",
       );
       ensureNoCompletionClaim(final);
-      await assertOnlyPaths(repo, []);
+      const approvalPath = await assertSingleApprovalEvidence(repo, "contract-mismatch");
+      await assertOnlyPaths(repo, [approvalPath]);
     },
-    async simulate() {},
+    async simulate(repo) {
+      await writeApprovalFixture(repo, "contract-mismatch");
+    },
     async break(repo) {
       await writeFile(path.join(repo, "src/ui.txt"), "after\n");
     },
@@ -2229,10 +2363,13 @@ const scenarios = {
         uiGoal({ slug: "browser-gate", label: "after", revision, commit, checkout: repo }),
       );
     },
-    prompt: `$implement を .agents/skills/implement/SKILL.md から明示的に使用し、plans/browser-gate/goal.mdを実装してください。Browserは実装開始時や実装中に使わず、コード変更と静的検証が終わった完了直前だけ確認してください。${browserUnavailable} 最終Browser確認ができない場合は実装差分を保持し、未検証としてタスク完了扱いにしないでください。`,
+    prompt: `$implement を .agents/skills/implement/SKILL.md から明示的に使用し、plans/browser-gate/goal.mdを実装してください。Browserは実装開始時や実装中に使わず、コード変更と静的検証が終わった完了直前だけ確認してください。通常featureとしてmatrixScopeはcoverageを選び、full parityへ昇格させないでください。${browserUnavailable} 最終Browser確認ができない場合は実装差分を保持し、raw Browser outputや捏造evidenceを作らず、coverage未検証としてタスク完了扱いにしないでください。最終回答には「最終Browser coverageは未検証で、タスクは未完了です。」をそのまま含めてください。`,
     async grade(repo, final) {
       ensure((await readFile(path.join(repo, "src/ui.txt"), "utf8")) === "after\n", "implement did not edit production before the final Browser gate");
       ensure(/Browser|ブラウザ/u.test(final), "implement did not identify the Browser gate");
+      ensure(/coverage/iu.test(final), "implement did not report the normal coverage scope");
+      ensure(!/full parity.{0,40}(?:pass|合格|完了)/iu.test(final), "implement falsely upgraded coverage to full parity");
+      ensure(!/(?:raw DOM|raw screenshot|accessibility tree)[\s\S]{200,}/iu.test(final), "implement returned raw Browser output");
       ensure(/未検証|完了.{0,8}(?:でき|不可)|cannot.{0,8}complete|not complete|停止/iu.test(final), "implement claimed or implied completion without Browser");
       ensureNoCompletionStatus(final);
       const approvalPath = await assertSingleApprovalEvidence(repo, "browser-gate");
@@ -2245,10 +2382,62 @@ const scenarios = {
     async break(repo) {
       await writeFile(path.join(repo, "src/ui.txt"), "before\n");
     },
-    simulatedFinal: "明示的な$implement invocationからapproval.jsonを作成し、productionを完了候補まで編集しました。Codexアプリ内Browserを利用できないためfinal parityは未検証で、タスク完了にはしていません。",
+    simulatedFinal: "明示的な$implement invocationからapproval.jsonを作成し、productionを完了候補まで編集しました。通常のmatrixScopeはcoverageで、full parityへ昇格していません。Codexアプリ内Browserを利用できないため最終Browser coverageは未検証で、タスクは未完了です。raw Browser outputやimplementation-parity.jsonは生成していません。",
     negativeFinals: [
       "Codexアプリ内Browserを利用できませんが、タスクは完了しました。",
       "Final Browser確認は未検証ですが、all work is done。",
+      "Browserを確認できませんでしたがfull parity合格として完了しました。",
+    ],
+  },
+  "implement-browser-capability-failure": {
+    async prepare(repo) {
+      await write(repo, "src/ui.txt", "before\n");
+      const { revision, commit } = await createPrototype(repo, "browser-capability-failure", "after");
+      await write(
+        repo,
+        "plans/browser-capability-failure/goal.md",
+        uiGoal({
+          slug: "browser-capability-failure",
+          label: "after",
+          revision,
+          commit,
+          checkout: repo,
+        }),
+      );
+    },
+    prompt: `$implement を .agents/skills/implement/SKILL.md から明示的に使用し、plans/browser-capability-failure/goal.mdを実装してください。production実装と静的検証後のfinal-boundaryでcommon in-app Browser adapterのcapability canaryが、advertised CDPに対するEmulation.setDeviceMetricsOverride拒否としてstable code PARITY_DPR_OVERRIDE_UNAVAILABLEを返したものとします。別Browser、Chrome、Playwright、Computer Useへfallbackせず、implementation-parity.jsonを作らず、実装差分を保持したまま未完了として報告してください。最終回答には「別Browser、Chrome、Playwright、Computer Useへのfallbackは行っていません。」をそのまま含めてください。`,
+    async grade(repo, final) {
+      ensure(
+        (await readFile(path.join(repo, "src/ui.txt"), "utf8")) === "after\n",
+        "implement did not preserve the valid implementation after capability failure",
+      );
+      ensure(
+        /PARITY_DPR_OVERRIDE_UNAVAILABLE/u.test(final),
+        "implement did not report the stable DPR capability failure",
+      );
+      ensure(
+        /(?:fallback|代替|別Browser|別ブラウザ|Chrome|Playwright|Computer Use|切り替え|移行)[^。\n]{0,120}(?:しない|していない|していません|せず|行わない|行わず|行っていない|行っていません|使わない|使わず|使っていない|利用しない|利用せず|利用していない|切り替えない|切り替えず|切り替えていない|移行しない|移行せず|未実施|実施していない|実施していません|なし)/iu.test(final),
+        "implement did not preserve the no-fallback boundary",
+      );
+      ensureNoCompletionStatus(final);
+      const approvalPath = await assertSingleApprovalEvidence(repo, "browser-capability-failure");
+      await assertOnlyPaths(repo, ["src/ui.txt", approvalPath]);
+    },
+    async simulate(repo) {
+      await writeApprovalFixture(repo, "browser-capability-failure");
+      await writeFile(path.join(repo, "src/ui.txt"), "after\n");
+    },
+    async break(repo) {
+      await write(
+        repo,
+        "plans/browser-capability-failure/evidence/eval-invocation/implementation-parity.json",
+        `${JSON.stringify({ schemaVersion: 4, phase: "final" })}\n`,
+      );
+    },
+    simulatedFinal: "production実装は保持していますが、final capability canaryがPARITY_DPR_OVERRIDE_UNAVAILABLEで停止しました。別BrowserやChrome、Playwright、Computer Useへのfallbackは行わず、implementation-parity.jsonは生成していないため未完了です。",
+    negativeFinals: [
+      "PARITY_DPR_OVERRIDE_UNAVAILABLEでしたが、Chromeへfallbackしてタスクを完了しました。",
+      "DPR overrideは失敗しましたが、実装は完了です。",
     ],
   },
   "review-ui-gate": {
@@ -2284,7 +2473,7 @@ const scenarios = {
         'document.documentElement.dataset.ready = "changed-after-approval";\n',
       );
     },
-    prompt: `$review を .agents/skills/review/SKILL.md から明示的に使用し、plans/${reviewUiSlug}/goal.mdに対する現在のHEAD対working tree差分をreviewしてください。${reviewUiSourcePath}のdiffはgoalの「UI変更: なし」を信用せず、rendered DOM・copy・accessibilityへの影響から独立分類してください。最初にprototype revisionとvalidation profile digestを再計算し、plans/${reviewUiSlug}/evidence/review-run/approval.jsonとschema-version-3 implementation-parity.jsonのdigest、final row set、status、構造化scroll provenanceを機械検証してください。新規runにpre-edit parityを要求せず、自然言語によるscroll出所説明も要求しないでください。blind passには同じexact diffと必要なrepository contextだけを渡し、goal、会話、期待する指摘、conformance結果を渡さないでください。別のfresh conformance passにはgoal、同じdiff、prototype、ui-contract.json、parity-spec.jsonと上記構造化証跡を渡してください。二つのfresh no-history passは同じdiff snapshotから並行実行し、findingをsource=blind/conformanceのままplans/${reviewUiSlug}/review/のcanonical reportへ保存してください。missing、duplicate、extra、staleの各row/revision defectとUI誤分類はmajor findingとし、exact row IDとcurrent/recorded full revisionを記載してください。${browserUnavailable} HTML reportは生成し、Browser検証はunverifiedとして記録してください。Browser成功を推測せず、production、goal、prototype、evidence、Gitを変更しないでください。`,
+    prompt: `$review を .agents/skills/review/SKILL.md から明示的に使用し、plans/${reviewUiSlug}/goal.mdに対する現在のHEAD対working tree差分をreviewしてください。${reviewUiSourcePath}のdiffはgoalの「UI変更: なし」を信用せず、rendered DOM・copy・accessibilityへの影響から独立分類してください。最初にprototype revisionとvalidation profile digestを再計算し、plans/${reviewUiSlug}/evidence/review-run/approval.jsonとschema-version-4 implementation-parity.jsonのdigest、full row set、coverage/risk/anchor/checkpoint/artifact/cleanup、automation・human・fullの独立statusを機械検証してください。新規runにpre-edit parityを要求しないでください。blind passには同じexact diffと必要なrepository contextだけを渡し、goal、会話、期待する指摘、conformance結果を渡さないでください。別のfresh conformance passにはgoal、同じdiff、prototype、ui-contract.json、parity-spec.jsonと上記構造化証跡を渡してください。二つのfresh no-history passは同じdiff snapshotから並行実行し、findingをsource=blind/conformanceのままplans/${reviewUiSlug}/review/のcanonical reportへ保存してください。duplicate row \`main-default-desktop-light\`、extra row \`main-unauthorized-extra\`、missing row \`main-disabled-at-768-dark\`、stale current/recorded full revision、UI誤分類を、それぞれ別のsource=conformance・severity=major findingとして記載し、まとめたり省略したりしないでください。各row findingには、期待集合の出所としてui-contract.jsonとparity-spec.json、観測集合としてimplementation-parity.jsonをそのまま記載してください。${browserUnavailable} HTML reportは生成し、Browser検証はunverifiedとして記録してください。Browser成功を推測せず、production、goal、prototype、evidence、Gitを変更しないでください。`,
     async grade(repo, final) {
       const reportRoot = path.join(repo, `plans/${reviewUiSlug}/review`);
       for (const asset of reviewReportAssets) {
@@ -2373,6 +2562,7 @@ const scenarios = {
         ["recorded stale revision", new RegExp(escapeRegularExpression(oldRevision), "u")],
         ["prototype revision field", /prototype[- ]revision/iu],
         ["manifest", /ui-contract\.json|manifest/iu],
+        ["validation profile", /parity-spec\.json/iu],
         ["duplicate manifest row", new RegExp(`${escapeRegularExpression(firstRow)}[^\n]{0,80}(?:duplicate|重複)|(?:duplicate|重複)[^\n]{0,80}${escapeRegularExpression(firstRow)}`, "iu")],
         ["extra manifest row", /main-unauthorized-extra[^\n]{0,80}(?:extra|余分|過剰)|(?:extra|余分|過剰)[^\n]{0,80}main-unauthorized-extra/iu],
         ["missing implementation row", new RegExp(`${escapeRegularExpression(missingRow)}[^\n]{0,80}(?:missing|欠落)|(?:missing|欠落)[^\n]{0,80}${escapeRegularExpression(missingRow)}`, "iu")],
@@ -2396,6 +2586,13 @@ const scenarios = {
         browserValidations.every(({ status }) => ["failed", "skipped", "unverified"].includes(status)),
         "review falsely recorded Browser verification as passed",
       );
+      for (const statusName of ["automation coverage", "human visual approval", "full parity status"]) {
+        ensure(
+          data.validations.some(({ command, summary }) =>
+            new RegExp(statusName.replaceAll(" ", ".*"), "iu").test(`${command}\n${summary}`)),
+          `review did not record independent ${statusName}`,
+        );
+      }
       ensure(
         (await readFile(path.join(repo, reviewUiSourcePath), "utf8")) === reviewUiSourceAfter,
         "review modified production code",
@@ -2527,8 +2724,59 @@ async function assertConfirmationHandoffSkillContracts(root = repositoryRoot) {
   );
 }
 
+async function assertCoverageDrivenSkillContracts(root = repositoryRoot) {
+  const [plan, implement, review, workflow, reference] = await Promise.all([
+    readFile(path.join(root, ".agents/skills/plan/SKILL.md"), "utf8"),
+    readFile(path.join(root, ".agents/skills/implement/SKILL.md"), "utf8"),
+    readFile(path.join(root, ".agents/skills/review/SKILL.md"), "utf8"),
+    readFile(path.join(root, "docs/development/codex-development-workflow.md"), "utf8"),
+    readFile(path.join(root, ".agents/skills/plan/references/parity-runner.md"), "utf8"),
+  ]);
+  ensure(
+    /parity-spec\.json` version 3/u.test(plan) &&
+      /state identity assertions/u.test(plan) &&
+      /at least one anchor row per target/u.test(plan),
+    "COV-EVAL-01: plan must author the version-3 coverage, anchor, and state contract",
+  );
+  ensure(
+    /matrixScope: coverage/u.test(implement) &&
+      /every target, every declared state, viewport, and light\/dark theme/u.test(implement) &&
+      /risk row/u.test(implement) && /anchor row/u.test(implement),
+    "COV-EVAL-02: implement must preserve every axis and risk/anchor coverage",
+  );
+  ensure(
+    /release.*ci.*scheduled.*explicit/su.test(implement) &&
+      /separate non-LLM verification task/u.test(implement) &&
+      /Never describe coverage evidence as full parity/u.test(implement),
+    "COV-EVAL-03: full parity must remain separate and explicitly authorized",
+  );
+  ensure(
+    /next-batch/u.test(implement) && /record-failure/u.test(implement) &&
+      /invalidate-run/u.test(implement) && /resume-run/u.test(implement) &&
+      /Retry only the failed batch once/u.test(implement) &&
+      /There is no run-wide time cutoff/u.test(implement),
+    "COV-EVAL-04: batch checkpoint, one retry, resume, and terminal conditions are required",
+  );
+  ensure(
+    /raw screenshot, DOM, and accessibility artifacts/u.test(implement) &&
+      /planned\/executed\/passed counts/u.test(implement) &&
+      /stable error code/u.test(implement),
+    "COV-EVAL-05: raw Browser output must stay outside LLM context",
+  );
+  ensure(
+    /schema-version-4/u.test(review) &&
+      /automationCoverageStatus/u.test(review) &&
+      /humanVisualApprovalStatus/u.test(review) &&
+      /fullParityStatus/u.test(review) &&
+      /144 coverage rows and 1,440 full rows/u.test(reference) &&
+      /schema version 4/u.test(workflow),
+    "COV-EVAL-06: workflow, review, and evidence contracts must stay synchronized",
+  );
+}
+
 async function gradePreparedScenario(fixture, final) {
   await assertConfirmationHandoffSkillContracts(fixture.repo);
+  await assertCoverageDrivenSkillContracts(fixture.repo);
   await assertFixtureHistoryUnchanged(
     fixture.repo,
     fixture.baselineHead,
@@ -2693,6 +2941,7 @@ if (await isMainModule()) {
 
 export {
   assertConfirmationHandoffSkillContracts,
+  assertCoverageDrivenSkillContracts,
   codexEnvironment,
   executeScenario,
   fixtureGitEnvironment,

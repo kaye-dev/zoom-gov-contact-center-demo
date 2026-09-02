@@ -262,6 +262,10 @@ test("reviewed migration manifest exactly classifies the current SHA-verified ch
         classification: "expand-compatible",
       },
       {
+        name: "20260901060000_add_disaster_radio_zaad",
+        classification: "expand-compatible",
+      },
+      {
         name: "20260901160000_add_reservation_caller_ani_binding",
         classification: "expand-compatible",
       },

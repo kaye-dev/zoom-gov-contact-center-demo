@@ -6,6 +6,7 @@ import { lstat, open, readdir, realpath } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { validateParitySpec } from "./parity-runner-core.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(scriptDirectory, "../../../..");
@@ -859,6 +860,18 @@ async function prototypeRevisionInRepository(requestedDirectory, requestedRoot) 
     new Set(files.map((file) => file.relativeEntry)),
     repositoryRealPath,
   );
+
+  const profileFile = files.find((file) => file.relativeEntry === "parity-spec.json");
+  if (profileFile) {
+    const profileContents = await readStableRegularFile(profileFile, prototypeRealPath);
+    let profile;
+    try {
+      profile = JSON.parse(profileContents.toString("utf8"));
+    } catch {
+      throw new Error("parity-spec.json must contain valid JSON");
+    }
+    validateParitySpec(profile, contract);
+  }
 
   const revision = await hashCollectedFiles(files, prototypeRealPath);
   // Revalidate the root identity and every production source before the final

@@ -52,7 +52,7 @@ export function Breadcrumbs({ items }: { items: readonly Breadcrumb[] }) {
       <ol className="flex flex-wrap items-center gap-x-2 gap-y-1">
         {items.map((item, index) => (
           <li key={`${item.label}-${index}`} className="flex items-center gap-2">
-            {index > 0 && <ChevronRightIcon className="shrink-0" />}
+            {index > 0 && <ChevronRightIcon className="h-4 w-4 shrink-0" />}
             {item.href ? (
               <Link href={item.href} className={`${styles.animatedLink} text-accent`}>
                 <AnimatedLinkLabel>{item.label}</AnimatedLinkLabel>
@@ -90,10 +90,11 @@ export function PageTitleBand({ title, iconSrc }: { title: string; iconSrc?: str
   );
 }
 
-export function SectionHeading({ id, children }: { id: string; children: ReactNode }) {
+export function SectionHeading({ id, children, tabIndex }: { id: string; children: ReactNode; tabIndex?: number }) {
   return (
     <h2
       id={id}
+      tabIndex={tabIndex}
       className="scroll-mt-24 border-l-4 border-accent bg-surface-hover px-5 py-4 text-xl font-bold leading-8 text-fg md:px-6 md:text-2xl"
     >
       {children}
@@ -114,13 +115,19 @@ type ContentsItem = {
   label: string;
 };
 
-export function ContentsNavigation({ items }: { items: readonly ContentsItem[] }) {
+export function ContentsNavigation({
+  items,
+  heading,
+}: {
+  items: readonly ContentsItem[];
+  heading?: string;
+}) {
   const { t } = useI18n();
 
   return (
     <nav aria-labelledby="page-contents-heading" className="mt-10 max-w-6xl border-y border-line py-6">
       <h2 id="page-contents-heading" className="text-xl font-bold text-fg md:text-2xl">
-        {t.contentPages.tableOfContents}
+        {heading ?? t.contentPages.tableOfContents}
       </h2>
       <ul className="mt-4 grid gap-x-10 md:grid-cols-2">
         {items.map((item, index) => (

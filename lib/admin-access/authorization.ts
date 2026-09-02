@@ -2,12 +2,13 @@ import {
   getAdminResourceDefinition,
   isSupportedAdminAction,
 } from "./catalog";
-import type {
-  AdminAccessAction,
-  AdminAccessActor,
-  AdminAccessDecision,
-  AdminAccessRoleSource,
-  AdminResourceKey,
+import {
+  ADMIN_RESOURCE_KEYS,
+  type AdminAccessAction,
+  type AdminAccessActor,
+  type AdminAccessDecision,
+  type AdminAccessRoleSource,
+  type AdminResourceKey,
 } from "./types";
 
 function roleReference(role: AdminAccessRoleSource) {
@@ -173,17 +174,7 @@ export function canAdminAccess(
 
 export function getAllowedAdminPermissionSet(actor: AdminAccessActor) {
   const allowed = new Set<string>();
-  for (const resourceKey of [
-    "users",
-    "password-reset-requests",
-    "roles",
-    "role-assignments",
-    "phone-settings",
-    "chat-settings",
-    "language-settings",
-    "maintenance-settings",
-    "developer-api",
-  ] as const) {
+  for (const resourceKey of ADMIN_RESOURCE_KEYS) {
     for (const action of ["VIEW", "CREATE", "UPDATE", "DELETE"] as const) {
       if (canAdminAccess(actor, resourceKey, action)) {
         allowed.add(`${resourceKey}:${action}`);

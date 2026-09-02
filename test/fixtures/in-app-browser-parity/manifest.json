@@ -1,0 +1,403 @@
+{
+  "schemaVersion": 1,
+  "prototypeRevision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "validationProfileDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "contract": {
+    "version": 1,
+    "productionBaseline": {
+      "sources": [],
+      "runtimeOwner": "in-app-browser-parity-fixture",
+      "checkout": "/fixture",
+      "commit": "1111111111111111111111111111111111111111",
+      "route": "/fixture"
+    },
+    "comparisonConditions": {
+      "viewports": [
+        "390x844",
+        "1280x800"
+      ],
+      "dpr": 1,
+      "scroll": {
+        "x": 0,
+        "y": 0
+      },
+      "locale": "ja",
+      "themes": [
+        "light",
+        "dark"
+      ],
+      "fixture": "deterministic-iab",
+      "authorization": "none",
+      "query": "theme"
+    },
+    "baselineStateInventory": [
+      "default"
+    ],
+    "themeContract": [
+      "light",
+      "dark"
+    ],
+    "responsiveContract": [
+      {
+        "id": "mobile",
+        "viewport": "390x844"
+      },
+      {
+        "id": "desktop",
+        "viewport": "1280x800"
+      }
+    ],
+    "visualInvariants": [
+      {
+        "id": "fixture-content",
+        "description": "同じfixture contentを表示する"
+      }
+    ],
+    "intentionalDifferences": [],
+    "stateAndInteraction": [
+      "click",
+      "press",
+      "focus",
+      "fill",
+      "waitForVisible",
+      "waitForHidden"
+    ],
+    "comparisonTargets": [
+      {
+        "id": "fixture",
+        "entry": "prototype.html",
+        "route": "/fixture",
+        "surface": "page"
+      }
+    ],
+    "parityMatrix": [
+      {
+        "id": "fixture-default-mobile-light",
+        "targetId": "fixture",
+        "entry": "prototype.html",
+        "route": "/fixture",
+        "surface": "page",
+        "state": "default",
+        "viewport": "390x844",
+        "theme": "light",
+        "breakpoint": "mobile",
+        "expectedInvariantIds": [
+          "fixture-content"
+        ],
+        "intentionalDifferenceIds": []
+      },
+      {
+        "id": "fixture-default-mobile-dark",
+        "targetId": "fixture",
+        "entry": "prototype.html",
+        "route": "/fixture",
+        "surface": "page",
+        "state": "default",
+        "viewport": "390x844",
+        "theme": "dark",
+        "breakpoint": "mobile",
+        "expectedInvariantIds": [
+          "fixture-content"
+        ],
+        "intentionalDifferenceIds": []
+      },
+      {
+        "id": "fixture-default-desktop-light",
+        "targetId": "fixture",
+        "entry": "prototype.html",
+        "route": "/fixture",
+        "surface": "page",
+        "state": "default",
+        "viewport": "1280x800",
+        "theme": "light",
+        "breakpoint": "desktop",
+        "expectedInvariantIds": [
+          "fixture-content"
+        ],
+        "intentionalDifferenceIds": []
+      },
+      {
+        "id": "fixture-default-desktop-dark",
+        "targetId": "fixture",
+        "entry": "prototype.html",
+        "route": "/fixture",
+        "surface": "page",
+        "state": "default",
+        "viewport": "1280x800",
+        "theme": "dark",
+        "breakpoint": "desktop",
+        "expectedInvariantIds": [
+          "fixture-content"
+        ],
+        "intentionalDifferenceIds": []
+      }
+    ]
+  },
+  "spec": {
+    "version": 2,
+    "stateSetups": [
+      {
+        "targetId": "fixture",
+        "state": "default",
+        "production": {
+          "query": {},
+          "actions": [
+            {
+              "type": "click",
+              "selector": "#activate"
+            },
+            {
+              "type": "fill",
+              "selector": "#field",
+              "value": "ZAAD"
+            },
+            {
+              "type": "press",
+              "selector": "#field",
+              "key": "Enter"
+            },
+            {
+              "type": "focus",
+              "selector": "#field"
+            },
+            {
+              "type": "waitForVisible",
+              "selector": "#fixture-main"
+            },
+            {
+              "type": "waitForHidden",
+              "selector": "#hidden"
+            }
+          ]
+        },
+        "prototype": {
+          "query": {},
+          "actions": [
+            {
+              "type": "click",
+              "selector": "#activate"
+            },
+            {
+              "type": "fill",
+              "selector": "#field",
+              "value": "ZAAD"
+            },
+            {
+              "type": "press",
+              "selector": "#field",
+              "key": "Enter"
+            },
+            {
+              "type": "focus",
+              "selector": "#field"
+            },
+            {
+              "type": "waitForVisible",
+              "selector": "#fixture-main"
+            },
+            {
+              "type": "waitForHidden",
+              "selector": "#hidden"
+            }
+          ]
+        }
+      }
+    ],
+    "browserSetups": [
+      {
+        "targetId": "fixture",
+        "production": {
+          "type": "aria-switch",
+          "selector": "#theme-toggle",
+          "checkedTheme": "dark",
+          "readbackSelector": "html"
+        },
+        "prototype": {
+          "type": "query",
+          "parameter": "theme"
+        }
+      }
+    ],
+    "probes": [
+      {
+        "id": "screenshot-main",
+        "kind": "screenshot",
+        "mode": "equal",
+        "productionSelector": "h1",
+        "prototypeSelector": "h1",
+        "required": true,
+        "options": {}
+      },
+      {
+        "id": "dom-main",
+        "kind": "dom",
+        "mode": "equal",
+        "productionSelector": "#fixture-main",
+        "prototypeSelector": "#fixture-main",
+        "required": true,
+        "options": {}
+      },
+      {
+        "id": "a11y-main",
+        "kind": "accessibility",
+        "mode": "equal",
+        "productionSelector": "#fixture-main",
+        "prototypeSelector": "#fixture-main",
+        "required": true,
+        "options": {}
+      },
+      {
+        "id": "visibility-main",
+        "kind": "visibility",
+        "mode": "equal",
+        "productionSelector": "#fixture-main",
+        "prototypeSelector": "#fixture-main",
+        "required": true,
+        "options": {
+          "expected": "visible"
+        }
+      },
+      {
+        "id": "text-message",
+        "kind": "text",
+        "mode": "equal",
+        "productionSelector": "#message",
+        "prototypeSelector": "#message",
+        "required": true,
+        "options": {
+          "normalizeWhitespace": true
+        }
+      },
+      {
+        "id": "attribute-active",
+        "kind": "attribute",
+        "mode": "equal",
+        "productionSelector": "#fixture-main",
+        "prototypeSelector": "#fixture-main",
+        "required": true,
+        "options": {
+          "name": "data-active"
+        }
+      },
+      {
+        "id": "style-main",
+        "kind": "computedStyle",
+        "mode": "equal",
+        "productionSelector": "#fixture-main",
+        "prototypeSelector": "#fixture-main",
+        "required": true,
+        "options": {
+          "properties": [
+            "display",
+            "padding",
+            "color-scheme"
+          ]
+        }
+      },
+      {
+        "id": "geometry-main",
+        "kind": "geometry",
+        "mode": "equal",
+        "productionSelector": "#fixture-main",
+        "prototypeSelector": "#fixture-main",
+        "required": true,
+        "options": {
+          "tolerancePx": 0
+        }
+      },
+      {
+        "id": "focus-field",
+        "kind": "focus",
+        "mode": "equal",
+        "productionSelector": "#field",
+        "prototypeSelector": "#field",
+        "required": true,
+        "options": {}
+      },
+      {
+        "id": "console-clean",
+        "kind": "console",
+        "mode": "equal",
+        "productionSelector": "#fixture-main",
+        "prototypeSelector": "#fixture-main",
+        "required": true,
+        "options": {}
+      },
+      {
+        "id": "network-clean",
+        "kind": "network",
+        "mode": "equal",
+        "productionSelector": "#fixture-main",
+        "prototypeSelector": "#fixture-main",
+        "required": true,
+        "options": {}
+      }
+    ],
+    "rowProbeMap": [
+      {
+        "rowId": "fixture-default-mobile-light",
+        "probeIds": [
+          "screenshot-main",
+          "dom-main",
+          "a11y-main",
+          "visibility-main",
+          "text-message",
+          "attribute-active",
+          "style-main",
+          "geometry-main",
+          "focus-field",
+          "console-clean",
+          "network-clean"
+        ]
+      },
+      {
+        "rowId": "fixture-default-mobile-dark",
+        "probeIds": [
+          "screenshot-main",
+          "dom-main",
+          "a11y-main",
+          "visibility-main",
+          "text-message",
+          "attribute-active",
+          "style-main",
+          "geometry-main",
+          "focus-field",
+          "console-clean",
+          "network-clean"
+        ]
+      },
+      {
+        "rowId": "fixture-default-desktop-light",
+        "probeIds": [
+          "screenshot-main",
+          "dom-main",
+          "a11y-main",
+          "visibility-main",
+          "text-message",
+          "attribute-active",
+          "style-main",
+          "geometry-main",
+          "focus-field",
+          "console-clean",
+          "network-clean"
+        ]
+      },
+      {
+        "rowId": "fixture-default-desktop-dark",
+        "probeIds": [
+          "screenshot-main",
+          "dom-main",
+          "a11y-main",
+          "visibility-main",
+          "text-message",
+          "attribute-active",
+          "style-main",
+          "geometry-main",
+          "focus-field",
+          "console-clean",
+          "network-clean"
+        ]
+      }
+    ]
+  }
+}

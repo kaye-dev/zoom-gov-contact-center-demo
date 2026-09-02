@@ -22,6 +22,10 @@ const sourceScript = path.join(
   repositoryRoot,
   ".agents/skills/plan/scripts/prototype-revision.mjs",
 );
+const sourceCore = path.join(
+  repositoryRoot,
+  ".agents/skills/plan/scripts/parity-runner-core.mjs",
+);
 
 interface RepositoryFixture {
   root: string;
@@ -82,6 +86,99 @@ const defaultContractObject = {
 
 const defaultUiContract = `${JSON.stringify(defaultContractObject, null, 2)}\n`;
 
+function legacyParitySpec(selector: string) {
+  return {
+    version: 1,
+    stateSetups: [{
+      targetId: "main",
+      state: "default",
+      production: { query: {}, actions: [] },
+      prototype: { query: {}, actions: [] },
+    }],
+    probes: [{
+      id: "console-clean",
+      kind: "console",
+      mode: "equal",
+      productionSelector: selector,
+      prototypeSelector: selector,
+      required: true,
+      options: {},
+    }],
+    rowProbeMap: defaultContractObject.parityMatrix.map(({ id }) => ({
+      rowId: id,
+      probeIds: ["console-clean"],
+    })),
+  };
+}
+
+function coverageParitySpec() {
+  const coverageProbes = [
+    { id: "route-ready", kind: "route", selector: "body", options: {} },
+    { id: "setup-ready", kind: "setup", selector: "body", options: {} },
+    { id: "state-visible", kind: "state", selector: "body", options: { expected: "visible" } },
+    { id: "viewport-exact", kind: "viewport", selector: "body", options: {} },
+    { id: "theme-exact", kind: "theme", selector: "html", options: { rootClass: "row-theme", colorScheme: "row-theme" } },
+    { id: "control-ready", kind: "control", selector: "button", options: { expected: "enabled" } },
+    { id: "overflow-clean", kind: "overflow", selector: "body", options: { tolerancePx: 0 } },
+    { id: "console-clean", kind: "console", selector: "body", options: {} },
+  ];
+  const firstRow = defaultContractObject.parityMatrix[0];
+  return {
+    version: 3,
+    stateSetups: [{
+      targetId: "main",
+      state: "default",
+      production: { query: {}, actions: [] },
+      prototype: { query: {}, actions: [] },
+      assertionProbeIds: ["state-visible"],
+    }],
+    browserSetups: [{
+      targetId: "main",
+      production: { type: "query", parameter: "theme" },
+      prototype: { type: "query", parameter: "theme" },
+    }],
+    probes: [
+      ...coverageProbes.map(({ id, kind, selector, options }) => ({
+        id,
+        kind,
+        mode: "equal",
+        productionSelector: selector,
+        prototypeSelector: selector,
+        required: true,
+        tier: "coverage",
+        options,
+      })),
+      {
+        id: "dom-main",
+        kind: "dom",
+        mode: "equal",
+        productionSelector: "body",
+        prototypeSelector: "body",
+        required: true,
+        tier: "anchor",
+        options: {},
+      },
+    ],
+    rowProbeMap: defaultContractObject.parityMatrix.map(({ id }) => ({
+      rowId: id,
+      probeIds: [
+        ...coverageProbes.map((probe) => probe.id),
+        ...(id === firstRow.id ? ["dom-main"] : []),
+      ],
+    })),
+    coverage: {
+      targetOrder: ["main"],
+      viewportOrder: ["1280x800", "390x844"],
+      themeOrder: ["light", "dark"],
+      anchorRows: [{ id: "anchor-main", targetId: "main", rowId: firstRow.id, reason: "representative detail" }],
+      riskRows: [],
+    },
+    sourceImpactMap: [{ source: "src/ui.ts", scope: "target", targetIds: ["main"] }],
+    batchPolicy: { maxRows: 4, maxBytes: 262144, summaryMaxBytes: 4096 },
+    artifactPolicy: { kinds: ["dom"], maxBytes: 1048576, retainOnFailure: true },
+  };
+}
+
 async function createRepositoryFixture(context: test.TestContext): Promise<RepositoryFixture> {
   const temporaryRoot = await mkdtemp(path.join(tmpdir(), "prototype-revision-"));
   const root = await realpath(temporaryRoot);
@@ -89,6 +186,7 @@ async function createRepositoryFixture(context: test.TestContext): Promise<Repos
   context.after(() => rm(root, { recursive: true, force: true }));
   await mkdir(path.dirname(script), { recursive: true });
   await copyFile(sourceScript, script);
+  await copyFile(sourceCore, path.join(path.dirname(script), "parity-runner-core.mjs"));
   await mkdir(path.join(root, "src"), { recursive: true });
   await writeFile(path.join(root, "src/ui.ts"), "export const ui = true;\n");
   return { root, script };
@@ -211,15 +309,35 @@ test("validation profileのparity-spec.jsonをrevisionへ含める", async (cont
   const fixture = await createRepositoryFixture(context);
   const prototype = await createPrototype(fixture, "profile-change", [
     ...representativeEntries,
-    ["parity-spec.json", '{"version":1,"marker":"before"}\n'],
+    ["parity-spec.json", `${JSON.stringify(legacyParitySpec("body"))}\n`],
   ]);
   const before = revisionFrom(runRevision(fixture, [prototype.relative]));
   await writeFile(
     path.join(prototype.absolute, "parity-spec.json"),
-    '{"version":1,"marker":"after"}\n',
+    `${JSON.stringify(legacyParitySpec("main"))}\n`,
   );
   const after = revisionFrom(runRevision(fixture, [prototype.relative]));
   assert.notEqual(after, before);
+});
+
+test("version 3 profileのcoverageとanchor完全性をrevision計算前に検証する", async (context) => {
+  const fixture = await createRepositoryFixture(context);
+  const profile = coverageParitySpec();
+  const prototype = await createPrototype(fixture, "profile-v3", [
+    ...representativeEntries,
+    ["parity-spec.json", `${JSON.stringify(profile)}\n`],
+  ]);
+  revisionFrom(runRevision(fixture, [prototype.relative]));
+
+  profile.coverage.anchorRows = [];
+  await writeFile(
+    path.join(prototype.absolute, "parity-spec.json"),
+    `${JSON.stringify(profile)}\n`,
+  );
+  assertRejected(
+    runRevision(fixture, [prototype.relative]),
+    /coverage\.anchorRows must include target main/u,
+  );
 });
 
 test("ui-contract.jsonの欠落、不正schema、evidence混入を拒否する", async (context) => {

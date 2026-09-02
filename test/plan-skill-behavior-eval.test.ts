@@ -18,6 +18,7 @@ type PreparedFixture = {
 };
 type EvaluatorModule = {
   assertConfirmationHandoffSkillContracts(root?: string): Promise<void>;
+  assertCoverageDrivenSkillContracts(root?: string): Promise<void>;
   codexEnvironment(): Record<string, string>;
   executeScenario(name: string): Promise<void>;
   fixtureGitEnvironment(): Record<string, string>;
@@ -46,7 +47,7 @@ async function temporaryEntries(prefix: string) {
   return (await readdir(tmpdir())).filter((entry) => entry.startsWith(prefix));
 }
 
-test("plan skill behavioral evalは実promptの8 scenarioを公開する", async () => {
+test("plan skill behavioral evalは実promptの9 scenarioを公開する", async () => {
   const { stdout } = await execFileAsync(process.execPath, [evaluator, "--list"], { cwd: root });
   assert.deepEqual(stdout.trim().split("\n"), [
     "plan-canonical",
@@ -56,6 +57,7 @@ test("plan skill behavioral evalは実promptの8 scenarioを公開する", async
     "implement-contract-mismatch",
     "implement-related-source-drift",
     "implement-browser-gate",
+    "implement-browser-capability-failure",
     "review-ui-gate",
   ]);
 });
@@ -78,6 +80,7 @@ test("plan skill behavioral evalはsymlink経由のCLI起動でもmainを実行�
     "implement-contract-mismatch",
     "implement-related-source-drift",
     "implement-browser-gate",
+    "implement-browser-capability-failure",
     "review-ui-gate",
   ]);
 });
@@ -87,7 +90,21 @@ test("plan skill behavioral evalのartifact graderはpositive/negative control�
     cwd: root,
     timeout: 180_000,
   });
-  assert.match(stdout, /self-test passed: 8 scenarios/);
+  assert.match(stdout, /self-test passed: 9 scenarios/);
+});
+
+test("WF-EVAL-01 capability failure", async (context) => {
+  const evaluatorModule = await evaluatorModulePromise;
+  const fixture = await evaluatorModule.prepareScenario(
+    "implement-browser-capability-failure",
+    `wf-eval-capability-${process.pid}`,
+  );
+  context.after(() => rm(fixture.fixtureRoot, { recursive: true, force: true }));
+  await fixture.scenario.simulate(fixture.repo);
+  await evaluatorModule.gradePreparedScenario(
+    fixture,
+    "production実装は保持していますが、final capability canaryがPARITY_DPR_OVERRIDE_UNAVAILABLEで停止しました。別BrowserやChrome、Playwright、Computer Useへのfallbackは行わず、implementation-parity.jsonは生成していないため未完了です。",
+  );
 });
 
 test("CS-EVAL-01〜04: skill evalはconfirmation handoff契約を全scenarioのgrade前に固定する", async () => {
@@ -98,6 +115,16 @@ test("CS-EVAL-01〜04: skill evalはconfirmation handoff契約を全scenarioのg
     assert.match(source, new RegExp(caseId, "u"));
   }
   assert.match(source, /assertConfirmationHandoffSkillContracts\(fixture\.repo\)/u);
+});
+
+test("COV-EVAL-01〜06: skill evalはcoverage-driven契約を全scenarioのgrade前に固定する", async () => {
+  const evaluatorModule = await evaluatorModulePromise;
+  await evaluatorModule.assertCoverageDrivenSkillContracts(root);
+  const source = await readFile(evaluator, "utf8");
+  for (const caseId of ["COV-EVAL-01", "COV-EVAL-02", "COV-EVAL-03", "COV-EVAL-04", "COV-EVAL-05", "COV-EVAL-06"]) {
+    assert.match(source, new RegExp(caseId, "u"));
+  }
+  assert.match(source, /assertCoverageDrivenSkillContracts\(fixture\.repo\)/u);
 });
 
 test("eval fixtureは外部MCPなしで必要なcustom agent定義を読み込める", async (context) => {

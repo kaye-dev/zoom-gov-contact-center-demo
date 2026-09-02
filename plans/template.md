@@ -32,6 +32,11 @@
 - stateとinteraction: なし
 - comparison targets: なし
 - parity matrix: なし
+- coverage matrix: なし
+- risk rows: なし
+- anchor rows: なし
+- full parity条件: なし
+- human UI review: なし
 
 # インターフェースとデータフロー
 
