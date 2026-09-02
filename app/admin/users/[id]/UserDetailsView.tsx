@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 
 import { PasswordInput } from "@/app/components/PasswordInput";
+import { Select } from "@/app/components/Select";
 import {
   parseAdminUserPasswordReset,
   type AdminUserField,
@@ -432,7 +433,8 @@ export function UserDetailsView({
                   className="space-y-3 sm:col-span-2"
                 >
                   {field === "role" ? (
-                    <select
+                    <Select
+                      containerClassName="max-w-md"
                       value={draftValue}
                       onChange={(event) => setDraftValue(event.target.value)}
                       disabled={isSubmitting}
@@ -441,11 +443,10 @@ export function UserDetailsView({
                       aria-describedby={
                         description ? `user-${field}-description` : undefined
                       }
-                      className="w-full max-w-md rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent disabled:opacity-60"
                     >
                       <option value="user">{t.auth.roleUser}</option>
                       <option value="admin">{t.auth.roleAdmin}</option>
-                    </select>
+                    </Select>
                   ) : (
                     <input
                       type={field === "email" ? "email" : "text"}
@@ -558,12 +559,12 @@ export function UserDetailsView({
             </p>
             {isEditingAccessRoles ? (
               <div className="space-y-3 sm:col-span-2">
-                <select
+                <Select
+                  containerClassName="max-w-md"
                   value={assignedRoleIds[0] ?? ""}
                   onChange={(event) => changeAccessRole(event.target.value)}
                   disabled={accessRolesProtected || isSavingRoles}
                   aria-labelledby="user-access-roles-label"
-                  className="w-full max-w-md cursor-pointer rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {assignedRoleIds.length === 0 ? (
                     <option value="" disabled>
@@ -577,7 +578,7 @@ export function UserDetailsView({
                         : role.name}
                     </option>
                   ))}
-                </select>
+                </Select>
                 <p className="text-xs leading-5 text-fg-muted">
                   {t.admin.accessControl.replaceAccessRoleHelp}
                 </p>

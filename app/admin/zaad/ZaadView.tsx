@@ -12,6 +12,7 @@ import {
 
 import { ModalDialog } from "@/app/components/admin/ModalDialog";
 import { Checkbox } from "@/app/components/Checkbox";
+import { Select } from "@/app/components/Select";
 import { useI18n } from "@/app/i18n/LanguageProvider";
 import type { ZaadDictionary } from "@/app/i18n/zaad-dictionaries";
 import {
@@ -1639,7 +1640,7 @@ function SettingsSection({
         >
           {copy.settings.assignment}
         </label>
-        <select
+        <Select
           id="zaad-public-contact-list"
           value={displayedSelectedId}
           onChange={(event) => setSelectedId(event.target.value)}
@@ -1647,7 +1648,6 @@ function SettingsSection({
           aria-describedby={
             !canUpdate ? "zaad-permission-update-reason" : undefined
           }
-          className={`${inputClassName} cursor-pointer disabled:cursor-not-allowed`}
         >
           <option
             ref={(option) => {
@@ -1668,7 +1668,7 @@ function SettingsSection({
               {list.contactCount === null ? "" : ` (${list.contactCount})`}
             </option>
           ))}
-        </select>
+        </Select>
         <p className="mt-2 text-sm leading-7 text-fg-muted">
           {copy.settings.futureOnly}
         </p>
@@ -2123,20 +2123,19 @@ function OneTimeSection({
                 <span className="text-sm font-semibold">
                   {copy.oneTime.voice} *
                 </span>
-                <select
+                <Select
                   id="zaad-one-time-voice"
                   name="voice"
                   value={voice}
                   onChange={(event) => setVoice(event.target.value)}
                   disabled={!canInteract || preflighting}
-                  className={`${inputClassName} cursor-pointer disabled:cursor-not-allowed`}
                 >
                   {ZAAD_VOICES.map((item) => (
                     <option key={item} value={item}>
                       {item} (ja-JP)
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
             </div>
           </section>
@@ -2154,13 +2153,12 @@ function OneTimeSection({
               <span className="text-sm font-semibold">
                 {copy.oneTime.baseCampaign} *
               </span>
-              <select
+              <Select
                 id="zaad-one-time-base-campaign"
                 name="baseCampaignId"
                 value={selectedBaseCampaignId}
                 onChange={(event) => setBaseCampaignId(event.target.value)}
                 disabled={!canInteract || preflighting}
-                className={`${inputClassName} cursor-pointer disabled:cursor-not-allowed`}
               >
                 <option value="">—</option>
                 {baseCampaigns.map((campaign) => (
@@ -2168,7 +2166,7 @@ function OneTimeSection({
                     {campaign.name} ({campaign.status})
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <p className="mt-5 rounded-md bg-amber-50 px-3 py-3 text-xs leading-6 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
               {copy.oneTime.confirmDescription}
@@ -2706,7 +2704,7 @@ function ResidentDialogForm({
         <span className="text-sm font-semibold">
           {copy.residents.consent} *
         </span>
-        <select
+        <Select
           id={
             mode === "create"
               ? "admin-resident-consent-status"
@@ -2716,7 +2714,6 @@ function ResidentDialogForm({
           defaultValue={mode === "edit" ? resident?.consentStatus : "CONSENTED"}
           required
           disabled={disabled}
-          className={`${inputClassName} cursor-pointer`}
         >
           <option
             ref={(option) => {
@@ -2729,7 +2726,7 @@ function ResidentDialogForm({
           <option value="NOT_CONSENTED">
             {copy.residents.notConsentedValue}
           </option>
-        </select>
+        </Select>
       </label>
       <DialogActions
         close={close}
@@ -2992,17 +2989,16 @@ function MessageDialogForm({
         />
         <label className="block">
           <span className="text-sm font-semibold">{copy.messages.voice} *</span>
-          <select
+          <Select
             id="zaad-message-voice"
             name="voiceId"
             defaultValue={message?.voiceId ?? "Tomoko"}
             disabled={disabled}
-            className={`${inputClassName} cursor-pointer`}
           >
             {ZAAD_VOICES.map((voice) => (
               <option key={voice}>{voice}</option>
             ))}
-          </select>
+          </Select>
         </label>
       </div>
       <DialogActions
