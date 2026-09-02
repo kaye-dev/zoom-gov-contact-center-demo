@@ -301,6 +301,7 @@ function createInAppBrowserParityAdapter({
   tab,
   expectedDpr = 1,
   timeouts = {},
+  artifactSink,
 }) {
   requireObject(browser, "browser");
   requireObject(tab, "tab");
@@ -309,6 +310,9 @@ function createInAppBrowserParityAdapter({
   }
   const comparisonTabId = tab.id;
   const resolvedTimeouts = { ...defaultTimeouts, ...timeouts };
+  if (artifactSink !== undefined && typeof artifactSink !== "function") {
+    fail("PARITY_ARTIFACT_SINK_UNAVAILABLE", "artifactSink must be a function");
+  }
   const state = {
     cdp: undefined,
     cdpOrigin: undefined,
@@ -323,6 +327,34 @@ function createInAppBrowserParityAdapter({
     networkEnabled: false,
     cleanupResult: undefined,
   };
+
+  async function storeArtifact({ probe, context, content, mediaType }) {
+    if (typeof artifactSink !== "function") {
+      fail(
+        "PARITY_ARTIFACT_SINK_UNAVAILABLE",
+        `required ${probe.kind} anchor artifact sink is unavailable`,
+        { operation: "runProbe", rowId: context.row.id, probeId: probe.id, surface: context.surface },
+      );
+    }
+    const record = await artifactSink({
+      kind: probe.kind,
+      rowId: context.row.id,
+      probeId: probe.id,
+      surface: context.surface,
+      content,
+      mediaType,
+    });
+    if (
+      record === null ||
+      typeof record !== "object" ||
+      typeof record.path !== "string" ||
+      typeof record.sha256 !== "string" ||
+      !Number.isInteger(record.bytes)
+    ) {
+      fail("PARITY_ARTIFACT_SINK_UNAVAILABLE", "artifact sink returned an invalid record");
+    }
+    return record;
+  }
 
   async function selectedTab() {
     return requireTabId(await browser.tabs.selected(), comparisonTabId);
@@ -668,7 +700,7 @@ function createInAppBrowserParityAdapter({
     await comparisonTab(requestedTabId);
     const setup = context.setup;
     if (!setup) {
-      fail("PARITY_BROWSER_SETUP_REQUIRED", "parity-spec.json version 2 browser setup is required");
+      fail("PARITY_BROWSER_SETUP_REQUIRED", "parity-spec.json version 2 or 3 browser setup is required");
     }
     if (setup.type === "aria-switch") {
       const control = await exactlyOne(setup.selector, "theme switch", "PARITY_THEME_SETUP_FAILED");
@@ -879,6 +911,91 @@ function createInAppBrowserParityAdapter({
         : probe.prototypeSelector;
       try {
         const locator = await exactlyOne(selector, `${probe.kind} probe`);
+      if (probe.kind === "route") {
+        const pathname = await tab.playwright.evaluate(() => location.pathname);
+        const expected = context.surface === "production" ? context.row.route : `/${context.row.entry}`;
+        return { value: { matches: pathname === expected, pathname } };
+      }
+      if (probe.kind === "setup") return { value: { matches: true } };
+      if (probe.kind === "state") {
+        const visible = await locator.isVisible();
+        return { value: { matches: visible === (probe.options.expected === "visible"), visible } };
+      }
+      if (probe.kind === "viewport") {
+        const measured = await tab.playwright.evaluate(() => ({
+          width: window.innerWidth,
+          height: window.innerHeight,
+          dpr: window.devicePixelRatio,
+        }));
+        const [width, height] = context.row.viewport.split("x").map(Number);
+        return {
+          value: {
+            matches: measured.width === width && measured.height === height && measured.dpr === expectedDpr,
+            ...measured,
+          },
+        };
+      }
+      if (probe.kind === "theme") {
+        const expectedClass = probe.options.rootClass === "row-theme"
+          ? context.row.theme
+          : probe.options.rootClass;
+        const measured = await tab.playwright.evaluate((rootClass) => {
+          const root = document.documentElement;
+          return {
+            rootClassPresent: root.classList.contains(rootClass),
+            colorScheme: getComputedStyle(root).colorScheme,
+          };
+        }, expectedClass);
+        return {
+          value: {
+            matches: measured.rootClassPresent && measured.colorScheme === context.row.theme,
+            ...measured,
+          },
+        };
+      }
+      if (probe.kind === "control") {
+        const measured = await tab.playwright.evaluate(({ targetSelector, expected }) => {
+          const element = document.querySelector(targetSelector);
+          if (!(element instanceof Element)) throw new Error("control selector drifted");
+          const style = getComputedStyle(element);
+          const rect = element.getBoundingClientRect();
+          const visible = !(
+            element.hidden ||
+            style.display === "none" ||
+            style.visibility === "hidden" ||
+            Number(style.opacity) === 0 ||
+            rect.width === 0 ||
+            rect.height === 0
+          );
+          const disabled = element.matches(":disabled") || element.getAttribute("aria-disabled") === "true";
+          const matches = expected === "visible"
+            ? visible
+            : expected === "hidden"
+              ? !visible
+              : expected === "disabled"
+                ? visible && disabled
+                : visible && !disabled;
+          return { matches, visible, disabled };
+        }, { targetSelector: selector, expected: probe.options.expected });
+        return { value: measured };
+      }
+      if (probe.kind === "overflow") {
+        const measured = await tab.playwright.evaluate(({ targetSelector, tolerancePx }) => {
+          const element = document.querySelector(targetSelector);
+          if (!(element instanceof Element)) throw new Error("overflow selector drifted");
+          const rect = element.getBoundingClientRect();
+          const documentOverflow = document.documentElement.scrollWidth - window.innerWidth;
+          const targetOverflow = Math.max(0, -rect.left, rect.right - window.innerWidth);
+          return {
+            matches: window.scrollX === 0 && documentOverflow <= tolerancePx && targetOverflow <= tolerancePx,
+            scrollX: window.scrollX,
+            scrollY: window.scrollY,
+            documentOverflow,
+            targetOverflow,
+          };
+        }, { targetSelector: selector, tolerancePx: probe.options.tolerancePx });
+        return { value: measured };
+      }
       if (probe.kind === "screenshot") {
         const rect = await tab.playwright.evaluate((targetSelector) => {
           const element = document.querySelector(targetSelector);
@@ -887,12 +1004,16 @@ function createInAppBrowserParityAdapter({
           return { x: box.x, y: box.y, width: box.width, height: box.height };
         }, selector);
         const bytes = await tab.screenshot({ clip: rect });
+        const artifact = probe.tier === "anchor"
+          ? await storeArtifact({ probe, context, content: bytes, mediaType: "image/png" })
+          : undefined;
         return {
           value: {
             sha256: await sha256Digest(bytes),
             width: rect.width,
             height: rect.height,
           },
+          ...(artifact ? { artifact, artifactPath: artifact.path } : {}),
         };
       }
       if (probe.kind === "dom") {
@@ -986,11 +1107,21 @@ function createInAppBrowserParityAdapter({
             rootTag: root.tagName.toLowerCase(),
           };
         }, { targetSelector: selector, limits: projectionLimits });
+        const value = await compactProjectionSnapshot(snapshot, {
+          source: "dom-projection",
+          rootField: "rootTag",
+        });
+        const artifact = probe.tier === "anchor"
+          ? await storeArtifact({
+              probe,
+              context,
+              content: snapshot.serialized,
+              mediaType: "application/json",
+            })
+          : undefined;
         return {
-          value: await compactProjectionSnapshot(snapshot, {
-            source: "dom-projection",
-            rootField: "rootTag",
-          }),
+          value,
+          ...(artifact ? { artifact, artifactPath: artifact.path } : {}),
         };
       }
       if (probe.kind === "accessibility") {
@@ -1173,12 +1304,22 @@ function createInAppBrowserParityAdapter({
             rootRole: projection?.role ?? null,
           };
         }, { targetSelector: selector, limits: projectionLimits });
+        const value = await compactProjectionSnapshot(snapshot, {
+          source: "accessibility-projection",
+          rootField: "rootRole",
+          allowNullRoot: true,
+        });
+        const artifact = probe.tier === "anchor"
+          ? await storeArtifact({
+              probe,
+              context,
+              content: snapshot.serialized,
+              mediaType: "application/json",
+            })
+          : undefined;
         return {
-          value: await compactProjectionSnapshot(snapshot, {
-            source: "accessibility-projection",
-            rootField: "rootRole",
-            allowNullRoot: true,
-          }),
+          value,
+          ...(artifact ? { artifact, artifactPath: artifact.path } : {}),
         };
       }
       if (probe.kind === "visibility") return { value: await locator.isVisible() };
@@ -1229,6 +1370,11 @@ function createInAppBrowserParityAdapter({
             return document.activeElement === element;
           }, selector),
         };
+      }
+      if (probe.kind === "keyboard") {
+        await locator.press(probe.options.key, { timeoutMs: resolvedTimeouts.actionMs });
+        await comparisonTab(requestedTabId);
+        return { value: { matches: true, key: probe.options.key } };
       }
       if (probe.kind === "console") {
         if (!state.consoleBaseline || typeof tab.dev?.logs !== "function") {

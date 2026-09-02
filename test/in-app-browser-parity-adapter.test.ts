@@ -79,6 +79,7 @@ function createFakeBrowser() {
       ["#hidden", { text: "", visible: false, attributes: {} }],
       ["#detached", { text: "", visible: true, attributes: {} }],
       ["#multiple", { count: 2, text: "", attributes: {} }],
+      ["button", { text: "Submit", attributes: {} }],
     ]),
   };
   const cdp = {
@@ -222,6 +223,17 @@ function createFakeBrowser() {
         const source = fn.toString();
         if (source.includes("devicePixelRatio")) {
           return { width: state.width, height: state.height, dpr: state.dpr };
+        }
+        if (source.includes("location.pathname")) return new URL(state.url).pathname;
+        if (source.includes("rootClassPresent")) {
+          const rootClass = arg as string;
+          return { rootClassPresent: rootClass === state.theme, colorScheme: state.theme };
+        }
+        if (source.includes("control selector drifted")) {
+          return { matches: true, visible: true, disabled: false };
+        }
+        if (source.includes("overflow selector drifted")) {
+          return { matches: true, scrollX: 0, scrollY: 0, documentOverflow: 0, targetOverflow: 0 };
         }
         if (source.includes("scrollX")) return { x: 0, y: 0 };
         if (source.includes("theme readback selector drifted")) {
@@ -1501,4 +1513,112 @@ test("IAB-08 selection drift is checked between bootstrap/reload and waitForHidd
       (error: unknown) => (error as { code?: string }).code === "PARITY_SELECTED_TAB_DRIFT",
     );
   });
+});
+
+test("IAB-09 coverage probeとanchor artifactはcompact recordだけを返す", async () => {
+  const { createInAppBrowserParityAdapter } = await adapterModulePromise;
+  const fixture = createFakeBrowser();
+  const artifacts: Array<Record<string, unknown>> = [];
+  const artifactSink = async (input: Record<string, unknown>) => {
+    artifacts.push(input);
+    return {
+      path: `.codex/parity-runs/run/artifacts/${input.rowId}--${input.probeId}--${input.surface}.bin`,
+      sha256: digest,
+      bytes: input.content instanceof Uint8Array
+        ? input.content.byteLength
+        : new TextEncoder().encode(String(input.content)).byteLength,
+      kind: input.kind,
+      mediaType: input.mediaType,
+      surface: input.surface,
+      rowId: input.rowId,
+      probeId: input.probeId,
+    };
+  };
+  const adapter = createInAppBrowserParityAdapter({
+    browser: fixture.browser,
+    tab: fixture.tab,
+    artifactSink,
+  });
+  await adapter.navigate("comparison", "http://localhost:3142/fixture");
+  await adapter.setViewport("comparison", { width: 390, height: 844 });
+  const context = {
+    row: {
+      id: "main-ready-mobile-light",
+      targetId: "main",
+      route: "/fixture",
+      entry: "prototype.html",
+      state: "ready",
+      viewport: "390x844",
+      theme: "light",
+    },
+    surface: "production",
+    networkSource: "not-required",
+  };
+  const coverageProbes = [
+    { id: "route", kind: "route", options: {}, selector: "main" },
+    { id: "setup", kind: "setup", options: {}, selector: "main" },
+    { id: "state", kind: "state", options: { expected: "visible" }, selector: "main" },
+    { id: "viewport", kind: "viewport", options: {}, selector: "main" },
+    { id: "theme", kind: "theme", options: { rootClass: "row-theme", colorScheme: "row-theme" }, selector: "main" },
+    { id: "control", kind: "control", options: { expected: "enabled" }, selector: "button" },
+    { id: "overflow", kind: "overflow", options: { tolerancePx: 0 }, selector: "main" },
+  ];
+  for (const definition of coverageProbes) {
+    const result = await adapter.runProbe("comparison", {
+      id: definition.id,
+      kind: definition.kind,
+      mode: "equal",
+      productionSelector: definition.selector,
+      prototypeSelector: definition.selector,
+      required: true,
+      tier: "coverage",
+      options: definition.options,
+    }, context);
+    assert.equal(result.value.matches, true, definition.kind);
+  }
+
+  for (const kind of ["screenshot", "dom", "accessibility"]) {
+    const result = await adapter.runProbe("comparison", {
+      id: `anchor-${kind}`,
+      kind,
+      mode: "equal",
+      productionSelector: "main",
+      prototypeSelector: "main",
+      required: true,
+      tier: "anchor",
+      options: {},
+    }, context);
+    assert.match(result.artifact.path, /^\.codex\/parity-runs\/run\/artifacts\//u);
+    assert.equal(Object.hasOwn(result, "content"), false);
+    assert.equal(Object.hasOwn(result.artifact, "content"), false);
+  }
+  assert.equal(artifacts.length, 3);
+
+  const keyboard = await adapter.runProbe("comparison", {
+    id: "anchor-keyboard",
+    kind: "keyboard",
+    mode: "equal",
+    productionSelector: "button",
+    prototypeSelector: "button",
+    required: true,
+    tier: "anchor",
+    options: { key: "Enter" },
+  }, context);
+  assert.deepEqual(keyboard.value, { matches: true, key: "Enter" });
+  assert.ok(fixture.state.actions.includes("press:button:Enter"));
+
+  const withoutSink = createInAppBrowserParityAdapter({ browser: fixture.browser, tab: fixture.tab });
+  await assert.rejects(
+    withoutSink.runProbe("comparison", {
+      id: "anchor-screenshot",
+      kind: "screenshot",
+      mode: "equal",
+      productionSelector: "main",
+      prototypeSelector: "main",
+      required: true,
+      tier: "anchor",
+      options: {},
+    }, context),
+    (error: unknown) => (error as { code?: string }).code === "PARITY_ARTIFACT_SINK_UNAVAILABLE",
+  );
 });

@@ -108,6 +108,167 @@ function clone<T>(value: T): T {
   return structuredClone(value);
 }
 
+function createCoverageFixture() {
+  const states = ["ready", "pending", "success", "empty", "failure"];
+  const coverageViewports = [
+    "390x844",
+    "639x844",
+    "640x844",
+    "767x900",
+    "768x900",
+    "1023x900",
+    "1024x900",
+    "1280x900",
+  ];
+  const themes = ["light", "dark"];
+  const targets = Array.from({ length: 18 }, (_, index) => ({
+    id: `target-${String(index + 1).padStart(2, "0")}`,
+    entry: `target-${String(index + 1).padStart(2, "0")}.html`,
+    route: `/target-${String(index + 1).padStart(2, "0")}`,
+    surface: "page",
+  }));
+  const matrix = targets.flatMap((target) =>
+    states.flatMap((state) =>
+      coverageViewports.flatMap((viewport, viewportIndex) =>
+        themes.map((theme) => ({
+          id: `${target.id}-${state}-viewport-${viewportIndex}-${theme}`,
+          targetId: target.id,
+          entry: target.entry,
+          route: target.route,
+          surface: target.surface,
+          state,
+          viewport,
+          theme,
+          breakpoint: `viewport-${viewportIndex}`,
+          expectedInvariantIds: ["coverage-invariant"],
+          intentionalDifferenceIds: [],
+        })),
+      ),
+    ),
+  );
+  const coverageContract = {
+    version: 1,
+    productionBaseline: {
+      sources: ["src/ui.ts"],
+      runtimeOwner: "fixture",
+      checkout: "/fixture",
+      commit: "1".repeat(40),
+      route: targets[0].route,
+    },
+    comparisonConditions: {
+      viewports: coverageViewports,
+      dpr: 1,
+      scroll: { x: 0, y: 0 },
+      locale: "ja",
+      themes,
+      fixture: "coverage-fixture",
+      authorization: "admin",
+      query: "none",
+    },
+    baselineStateInventory: states,
+    themeContract: themes,
+    responsiveContract: coverageViewports.map((viewport, index) => ({ id: `viewport-${index}`, viewport })),
+    visualInvariants: [{ id: "coverage-invariant", description: "coverage invariant" }],
+    intentionalDifferences: [],
+    stateAndInteraction: ["coverage", "anchor", "risk"],
+    comparisonTargets: targets,
+    parityMatrix: matrix,
+  };
+  const coverageProbes = [
+    ["route", "route", {}],
+    ["setup", "setup", {}],
+    ["state", "state", { expected: "visible" }],
+    ["viewport", "viewport", {}],
+    ["theme", "theme", { rootClass: "row-theme", colorScheme: "row-theme" }],
+    ["control", "control", { expected: "enabled" }],
+    ["overflow", "overflow", { tolerancePx: 0 }],
+    ["console", "console", {}],
+  ].map(([id, kind, options]) => ({
+    id: `coverage-${id}`,
+    kind,
+    mode: "equal",
+    productionSelector: kind === "control" ? "button" : "main",
+    prototypeSelector: kind === "control" ? "button" : "main",
+    required: true,
+    tier: "coverage",
+    options,
+  }));
+  const anchorProbe = {
+    id: "anchor-screenshot",
+    kind: "screenshot",
+    mode: "equal",
+    productionSelector: "main",
+    prototypeSelector: "main",
+    required: true,
+    tier: "anchor",
+    options: {},
+  };
+  const keyboardProbe = {
+    id: "anchor-keyboard",
+    kind: "keyboard",
+    mode: "equal",
+    productionSelector: "button",
+    prototypeSelector: "button",
+    required: true,
+    tier: "anchor",
+    options: { key: "Enter" },
+  };
+  const anchorRows = targets.map((target, index) => ({
+    id: `anchor-${target.id}`,
+    targetId: target.id,
+    rowId: `${target.id}-ready-viewport-0-light`,
+    reason: `representative anchor ${index + 1}`,
+  }));
+  const universalProbeIds = coverageProbes.map(({ id }) => id);
+  const coverageSpec = {
+    version: 3,
+    stateSetups: targets.flatMap((target) => states.map((state) => ({
+      targetId: target.id,
+      state,
+      production: { query: { state }, actions: [] },
+      prototype: { query: { state }, actions: [] },
+      assertionProbeIds: ["coverage-state", "coverage-control"],
+    }))),
+    probes: [...coverageProbes, anchorProbe, keyboardProbe],
+    rowProbeMap: matrix.map(({ id }) => ({
+      rowId: id,
+      probeIds: anchorRows.some(({ rowId }) => rowId === id)
+        ? [
+            ...universalProbeIds,
+            anchorProbe.id,
+            ...(id === anchorRows[0].rowId ? [keyboardProbe.id] : []),
+          ]
+        : universalProbeIds,
+    })),
+    browserSetups: targets.map(({ id: targetId }) => ({
+      targetId,
+      production: { type: "query", parameter: "theme" },
+      prototype: { type: "query", parameter: "theme" },
+    })),
+    coverage: {
+      targetOrder: targets.map(({ id }) => id),
+      viewportOrder: coverageViewports,
+      themeOrder: themes,
+      anchorRows,
+      riskRows: [{
+        id: "risk-mobile-ready",
+        targetId: targets[0].id,
+        state: "ready",
+        viewport: coverageViewports[0],
+        theme: "light",
+        interaction: "mobile-control",
+        reason: "mobile control is state-specific",
+        requiredProbeIds: ["coverage-control"],
+        expected: "control remains operable",
+      }],
+    },
+    sourceImpactMap: [{ source: "src/ui.ts", scope: "global", targetIds: [] }],
+    batchPolicy: { maxRows: 4, maxBytes: 131072, summaryMaxBytes: 4096 },
+    artifactPolicy: { kinds: ["screenshot", "dom", "accessibility"], maxBytes: 2097152, retainOnFailure: true },
+  };
+  return { contract: coverageContract, spec: coverageSpec, targets, states, viewports: coverageViewports, themes };
+}
+
 function createAdapter(overrides: Record<string, unknown> = {}) {
   let active = "production";
   let viewport = { width: 1280, height: 800, dpr: 1 };
@@ -301,6 +462,83 @@ test("phaseとrisk tagからsmoke・affected・全matrixを決定する", async 
     risks: ["focus"],
   });
   assert.deepEqual(mobileFocus.map(({ id }: { id: string }) => id), ["main-default-mobile-light"]);
+});
+
+test("COVERAGE-01 version 3 profileは144行で全軸をcoverしfullは明示contextで1440行になる", async () => {
+  const parity = await parityModulePromise;
+  const fixture = createCoverageFixture();
+  assert.equal(parity.validateParitySpec(fixture.spec, fixture.contract), fixture.spec);
+  const first = parity.selectRows({
+    phase: "final",
+    contract: fixture.contract,
+    spec: fixture.spec,
+    matrixScope: "coverage",
+  });
+  const second = parity.selectRows({
+    phase: "final",
+    contract: fixture.contract,
+    spec: fixture.spec,
+    matrixScope: "coverage",
+  });
+  assert.equal(first.length, 144);
+  assert.equal(new Set(first.map(({ id }: { id: string }) => id)).size, 144);
+  assert.deepEqual(first.map(({ id }: { id: string }) => id), second.map(({ id }: { id: string }) => id));
+  const report = parity.createCoverageReport(fixture.contract, first);
+  assert.equal(report.status, "pass");
+  assert.equal(report.targetStates.length, 18 * 5);
+  assert.equal(report.targetViewports.length, 18 * 8);
+  assert.equal(report.targetThemes.length, 18 * 2);
+  assert.throws(
+    () => parity.selectRows({
+      phase: "final",
+      contract: fixture.contract,
+      spec: fixture.spec,
+      matrixScope: "full",
+    }),
+    /requires release, ci, scheduled, or explicit execution context/u,
+  );
+  assert.equal(parity.selectRows({
+    phase: "final",
+    contract: fixture.contract,
+    spec: fixture.spec,
+    matrixScope: "full",
+    executionContext: "ci",
+  }).length, 1_440);
+
+  const additiveRisk = clone(fixture.spec);
+  additiveRisk.coverage.riskRows.push({
+    id: "risk-additive",
+    targetId: fixture.targets[0].id,
+    state: "ready",
+    viewport: fixture.viewports[1],
+    theme: "dark",
+    interaction: "breakpoint-risk",
+    reason: "this coordinate is outside the cyclic base rows",
+    requiredProbeIds: ["coverage-overflow"],
+    expected: "no horizontal overflow",
+  });
+  assert.equal(parity.selectRows({
+    phase: "final",
+    contract: fixture.contract,
+    spec: additiveRisk,
+    matrixScope: "coverage",
+  }).length, 145);
+});
+
+test("COVERAGE-02 version 3 profileはanchor・state assertion・source impactの欠落を拒否する", async () => {
+  const parity = await parityModulePromise;
+  const fixture = createCoverageFixture();
+  const missingAnchor = clone(fixture.spec);
+  missingAnchor.coverage.anchorRows = missingAnchor.coverage.anchorRows.slice(1);
+  assert.throws(() => parity.validateParitySpec(missingAnchor, fixture.contract), /must include target target-01/u);
+
+  const missingAssertion = clone(fixture.spec);
+  missingAssertion.stateSetups[0].assertionProbeIds = [];
+  assert.throws(() => parity.validateParitySpec(missingAssertion, fixture.contract), /non-empty array/u);
+
+  const missingImpact = clone(fixture.spec);
+  missingImpact.sourceImpactMap = [];
+  assert.throws(() => parity.validateParitySpec(missingImpact, fixture.contract), /cover every productionBaseline source/u);
 });
 
 test("DOM正規化はkey順を安定化しcomputed-hidden nodeを除外する", async () => {

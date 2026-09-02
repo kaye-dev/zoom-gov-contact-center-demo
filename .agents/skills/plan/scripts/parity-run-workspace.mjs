@@ -4,6 +4,7 @@ import {
   mkdir,
   readFile,
   realpath,
+  rename,
   rm,
   stat,
   writeFile,
@@ -12,16 +13,21 @@ import path from "node:path";
 
 import {
   ParityRunError,
+  createCoverageReport,
   createRunContext,
   mergeBatchResults,
   requireLoopbackBaseUrl,
+  resolveInvalidationTargets,
   stableStringify,
 } from "./parity-runner-core.mjs";
 
-const workspaceSchemaVersion = 1;
+const legacyWorkspaceSchemaVersion = 1;
+const coverageWorkspaceSchemaVersion = 2;
 const defaultMaxRows = 4;
 const defaultMaxBytes = 128 * 1024;
 const maxFragmentBytes = 512 * 1024;
+const maxDiagnosticBytes = 2 * 1024;
+const maxSummaryBytes = 4 * 1024;
 const slugPattern = /^[a-z0-9][a-z0-9-]*$/u;
 const identifierPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 const sensitiveKeyPattern = /(?:cookie|credential|password|secret|token|rawscreenshot|screenshotbytes)/iu;
@@ -122,6 +128,117 @@ async function writeJsonExclusive(target, value) {
   ensure(metadata.isFile() && !metadata.isSymbolicLink(), "PARITY_BATCH_INVALID", `${target} must be a regular file`);
   ensure((metadata.mode & 0o777) === 0o600, "PARITY_BATCH_INVALID", `${target} must use mode 600`);
   return { text, bytes: byteLength(text), sha256: canonicalSha256(value) };
+}
+
+async function writeJsonAtomic(target, value) {
+  assertSecretFree(value);
+  const text = `${JSON.stringify(value, null, 2)}\n`;
+  const temporary = `${target}.next`;
+  try {
+    await writeFile(temporary, text, { flag: "wx", mode: 0o600 });
+    await rename(temporary, target);
+  } catch (error) {
+    await rm(temporary, { force: true }).catch(() => {});
+    throw error;
+  }
+  const metadata = await lstat(target);
+  ensure(metadata.isFile() && !metadata.isSymbolicLink(), "PARITY_BATCH_INVALID", `${target} must be a regular file`);
+  ensure((metadata.mode & 0o777) === 0o600, "PARITY_BATCH_INVALID", `${target} must use mode 600`);
+  return { text, bytes: byteLength(text), sha256: canonicalSha256(value) };
+}
+
+function boundedDiagnostic(value) {
+  const bytes = Buffer.from(String(value ?? ""), "utf8");
+  if (bytes.length <= maxDiagnosticBytes) return bytes.toString("utf8");
+  return bytes.subarray(0, maxDiagnosticBytes).toString("utf8");
+}
+
+function compactRunSummary(checkpoint, { cleanup = "pending" } = {}) {
+  const passed = checkpoint.batches.filter(({ status }) => status === "passed");
+  const failed = checkpoint.batches.find(({ status }) => status === "failed" || status === "terminal");
+  const executed = checkpoint.batches.filter(({ status }) => !["pending", "invalidated"].includes(status));
+  const summary = {
+    plannedRows: checkpoint.plannedRows,
+    executedRows: executed.reduce((total, batch) => total + batch.rowIds.length, 0),
+    passedRows: passed.reduce((total, batch) => total + batch.rowIds.length, 0),
+    failedRowIds: failed?.rowIds ?? [],
+    errorCode: failed?.errorCode ?? null,
+    diagnostic: boundedDiagnostic(failed?.diagnostic ?? ""),
+    checkpoint: checkpoint.batches.find(({ status }) => status !== "passed")?.batchId ?? "complete",
+    cleanup,
+  };
+  ensure(
+    byteLength(stableStringify(summary)) <= maxSummaryBytes,
+    "PARITY_BATCH_INVALID",
+    "compact summary exceeds the byte limit",
+  );
+  return summary;
+}
+
+function createCheckpoint(runId, batchDescriptors) {
+  return {
+    schemaVersion: coverageWorkspaceSchemaVersion,
+    runId,
+    resumed: false,
+    plannedRows: batchDescriptors.reduce((total, batch) => total + batch.rowIds.length, 0),
+    invalidations: [],
+    artifactIndex: [],
+    batches: batchDescriptors.map((batch) => ({
+      batchId: batch.batchId,
+      rowIds: batch.rowIds,
+      status: "pending",
+      attempts: 0,
+      errorCode: null,
+      diagnostic: null,
+      fragmentSha256: null,
+    })),
+  };
+}
+
+async function readCheckpoint(runRoot) {
+  const { value } = await readJsonFile(path.join(runRoot, "checkpoint.json"));
+  ensure(value.schemaVersion === coverageWorkspaceSchemaVersion, "PARITY_BATCH_INVALID", "checkpoint schemaVersion is invalid");
+  ensure(Array.isArray(value.batches), "PARITY_BATCH_INVALID", "checkpoint batches must be an array");
+  return value;
+}
+
+async function createWorkspaceArtifactSink({ repositoryRootPath, runId, maxBytes = 2 * 1024 * 1024 }) {
+  const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
+  const artifactRoot = path.join(paths.runRoot, "artifacts");
+  await ensureRealDirectory(artifactRoot, { create: true, mode: 0o700 });
+  return async ({ kind, rowId, probeId, surface, content, mediaType }) => {
+    for (const [value, label] of [[kind, "kind"], [rowId, "rowId"], [probeId, "probeId"], [surface, "surface"]]) {
+      validateIdentifier(value, `artifact ${label}`);
+    }
+    ensure(["screenshot", "dom", "accessibility"].includes(kind), "PARITY_BATCH_INVALID", "artifact kind is invalid");
+    ensure(["production", "prototype"].includes(surface), "PARITY_BATCH_INVALID", "artifact surface is invalid");
+    ensure(typeof mediaType === "string" && mediaType.length > 0, "PARITY_BATCH_INVALID", "artifact mediaType is invalid");
+    const bytes = typeof content === "string" ? Buffer.from(content, "utf8") : Buffer.from(content);
+    ensure(bytes.length <= maxBytes, "PARITY_BATCH_INVALID", "artifact exceeds the byte limit");
+    if (typeof content === "string") assertSecretFree(content, "artifact content");
+    const extension = kind === "screenshot" ? "png" : "json";
+    const fileName = `${rowId}--${probeId}--${surface}.${extension}`;
+    const target = path.join(artifactRoot, fileName);
+    ensure(path.dirname(target) === artifactRoot, "PARITY_BATCH_INVALID", "artifact escaped its root");
+    await writeFile(target, bytes, { flag: "wx", mode: 0o600 });
+    const metadata = await lstat(target);
+    ensure(metadata.isFile() && !metadata.isSymbolicLink(), "PARITY_BATCH_INVALID", "artifact must be a regular file");
+    ensure((metadata.mode & 0o777) === 0o600, "PARITY_BATCH_INVALID", "artifact must use mode 600");
+    const record = {
+      path: path.relative(paths.repositoryRoot, target).split(path.sep).join("/"),
+      sha256: sha256(bytes),
+      bytes: bytes.length,
+      kind,
+      mediaType,
+      surface,
+      rowId,
+      probeId,
+    };
+    const checkpoint = await readCheckpoint(paths.runRoot);
+    checkpoint.artifactIndex.push(record);
+    await writeJsonAtomic(path.join(paths.runRoot, "checkpoint.json"), checkpoint);
+    return record;
+  };
 }
 
 async function readJsonFile(target, { limit = maxFragmentBytes } = {}) {
@@ -361,9 +478,10 @@ async function prepareRunWorkspace({
   changedStates = [],
   changedViewports = [],
   risks = ["normal"],
-  matrixScope = "targeted",
-  maxRows = defaultMaxRows,
-  maxBytes = defaultMaxBytes,
+  matrixScope = definition?.spec?.version === 3 ? "coverage" : "targeted",
+  executionContext,
+  maxRows,
+  maxBytes,
   shellCommands = 0,
   validateApproval,
 }) {
@@ -376,6 +494,11 @@ async function prepareRunWorkspace({
     ensure(approval[field] === current[field], "PARITY_CURRENT_STATE_DRIFT", `approval ${field} is stale`);
   }
   ensure(approval.runId === runId, "PARITY_CURRENT_STATE_DRIFT", "approval runId does not match");
+  const workspaceSchemaVersion = definition.spec.version === 3
+    ? coverageWorkspaceSchemaVersion
+    : legacyWorkspaceSchemaVersion;
+  const resolvedMaxRows = maxRows ?? definition.spec.batchPolicy?.maxRows ?? defaultMaxRows;
+  const resolvedMaxBytes = maxBytes ?? definition.spec.batchPolicy?.maxBytes ?? defaultMaxBytes;
   const context = createRunContext({
     runId,
     definition,
@@ -385,8 +508,9 @@ async function prepareRunWorkspace({
     changedViewports,
     risks,
     matrixScope,
-    maxRows,
-    maxBytes,
+    executionContext,
+    maxRows: resolvedMaxRows,
+    maxBytes: resolvedMaxBytes,
   });
   const paths = await resolveWorkspacePaths(repositoryRootPath, runId, {
     createRoot: true,
@@ -404,7 +528,7 @@ async function prepareRunWorkspace({
       };
       const fileName = `${batch.batchId}.json`;
       const written = await writeJsonExclusive(path.join(paths.runRoot, fileName), payload);
-      ensure(written.bytes <= maxBytes, "PARITY_BATCH_INVALID", `${batch.batchId} exceeds the configured byte limit`);
+      ensure(written.bytes <= resolvedMaxBytes, "PARITY_BATCH_INVALID", `${batch.batchId} exceeds the configured byte limit`);
       batchDescriptors.push({
         batchId: batch.batchId,
         fileName,
@@ -419,6 +543,7 @@ async function prepareRunWorkspace({
       slug,
       phase: "final",
       matrixScope,
+      executionContext: executionContext ?? (definition.spec.version === 3 ? "feature" : null),
       selection: context.selection,
       goalSha256: current.goalSha256,
       prototypeRevision: current.prototypeRevision,
@@ -428,15 +553,25 @@ async function prepareRunWorkspace({
       runtime: current.runtime,
       sources: current.sources,
       shellCommands,
+      batchPolicy: { maxRows: resolvedMaxRows, maxBytes: resolvedMaxBytes },
       rowIds: context.rowIds,
       batches: batchDescriptors,
     };
     const writtenManifest = await writeJsonExclusive(path.join(paths.runRoot, "manifest.json"), manifest);
+    if (workspaceSchemaVersion === coverageWorkspaceSchemaVersion) {
+      await writeJsonExclusive(
+        path.join(paths.runRoot, "checkpoint.json"),
+        createCheckpoint(runId, batchDescriptors),
+      );
+    }
     return {
       schemaVersion: workspaceSchemaVersion,
       runId,
       manifestPath: path.join(paths.runRoot, "manifest.json"),
       manifestSha256: writtenManifest.sha256,
+      ...(workspaceSchemaVersion === coverageWorkspaceSchemaVersion
+        ? { summary: compactRunSummary(createCheckpoint(runId, batchDescriptors)) }
+        : {}),
       batches: batchDescriptors.map((batch) => ({
         batchId: batch.batchId,
         path: path.join(paths.runRoot, batch.fileName),
@@ -450,6 +585,182 @@ async function prepareRunWorkspace({
   }
 }
 
+async function nextRunBatch({ repositoryRootPath, runId }) {
+  const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
+  const { value: manifest } = await readJsonFile(path.join(paths.runRoot, "manifest.json"));
+  ensure(manifest.schemaVersion === coverageWorkspaceSchemaVersion, "PARITY_BATCH_INVALID", "next-batch requires a coverage workspace");
+  const checkpoint = await readCheckpoint(paths.runRoot);
+  const terminal = checkpoint.batches.find(({ status }) => status === "terminal");
+  if (terminal) return { runId, status: "terminal", batch: null, summary: compactRunSummary(checkpoint) };
+  const descriptorState = checkpoint.batches.find(({ status, attempts }) =>
+    status === "pending" || status === "invalidated" || (status === "failed" && attempts < 2));
+  if (!descriptorState) {
+    const complete = checkpoint.batches.every(({ status }) => status === "passed");
+    return {
+      runId,
+      status: complete ? "complete" : "blocked",
+      batch: null,
+      summary: compactRunSummary(checkpoint),
+    };
+  }
+  descriptorState.status = "running";
+  descriptorState.attempts += 1;
+  descriptorState.errorCode = null;
+  descriptorState.diagnostic = null;
+  await writeJsonAtomic(path.join(paths.runRoot, "checkpoint.json"), checkpoint);
+  const descriptor = manifest.batches.find(({ batchId }) => batchId === descriptorState.batchId);
+  return {
+    runId,
+    status: "ready",
+    batch: {
+      batchId: descriptor.batchId,
+      path: path.join(paths.runRoot, descriptor.fileName),
+      sha256: descriptor.sha256,
+      bytes: descriptor.bytes,
+      rowIds: descriptor.rowIds,
+      attempt: descriptorState.attempts,
+    },
+    summary: compactRunSummary(checkpoint),
+  };
+}
+
+async function resumeRunWorkspace({ repositoryRootPath, runId }) {
+  const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
+  const checkpoint = await readCheckpoint(paths.runRoot);
+  checkpoint.resumed = true;
+  for (const batch of checkpoint.batches) {
+    if (batch.status === "running") {
+      batch.status = batch.attempts < 2 ? "failed" : "terminal";
+      batch.errorCode = "PARITY_RUN_INTERRUPTED";
+      batch.diagnostic = "batch execution was interrupted before a result was recorded";
+    }
+  }
+  await writeJsonAtomic(path.join(paths.runRoot, "checkpoint.json"), checkpoint);
+  return nextRunBatch({ repositoryRootPath, runId });
+}
+
+async function recordBatchFailure({
+  repositoryRootPath,
+  runId,
+  batchId,
+  code,
+  diagnostic,
+  transient,
+}) {
+  validateIdentifier(batchId, "batchId");
+  ensure(typeof code === "string" && /^PARITY_[A-Z0-9_]+$/u.test(code), "PARITY_BATCH_INVALID", "failure code is invalid");
+  ensure(typeof transient === "boolean", "PARITY_BATCH_INVALID", "failure transient flag is invalid");
+  const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
+  const checkpoint = await readCheckpoint(paths.runRoot);
+  const batch = checkpoint.batches.find((item) => item.batchId === batchId);
+  ensure(batch?.status === "running", "PARITY_BATCH_INVALID", "failure batch is not running");
+  batch.errorCode = code;
+  batch.diagnostic = boundedDiagnostic(diagnostic);
+  if (transient && batch.attempts < 2) batch.status = "failed";
+  else batch.status = "terminal";
+  await writeJsonAtomic(path.join(paths.runRoot, "checkpoint.json"), checkpoint);
+  return {
+    runId,
+    batchId,
+    status: batch.status,
+    retryable: batch.status === "failed",
+    summary: compactRunSummary(checkpoint),
+  };
+}
+
+async function invalidateRunWorkspace({
+  repositoryRootPath,
+  runId,
+  scope,
+  targetIds = [],
+  source,
+}) {
+  const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
+  const { value: manifest } = await readJsonFile(path.join(paths.runRoot, "manifest.json"));
+  ensure(manifest.schemaVersion === coverageWorkspaceSchemaVersion, "PARITY_BATCH_INVALID", "invalidate-run requires a coverage workspace");
+  const resolution = resolveInvalidationTargets({
+    spec: manifest.definition.spec,
+    contract: manifest.definition.contract,
+    scope,
+    targetIds,
+    source,
+  });
+  const affectedTargets = new Set(resolution.targetIds);
+  const rowsById = new Map(manifest.definition.contract.parityMatrix.map((row) => [row.id, row]));
+  const checkpoint = await readCheckpoint(paths.runRoot);
+  const invalidatedBatchIds = [];
+  for (const batch of checkpoint.batches) {
+    const batchTargets = new Set(batch.rowIds.map((rowId) => rowsById.get(rowId)?.targetId));
+    const affected = [...batchTargets].some((targetId) => affectedTargets.has(targetId));
+    if (!affected) continue;
+    ensure(
+      [...batchTargets].every((targetId) => affectedTargets.has(targetId)),
+      "PARITY_BATCH_INVALID",
+      "coverage batches must preserve target boundaries before invalidation",
+    );
+    await rm(path.join(paths.runRoot, `fragment-${batch.batchId}.json`), { force: true });
+    batch.status = "invalidated";
+    batch.attempts = 0;
+    batch.errorCode = null;
+    batch.diagnostic = null;
+    batch.fragmentSha256 = null;
+    invalidatedBatchIds.push(batch.batchId);
+  }
+  checkpoint.invalidations.push({
+    at: new Date().toISOString(),
+    scope,
+    source: source ?? null,
+    targetIds: resolution.targetIds,
+    failClosed: resolution.failClosed,
+    batchIds: invalidatedBatchIds,
+  });
+  await writeJsonAtomic(path.join(paths.runRoot, "checkpoint.json"), checkpoint);
+  return {
+    runId,
+    status: "invalidated",
+    targetIds: resolution.targetIds,
+    failClosed: resolution.failClosed,
+    batchIds: invalidatedBatchIds,
+    summary: compactRunSummary(checkpoint),
+  };
+}
+
+async function promoteArtifacts({ paths, slug, runId, artifactIndex, rows }) {
+  if (artifactIndex.length === 0) return { artifactIndex, rows };
+  const runEvidenceRoot = path.join(paths.repositoryRoot, "plans", slug, "evidence", runId);
+  await ensureRealDirectory(runEvidenceRoot, { mode: 0o700 });
+  const canonicalRoot = path.join(runEvidenceRoot, "artifacts");
+  await ensureRealDirectory(canonicalRoot, { create: true, mode: 0o700 });
+  const promoted = [];
+  const pathMap = new Map();
+  for (const artifact of artifactIndex) {
+    const source = path.join(paths.repositoryRoot, artifact.path);
+    const resolved = await realpath(source);
+    const sourceRoot = path.join(paths.runRoot, "artifacts");
+    ensure(resolved.startsWith(`${sourceRoot}${path.sep}`), "PARITY_BATCH_INVALID", "artifact source escaped run workspace");
+    const bytes = await readFile(resolved);
+    ensure(bytes.length === artifact.bytes && sha256(bytes) === artifact.sha256, "PARITY_BATCH_INVALID", "artifact digest changed");
+    const target = path.join(canonicalRoot, path.basename(resolved));
+    ensure(path.dirname(target) === canonicalRoot, "PARITY_BATCH_INVALID", "canonical artifact escaped evidence root");
+    await writeFile(target, bytes, { flag: "wx", mode: 0o600 });
+    const canonicalPath = path.relative(paths.repositoryRoot, target).split(path.sep).join("/");
+    pathMap.set(artifact.path, canonicalPath);
+    promoted.push({ ...artifact, path: canonicalPath });
+  }
+  const rewrite = (artifact) => ({ ...artifact, path: pathMap.get(artifact.path) ?? artifact.path });
+  const promotedRows = rows.map((row) => ({
+    ...row,
+    artifactPaths: row.artifactPaths.map((artifactPath) => pathMap.get(artifactPath) ?? artifactPath),
+    ...(Array.isArray(row.artifacts) ? { artifacts: row.artifacts.map(rewrite) } : {}),
+    probes: row.probes.map((probe) => ({
+      ...probe,
+      artifactPaths: probe.artifactPaths.map((artifactPath) => pathMap.get(artifactPath) ?? artifactPath),
+      ...(Array.isArray(probe.artifacts) ? { artifacts: probe.artifacts.map(rewrite) } : {}),
+    })),
+  }));
+  return { artifactIndex: promoted, rows: promotedRows };
+}
+
 async function recordBatchResult({
   repositoryRootPath,
   runId,
@@ -459,9 +770,22 @@ async function recordBatchResult({
   validateIdentifier(batchId, "batchId");
   const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
   const { value: manifest } = await readJsonFile(path.join(paths.runRoot, "manifest.json"));
+  const workspaceSchemaVersion = manifest.schemaVersion;
+  ensure(
+    workspaceSchemaVersion === legacyWorkspaceSchemaVersion || workspaceSchemaVersion === coverageWorkspaceSchemaVersion,
+    "PARITY_BATCH_INVALID",
+    "run manifest schemaVersion is invalid",
+  );
   const descriptorIndex = manifest.batches.findIndex((batch) => batch.batchId === batchId);
   ensure(descriptorIndex >= 0, "PARITY_BATCH_INVALID", `unknown batch: ${batchId}`);
   const descriptor = manifest.batches[descriptorIndex];
+  let checkpoint;
+  let checkpointBatch;
+  if (workspaceSchemaVersion === coverageWorkspaceSchemaVersion) {
+    checkpoint = await readCheckpoint(paths.runRoot);
+    checkpointBatch = checkpoint.batches.find((batch) => batch.batchId === batchId);
+    ensure(checkpointBatch?.status === "running", "PARITY_BATCH_INVALID", "coverage batch must be running before record-batch");
+  }
   let priorCapabilities;
   for (let index = 0; index < descriptorIndex; index += 1) {
     let prior;
@@ -511,7 +835,22 @@ async function recordBatchResult({
   });
   validateFragmentContract(fragment, manifest, descriptorIndex, priorCapabilities);
   const target = path.join(paths.runRoot, `fragment-${batchId}.json`);
-  await writeJsonExclusive(target, fragment);
+  const written = await writeJsonExclusive(target, fragment);
+  if (workspaceSchemaVersion === coverageWorkspaceSchemaVersion) {
+    checkpointBatch.fragmentSha256 = written.sha256;
+    const requiredFailure = fragment.rows.some(({ status }) => status === "fail");
+    checkpointBatch.status = requiredFailure ? "terminal" : "passed";
+    checkpointBatch.errorCode = requiredFailure ? "PARITY_REQUIRED_PROBE_FAILED" : null;
+    checkpointBatch.diagnostic = requiredFailure ? "one or more required probes failed" : null;
+    await writeJsonAtomic(path.join(paths.runRoot, "checkpoint.json"), checkpoint);
+    return {
+      runId,
+      batchId,
+      fragmentPath: target,
+      status: checkpointBatch.status,
+      summary: compactRunSummary(checkpoint),
+    };
+  }
   return { runId, batchId, fragmentPath: target, status: "recorded" };
 }
 
@@ -548,6 +887,12 @@ async function finalizeRunWorkspace({
   validateIdentifier(slug, "slug", slugPattern);
   const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
   const { value: manifest } = await readJsonFile(path.join(paths.runRoot, "manifest.json"));
+  const workspaceSchemaVersion = manifest.schemaVersion;
+  ensure(
+    workspaceSchemaVersion === legacyWorkspaceSchemaVersion || workspaceSchemaVersion === coverageWorkspaceSchemaVersion,
+    "PARITY_BATCH_INVALID",
+    "run manifest schemaVersion is invalid",
+  );
   ensure(manifest.slug === slug && manifest.runId === runId, "PARITY_CURRENT_STATE_DRIFT", "run manifest identity mismatch");
   ensure(
     stableStringify(manifest.definition) === stableStringify(definition),
@@ -556,6 +901,16 @@ async function finalizeRunWorkspace({
   );
   const fragments = [];
   let validatedCapabilities;
+  const checkpoint = workspaceSchemaVersion === coverageWorkspaceSchemaVersion
+    ? await readCheckpoint(paths.runRoot)
+    : undefined;
+  if (checkpoint) {
+    ensure(
+      checkpoint.batches.every(({ status }) => status === "passed"),
+      "PARITY_BATCH_INCOMPLETE",
+      "coverage checkpoint must contain only passed batches before finalize",
+    );
+  }
   for (const [descriptorIndex, descriptor] of manifest.batches.entries()) {
     const batchFile = await readJsonFile(path.join(paths.runRoot, descriptor.fileName), {
       limit: descriptor.bytes,
@@ -586,6 +941,14 @@ async function finalizeRunWorkspace({
       `fragment identity mismatch: ${descriptor.batchId}`,
     );
     ensure(fragment.batchSha256 === descriptor.sha256, "PARITY_BATCH_INVALID", `fragment digest mismatch: ${descriptor.batchId}`);
+    if (checkpoint) {
+      const batchCheckpoint = checkpoint.batches.find(({ batchId }) => batchId === descriptor.batchId);
+      ensure(
+        batchCheckpoint?.fragmentSha256 === fragmentFile.sha256,
+        "PARITY_BATCH_INVALID",
+        `checkpoint fragment digest mismatch: ${descriptor.batchId}`,
+      );
+    }
     ensure(
       stableStringify(fragment.rowIds) === stableStringify(descriptor.rowIds),
       "PARITY_BATCH_INVALID",
@@ -595,7 +958,7 @@ async function finalizeRunWorkspace({
     if (fragment.capabilities !== null) validatedCapabilities = fragment.capabilities;
     fragments.push(fragment);
   }
-  const rows = mergeBatchResults({
+  let rows = mergeBatchResults({
     expectedRowIds: manifest.rowIds,
     fragments: fragments.map(({ batchId, rowIds, rows: fragmentRows }) => ({
       batchId,
@@ -613,8 +976,21 @@ async function finalizeRunWorkspace({
   );
   const capabilities = validatedCapabilities;
   ensure(capabilities?.status === "pass", "PARITY_BATCH_INCOMPLETE", "capability canary must pass");
+  let artifactIndex = [];
+  if (checkpoint) {
+    const promoted = await promoteArtifacts({
+      paths,
+      slug,
+      runId,
+      artifactIndex: checkpoint.artifactIndex,
+      rows,
+    });
+    rows = promoted.rows;
+    artifactIndex = promoted.artifactIndex;
+  }
+  const coverageMode = workspaceSchemaVersion === coverageWorkspaceSchemaVersion;
   const evidence = {
-    schemaVersion: 3,
+    schemaVersion: coverageMode ? 4 : 3,
     phase: "final",
     runId,
     generatedAt: new Date().toISOString(),
@@ -628,6 +1004,31 @@ async function finalizeRunWorkspace({
     capabilities: { ...capabilities, cleanup: cleanupFragments[0].terminalCleanup },
     rows,
     metrics: mergeMetrics(manifest, fragments),
+    ...(coverageMode
+      ? {
+          coverage: createCoverageReport(
+            manifest.definition.contract,
+            rows.map(({ rowId }) => manifest.definition.contract.parityMatrix.find(({ id }) => id === rowId)),
+          ),
+          riskRows: manifest.definition.spec.coverage.riskRows.map((risk) => ({
+            id: risk.id,
+            rowId: manifest.selection.riskRowIds.find(({ id }) => id === risk.id)?.rowId,
+            requiredProbeIds: risk.requiredProbeIds,
+            status: "pass",
+          })),
+          anchorRows: manifest.selection.anchorRowIds.map((anchor) => ({ ...anchor, status: "pass" })),
+          checkpoints: {
+            resumed: checkpoint.resumed,
+            batches: checkpoint.batches,
+            invalidations: checkpoint.invalidations,
+          },
+          artifactIndex,
+          cleanup: cleanupFragments[0].terminalCleanup,
+          automationCoverageStatus: "pass",
+          humanVisualApprovalStatus: "pending",
+          fullParityStatus: manifest.matrixScope === "full" ? "pass" : "not-run",
+        }
+      : {}),
   };
   ensure(typeof validateBundle === "function", "PARITY_BATCH_INVALID", "validateBundle callback is required");
   ensure(typeof writeEvidence === "function", "PARITY_BATCH_INVALID", "writeEvidence callback is required");
@@ -687,8 +1088,14 @@ async function abortRunWorkspace({ repositoryRootPath, runId }) {
 export {
   abortRunWorkspace,
   assertSecretFree,
+  compactRunSummary,
+  createWorkspaceArtifactSink,
   finalizeRunWorkspace,
+  invalidateRunWorkspace,
+  nextRunBatch,
   prepareRunWorkspace,
+  recordBatchFailure,
   recordBatchResult,
+  resumeRunWorkspace,
   sha256,
 };

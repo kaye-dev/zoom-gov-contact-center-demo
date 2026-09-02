@@ -18,6 +18,7 @@ type PreparedFixture = {
 };
 type EvaluatorModule = {
   assertConfirmationHandoffSkillContracts(root?: string): Promise<void>;
+  assertCoverageDrivenSkillContracts(root?: string): Promise<void>;
   codexEnvironment(): Record<string, string>;
   executeScenario(name: string): Promise<void>;
   fixtureGitEnvironment(): Record<string, string>;
@@ -114,6 +115,16 @@ test("CS-EVAL-01〜04: skill evalはconfirmation handoff契約を全scenarioのg
     assert.match(source, new RegExp(caseId, "u"));
   }
   assert.match(source, /assertConfirmationHandoffSkillContracts\(fixture\.repo\)/u);
+});
+
+test("COV-EVAL-01〜06: skill evalはcoverage-driven契約を全scenarioのgrade前に固定する", async () => {
+  const evaluatorModule = await evaluatorModulePromise;
+  await evaluatorModule.assertCoverageDrivenSkillContracts(root);
+  const source = await readFile(evaluator, "utf8");
+  for (const caseId of ["COV-EVAL-01", "COV-EVAL-02", "COV-EVAL-03", "COV-EVAL-04", "COV-EVAL-05", "COV-EVAL-06"]) {
+    assert.match(source, new RegExp(caseId, "u"));
+  }
+  assert.match(source, /assertCoverageDrivenSkillContracts\(fixture\.repo\)/u);
 });
 
 test("eval fixtureは外部MCPなしで必要なcustom agent定義を読み込める", async (context) => {

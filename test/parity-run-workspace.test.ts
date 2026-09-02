@@ -226,6 +226,193 @@ async function prepare(
   });
 }
 
+function createCoverageWorkspaceDefinition() {
+  const targets = [
+    { id: "main", entry: "index.html", route: "/fixture", surface: "page" },
+    { id: "secondary", entry: "secondary.html", route: "/secondary", surface: "page" },
+  ];
+  const viewports = ["390x844", "1280x900"];
+  const themes = ["light", "dark"];
+  const rows = targets.flatMap((target) =>
+    viewports.flatMap((viewport, viewportIndex) => themes.map((theme) => ({
+      id: `${target.id}-ready-${viewportIndex}-${theme}`,
+      targetId: target.id,
+      entry: target.entry,
+      route: target.route,
+      surface: target.surface,
+      state: "ready",
+      viewport,
+      theme,
+      breakpoint: `viewport-${viewportIndex}`,
+      expectedInvariantIds: ["coverage"],
+      intentionalDifferenceIds: [],
+    }))),
+  );
+  const coverageContract = {
+    ...structuredClone(contract),
+    comparisonConditions: { ...structuredClone(contract.comparisonConditions), viewports, themes },
+    baselineStateInventory: ["ready"],
+    themeContract: themes,
+    responsiveContract: viewports.map((viewport, index) => ({ id: `viewport-${index}`, viewport })),
+    visualInvariants: [{ id: "coverage", description: "coverage" }],
+    stateAndInteraction: ["coverage"],
+    comparisonTargets: targets,
+    parityMatrix: rows,
+  };
+  const probeDefinitions = [
+    ["route", {}],
+    ["setup", {}],
+    ["state", { expected: "visible" }],
+    ["viewport", {}],
+    ["theme", { rootClass: "row-theme", colorScheme: "row-theme" }],
+    ["control", { expected: "enabled" }],
+    ["overflow", { tolerancePx: 0 }],
+    ["console", {}],
+  ].map(([kind, options]) => ({
+    id: `coverage-${kind}`,
+    kind,
+    mode: "equal",
+    productionSelector: "main",
+    prototypeSelector: "main",
+    required: true,
+    tier: "coverage",
+    options,
+  }));
+  const anchorProbe = {
+    id: "anchor-screenshot",
+    kind: "screenshot",
+    mode: "equal",
+    productionSelector: "main",
+    prototypeSelector: "main",
+    required: true,
+    tier: "anchor",
+    options: {},
+  };
+  const anchorRows = targets.map((target) => ({
+    id: `anchor-${target.id}`,
+    targetId: target.id,
+    rowId: `${target.id}-ready-0-light`,
+    reason: "representative anchor",
+  }));
+  const coverageSpec = {
+    version: 3,
+    stateSetups: targets.map((target) => ({
+      targetId: target.id,
+      state: "ready",
+      production: { query: {}, actions: [] },
+      prototype: { query: {}, actions: [] },
+      assertionProbeIds: ["coverage-state"],
+    })),
+    browserSetups: targets.map((target) => ({
+      targetId: target.id,
+      production: { type: "query", parameter: "theme" },
+      prototype: { type: "query", parameter: "theme" },
+    })),
+    probes: [...probeDefinitions, anchorProbe],
+    rowProbeMap: rows.map((row) => ({
+      rowId: row.id,
+      probeIds: anchorRows.some(({ rowId }) => rowId === row.id)
+        ? [...probeDefinitions.map(({ id }) => id), anchorProbe.id]
+        : probeDefinitions.map(({ id }) => id),
+    })),
+    coverage: {
+      targetOrder: targets.map(({ id }) => id),
+      viewportOrder: viewports,
+      themeOrder: themes,
+      anchorRows,
+      riskRows: [],
+    },
+    sourceImpactMap: [{ source: "src/ui.ts", scope: "shared", targetIds: ["main"] }],
+    batchPolicy: { maxRows: 2, maxBytes: 131072, summaryMaxBytes: 4096 },
+    artifactPolicy: { kinds: ["screenshot", "dom", "accessibility"], maxBytes: 2097152, retainOnFailure: true },
+  };
+  return {
+    contract: coverageContract,
+    spec: coverageSpec,
+    prototypeRevision: revision,
+    validationProfileDigest: profileDigest,
+  };
+}
+
+function coverageFragment(
+  handshake: { runId: string; batches: Array<{ batchId: string; sha256: string }> },
+  batch: { batchId: string; rowIds: string[] },
+  definition: ReturnType<typeof createCoverageWorkspaceDefinition>,
+) {
+  const batchIndex = handshake.batches.findIndex(({ batchId }) => batchId === batch.batchId);
+  const rowsById = new Map(definition.contract.parityMatrix.map((row) => [row.id, row]));
+  const probeIdsByRow = new Map(definition.spec.rowProbeMap.map((mapping) => [mapping.rowId, mapping.probeIds]));
+  const probeById = new Map(definition.spec.probes.map((probe) => [probe.id, probe]));
+  return {
+    schemaVersion: 2,
+    runId: handshake.runId,
+    batchId: batch.batchId,
+    batchSha256: handshake.batches[batchIndex].sha256,
+    rowIds: batch.rowIds,
+    rows: batch.rowIds.map((rowId) => {
+      const row = rowsById.get(rowId)!;
+      return {
+        rowId,
+        status: "pass",
+        actualConditions: {
+          state: row.state,
+          theme: row.theme,
+          viewport: row.viewport,
+          dpr: 1,
+          urls: {
+            production: `http://localhost:3142${row.route}`,
+            prototype: `http://127.0.0.1:4142/${row.entry}`,
+          },
+          scroll: {
+            production: { x: 0, y: 0, source: "window.scrollX/window.scrollY" },
+            prototype: { x: 0, y: 0, source: "window.scrollX/window.scrollY" },
+          },
+        },
+        probes: probeIdsByRow.get(rowId)!.map((probeId) => {
+          const probe = probeById.get(probeId)!;
+          const value = probe.kind === "console" ? [] : { matches: true };
+          return {
+            probeId,
+            kind: probe.kind,
+            tier: probe.tier,
+            status: "pass",
+            production: value,
+            prototype: value,
+            artifactPaths: [],
+            artifacts: [],
+          };
+        }),
+        artifactPaths: [],
+        artifacts: [],
+      };
+    }),
+    capabilities: batchIndex === 0 ? {
+      status: "pass",
+      tabId: "comparison",
+      viewport: { width: 390, height: 844, dpr: 1 },
+      networkSource: "not-required",
+      sessionId: "coverage-fixture",
+      screenshot: digest,
+    } : null,
+    metrics: {
+      startedAt: "2026-09-01T00:00:00.000Z",
+      finishedAt: "2026-09-01T00:00:01.000Z",
+      durationMs: 1000,
+      shellCommands: 0,
+      browserOperations: 20,
+      fullMatrixRuns: 0,
+    },
+    terminalCleanup: batchIndex === handshake.batches.length - 1 ? {
+      status: "pass",
+      tabId: "comparison",
+      cdpCleared: true,
+      viewportReset: true,
+      baseline: { width: 1280, height: 720, dpr: 2 },
+      readback: { width: 1280, height: 720, dpr: 2 },
+    } : null,
+  };
+}
+
 test("WS-01 bounded batch integrity", async (context) => {
   const workspace = await workspaceModulePromise;
   const fixture = await createFixture(context, "ws-01");
@@ -720,4 +907,327 @@ test("WS-CLI-01 prepare record finalize lifecycle", async (context) => {
   const evidence = JSON.parse(await readFile(path.join(repositoryRoot, finalized.evidencePath), "utf8"));
   assert.equal(evidence.rows[0].rowId, "main-default-mobile-light");
   await assert.rejects(access(path.join(repositoryRoot, ".codex", "parity-runs", "cli-run")));
+});
+
+test("WS-COVERAGE-01 checkpointは成功batchを保持し未実行batchだけを返す", async (context) => {
+  const workspace = await workspaceModulePromise;
+  const fixture = await createFixture(context, "ws-coverage-checkpoint");
+  const definition = createCoverageWorkspaceDefinition();
+  const handshake = await workspace.prepareRunWorkspace({
+    repositoryRootPath: fixture.root,
+    slug: "fixture",
+    runId: "ws-coverage-checkpoint",
+    definition,
+    approval: fixture.approval,
+    current: fixture.current,
+    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    matrixScope: "coverage",
+    validateApproval: fixture.runner.validateApprovalEvidence,
+  });
+  assert.equal(handshake.schemaVersion, 2);
+  assert.equal(handshake.summary.plannedRows, 4);
+  assert.equal(handshake.batches.length, 2);
+
+  const first = await workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId });
+  assert.equal(first.batch.batchId, "batch-0001");
+  await workspace.recordBatchResult({
+    repositoryRootPath: fixture.root,
+    runId: handshake.runId,
+    batchId: first.batch.batchId,
+    input: JSON.stringify(coverageFragment(handshake, first.batch, definition)),
+  });
+  const second = await workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId });
+  assert.equal(second.batch.batchId, "batch-0002");
+  assert.equal(second.summary.passedRows, 2);
+  assert.deepEqual(second.summary.failedRowIds, []);
+});
+
+test("WS-COVERAGE-02 transient failureは同じbatchだけを1回再試行してterminalになる", async (context) => {
+  const workspace = await workspaceModulePromise;
+  const fixture = await createFixture(context, "ws-coverage-retry");
+  const definition = createCoverageWorkspaceDefinition();
+  const handshake = await workspace.prepareRunWorkspace({
+    repositoryRootPath: fixture.root,
+    slug: "fixture",
+    runId: "ws-coverage-retry",
+    definition,
+    approval: fixture.approval,
+    current: fixture.current,
+    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    matrixScope: "coverage",
+    validateApproval: fixture.runner.validateApprovalEvidence,
+  });
+  const first = await workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId });
+  const retryable = await workspace.recordBatchFailure({
+    repositoryRootPath: fixture.root,
+    runId: handshake.runId,
+    batchId: first.batch.batchId,
+    code: "PARITY_BROWSER_TRANSIENT",
+    diagnostic: "temporary Browser disconnect",
+    transient: true,
+  });
+  assert.equal(retryable.retryable, true);
+  const retry = await workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId });
+  assert.equal(retry.batch.batchId, first.batch.batchId);
+  assert.equal(retry.batch.attempt, 2);
+  const terminal = await workspace.recordBatchFailure({
+    repositoryRootPath: fixture.root,
+    runId: handshake.runId,
+    batchId: retry.batch.batchId,
+    code: "PARITY_BROWSER_TRANSIENT",
+    diagnostic: "temporary Browser disconnect repeated",
+    transient: true,
+  });
+  assert.equal(terminal.retryable, false);
+  assert.equal(terminal.status, "terminal");
+  const stopped = await workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId });
+  assert.equal(stopped.status, "terminal");
+  assert.equal(stopped.batch, null);
+});
+
+test("WS-CLI-02 coverage checkpoint commandは失敗batchだけを1回再開する", async (context) => {
+  const workspace = await workspaceModulePromise;
+  const fixture = await createFixture(context, "ws-cli-coverage");
+  const definition = createCoverageWorkspaceDefinition();
+  await workspace.prepareRunWorkspace({
+    repositoryRootPath: fixture.root,
+    slug: "fixture",
+    runId: "ws-cli-coverage",
+    definition,
+    approval: fixture.approval,
+    current: fixture.current,
+    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    matrixScope: "coverage",
+    validateApproval: fixture.runner.validateApprovalEvidence,
+  });
+
+  const firstOutput = captureOutput();
+  await fixture.runner.runCli({
+    argv: ["next-batch", "plans/fixture/prototype", "--run-id", "ws-cli-coverage"],
+    repositoryRootPath: fixture.root,
+    stdout: firstOutput.stream,
+  });
+  const first = JSON.parse(firstOutput.read());
+  assert.equal(first.batch.attempt, 1);
+
+  const failureOutput = captureOutput();
+  await fixture.runner.runCli({
+    argv: [
+      "record-failure", "plans/fixture/prototype",
+      "--run-id", "ws-cli-coverage",
+      "--batch-id", first.batch.batchId,
+      "--failure-code", "PARITY_BROWSER_TRANSIENT",
+      "--diagnostic", "temporary disconnect",
+      "--transient", "true",
+    ],
+    repositoryRootPath: fixture.root,
+    stdout: failureOutput.stream,
+  });
+  assert.equal(JSON.parse(failureOutput.read()).retryable, true);
+
+  const resumeOutput = captureOutput();
+  await fixture.runner.runCli({
+    argv: ["resume-run", "plans/fixture/prototype", "--run-id", "ws-cli-coverage"],
+    repositoryRootPath: fixture.root,
+    stdout: resumeOutput.stream,
+  });
+  const retry = JSON.parse(resumeOutput.read());
+  assert.equal(retry.batch.batchId, first.batch.batchId);
+  assert.equal(retry.batch.attempt, 2);
+
+  const terminalOutput = captureOutput();
+  await fixture.runner.runCli({
+    argv: [
+      "record-failure", "plans/fixture/prototype",
+      "--run-id", "ws-cli-coverage",
+      "--batch-id", first.batch.batchId,
+      "--failure-code", "PARITY_BROWSER_TRANSIENT",
+      "--diagnostic", "temporary disconnect repeated",
+      "--transient", "true",
+    ],
+    repositoryRootPath: fixture.root,
+    stdout: terminalOutput.stream,
+  });
+  assert.equal(JSON.parse(terminalOutput.read()).status, "terminal");
+
+  const cleanupOutput = captureOutput();
+  await fixture.runner.runCli({
+    argv: ["cleanup-run", "plans/fixture/prototype", "--run-id", "ws-cli-coverage"],
+    repositoryRootPath: fixture.root,
+    stdout: cleanupOutput.stream,
+  });
+  assert.equal(JSON.parse(cleanupOutput.read()).status, "aborted");
+});
+
+test("WS-COVERAGE-03 targetとsharedとglobal invalidationは非影響batchを保持する", async (context) => {
+  const workspace = await workspaceModulePromise;
+  const fixture = await createFixture(context, "ws-coverage-invalidate");
+  const definition = createCoverageWorkspaceDefinition();
+  const handshake = await workspace.prepareRunWorkspace({
+    repositoryRootPath: fixture.root,
+    slug: "fixture",
+    runId: "ws-coverage-invalidate",
+    definition,
+    approval: fixture.approval,
+    current: fixture.current,
+    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    matrixScope: "coverage",
+    validateApproval: fixture.runner.validateApprovalEvidence,
+  });
+  for (let index = 0; index < handshake.batches.length; index += 1) {
+    const next = await workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId });
+    await workspace.recordBatchResult({
+      repositoryRootPath: fixture.root,
+      runId: handshake.runId,
+      batchId: next.batch.batchId,
+      input: JSON.stringify(coverageFragment(handshake, next.batch, definition)),
+    });
+  }
+  const targeted = await workspace.invalidateRunWorkspace({
+    repositoryRootPath: fixture.root,
+    runId: handshake.runId,
+    scope: "target",
+    targetIds: ["main"],
+  });
+  assert.deepEqual(targeted.batchIds, ["batch-0001"]);
+  assert.equal(targeted.summary.passedRows, 2);
+  const component = await workspace.invalidateRunWorkspace({
+    repositoryRootPath: fixture.root,
+    runId: handshake.runId,
+    scope: "shared",
+    source: "src/ui.ts",
+  });
+  assert.deepEqual(component.targetIds, ["main"]);
+  assert.equal(component.failClosed, false);
+  const global = await workspace.invalidateRunWorkspace({
+    repositoryRootPath: fixture.root,
+    runId: handshake.runId,
+    scope: "global",
+  });
+  assert.deepEqual(global.batchIds, ["batch-0001", "batch-0002"]);
+  assert.equal(global.summary.passedRows, 0);
+});
+
+test("WS-COVERAGE-04 artifact sinkはprivate artifactだけを保存し秘密値を拒否する", async (context) => {
+  const workspace = await workspaceModulePromise;
+  const fixture = await createFixture(context, "ws-coverage-artifact");
+  const definition = createCoverageWorkspaceDefinition();
+  const handshake = await workspace.prepareRunWorkspace({
+    repositoryRootPath: fixture.root,
+    slug: "fixture",
+    runId: "ws-coverage-artifact",
+    definition,
+    approval: fixture.approval,
+    current: fixture.current,
+    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    matrixScope: "coverage",
+    validateApproval: fixture.runner.validateApprovalEvidence,
+  });
+  const sink = await workspace.createWorkspaceArtifactSink({
+    repositoryRootPath: fixture.root,
+    runId: handshake.runId,
+  });
+  const artifact = await sink({
+    kind: "dom",
+    rowId: "main-ready-0-light",
+    probeId: "anchor-screenshot",
+    surface: "production",
+    content: JSON.stringify({ role: "main", state: "ready" }),
+    mediaType: "application/json",
+  });
+  assert.match(artifact.sha256, /^sha256:[a-f0-9]{64}$/u);
+  assert.equal((await stat(path.join(fixture.root, artifact.path))).mode & 0o777, 0o600);
+  assert.doesNotMatch(JSON.stringify(handshake.summary), /role|state/u);
+  await assert.rejects(
+    sink({
+      kind: "dom",
+      rowId: "main-ready-0-light",
+      probeId: "anchor-screenshot",
+      surface: "prototype",
+      content: JSON.stringify({ email: "resident@example.jp" }),
+      mediaType: "application/json",
+    }),
+    /sensitive data/u,
+  );
+});
+
+test("WS-COVERAGE-05 finalizeはraw artifactを昇格してschema version 4 evidenceを作る", async (context) => {
+  const workspace = await workspaceModulePromise;
+  const fixture = await createFixture(context, "ws-coverage-finalize");
+  const definition = createCoverageWorkspaceDefinition();
+  const evidenceRunRoot = path.join(fixture.root, "plans", "fixture", "evidence", "ws-coverage-finalize");
+  await mkdir(evidenceRunRoot, { recursive: true, mode: 0o700 });
+  await chmod(path.dirname(evidenceRunRoot), 0o700);
+  await chmod(evidenceRunRoot, 0o700);
+  const handshake = await workspace.prepareRunWorkspace({
+    repositoryRootPath: fixture.root,
+    slug: "fixture",
+    runId: "ws-coverage-finalize",
+    definition,
+    approval: fixture.approval,
+    current: fixture.current,
+    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    matrixScope: "coverage",
+    validateApproval: fixture.runner.validateApprovalEvidence,
+  });
+  const sink = await workspace.createWorkspaceArtifactSink({
+    repositoryRootPath: fixture.root,
+    runId: handshake.runId,
+  });
+  const artifactsByRow = new Map<string, Array<Record<string, unknown>>>();
+  for (const anchor of definition.spec.coverage.anchorRows) {
+    for (const surface of ["production", "prototype"]) {
+      const record = await sink({
+        kind: "screenshot",
+        rowId: anchor.rowId,
+        probeId: "anchor-screenshot",
+        surface,
+        content: new Uint8Array([1, 2, 3, surface === "production" ? 4 : 5]),
+        mediaType: "image/png",
+      });
+      artifactsByRow.set(anchor.rowId, [...(artifactsByRow.get(anchor.rowId) ?? []), record]);
+    }
+  }
+  for (let index = 0; index < handshake.batches.length; index += 1) {
+    const next = await workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId });
+    const value = coverageFragment(handshake, next.batch, definition);
+    for (const row of value.rows) {
+      const artifacts = artifactsByRow.get(row.rowId) ?? [];
+      if (artifacts.length === 0) continue;
+      const probe = row.probes.find(({ probeId }) => probeId === "anchor-screenshot")!;
+      probe.artifacts = artifacts;
+      probe.artifactPaths = artifacts.map(({ path: artifactPath }) => artifactPath as string);
+      row.artifacts = artifacts;
+      row.artifactPaths = [...probe.artifactPaths];
+    }
+    await workspace.recordBatchResult({
+      repositoryRootPath: fixture.root,
+      runId: handshake.runId,
+      batchId: next.batch.batchId,
+      input: JSON.stringify(value),
+    });
+  }
+  const finalized = await workspace.finalizeRunWorkspace({
+    repositoryRootPath: fixture.root,
+    slug: "fixture",
+    runId: handshake.runId,
+    approval: fixture.approval,
+    current: fixture.current,
+    definition,
+    validateBundle: fixture.runner.validateEvidenceBundle,
+    writeEvidence: fixture.runner.writeRunEvidence,
+  });
+  const evidence = JSON.parse(await readFile(path.join(fixture.root, finalized.evidencePath), "utf8"));
+  assert.equal(evidence.schemaVersion, 4);
+  assert.equal(evidence.matrixScope, "coverage");
+  assert.equal(evidence.coverage.status, "pass");
+  assert.equal(evidence.automationCoverageStatus, "pass");
+  assert.equal(evidence.humanVisualApprovalStatus, "pending");
+  assert.equal(evidence.fullParityStatus, "not-run");
+  assert.equal(evidence.artifactIndex.length, 4);
+  for (const artifact of evidence.artifactIndex) {
+    assert.match(artifact.path, /^plans\/fixture\/evidence\/ws-coverage-finalize\/artifacts\//u);
+    assert.equal((await stat(path.join(fixture.root, artifact.path))).mode & 0o777, 0o600);
+  }
+  await assert.rejects(access(path.dirname(handshake.manifestPath)));
 });

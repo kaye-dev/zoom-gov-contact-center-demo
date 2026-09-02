@@ -1,6 +1,9 @@
 const phases = new Set(["smoke", "pre-edit", "affected", "final"]);
 const fullMatrixPhases = new Set(["pre-edit", "final"]);
-const matrixScopes = new Set(["targeted", "full"]);
+const matrixScopes = new Set(["targeted", "coverage", "full"]);
+const legacyMatrixScopes = new Set(["targeted", "full"]);
+const coverageMatrixScopes = new Set(["coverage", "full"]);
+const fullExecutionContexts = new Set(["release", "ci", "scheduled", "explicit"]);
 const actionTypes = new Set([
   "click",
   "press",
@@ -19,9 +22,38 @@ const probeKinds = new Set([
   "computedStyle",
   "geometry",
   "focus",
+  "keyboard",
   "console",
   "network",
+  "route",
+  "setup",
+  "state",
+  "viewport",
+  "theme",
+  "control",
+  "overflow",
 ]);
+const coverageProbeKinds = new Set([
+  "route",
+  "setup",
+  "state",
+  "viewport",
+  "theme",
+  "control",
+  "overflow",
+  "console",
+]);
+const anchorProbeKinds = new Set([
+  "screenshot",
+  "dom",
+  "accessibility",
+  "computedStyle",
+  "geometry",
+  "focus",
+  "keyboard",
+  "network",
+]);
+const probeTiers = new Set(["coverage", "anchor"]);
 const probeModes = new Set(["equal", "different"]);
 const riskTags = new Set([
   "normal",
@@ -224,17 +256,197 @@ function validateProbeOptions(probe, label) {
         `${label}.options.tolerancePx must be a non-negative finite number`,
       );
       break;
+    case "keyboard":
+      requireExactKeys(options, ["key"], `${label}.options`);
+      requireNonEmptyString(options.key, `${label}.options.key`);
+      break;
+    case "state":
+      requireExactKeys(options, ["expected"], `${label}.options`);
+      ensure(
+        options.expected === "visible" || options.expected === "hidden",
+        `${label}.options.expected must be visible or hidden`,
+      );
+      break;
+    case "control":
+      requireExactKeys(options, ["expected"], `${label}.options`);
+      ensure(
+        ["enabled", "disabled", "visible", "hidden"].includes(options.expected),
+        `${label}.options.expected must be enabled, disabled, visible, or hidden`,
+      );
+      break;
+    case "theme":
+      requireExactKeys(options, ["rootClass", "colorScheme"], `${label}.options`);
+      requireNonEmptyString(options.rootClass, `${label}.options.rootClass`);
+      ensure(
+        options.colorScheme === "row-theme",
+        `${label}.options.colorScheme must be row-theme`,
+      );
+      break;
+    case "overflow":
+      requireExactKeys(options, ["tolerancePx"], `${label}.options`);
+      ensure(
+        typeof options.tolerancePx === "number" &&
+          Number.isFinite(options.tolerancePx) &&
+          options.tolerancePx >= 0,
+        `${label}.options.tolerancePx must be a non-negative finite number`,
+      );
+      break;
     default:
       requireExactKeys(options, [], `${label}.options`);
   }
 }
 
+function rowCoordinate(row) {
+  return JSON.stringify([row.targetId, row.state, row.viewport, row.theme]);
+}
+
+function validateCoverageProfile(spec, contract, { probeById, probeIdsByRow, setupTuples }) {
+  requireExactKeys(
+    spec.coverage,
+    ["targetOrder", "viewportOrder", "themeOrder", "anchorRows", "riskRows"],
+    "parity-spec.json coverage",
+  );
+  const targetIds = contract.comparisonTargets.map(({ id }) => id);
+  const viewports = contract.comparisonConditions.viewports;
+  const themes = contract.comparisonConditions.themes;
+  ensure(
+    JSON.stringify(requireUniqueStrings(spec.coverage.targetOrder, "coverage.targetOrder")) ===
+      JSON.stringify(targetIds),
+    "coverage.targetOrder must match ui-contract.json comparison target order",
+  );
+  ensure(
+    JSON.stringify(requireUniqueStrings(spec.coverage.viewportOrder, "coverage.viewportOrder")) ===
+      JSON.stringify(viewports),
+    "coverage.viewportOrder must match ui-contract.json viewport order",
+  );
+  ensure(
+    JSON.stringify(requireUniqueStrings(spec.coverage.themeOrder, "coverage.themeOrder")) ===
+      JSON.stringify(themes),
+    "coverage.themeOrder must match ui-contract.json theme order",
+  );
+
+  const rowById = new Map(contract.parityMatrix.map((row) => [row.id, row]));
+  const rowByCoordinate = new Map(contract.parityMatrix.map((row) => [rowCoordinate(row), row]));
+  ensure(rowByCoordinate.size === contract.parityMatrix.length, "ui-contract.json parityMatrix coordinates must be unique");
+  ensure(Array.isArray(spec.coverage.anchorRows), "coverage.anchorRows must be an array");
+  const anchorsByTarget = new Map(targetIds.map((targetId) => [targetId, 0]));
+  const anchorIds = new Set();
+  for (const [index, anchor] of spec.coverage.anchorRows.entries()) {
+    const label = `coverage.anchorRows[${index}]`;
+    requireExactKeys(anchor, ["id", "targetId", "rowId", "reason"], label);
+    const id = requireNonEmptyString(anchor.id, `${label}.id`);
+    ensure(!anchorIds.has(id), "coverage anchor IDs must be unique");
+    anchorIds.add(id);
+    const targetId = requireNonEmptyString(anchor.targetId, `${label}.targetId`);
+    ensure(anchorsByTarget.has(targetId), `${label}.targetId is not declared`);
+    const row = rowById.get(requireNonEmptyString(anchor.rowId, `${label}.rowId`));
+    ensure(row?.targetId === targetId, `${label}.rowId must belong to targetId`);
+    requireNonEmptyString(anchor.reason, `${label}.reason`);
+    ensure(
+      (probeIdsByRow.get(row.id) ?? []).some((probeId) => probeById.get(probeId)?.tier === "anchor"),
+      `${label}.rowId must map at least one anchor probe`,
+    );
+    anchorsByTarget.set(targetId, anchorsByTarget.get(targetId) + 1);
+  }
+  for (const [targetId, count] of anchorsByTarget) {
+    ensure(count > 0, `coverage.anchorRows must include target ${targetId}`);
+  }
+
+  ensure(Array.isArray(spec.coverage.riskRows), "coverage.riskRows must be an array");
+  const riskIds = new Set();
+  for (const [index, risk] of spec.coverage.riskRows.entries()) {
+    const label = `coverage.riskRows[${index}]`;
+    requireExactKeys(
+      risk,
+      ["id", "targetId", "state", "viewport", "theme", "interaction", "reason", "requiredProbeIds", "expected"],
+      label,
+    );
+    const id = requireNonEmptyString(risk.id, `${label}.id`);
+    ensure(!riskIds.has(id), "coverage risk IDs must be unique");
+    riskIds.add(id);
+    const coordinate = JSON.stringify([
+      requireNonEmptyString(risk.targetId, `${label}.targetId`),
+      requireNonEmptyString(risk.state, `${label}.state`),
+      requireNonEmptyString(risk.viewport, `${label}.viewport`),
+      requireNonEmptyString(risk.theme, `${label}.theme`),
+    ]);
+    const row = rowByCoordinate.get(coordinate);
+    ensure(row, `${label} does not resolve to a ui-contract.json parity row`);
+    requireNonEmptyString(risk.interaction, `${label}.interaction`);
+    requireNonEmptyString(risk.reason, `${label}.reason`);
+    requireNonEmptyString(risk.expected, `${label}.expected`);
+    const mappedProbeIds = new Set(probeIdsByRow.get(row.id) ?? []);
+    for (const probeId of requireUniqueStrings(risk.requiredProbeIds, `${label}.requiredProbeIds`)) {
+      const probe = probeById.get(probeId);
+      ensure(probe?.required === true, `${label} references a non-required probe: ${probeId}`);
+      ensure(mappedProbeIds.has(probeId), `${label} probe is not mapped to its row: ${probeId}`);
+    }
+  }
+
+  requireExactKeys(spec.batchPolicy, ["maxRows", "maxBytes", "summaryMaxBytes"], "parity-spec.json batchPolicy");
+  for (const field of ["maxRows", "maxBytes", "summaryMaxBytes"]) {
+    ensure(
+      Number.isInteger(spec.batchPolicy[field]) && spec.batchPolicy[field] > 0,
+      `batchPolicy.${field} must be a positive integer`,
+    );
+  }
+  requireExactKeys(spec.artifactPolicy, ["kinds", "maxBytes", "retainOnFailure"], "parity-spec.json artifactPolicy");
+  const artifactKinds = requireUniqueStrings(spec.artifactPolicy.kinds, "artifactPolicy.kinds");
+  ensure(
+    artifactKinds.every((kind) => ["screenshot", "dom", "accessibility"].includes(kind)),
+    "artifactPolicy.kinds contains an unsupported artifact kind",
+  );
+  ensure(
+    Number.isInteger(spec.artifactPolicy.maxBytes) && spec.artifactPolicy.maxBytes > 0,
+    "artifactPolicy.maxBytes must be a positive integer",
+  );
+  requireBoolean(spec.artifactPolicy.retainOnFailure, "artifactPolicy.retainOnFailure");
+
+  ensure(Array.isArray(spec.sourceImpactMap), "parity-spec.json sourceImpactMap must be an array");
+  const sourceEntries = new Map();
+  for (const [index, impact] of spec.sourceImpactMap.entries()) {
+    const label = `sourceImpactMap[${index}]`;
+    requireExactKeys(impact, ["source", "scope", "targetIds"], label);
+    const source = requireNonEmptyString(impact.source, `${label}.source`);
+    ensure(!sourceEntries.has(source), "sourceImpactMap sources must be unique");
+    ensure(contract.productionBaseline.sources.includes(source), `${label}.source is not in productionBaseline.sources`);
+    ensure(["target", "shared", "global"].includes(impact.scope), `${label}.scope is invalid`);
+    const impactedTargets = requireUniqueStrings(impact.targetIds, `${label}.targetIds`, {
+      allowEmpty: impact.scope === "global",
+    });
+    ensure(impactedTargets.every((targetId) => targetIds.includes(targetId)), `${label}.targetIds contains an unknown target`);
+    if (impact.scope === "global") ensure(impactedTargets.length === 0, `${label}.targetIds must be empty for global scope`);
+    sourceEntries.set(source, impact);
+  }
+  ensure(
+    JSON.stringify([...sourceEntries.keys()].sort()) === JSON.stringify([...contract.productionBaseline.sources].sort()),
+    "sourceImpactMap must cover every productionBaseline source exactly once",
+  );
+
+  for (const tuple of setupTuples) {
+    const [targetId, state] = JSON.parse(tuple);
+    const setup = spec.stateSetups.find((item) => item.targetId === targetId && item.state === state);
+    const assertionIds = requireUniqueStrings(setup.assertionProbeIds, `stateSetups ${targetId}/${state}.assertionProbeIds`);
+    for (const probeId of assertionIds) {
+      const probe = probeById.get(probeId);
+      ensure(probe?.required === true && probe.tier === "coverage", `state assertion must reference a required coverage probe: ${probeId}`);
+    }
+  }
+}
+
 function validateParitySpec(spec, contract) {
   ensure(isPlainObject(spec), "parity-spec.json must be an object");
-  ensure(spec.version === 1 || spec.version === 2, "parity-spec.json version must be 1 or 2");
+  ensure([1, 2, 3].includes(spec.version), "parity-spec.json version must be 1, 2, or 3");
   requireExactKeys(
     spec,
-    ["version", "stateSetups", "probes", "rowProbeMap", ...(spec.version === 2 ? ["browserSetups"] : [])],
+    [
+      "version",
+      "stateSetups",
+      "probes",
+      "rowProbeMap",
+      ...([2, 3].includes(spec.version) ? ["browserSetups"] : []),
+      ...(spec.version === 3 ? ["coverage", "sourceImpactMap", "batchPolicy", "artifactPolicy"] : []),
+    ],
     "parity-spec.json",
   );
   ensure(isPlainObject(contract), "ui-contract.json must contain an object");
@@ -249,7 +461,11 @@ function validateParitySpec(spec, contract) {
   const setupTuples = new Set();
   for (const [index, setup] of spec.stateSetups.entries()) {
     const label = `stateSetups[${index}]`;
-    requireExactKeys(setup, ["targetId", "state", "production", "prototype"], label);
+    requireExactKeys(
+      setup,
+      ["targetId", "state", "production", "prototype", ...(spec.version === 3 ? ["assertionProbeIds"] : [])],
+      label,
+    );
     requireNonEmptyString(setup.targetId, `${label}.targetId`);
     requireNonEmptyString(setup.state, `${label}.state`);
     ensure(targetIds.has(setup.targetId), `${label}.targetId is not declared by ui-contract.json`);
@@ -266,21 +482,41 @@ function validateParitySpec(spec, contract) {
 
   ensure(Array.isArray(spec.probes) && spec.probes.length > 0, "parity-spec.json probes must be a non-empty array");
   const probeIds = new Set();
+  const probeById = new Map();
   for (const [index, probe] of spec.probes.entries()) {
     const label = `probes[${index}]`;
     requireExactKeys(
       probe,
-      ["id", "kind", "mode", "productionSelector", "prototypeSelector", "required", "options"],
+      [
+        "id",
+        "kind",
+        "mode",
+        "productionSelector",
+        "prototypeSelector",
+        "required",
+        "options",
+        ...(spec.version === 3 ? ["tier"] : []),
+      ],
       label,
     );
     const id = requireNonEmptyString(probe.id, `${label}.id`);
     ensure(!probeIds.has(id), "probe IDs must be unique");
     probeIds.add(id);
+    probeById.set(id, probe);
     ensure(probeKinds.has(probe.kind), `${label}.kind is not allowed: ${probe.kind}`);
     ensure(probeModes.has(probe.mode), `${label}.mode must be equal or different`);
     requireNonEmptyString(probe.productionSelector, `${label}.productionSelector`);
     requireNonEmptyString(probe.prototypeSelector, `${label}.prototypeSelector`);
     requireBoolean(probe.required, `${label}.required`);
+    if (spec.version === 3) {
+      ensure(probeTiers.has(probe.tier), `${label}.tier must be coverage or anchor`);
+      if (probe.tier === "coverage") {
+        ensure(coverageProbeKinds.has(probe.kind), `${label}.kind is not allowed for coverage tier`);
+        ensure(probe.required === true, `${label} coverage probes must be required`);
+      } else {
+        ensure(anchorProbeKinds.has(probe.kind), `${label}.kind is not allowed for anchor tier`);
+      }
+    }
     validateProbeOptions(probe, label);
   }
 
@@ -288,6 +524,7 @@ function validateParitySpec(spec, contract) {
   const contractRowIds = contract.parityMatrix.map(({ id }) => id);
   const mappedRowIds = new Set();
   const usedProbeIds = new Set();
+  const probeIdsByRow = new Map();
   for (const [index, mapping] of spec.rowProbeMap.entries()) {
     const label = `rowProbeMap[${index}]`;
     requireExactKeys(mapping, ["rowId", "probeIds"], label);
@@ -295,7 +532,9 @@ function validateParitySpec(spec, contract) {
     ensure(contractRowIds.includes(rowId), `${label}.rowId is not declared by ui-contract.json`);
     ensure(!mappedRowIds.has(rowId), "rowProbeMap row IDs must be unique");
     mappedRowIds.add(rowId);
-    for (const probeId of requireUniqueStrings(mapping.probeIds, `${label}.probeIds`)) {
+    const mappedProbeIds = requireUniqueStrings(mapping.probeIds, `${label}.probeIds`);
+    probeIdsByRow.set(rowId, mappedProbeIds);
+    for (const probeId of mappedProbeIds) {
       ensure(probeIds.has(probeId), `${label} references an unknown probe: ${probeId}`);
       usedProbeIds.add(probeId);
     }
@@ -308,7 +547,21 @@ function validateParitySpec(spec, contract) {
     JSON.stringify([...usedProbeIds].sort()) === JSON.stringify([...probeIds].sort()),
     "every probe must be used by rowProbeMap",
   );
-  if (spec.version === 2) validateBrowserSetups(spec.browserSetups, contract);
+  if ([2, 3].includes(spec.version)) validateBrowserSetups(spec.browserSetups, contract);
+  if (spec.version === 3) {
+    for (const [rowId, mappedProbeIds] of probeIdsByRow) {
+      const mappedKinds = new Set(
+        mappedProbeIds
+          .map((probeId) => probeById.get(probeId))
+          .filter((probe) => probe?.tier === "coverage")
+          .map(({ kind }) => kind),
+      );
+      for (const kind of coverageProbeKinds) {
+        ensure(mappedKinds.has(kind), `rowProbeMap ${rowId} is missing required coverage probe kind: ${kind}`);
+      }
+    }
+    validateCoverageProfile(spec, contract, { probeById, probeIdsByRow, setupTuples });
+  }
   return spec;
 }
 
@@ -328,17 +581,152 @@ function selectedScope(contract, changedTargetIds, changedStates) {
   return { targets: new Set(targets), states: new Set(states) };
 }
 
+function coverageRows(contract, spec) {
+  ensure(spec?.version === 3, "coverage matrix scope requires parity-spec.json version 3");
+  validateParitySpec(spec, contract);
+  const rowByCoordinate = new Map(contract.parityMatrix.map((row) => [rowCoordinate(row), row]));
+  const selected = [];
+  const selectedIds = new Set();
+  const addRow = (row, label) => {
+    ensure(row, `${label} does not resolve to a parity row`);
+    if (selectedIds.has(row.id)) return;
+    selectedIds.add(row.id);
+    selected.push(row);
+  };
+  for (const targetId of spec.coverage.targetOrder) {
+    const targetRows = contract.parityMatrix.filter((row) => row.targetId === targetId);
+    const states = [...new Set(targetRows.map(({ state }) => state))];
+    const viewports = spec.coverage.viewportOrder;
+    const themes = spec.coverage.themeOrder;
+    const baseRowCount = Math.max(states.length, viewports.length, themes.length);
+    for (let index = 0; index < baseRowCount; index += 1) {
+      const coordinate = JSON.stringify([
+        targetId,
+        states[index % states.length],
+        viewports[index % viewports.length],
+        themes[index % themes.length],
+      ]);
+      addRow(rowByCoordinate.get(coordinate), `coverage row ${targetId}/${index}`);
+    }
+  }
+  for (const risk of spec.coverage.riskRows) {
+    addRow(
+      rowByCoordinate.get(JSON.stringify([risk.targetId, risk.state, risk.viewport, risk.theme])),
+      `risk row ${risk.id}`,
+    );
+  }
+  const rowById = new Map(contract.parityMatrix.map((row) => [row.id, row]));
+  for (const anchor of spec.coverage.anchorRows) addRow(rowById.get(anchor.rowId), `anchor row ${anchor.id}`);
+  return selected;
+}
+
+function coverageSelectionMetadata(spec, rows) {
+  const selectedIds = new Set(rows.map(({ id }) => id));
+  return {
+    exactRowIds: rows.map(({ id }) => id),
+    riskRowIds: spec.coverage.riskRows
+      .map((risk) => ({
+        id: risk.id,
+        rowId: rows.find((row) =>
+          row.targetId === risk.targetId &&
+          row.state === risk.state &&
+          row.viewport === risk.viewport &&
+          row.theme === risk.theme)?.id,
+      }))
+      .filter(({ rowId }) => selectedIds.has(rowId)),
+    anchorRowIds: spec.coverage.anchorRows
+      .filter(({ rowId }) => selectedIds.has(rowId))
+      .map(({ id, rowId, targetId }) => ({ id, rowId, targetId })),
+  };
+}
+
+function createCoverageReport(contract, rows) {
+  const selected = new Set(rows.map(rowCoordinate));
+  const targetStates = [];
+  const targetViewports = [];
+  const targetThemes = [];
+  for (const { id: targetId } of contract.comparisonTargets) {
+    const targetRows = contract.parityMatrix.filter((row) => row.targetId === targetId);
+    for (const state of [...new Set(targetRows.map((row) => row.state))]) {
+      targetStates.push({
+        targetId,
+        state,
+        covered: targetRows.some((row) => row.state === state && selected.has(rowCoordinate(row))),
+      });
+    }
+    for (const viewport of contract.comparisonConditions.viewports) {
+      targetViewports.push({
+        targetId,
+        viewport,
+        covered: targetRows.some((row) => row.viewport === viewport && selected.has(rowCoordinate(row))),
+      });
+    }
+    for (const theme of contract.comparisonConditions.themes) {
+      targetThemes.push({
+        targetId,
+        theme,
+        covered: targetRows.some((row) => row.theme === theme && selected.has(rowCoordinate(row))),
+      });
+    }
+  }
+  const missing = {
+    targetStates: targetStates.filter(({ covered }) => !covered).map(({ targetId, state }) => `${targetId}/${state}`),
+    targetViewports: targetViewports.filter(({ covered }) => !covered).map(({ targetId, viewport }) => `${targetId}/${viewport}`),
+    targetThemes: targetThemes.filter(({ covered }) => !covered).map(({ targetId, theme }) => `${targetId}/${theme}`),
+  };
+  return {
+    targetStates,
+    targetViewports,
+    targetThemes,
+    missing,
+    status: Object.values(missing).every((values) => values.length === 0) ? "pass" : "fail",
+  };
+}
+
+function resolveInvalidationTargets({ spec, contract, scope, targetIds = [], source }) {
+  ensure(spec?.version === 3, "invalidation requires parity-spec.json version 3");
+  const declaredTargets = contract.comparisonTargets.map(({ id }) => id);
+  if (scope === "global") return { targetIds: declaredTargets, failClosed: false };
+  if (scope === "target") {
+    const selected = requireUniqueStrings(targetIds, "invalidation targetIds");
+    ensure(selected.every((targetId) => declaredTargets.includes(targetId)), "invalidation contains an unknown target");
+    return { targetIds: selected, failClosed: false };
+  }
+  ensure(scope === "shared", "invalidation scope must be target, shared, or global");
+  requireNonEmptyString(source, "invalidation source");
+  const impact = spec.sourceImpactMap.find((entry) => entry.source === source);
+  if (!impact) return { targetIds: declaredTargets, failClosed: true };
+  if (impact.scope === "global") return { targetIds: declaredTargets, failClosed: false };
+  return { targetIds: impact.targetIds, failClosed: false };
+}
+
 function selectRows({
   phase,
   contract,
+  spec,
   changedTargetIds = [],
   changedStates = [],
   changedViewports = [],
   risks = ["normal"],
-  matrixScope = "targeted",
+  matrixScope = spec?.version === 3 && phase !== "smoke" ? "coverage" : "targeted",
+  executionContext,
 }) {
   ensure(phases.has(phase), `phase must be one of: ${[...phases].join(", ")}`);
   ensure(matrixScopes.has(matrixScope), `matrixScope must be one of: ${[...matrixScopes].join(", ")}`);
+  if (spec?.version === 3) {
+    if (matrixScope === "targeted") {
+      ensure(phase === "smoke", "parity-spec.json version 3 targeted scope is allowed only for plan smoke");
+    } else {
+      ensure(coverageMatrixScopes.has(matrixScope), "parity-spec.json version 3 supports coverage or full matrix scope");
+    }
+    if (matrixScope === "coverage") return coverageRows(contract, spec);
+    if (matrixScope === "full") {
+      ensure(fullMatrixPhases.has(phase), "full matrix scope is allowed only for pre-edit or final");
+      ensure(fullExecutionContexts.has(executionContext), "full matrix scope requires release, ci, scheduled, or explicit execution context");
+      return [...contract.parityMatrix];
+    }
+  }
+  ensure(legacyMatrixScopes.has(matrixScope), "targeted selection supports targeted or full matrix scope");
   if (matrixScope === "full") {
     ensure(fullMatrixPhases.has(phase), "full matrix scope is allowed only for pre-edit or final");
     return [...contract.parityMatrix];
@@ -412,7 +800,7 @@ async function sha256Digest(value, cryptoProvider = globalThis.crypto) {
   return `sha256:${[...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
 
-function createBatches(rows, { maxRows = 4, maxBytes = 128 * 1024 } = {}) {
+function createBatches(rows, { maxRows = 4, maxBytes = 128 * 1024, preserveTargetBoundaries = false } = {}) {
   ensure(Array.isArray(rows) && rows.length > 0, "batch rows must be a non-empty array");
   ensure(Number.isInteger(maxRows) && maxRows > 0, "maxRows must be a positive integer");
   ensure(Number.isInteger(maxBytes) && maxBytes > 0, "maxBytes must be a positive integer");
@@ -429,7 +817,9 @@ function createBatches(rows, { maxRows = 4, maxBytes = 128 * 1024 } = {}) {
     if (byteLength > maxBytes && current.length === 0) {
       throwParityError("PARITY_BATCH_INVALID", `row exceeds the batch byte limit: ${row.id}`);
     }
-    if (current.length >= maxRows || byteLength > maxBytes) {
+    const crossesTargetBoundary =
+      preserveTargetBoundaries && current.length > 0 && current[0].targetId !== row.targetId;
+    if (current.length >= maxRows || byteLength > maxBytes || crossesTargetBoundary) {
       batches.push(current);
       current = [row];
     } else {
@@ -452,7 +842,8 @@ function createRunContext({
   changedStates = [],
   changedViewports = [],
   risks = ["normal"],
-  matrixScope = "targeted",
+  matrixScope = definition?.spec?.version === 3 ? "coverage" : "targeted",
+  executionContext,
   maxRows,
   maxBytes,
 }) {
@@ -461,19 +852,30 @@ function createRunContext({
   const rows = selectRows({
     phase,
     contract: definition.contract,
+    spec: definition.spec,
     changedTargetIds,
     changedStates,
     changedViewports,
     risks,
     matrixScope,
+    executionContext,
   });
+  const coverageMetadata = definition.spec.version === 3
+    ? coverageSelectionMetadata(definition.spec, rows)
+    : undefined;
   return {
     runId,
     phase,
     matrixScope,
-    selection: { changedTargetIds, changedStates, changedViewports, risks },
+    selection: definition.spec.version === 3
+      ? { executionContext: executionContext ?? "feature", ...coverageMetadata }
+      : { changedTargetIds, changedStates, changedViewports, risks },
     rowIds: rows.map(({ id }) => id),
-    batches: createBatches(rows, { maxRows, maxBytes }),
+    batches: createBatches(rows, {
+      maxRows,
+      maxBytes,
+      preserveTargetBoundaries: definition.spec.version === 3,
+    }),
   };
 }
 
@@ -581,6 +983,12 @@ function compareProbe(probe, productionResult, prototypeResult) {
   }
   if (probe.kind === "visibility" && probe.mode === "equal") {
     equal = equal && production === probe.options.expected;
+  }
+  if (["route", "setup", "state", "viewport", "theme", "control", "overflow", "keyboard"].includes(probe.kind)) {
+    equal = equal && production?.matches === true && prototype?.matches === true;
+  }
+  if (probe.kind === "console") {
+    equal = equal && Array.isArray(production) && production.length === 0;
   }
   const passed = probe.mode === "equal" ? equal : !equal;
   return {
@@ -840,30 +1248,34 @@ class BrowserParityRunner {
     changedStates = [],
     changedViewports = [],
     risks = ["normal"],
-    matrixScope = "targeted",
+    matrixScope,
+    executionContext,
     run,
   }) {
     const { contract, spec } = definition;
+    const resolvedMatrixScope = matrixScope ?? (spec.version === 3 && phase === "final" ? "coverage" : "targeted");
     ensure(
       phase === "smoke" || phase === "final",
       "new Browser runs support only final-boundary smoke or final phases",
     );
     requireLoopbackBaseUrl(baseUrls.production, "production");
     requireLoopbackBaseUrl(baseUrls.prototype, "prototype");
-    if (this.adapter.requiresBrowserSetups === true && spec.version !== 2) {
+    if (this.adapter.requiresBrowserSetups === true && ![2, 3].includes(spec.version)) {
       throwParityError(
         "PARITY_BROWSER_SETUP_REQUIRED",
-        "in-app Browser execution requires parity-spec.json version 2 browserSetups",
+        "in-app Browser execution requires parity-spec.json version 2 or 3 browserSetups",
       );
     }
     const rows = selectRows({
       phase,
       contract,
+      spec,
       changedTargetIds,
       changedStates,
       changedViewports,
       risks,
-      matrixScope,
+      matrixScope: resolvedMatrixScope,
+      executionContext,
     });
     const probeById = new Map(spec.probes.map((probe) => [probe.id, probe]));
     const probeIdsByRow = new Map(spec.rowProbeMap.map(({ rowId, probeIds }) => [rowId, probeIds]));
@@ -903,26 +1315,45 @@ class BrowserParityRunner {
       requiresNetwork,
       url: canaryUrl,
     });
+    const selection = spec.version === 3
+      ? {
+          executionContext: executionContext ?? (phase === "smoke" ? "plan-smoke" : "feature"),
+          ...coverageSelectionMetadata(spec, rows),
+        }
+      : { changedTargetIds, changedStates, changedViewports, risks };
     const evidence = {
-      schemaVersion: 3,
+      schemaVersion: spec.version === 3 ? 4 : 3,
       phase,
       runId: run.runId,
       generatedAt: startedAt,
       goalSha256: run.goalSha256,
       prototypeRevision: definition.prototypeRevision,
       validationProfileDigest: definition.validationProfileDigest,
-      matrixScope,
-      selection: {
-        changedTargetIds,
-        changedStates,
-        changedViewports,
-        risks,
-      },
+      matrixScope: resolvedMatrixScope,
+      selection,
       runtime: run.runtime,
       sources: run.sources,
       capabilities: canary,
       rows: [],
       metrics: undefined,
+      ...(spec.version === 3
+        ? {
+            coverage: createCoverageReport(contract, rows),
+            riskRows: spec.coverage.riskRows.map((risk) => ({
+              id: risk.id,
+              rowId: selection.riskRowIds.find(({ id }) => id === risk.id)?.rowId,
+              requiredProbeIds: risk.requiredProbeIds,
+              status: "pending",
+            })),
+            anchorRows: selection.anchorRowIds.map((anchor) => ({ ...anchor, status: "pending" })),
+            checkpoints: { resumed: false, batches: [], invalidations: [] },
+            artifactIndex: [],
+            cleanup: { status: "pending" },
+            automationCoverageStatus: "pending",
+            humanVisualApprovalStatus: "pending",
+            fullParityStatus: resolvedMatrixScope === "full" ? "pending" : "not-run",
+          }
+        : {}),
     };
 
     for (const row of rows) {
@@ -991,15 +1422,30 @@ class BrowserParityRunner {
           },
           probes: [],
           artifactPaths: [],
+          ...(spec.version === 3 ? { artifacts: [] } : {}),
         };
         for (const probeId of probeIdsByRow.get(row.id)) {
           const probe = probeById.get(probeId);
           const production = productionProbeResults.get(probeId);
           const prototype = prototypeProbeResults.get(probeId);
           const comparison = compareProbe(probe, production, prototype);
-          const artifacts = [production?.artifactPath, prototype?.artifactPath].filter(Boolean);
+          const artifactRecords = [production?.artifact, prototype?.artifact].filter(Boolean);
+          const artifacts = [
+            production?.artifactPath ?? production?.artifact?.path,
+            prototype?.artifactPath ?? prototype?.artifact?.path,
+          ].filter(Boolean);
           rowEvidence.artifactPaths.push(...artifacts);
-          rowEvidence.probes.push({ probeId, kind: probe.kind, ...comparison, artifactPaths: artifacts });
+          if (spec.version === 3) {
+            rowEvidence.artifacts.push(...artifactRecords);
+            evidence.artifactIndex.push(...artifactRecords);
+          }
+          rowEvidence.probes.push({
+            probeId,
+            kind: probe.kind,
+            ...comparison,
+            artifactPaths: artifacts,
+            ...(spec.version === 3 ? { tier: probe.tier, artifacts: artifactRecords } : {}),
+          });
           if (comparison.status === "fail") rowEvidence.status = "fail";
         }
         evidence.rows.push(rowEvidence);
@@ -1010,7 +1456,7 @@ class BrowserParityRunner {
             durationMs: Date.now() - startedMs,
             shellCommands: Number.isInteger(run.shellCommands) && run.shellCommands >= 0 ? run.shellCommands : 0,
             browserOperations: this.operations,
-            fullMatrixRuns: matrixScope === "full" ? 1 : 0,
+            fullMatrixRuns: resolvedMatrixScope === "full" ? 1 : 0,
           };
           throw new ParityRunError("PARITY_ROW_FAILED", `parity row failed: ${row.id}`, evidence);
         }
@@ -1022,6 +1468,7 @@ class BrowserParityRunner {
           actualConditions: null,
           probes: [],
           artifactPaths: [],
+          ...(spec.version === 3 ? { artifacts: [] } : {}),
           error: "PARITY_UNEXPECTED_ERROR",
         });
         evidence.metrics = {
@@ -1030,7 +1477,7 @@ class BrowserParityRunner {
           durationMs: Date.now() - startedMs,
           shellCommands: Number.isInteger(run.shellCommands) && run.shellCommands >= 0 ? run.shellCommands : 0,
           browserOperations: this.operations,
-          fullMatrixRuns: matrixScope === "full" ? 1 : 0,
+          fullMatrixRuns: resolvedMatrixScope === "full" ? 1 : 0,
         };
         throw new ParityRunError(
           "PARITY_UNEXPECTED_ERROR",
@@ -1045,8 +1492,25 @@ class BrowserParityRunner {
       durationMs: Date.now() - startedMs,
       shellCommands: Number.isInteger(run.shellCommands) && run.shellCommands >= 0 ? run.shellCommands : 0,
       browserOperations: this.operations,
-      fullMatrixRuns: matrixScope === "full" ? 1 : 0,
+      fullMatrixRuns: resolvedMatrixScope === "full" ? 1 : 0,
     };
+    if (spec.version === 3) {
+      evidence.riskRows = evidence.riskRows.map((risk) => ({
+        ...risk,
+        status: evidence.rows.find(({ rowId }) => rowId === risk.rowId)?.status ?? "fail",
+      }));
+      evidence.anchorRows = evidence.anchorRows.map((anchor) => ({
+        ...anchor,
+        status: evidence.rows.find(({ rowId }) => rowId === anchor.rowId)?.status ?? "fail",
+      }));
+      evidence.automationCoverageStatus =
+        evidence.coverage.status === "pass" && evidence.rows.every(({ status }) => status === "pass")
+          ? "pass"
+          : "fail";
+      evidence.fullParityStatus = resolvedMatrixScope === "full" && evidence.automationCoverageStatus === "pass"
+        ? "pass"
+        : evidence.fullParityStatus;
+    }
     return evidence;
   }
 
@@ -1064,7 +1528,9 @@ class BrowserParityRunner {
       try {
         const cleanup = await this.call("cleanup");
         if (result?.capabilities) result.capabilities.cleanup = cleanup;
+        if (result?.schemaVersion === 4) result.cleanup = cleanup;
         if (failure?.evidence?.capabilities) failure.evidence.capabilities.cleanup = cleanup;
+        if (failure?.evidence?.schemaVersion === 4) failure.evidence.cleanup = cleanup;
       } catch {
         throw new ParityRunError(
           "PARITY_CLEANUP_FAILED",
@@ -1082,7 +1548,9 @@ export {
   BrowserParityRunner,
   ParityRunError,
   compareProbe,
+  coverageSelectionMetadata,
   createBatches,
+  createCoverageReport,
   createRunContext,
   ensure,
   fullMatrixPhases,
@@ -1097,6 +1565,7 @@ export {
   requireNonEmptyString,
   requireLoopbackBaseUrl,
   requireUniqueStrings,
+  resolveInvalidationTargets,
   scrollSource,
   selectRows,
   sha256Digest,

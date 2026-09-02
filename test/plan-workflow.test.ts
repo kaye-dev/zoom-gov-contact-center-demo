@@ -100,6 +100,11 @@ test("templateはgoal設計とinvocation approvalだけを持ちmutable parity�
     "stateとinteraction",
     "comparison targets",
     "parity matrix",
+    "coverage matrix",
+    "risk rows",
+    "anchor rows",
+    "full parity条件",
+    "human UI review",
   ]) {
     assert.match(template, new RegExp(`^- ${field}:`, "m"));
   }
@@ -120,7 +125,7 @@ test("planはauthoring後の返却直前にsmokeを1回だけ行う", async () =
   assert.match(plan, /parity-spec\.json/);
   assert.match(plan, /prototype revision/);
   assert.match(plan, /smoke/);
-  assert.match(plan, /Do not run the complete matrix/);
+  assert.match(plan, /Do not run the coverage or full matrix/);
   assert.doesNotMatch(plan, /machineParityResults|UI承認記録|<row-id>=pending/);
   assert.match(plan, /user can give feedback|user.*feedback/iu);
   assert.match(plan, /Browser unavailability does not block a reviewable plan/);
@@ -131,10 +136,10 @@ test("planはauthoring後の返却直前にsmokeを1回だけ行う", async () =
   assert.match(plan, /If it is unavailable, continue the investigation locally and report/);
   assert.match(quality, /Prepare iterative review/);
   assert.match(goalQuality, /explicit `\$implement` invocation is the approval/);
-  assert.match(goalQuality, /missing file means that phase was not run/);
-  assert.match(parityReference, /representative desktop and 390×844/);
-  assert.match(parityReference, /theme.*semantic-token.*native-control/);
-  assert.match(parityReference, /responsive.*shell.*navigation.*layout/);
+  assert.match(goalQuality, /missing final file means automated coverage did not complete/);
+  assert.match(parityReference, /144 coverage rows and 1,440 full rows/);
+  assert.match(parityReference, /risk row/);
+  assert.match(parityReference, /anchor/);
 });
 
 test("読みにくいplanは同じgoalを履歴なしの最終設計へ再整理する", async () => {
@@ -156,7 +161,7 @@ test("読みにくいplanは同じgoalを履歴なしの最終設計へ再整理
   assert.match(plan, /Do not start another skill or custom agent, and do not run Browser solely for this editorial rewrite/);
 });
 
-test("implementはinvocation approval後にBrowserを使わず実装し完了直前のfinalだけを要求する", async () => {
+test("implementはinvocation approval後にcoverage-driven finalを実行する", async () => {
   const [implement, workflow, devServer, agents] = await Promise.all([
     read(".agents/skills/implement/SKILL.md"),
     read("docs/development/codex-development-workflow.md"),
@@ -171,35 +176,38 @@ test("implementはinvocation approval後にBrowserを使わず実装し完了直
   assert.match(implement, /explicit `\$implement` invocation is the approval basis/);
   assert.match(implement, /approval\.json/);
   assert.match(implement, /implementation-parity\.json/);
-  assert.match(implement, /one capability canary/);
-  assert.match(implement, /Start gate without Browser/);
+  assert.match(implement, /Coverage scope and start gate/);
   assert.match(implement, /Browser availability is not a start gate/);
   assert.match(implement, /Do not probe Browser capability/);
-  assert.match(implement, /Final Browser review/);
-  assert.match(implement, /schema version 3/);
-  assert.match(implement, /do not create `pre-edit-parity\.json`/);
-  assert.match(implement, /Do not run `affected` Browser rows/);
-  assert.match(implement, /Use `targeted` by default/);
-  assert.match(implement, /Use `full` only when/);
-  assert.match(implement, /one setup attempt plus one retry/);
+  assert.match(implement, /Final coverage run/);
+  assert.match(implement, /schema-version-4/);
+  assert.match(implement, /do not create `pre-edit-parity\.json`/i);
+  assert.match(implement, /matrixScope: coverage/);
+  assert.match(implement, /matrixScope: full/);
+  assert.match(implement, /release.*ci.*scheduled.*explicit/s);
+  assert.match(implement, /Retry only the failed batch once/);
+  assert.match(implement, /There is no run-wide time cutoff/);
   assert.match(implement, /in-app-browser-parity-adapter\.mjs/);
   assert.match(implement, /prepare-run/);
+  assert.match(implement, /next-batch/);
   assert.match(implement, /record-batch/);
+  assert.match(implement, /record-failure/);
+  assert.match(implement, /invalidate-run/);
+  assert.match(implement, /resume-run/);
   assert.match(implement, /finalize-run/);
-  assert.match(implement, /task-specific runtime shim/);
+  assert.match(implement, /task-specific adapters.*runtime shims/s);
   assert.match(implement, /Run the full test suite only when/);
   assert.match(implement, /Run a production build only for/);
-  assert.match(implement, /Any later related change invalidates it/);
-  assert.match(implement, /Do not require a prior machine-parity field/);
-  assert.match(implement, /do not request an extra approval message/);
+  assert.match(implement, /sourceImpactMap/);
+  assert.match(implement, /Automated coverage, human visual approval, and full parity are independent states/);
   assert.match(implement, /do not delegate implementation to a custom agent/);
-  assert.match(workflow, /final parityを1回/);
-  assert.match(workflow, /`targeted`を既定/);
+  assert.match(workflow, /`coverage`を通常既定/);
+  assert.match(workflow, /schema version 4/);
   assert.match(workflow, /task固有adapter、実行可能bundle、runtime shimを新設しない/);
-  assert.match(workflow, /不要な全test・buildを実行しない/);
-  assert.match(workflow, /pre-editとaffectedのBrowser実行が0回/);
-  assert.match(workflow, /完了直前のtargeted finalが1回/);
-  assert.match(workflow, /巨大なpending一覧を作らない/);
+  assert.match(workflow, /全testは.*場合.*production buildは.*場合/s);
+  assert.match(workflow, /pre-editとaffectedのBrowser phaseは新規runで実行しない/);
+  assert.match(workflow, /全target-state\/viewport\/theme coverage/);
+  assert.match(workflow, /LLMには件数、失敗row ID/);
 });
 
 test("WF-01 in-app parity lifecycle contract", async () => {
@@ -211,19 +219,23 @@ test("WF-01 in-app parity lifecycle contract", async () => {
     read(".agents/skills/plan/references/parity-runner.md"),
     read(".gitignore"),
   ]);
-  assert.match(plan, /parity-spec\.json` version 2/u);
+  assert.match(plan, /parity-spec\.json` version 3/u);
   assert.match(plan, /browserSetups/u);
   for (const contract of [implement, workflow, reference]) {
     assert.match(contract, /prepare-run/u);
+    assert.match(contract, /next-batch/u);
     assert.match(contract, /record-batch/u);
+    assert.match(contract, /resume-run/u);
     assert.match(contract, /finalize-run/u);
     assert.match(contract, /390x844 \/ DPR 1|390×844 \/ DPR 1/u);
   }
-  assert.match(review, /terminal cleanup/u);
+  assert.match(review, /terminal cleanup|terminal finalization/u);
   assert.match(review, /parity-runs/u);
+  assert.match(review, /schema-version-4/u);
   assert.match(reference, /PARITY_DPR_OVERRIDE_UNAVAILABLE/u);
   assert.match(reference, /PARITY_CLEANUP_FAILED/u);
-  assert.match(reference, /single selected tab|選択済みtab|selected comparison tab/u);
+  assert.match(reference, /one fresh selected in-app Browser tab/u);
+  assert.match(reference, /144 coverage rows and 1,440 full rows/u);
   assert.match(gitignore, /^\/\.codex\/parity-runs\/$/mu);
 });
 
@@ -318,15 +330,17 @@ test("reviewはstructured evidenceを先に検証して二つのpassを並行実
   const review = await read(".agents/skills/review/SKILL.md");
   assert.match(review, /approval\.json/);
   assert.match(review, /implementation-parity\.json/);
-  assert.match(review, /schema-version-3/);
+  assert.match(review, /schema-version-4/);
   assert.match(review, /node \.agents\/skills\/plan\/scripts\/prototype-revision\.mjs plans\/<slug>\/prototype/);
   assert.match(review, /review-data\.json\.validations/);
-  assert.match(review, /returned current `sha256:` revision/);
-  assert.match(review, /New runs do not require or create `pre-edit-parity\.json`/);
-  assert.match(review, /structured scroll provenance/);
-  assert.doesNotMatch(review, /natural-language scroll|自然言語.*scroll/iu);
+  assert.match(review, /current `sha256:` revision/);
+  assert.match(review, /New runs do not create `pre-edit-parity\.json`/);
+  assert.match(review, /target-state\/target-viewport\/target-theme coverage/);
+  assert.match(review, /automationCoverageStatus/);
+  assert.match(review, /humanVisualApprovalStatus/);
+  assert.match(review, /fullParityStatus/);
   assert.match(review, /existing plan with only legacy goal\/Markdown evidence/);
-  assert.match(review, /schema version 1 and 2 as legacy read-only pre-edit\/final pairs/);
+  assert.match(review, /schema versions 1, 2, and 3 as legacy read-only inputs/);
   assert.match(review, /Run both passes in parallel/);
   assert.match(review, /concurrently/);
   assert.match(review, /two fresh no-history `independent_reviewer` custom agents/);

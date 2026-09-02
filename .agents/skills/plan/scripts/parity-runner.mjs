@@ -9,14 +9,19 @@ import { prototypeRevisionInRepository } from "./prototype-revision.mjs";
 import {
   abortRunWorkspace,
   finalizeRunWorkspace,
+  invalidateRunWorkspace,
+  nextRunBatch,
   prepareRunWorkspace,
+  recordBatchFailure,
   recordBatchResult,
+  resumeRunWorkspace,
 } from "./parity-run-workspace.mjs";
 import {
   BrowserParityRunner,
   ParityRunError,
   compareProbe,
   createBatches,
+  createCoverageReport,
   createRunContext,
   ensure,
   fullMatrixPhases,
@@ -216,7 +221,24 @@ function validateMeasuredUrl(value, surface, expectedRoute, label) {
   ensure(actual.pathname === expectedRoute, `${label} route does not match the manifest row`);
 }
 
-function validateRowEvidence(rowEvidence, manifestRow, contract, expectedProbes) {
+function validateArtifactRecord(artifact, label) {
+  requireExactKeys(
+    artifact,
+    ["path", "sha256", "bytes", "kind", "mediaType", "surface", "rowId", "probeId"],
+    label,
+  );
+  requireNonEmptyString(artifact.path, `${label}.path`);
+  ensure(!path.isAbsolute(artifact.path) && !artifact.path.split("/").includes(".."), `${label}.path is unsafe`);
+  requireSha256(artifact.sha256, `${label}.sha256`);
+  ensure(Number.isInteger(artifact.bytes) && artifact.bytes >= 0, `${label}.bytes must be a non-negative integer`);
+  ensure(["screenshot", "dom", "accessibility"].includes(artifact.kind), `${label}.kind is invalid`);
+  requireNonEmptyString(artifact.mediaType, `${label}.mediaType`);
+  ensure(["production", "prototype"].includes(artifact.surface), `${label}.surface is invalid`);
+  requireNonEmptyString(artifact.rowId, `${label}.rowId`);
+  requireNonEmptyString(artifact.probeId, `${label}.probeId`);
+}
+
+function validateRowEvidence(rowEvidence, manifestRow, contract, expectedProbes, schemaVersion = 3) {
   const label = `parity evidence row ${manifestRow.id}`;
   ensure(isPlainObject(rowEvidence), `${label} must be an object`);
   ensure(rowEvidence.rowId === manifestRow.id, `${label} rowId does not match the manifest`);
@@ -225,14 +247,26 @@ function validateRowEvidence(rowEvidence, manifestRow, contract, expectedProbes)
   ensure(Array.isArray(rowEvidence.probes), `${label}.probes must be an array`);
 
   if (rowEvidence.actualConditions === null) {
-    requireExactKeys(rowEvidence, ["rowId", "status", "actualConditions", "probes", "artifactPaths", "error"], label);
+    requireExactKeys(
+      rowEvidence,
+      ["rowId", "status", "actualConditions", "probes", "artifactPaths", "error", ...(schemaVersion === 4 ? ["artifacts"] : [])],
+      label,
+    );
     ensure(rowEvidence.status === "fail", `${label} without actual conditions must fail`);
     ensure(rowEvidence.probes.length === 0, `${label} without actual conditions must not contain probes`);
     requireNonEmptyString(rowEvidence.error, `${label}.error`);
     return;
   }
 
-  requireExactKeys(rowEvidence, ["rowId", "status", "actualConditions", "probes", "artifactPaths"], label);
+  requireExactKeys(
+    rowEvidence,
+    ["rowId", "status", "actualConditions", "probes", "artifactPaths", ...(schemaVersion === 4 ? ["artifacts"] : [])],
+    label,
+  );
+  if (schemaVersion === 4) {
+    ensure(Array.isArray(rowEvidence.artifacts), `${label}.artifacts must be an array`);
+    rowEvidence.artifacts.forEach((artifact, index) => validateArtifactRecord(artifact, `${label}.artifacts[${index}]`));
+  }
   requireExactKeys(
     rowEvidence.actualConditions,
     ["state", "theme", "viewport", "dpr", "urls", "scroll"],
@@ -277,6 +311,7 @@ function validateRowEvidence(rowEvidence, manifestRow, contract, expectedProbes)
       "prototype",
       "reason",
       "artifactPaths",
+      ...(schemaVersion === 4 ? ["tier", "artifacts"] : []),
     ]);
     ensure(Object.keys(probe).every((key) => allowedKeys.has(key)), `${probeLabel} contains an unknown field`);
     const probeId = requireNonEmptyString(probe.probeId, `${probeLabel}.probeId`);
@@ -287,8 +322,23 @@ function validateRowEvidence(rowEvidence, manifestRow, contract, expectedProbes)
       ensure(expectedProbe, `${probeLabel}.probeId is not mapped to this row`);
       ensure(probe.kind === expectedProbe.kind, `${probeLabel}.kind does not match parity-spec.json`);
       ensure(!(expectedProbe.required && probe.status === "skipped"), `${probeLabel} required probe must not be skipped`);
+      if (schemaVersion === 4) ensure(probe.tier === expectedProbe.tier, `${probeLabel}.tier does not match parity-spec.json`);
+      if (
+        schemaVersion === 4 &&
+        expectedProbe.tier === "anchor" &&
+        ["screenshot", "dom", "accessibility"].includes(expectedProbe.kind)
+      ) {
+        ensure(probe.artifacts?.length === 2, `${probeLabel} must contain production and prototype raw artifact records`);
+      }
     }
     requireStringArray(probe.artifactPaths, `${probeLabel}.artifactPaths`);
+    if (schemaVersion === 4) {
+      ensure(Array.isArray(probe.artifacts), `${probeLabel}.artifacts must be an array`);
+      probe.artifacts.forEach((artifact, artifactIndex) => validateArtifactRecord(artifact, `${probeLabel}.artifacts[${artifactIndex}]`));
+      for (const artifact of probe.artifacts) {
+        ensure(artifact.rowId === manifestRow.id && artifact.probeId === probeId, `${probeLabel} artifact ownership is invalid`);
+      }
+    }
     if (probe.status === "skipped") {
       requireNonEmptyString(probe.reason, `${probeLabel}.reason`);
     } else {
@@ -318,10 +368,11 @@ function validateParityEvidence(evidence, contract, spec) {
   if (spec) validateParitySpec(spec, contract);
   ensure(isPlainObject(evidence), "parity evidence must be an object");
   ensure(
-    evidence.schemaVersion === 1 || evidence.schemaVersion === 2 || evidence.schemaVersion === 3,
-    "parity evidence schemaVersion must be 1, 2, or 3",
+    [1, 2, 3, 4].includes(evidence.schemaVersion),
+    "parity evidence schemaVersion must be 1, 2, 3, or 4",
   );
   const legacyFullMatrixEvidence = evidence.schemaVersion === 1;
+  const coverageEvidence = evidence.schemaVersion === 4;
   requireExactKeys(
     evidence,
     [
@@ -338,11 +389,24 @@ function validateParityEvidence(evidence, contract, spec) {
       "capabilities",
       "rows",
       "metrics",
+      ...(coverageEvidence
+        ? [
+            "coverage",
+            "riskRows",
+            "anchorRows",
+            "checkpoints",
+            "artifactIndex",
+            "cleanup",
+            "automationCoverageStatus",
+            "humanVisualApprovalStatus",
+            "fullParityStatus",
+          ]
+        : []),
     ],
     "parity evidence",
   );
   ensure(phases.has(evidence.phase), "parity evidence phase is invalid");
-  if (evidence.schemaVersion === 3) {
+  if (evidence.schemaVersion === 3 || coverageEvidence) {
     ensure(
       evidence.phase === "smoke" || evidence.phase === "final",
       "parity evidence schemaVersion 3 supports only final-boundary smoke or final runs",
@@ -358,6 +422,7 @@ function validateParityEvidence(evidence, contract, spec) {
   let changedStates = [];
   let changedViewports = [];
   let risks = ["normal"];
+  let executionContext;
   if (legacyFullMatrixEvidence) {
     ensure(
       fullMatrixPhases.has(evidence.phase),
@@ -366,27 +431,39 @@ function validateParityEvidence(evidence, contract, spec) {
   } else {
     ensure(matrixScopes.has(evidence.matrixScope), "parity evidence matrixScope is invalid");
     matrixScope = evidence.matrixScope;
-    requireExactKeys(
-      evidence.selection,
-      ["changedTargetIds", "changedStates", "changedViewports", "risks"],
-      "parity evidence selection",
-    );
-    changedTargetIds = requireUniqueStrings(
-      evidence.selection.changedTargetIds,
-      "parity evidence selection.changedTargetIds",
-      { allowEmpty: true },
-    );
-    changedStates = requireUniqueStrings(
-      evidence.selection.changedStates,
-      "parity evidence selection.changedStates",
-      { allowEmpty: true },
-    );
-    changedViewports = requireUniqueStrings(
-      evidence.selection.changedViewports,
-      "parity evidence selection.changedViewports",
-      { allowEmpty: true },
-    );
-    risks = requireUniqueStrings(evidence.selection.risks, "parity evidence selection.risks");
+    if (coverageEvidence) {
+      requireExactKeys(
+        evidence.selection,
+        ["executionContext", "exactRowIds", "riskRowIds", "anchorRowIds"],
+        "parity evidence selection",
+      );
+      executionContext = requireNonEmptyString(evidence.selection.executionContext, "parity evidence selection.executionContext");
+      requireUniqueStrings(evidence.selection.exactRowIds, "parity evidence selection.exactRowIds");
+      ensure(Array.isArray(evidence.selection.riskRowIds), "parity evidence selection.riskRowIds must be an array");
+      ensure(Array.isArray(evidence.selection.anchorRowIds), "parity evidence selection.anchorRowIds must be an array");
+    } else {
+      requireExactKeys(
+        evidence.selection,
+        ["changedTargetIds", "changedStates", "changedViewports", "risks"],
+        "parity evidence selection",
+      );
+      changedTargetIds = requireUniqueStrings(
+        evidence.selection.changedTargetIds,
+        "parity evidence selection.changedTargetIds",
+        { allowEmpty: true },
+      );
+      changedStates = requireUniqueStrings(
+        evidence.selection.changedStates,
+        "parity evidence selection.changedStates",
+        { allowEmpty: true },
+      );
+      changedViewports = requireUniqueStrings(
+        evidence.selection.changedViewports,
+        "parity evidence selection.changedViewports",
+        { allowEmpty: true },
+      );
+      risks = requireUniqueStrings(evidence.selection.risks, "parity evidence selection.risks");
+    }
   }
   ensure(isPlainObject(evidence.runtime), "parity evidence runtime must be an object");
   ensure(Array.isArray(evidence.sources), "parity evidence sources must be an array");
@@ -441,11 +518,13 @@ function validateParityEvidence(evidence, contract, spec) {
   const expected = selectRows({
     phase: evidence.phase,
     contract,
+    spec,
     changedTargetIds,
     changedStates,
     changedViewports,
     risks,
     matrixScope,
+    executionContext,
   }).map(({ id }) => id).sort();
   ensure(
     JSON.stringify([...rowIds].sort()) === JSON.stringify(expected),
@@ -460,7 +539,61 @@ function validateParityEvidence(evidence, contract, spec) {
       )
     : undefined;
   for (const row of evidence.rows) {
-    validateRowEvidence(row, manifestRows.get(row.rowId), contract, probesByRow?.get(row.rowId));
+    validateRowEvidence(row, manifestRows.get(row.rowId), contract, probesByRow?.get(row.rowId), evidence.schemaVersion);
+  }
+  if (coverageEvidence) {
+    ensure(spec?.version === 3, "schemaVersion 4 evidence requires parity-spec.json version 3");
+    ensure(
+      JSON.stringify([...rowIds].sort()) === JSON.stringify([...evidence.selection.exactRowIds].sort()),
+      "schemaVersion 4 exactRowIds do not match executed rows",
+    );
+    const recomputedCoverage = createCoverageReport(contract, evidence.rows.map(({ rowId }) => manifestRows.get(rowId)));
+    ensure(
+      stableStringify(evidence.coverage) === stableStringify(recomputedCoverage),
+      "schemaVersion 4 coverage summary is not reproducible",
+    );
+    ensure(evidence.phase === "smoke" || recomputedCoverage.status === "pass", "schemaVersion 4 required coverage is incomplete");
+    ensure(Array.isArray(evidence.riskRows), "schemaVersion 4 riskRows must be an array");
+    ensure(Array.isArray(evidence.anchorRows), "schemaVersion 4 anchorRows must be an array");
+    for (const [index, risk] of evidence.riskRows.entries()) {
+      requireExactKeys(risk, ["id", "rowId", "requiredProbeIds", "status"], `schemaVersion 4 riskRows[${index}]`);
+      const declared = spec.coverage.riskRows.find(({ id }) => id === risk.id);
+      ensure(declared, `schemaVersion 4 riskRows[${index}] is not declared`);
+      ensure(risk.status === "pass", `schemaVersion 4 riskRows[${index}] must pass`);
+      requireUniqueStrings(risk.requiredProbeIds, `schemaVersion 4 riskRows[${index}].requiredProbeIds`);
+      ensure(
+        stableStringify(risk.requiredProbeIds) === stableStringify(declared.requiredProbeIds),
+        `schemaVersion 4 riskRows[${index}] required probes changed`,
+      );
+    }
+    for (const [index, anchor] of evidence.anchorRows.entries()) {
+      requireExactKeys(anchor, ["id", "rowId", "targetId", "status"], `schemaVersion 4 anchorRows[${index}]`);
+      const declared = spec.coverage.anchorRows.find(({ id }) => id === anchor.id);
+      ensure(
+        declared?.rowId === anchor.rowId && declared?.targetId === anchor.targetId,
+        `schemaVersion 4 anchorRows[${index}] is not declared`,
+      );
+      ensure(anchor.status === "pass", `schemaVersion 4 anchorRows[${index}] must pass`);
+    }
+    ensure(isPlainObject(evidence.checkpoints), "schemaVersion 4 checkpoints must be an object");
+    requireExactKeys(evidence.checkpoints, ["resumed", "batches", "invalidations"], "schemaVersion 4 checkpoints");
+    ensure(typeof evidence.checkpoints.resumed === "boolean", "schemaVersion 4 checkpoints.resumed must be boolean");
+    ensure(Array.isArray(evidence.checkpoints.batches), "schemaVersion 4 checkpoints.batches must be an array");
+    ensure(Array.isArray(evidence.checkpoints.invalidations), "schemaVersion 4 checkpoints.invalidations must be an array");
+    ensure(Array.isArray(evidence.artifactIndex), "schemaVersion 4 artifactIndex must be an array");
+    evidence.artifactIndex.forEach((artifact, index) => validateArtifactRecord(artifact, `artifactIndex[${index}]`));
+    ensure(isPlainObject(evidence.cleanup) && evidence.cleanup.status === "pass", "schemaVersion 4 cleanup must pass");
+    ensure(["pass", "fail"].includes(evidence.automationCoverageStatus), "schemaVersion 4 automationCoverageStatus is invalid");
+    if (evidence.phase === "final") ensure(evidence.automationCoverageStatus === "pass", "schemaVersion 4 automation coverage must pass");
+    ensure(
+      ["pending", "approved", "rejected"].includes(evidence.humanVisualApprovalStatus),
+      "schemaVersion 4 humanVisualApprovalStatus is invalid",
+    );
+    ensure(["not-run", "pass", "fail"].includes(evidence.fullParityStatus), "schemaVersion 4 fullParityStatus is invalid");
+    ensure(
+      evidence.fullParityStatus === (matrixScope === "full" ? "pass" : "not-run"),
+      "schemaVersion 4 fullParityStatus does not match matrixScope",
+    );
   }
   return evidence;
 }
@@ -469,8 +602,8 @@ function validateEvidenceBundle({ approval, preEdit, implementation, contract, s
   validateApprovalEvidence(approval);
   validateParityEvidence(implementation, contract, spec);
   ensure(implementation.phase === "final", "implementation evidence has the wrong phase");
-  if (implementation.schemaVersion === 3) {
-    ensure(preEdit === undefined, "schemaVersion 3 completion evidence must not include pre-edit parity");
+  if (implementation.schemaVersion === 3 || implementation.schemaVersion === 4) {
+    ensure(preEdit === undefined, `schemaVersion ${implementation.schemaVersion} completion evidence must not include pre-edit parity`);
     ensure(
       implementation.rows.every(({ status }) => status === "pass"),
       "final evidence must contain only passing rows",
@@ -543,11 +676,23 @@ async function writeRunEvidence({ repositoryRootPath = repositoryRoot, slug, run
 function parseCliArguments(argv) {
   ensure(
     argv.length >= 2,
-    "usage: parity-runner.mjs <validate|select|prepare-run|record-batch|finalize-run|abort-run> plans/<slug>/prototype [options]",
+    "usage: parity-runner.mjs <validate|select|prepare-run|next-batch|resume-run|record-batch|record-failure|invalidate-run|finalize-run|cleanup-run|abort-run> plans/<slug>/prototype [options]",
   );
   const [command, target, ...rest] = argv;
   ensure(
-    ["validate", "select", "prepare-run", "record-batch", "finalize-run", "abort-run"].includes(command),
+    [
+      "validate",
+      "select",
+      "prepare-run",
+      "next-batch",
+      "resume-run",
+      "record-batch",
+      "record-failure",
+      "invalidate-run",
+      "finalize-run",
+      "cleanup-run",
+      "abort-run",
+    ].includes(command),
     "unknown parity runner command",
   );
   const options = {
@@ -556,16 +701,22 @@ function parseCliArguments(argv) {
     changedStates: [],
     changedViewports: [],
     risks: ["normal"],
-    matrixScope: "targeted",
+    matrixScope: undefined,
+    executionContext: undefined,
     runId: undefined,
     batchId: undefined,
     productionUrl: undefined,
     prototypeUrl: undefined,
     runtimeOwner: undefined,
     runtimeCheckout: undefined,
-    maxRows: 4,
-    maxBytes: 128 * 1024,
+    maxRows: undefined,
+    maxBytes: undefined,
     shellCommands: 0,
+    invalidationScope: undefined,
+    source: undefined,
+    failureCode: undefined,
+    diagnostic: undefined,
+    transient: undefined,
   };
   for (let index = 0; index < rest.length; index += 1) {
     const argument = rest[index];
@@ -576,6 +727,7 @@ function parseCliArguments(argv) {
     else if (argument === "--state") options.changedStates.push(value);
     else if (argument === "--viewport") options.changedViewports.push(value);
     else if (argument === "--matrix-scope") options.matrixScope = value;
+    else if (argument === "--execution-context") options.executionContext = value;
     else if (argument === "--run-id") options.runId = value;
     else if (argument === "--batch-id") options.batchId = value;
     else if (argument === "--production-url") options.productionUrl = value;
@@ -585,6 +737,14 @@ function parseCliArguments(argv) {
     else if (argument === "--max-rows") options.maxRows = Number(value);
     else if (argument === "--max-bytes") options.maxBytes = Number(value);
     else if (argument === "--shell-commands") options.shellCommands = Number(value);
+    else if (argument === "--invalidation-scope") options.invalidationScope = value;
+    else if (argument === "--source") options.source = value;
+    else if (argument === "--failure-code") options.failureCode = value;
+    else if (argument === "--diagnostic") options.diagnostic = value;
+    else if (argument === "--transient") {
+      ensure(value === "true" || value === "false", "--transient must be true or false");
+      options.transient = value === "true";
+    }
     else if (argument === "--risk") {
       if (options.risks.length === 1 && options.risks[0] === "normal") options.risks = [];
       options.risks.push(value);
@@ -691,12 +851,48 @@ async function runCli({
 } = {}) {
   const root = await realpath(repositoryRootPath);
   const { command, target, options } = parseCliArguments(argv);
-  if (command === "abort-run") {
+  if (command === "abort-run" || command === "cleanup-run") {
     planSlugFromTarget(target);
     ensure(options.runId, "--run-id is required");
     stdout.write(`${JSON.stringify(await abortRunWorkspace({
       repositoryRootPath: root,
       runId: options.runId,
+    }), null, 2)}\n`);
+    return;
+  }
+  if (command === "next-batch" || command === "resume-run") {
+    planSlugFromTarget(target);
+    ensure(options.runId, "--run-id is required");
+    const operation = command === "next-batch" ? nextRunBatch : resumeRunWorkspace;
+    stdout.write(`${JSON.stringify(await operation({ repositoryRootPath: root, runId: options.runId }), null, 2)}\n`);
+    return;
+  }
+  if (command === "record-failure") {
+    planSlugFromTarget(target);
+    ensure(options.runId, "--run-id is required");
+    ensure(options.batchId, "--batch-id is required");
+    ensure(options.failureCode, "--failure-code is required");
+    ensure(options.transient !== undefined, "--transient is required");
+    stdout.write(`${JSON.stringify(await recordBatchFailure({
+      repositoryRootPath: root,
+      runId: options.runId,
+      batchId: options.batchId,
+      code: options.failureCode,
+      diagnostic: options.diagnostic ?? "",
+      transient: options.transient,
+    }), null, 2)}\n`);
+    return;
+  }
+  if (command === "invalidate-run") {
+    planSlugFromTarget(target);
+    ensure(options.runId, "--run-id is required");
+    ensure(options.invalidationScope, "--invalidation-scope is required");
+    stdout.write(`${JSON.stringify(await invalidateRunWorkspace({
+      repositoryRootPath: root,
+      runId: options.runId,
+      scope: options.invalidationScope,
+      targetIds: options.changedTargetIds,
+      source: options.source,
     }), null, 2)}\n`);
     return;
   }
@@ -736,6 +932,7 @@ async function runCli({
       changedViewports: options.changedViewports,
       risks: options.risks,
       matrixScope: options.matrixScope,
+      executionContext: options.executionContext,
       maxRows: options.maxRows,
       maxBytes: options.maxBytes,
       shellCommands: options.shellCommands,
@@ -770,7 +967,7 @@ async function runCli({
     rowCount: definition.contract.parityMatrix.length,
   };
   if (command === "select") {
-    output.rows = selectRows({ contract: definition.contract, ...options }).map(({ id }) => id);
+    output.rows = selectRows({ contract: definition.contract, spec: definition.spec, ...options }).map(({ id }) => id);
   }
   stdout.write(`${JSON.stringify(output, null, 2)}\n`);
 }
@@ -800,6 +997,7 @@ export {
   ParityRunError,
   compareProbe,
   createBatches,
+  createCoverageReport,
   createRunContext,
   createApprovalEvidence,
   isVisibleSnapshot,
