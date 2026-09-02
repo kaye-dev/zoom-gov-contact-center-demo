@@ -261,6 +261,14 @@ Zoom AI、Zoom Virtual Agent、Zoom Contact Center、Zoom Phone への導線は�
 - `checked`、`unchecked`、`indeterminate`、`disabled`、`focus-visible` の各状態を視覚的に区別し、`forced-colors` でも選択状態、境界、フォーカスが失われないようにする。
 - すべてのチェックボックスに、関連付けた可視ラベルまたは `aria-label` / `aria-labelledby` によるアクセシブルネームを付ける。ラベルや行を操作ターゲットに含める場合も、ネイティブチェックボックスとのプログラム上の関連付けを維持する。
 
+#### 6.5.2 セレクト
+
+- 本番コードの単一選択では `app/components/Select.tsx` を使用し、それ以外の場所で `<select>` を直接実装しない。複数選択や検索可能な選択UIが必要な場合は、共通コンポーネントの契約を別途設計する。
+- 常時見えるラベルを設け、補足、制約、エラーは `aria-describedby`、必要に応じて `aria-invalid` でネイティブ `<select>` と関連付ける。
+- closed controlは `surface`、`line`、`fg`、`fg-muted`、`accent` のセマンティックトークン、`rounded-md`、既存入力と同じ縦余白を使用する。右端には20pxの下向きchevronを置き、文言と重ならない右余白を確保する。
+- `focus-visible` は2pxのaccent outline、無効状態はネイティブ `disabled` と `cursor-not-allowed` および十分に識別できるopacityで示す。`forced-colors` ではネイティブappearanceを復元し、装飾chevronを非表示にする。
+- option popup、矢印キー、Home / End、フォーム送信などの操作はブラウザとOSのネイティブ挙動を維持する。
+
 ### 6.6 メニュー、ドロワー、ダイアログ
 
 - 開閉ボタンに `aria-expanded` と対象との関連を付ける。

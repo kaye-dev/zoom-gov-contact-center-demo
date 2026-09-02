@@ -226,8 +226,11 @@ test("role and user screens follow the compact prototype structure and single-ro
   assert.match(userDetails, /detailsPageTitle/);
   assert.match(userDetailsPage, /export const metadata: Metadata/);
   assert.match(userDetails, /hover:text-primary-700 dark:hover:text-primary-300/);
-  assert.match(userDetails, /<select/);
-  assert.match(userDetails, /w-full max-w-md/);
+  assert.equal(userDetails.match(/<Select\b/g)?.length, 2);
+  assert.equal(
+    userDetails.match(/containerClassName="max-w-md"/g)?.length,
+    2,
+  );
   assert.doesNotMatch(userDetails, /type="checkbox"/);
   assert.doesNotMatch(userDetails, /aria-multiselectable/);
   assert.match(userDetails, /userManagement\.passwordVisibilityHelp/);

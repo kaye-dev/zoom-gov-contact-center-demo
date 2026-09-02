@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { getAdminRoleDisplayName } from "@/app/components/admin/role-display";
+import { Select } from "@/app/components/Select";
 
 import { ContentCopyIcon } from "../../../components/svg/ContentCopyIcon";
 import { useI18n } from "../../../i18n/LanguageProvider";
@@ -196,14 +197,13 @@ export function NewUserForm({
         </label>
         <label className="block space-y-2">
           <span className="text-sm font-semibold">{t.auth.role}</span>
-          <select
+          <Select
             name="role"
             defaultValue="user"
-            className="w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent"
           >
             <option value="user">{t.auth.roleUser}</option>
             <option value="admin">{t.auth.roleAdmin}</option>
-          </select>
+          </Select>
           <span className="block text-xs leading-5 text-fg-muted">
             {t.admin.accessControl.adminAttributeHelp}
           </span>
@@ -213,11 +213,10 @@ export function NewUserForm({
             <span className="text-sm font-semibold">
               {t.admin.userManagement.accessRoles}
             </span>
-            <select
+            <Select
               name="accessRoleId"
               required
               defaultValue={defaultAccessRoleId}
-              className="w-full cursor-pointer rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               {defaultAccessRoleId === "" ? (
                 <option value="" disabled>
@@ -229,7 +228,7 @@ export function NewUserForm({
                   {getAdminRoleDisplayName(role, t.admin.accessControl)}
                 </option>
               ))}
-            </select>
+            </Select>
             <span className="block text-xs leading-5 text-fg-muted">
               {t.admin.accessControl.assignedRolesHelp}
             </span>

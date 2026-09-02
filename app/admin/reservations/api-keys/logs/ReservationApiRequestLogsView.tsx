@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 
+import { Select } from "@/app/components/Select";
 import { ChevronLeftIcon } from "@/app/components/svg/ChevronLeftIcon";
 import { useI18n } from "@/app/i18n/LanguageProvider";
 import type {
@@ -52,23 +53,23 @@ export function ReservationApiRequestLogsView({
           </label>
           <label className="block space-y-2">
             <span className="block text-sm font-semibold">{copy.filter.method}</span>
-            <select name="method" defaultValue={filters.method} className="w-full cursor-pointer rounded-md border border-line bg-surface px-3 py-2.5 text-sm text-fg outline-none focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+            <Select name="method" defaultValue={filters.method}>
               <option value="">{copy.filter.all}</option>
               <option value="GET">GET</option>
               <option value="POST">POST</option>
               <option value="PUT">PUT</option>
               <option value="PATCH">PATCH</option>
               <option value="DELETE">DELETE</option>
-            </select>
+            </Select>
           </label>
           <label className="block space-y-2">
             <span className="block text-sm font-semibold">{copy.filter.result}</span>
-            <select name="result" defaultValue={filters.result} className="w-full cursor-pointer rounded-md border border-line bg-surface px-3 py-2.5 text-sm text-fg outline-none focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+            <Select name="result" defaultValue={filters.result}>
               <option value="">{copy.filter.all}</option>
               <option value="success">{copy.filter.success}</option>
               <option value="client-error">{copy.filter.clientError}</option>
               <option value="server-error">{copy.filter.serverError}</option>
-            </select>
+            </Select>
           </label>
           <button type="submit" className="cursor-pointer rounded-md border border-line bg-surface px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">{copy.filter.submit}</button>
         </form>

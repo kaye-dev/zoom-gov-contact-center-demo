@@ -6,6 +6,7 @@ import Link from "next/link";
 
 import { ChevronLeftIcon } from "@/app/components/svg/ChevronLeftIcon";
 import { ChevronRightIcon } from "@/app/components/svg/ChevronRightIcon";
+import { Select } from "@/app/components/Select";
 import { useI18n } from "@/app/i18n/LanguageProvider";
 import {
   RESERVATION_SERVICE_KEYS,
@@ -158,17 +159,16 @@ export function ReservationSystemView({
         <div className="grid gap-4 lg:grid-cols-[minmax(16rem,1fr)_auto] lg:items-end">
           <label htmlFor="service-select" className="block max-w-xl space-y-2">
             <span className="block text-sm font-semibold">{copy.serviceLabel}</span>
-            <select
+            <Select
               id="service-select"
               value={calendar.service.key}
               onChange={(event) => loadCalendar(event.target.value as ReservationServiceKey, calendar.month)}
               disabled={isLoading || isGenerating}
-              className="w-full cursor-pointer rounded-md border border-line bg-surface px-3 py-2.5 text-fg outline-none transition-colors focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
             >
               {RESERVATION_SERVICE_KEYS.map((key) => (
                 <option key={key} value={key}>{copy.services[key].name}</option>
               ))}
-            </select>
+            </Select>
           </label>
           <div className="flex flex-wrap items-center gap-2">
             <button
