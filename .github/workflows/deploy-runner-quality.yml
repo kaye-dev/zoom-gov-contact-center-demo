@@ -19,7 +19,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Build and test the immutable deploy runner
+      - name: Build, test, and typecheck the immutable deploy runner
         shell: bash
         run: |
           set -euo pipefail
@@ -54,3 +54,7 @@ jobs:
             --entrypoint npm \
             "${image}" \
             test
+          docker run --rm --init --network none \
+            --entrypoint npm \
+            "${image}" \
+            run typecheck
