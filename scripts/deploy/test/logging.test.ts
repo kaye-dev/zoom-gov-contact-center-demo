@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
@@ -48,35 +49,19 @@ test("ANSI log style colors phases, failures, and the success summary", () => {
   );
 });
 
-test("known database TLS warning is summarized once during validation", () => {
-  const warning = [
-    "SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.",
-    "In the next major version, these modes will adopt standard libpq semantics.",
-  ].join("\n");
-
-  const validateSummary = summarizeDeploymentProcessWarning(
-    "Warning",
-    warning,
-    "validate",
-  );
-  assert.equal(
-    validateSummary,
-    "Database TLS: sslmode=requireは現在verify-full相当です。pgの次回major更新前に接続設定を見直してください。",
-  );
-  assert.doesNotMatch(validateSummary ?? "", /\n/u);
-  assert.equal(
-    summarizeDeploymentProcessWarning("Warning", warning, "release"),
-    undefined,
-  );
-});
-
-test("unexpected Node warnings remain visible", () => {
+test("DBTLS-08: warning handlerは未知warningを一度表示しTLS警告専用allowlistを持たない", () => {
   assert.equal(
     summarizeDeploymentProcessWarning(
       "ExperimentalWarning",
-      "unexpected runtime warning",
-      "smoke",
+      " unexpected runtime warning \n",
     ),
     "ExperimentalWarning: unexpected runtime warning",
   );
+
+  const source = readFileSync(
+    new URL("../main.ts", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(source, /PG_SSL_WARNING_PREFIX/u);
+  assert.doesNotMatch(source, /次回major更新前/u);
 });

@@ -28,7 +28,7 @@ git status --short
 
 ## 実行中の動作
 
-`deploy.sh`は固定versionのdeploy runner imageを使い、Parameter Storeの4件を値を表示せずに取得します。`config`が初回setupまたはcredential更新の途中状態なら、同じprofileで`./setup-deploy-aws.sh`を再実行するよう案内し、Production関連処理を始めず停止します。完了済みの場合は保存されたVercel / Neon対象をAPIで再確認し、Neonからpooled / direct connection stringを取得して次の順に処理します。
+`deploy.sh`は固定versionのdeploy runner imageを使い、Parameter Storeの4件を値を表示せずに取得します。`config`が初回setupまたはcredential更新の途中状態なら、同じprofileで`./setup-deploy-aws.sh`を再実行するよう案内し、Production関連処理を始めず停止します。完了済みの場合は保存されたVercel / Neon対象をAPIで再確認し、Neonからpooled / direct connection stringを取得します。Neon APIが返すraw URIは手編集せず、runnerが`sslmode=require`または`sslmode=verify-full`を検証してmemory上で`sslmode=verify-full`へ正規化します。正規化済みdirect URIはmigrationとDB検証のprocess内だけで使い、pooled URIだけをVercel Productionの`DATABASE_URL`へ同期して、次の順に処理します。
 
 1. Gitのbranch / commit / clean worktree、AWS account、provider plan、project、domain、region、DB endpointを検証する。
 2. test、lint、typecheck、runtime audit、Production buildを実行する。
@@ -93,6 +93,8 @@ profileをその回だけ指定する場合は各コマンドへ`--profile <AWS_
 ## 停止・失敗した場合
 
 errorの直前に表示されたphaseを確認し、状態不明のまま再実行しません。
+
+TLSの証明書chainまたはhostname検証に失敗した場合は、`sslmode=require`、`no-verify`、`NODE_TLS_REJECT_UNAUTHORIZED=0`へfallbackしません。下表で失敗phaseの外部状態を判定し、対象の証明書、hostname、Neon endpointを修復してから既存経路を再実行します。
 
 | 停止箇所                            | 外部状態                                       | 対応                                                   |
 | ----------------------------------- | ---------------------------------------------- | ------------------------------------------------------ |

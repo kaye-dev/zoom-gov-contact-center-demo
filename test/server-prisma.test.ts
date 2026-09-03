@@ -24,18 +24,18 @@ test("local database config uses the development fallback and bounded pool", () 
   assert.equal(config.ssl, undefined);
 });
 
-test("production database config uses only the pooled DATABASE_URL", () => {
+test("DBTLS-09: production database configはverify-fullのpooled DATABASE_URLだけを使う", () => {
   const config = resolveDatabasePoolConfig({
     NODE_ENV: "production",
     DATABASE_URL:
-      "postgresql://app:secret@ep-example-pooler.ap-southeast-1.aws.neon.tech/zoom_demo?sslmode=require",
+      "postgresql://app:secret@ep-example-pooler.ap-southeast-1.aws.neon.tech/zoom_demo?sslmode=verify-full",
     DATABASE_URL_UNPOOLED:
-      "postgresql://app:secret@ep-example.ap-southeast-1.aws.neon.tech/zoom_demo?sslmode=require",
+      "postgresql://app:secret@ep-example.ap-southeast-1.aws.neon.tech/zoom_demo?sslmode=verify-full",
   });
 
   assert.equal(
     config.connectionString,
-    "postgresql://app:secret@ep-example-pooler.ap-southeast-1.aws.neon.tech/zoom_demo?sslmode=require",
+    "postgresql://app:secret@ep-example-pooler.ap-southeast-1.aws.neon.tech/zoom_demo?sslmode=verify-full",
   );
   assert.equal(config.max, 2);
   assert.equal(config.application_name, "zoom-gov-demo-app");

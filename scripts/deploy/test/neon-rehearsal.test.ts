@@ -126,7 +126,7 @@ function rehearsal(): NeonRehearsal {
     parentBranchId: config.branchId,
     parentLsn,
     endpointId,
-    directUrl: `postgresql://${config.roleName}:p%40ss@${endpointHost}/${config.databaseName}?sslmode=require`,
+    directUrl: `postgresql://${config.roleName}:p%40ss@${endpointHost}/${config.databaseName}?sslmode=verify-full&channel_binding=require`,
   };
 }
 
@@ -274,7 +274,7 @@ function createHarness(options: HarnessOptions = {}) {
       assert.equal(url.searchParams.get("database_name"), config.databaseName);
       assert.equal(url.searchParams.get("role_name"), config.roleName);
       return Response.json({
-        uri: `postgresql://${config.roleName}:p%40ss@${endpointId}${pooled ? "-pooler" : ""}.ap-southeast-1.aws.neon.tech/${config.databaseName}?sslmode=require`,
+        uri: `postgresql://${config.roleName}:p%40ss@${endpointId}${pooled ? "-pooler" : ""}.ap-southeast-1.aws.neon.tech/${config.databaseName}?sslmode=require&channel_binding=require`,
       });
     }
     if (method === "GET" && url.pathname === `${projectPath}/branches`) {
@@ -357,7 +357,7 @@ function createHarness(options: HarnessOptions = {}) {
   };
 }
 
-test("one POST creates an exact Production child and returns only the validated direct URI", async () => {
+test("DBTLS-06: rehearsal direct URIも同じendpointのverify-fullへ正規化する", async () => {
   const harness = createHarness({
     createOperationStatuses: {
       [createBranchOperationId]: ["failed", "finished"],
@@ -370,6 +370,13 @@ test("one POST creates an exact Production child and returns only the validated 
   );
 
   assert.deepEqual(result, rehearsal());
+  const directUrl = new URL(result.directUrl);
+  assert.equal(directUrl.hostname, endpointHost);
+  assert.equal(directUrl.pathname, `/${config.databaseName}`);
+  assert.equal(directUrl.username, config.roleName);
+  assert.equal(directUrl.password, "p%40ss");
+  assert.deepEqual(directUrl.searchParams.getAll("sslmode"), ["verify-full"]);
+  assert.equal(directUrl.searchParams.get("channel_binding"), "require");
   assert.deepEqual(harness.waits, [100]);
   const createRequests = harness.requests.filter(
     ({ method, url }) => method === "POST" && url.pathname.endsWith("/branches"),
