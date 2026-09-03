@@ -37,7 +37,7 @@ import {
 } from "../lib/server/maintenance-store";
 
 const SECRET_DATABASE_URL =
-  "postgresql://secret-user:secret-password@db.example.test/demo";
+  "postgresql://secret-user:secret-password@db.example.test/demo?sslmode=verify-full";
 const PRODUCTION_ENV = {
   NODE_ENV: "production",
   APP_CANONICAL_ORIGIN: "https://city.example.jp",
@@ -52,7 +52,7 @@ const CURRENT_CONFIG: MaintenanceConfig = {
   updatedAt: "2026-08-10T00:00:00.000Z",
 };
 
-test("maintenance pool uses one bounded no-retry profile", () => {
+test("DBTLS-10: maintenance poolはverify-full URLとbounded no-retry profileを使う", () => {
   assert.deepEqual(resolveMaintenancePostgresPoolConfig(PRODUCTION_ENV), {
     connectionString: SECRET_DATABASE_URL,
     max: MAINTENANCE_POSTGRES_POOL_MAX,

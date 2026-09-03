@@ -104,9 +104,6 @@ const CANONICAL_PUBLIC_STATUS_DELAY_MS = 5_000;
 const DEPLOYMENT_LOG_STYLE = resolveDeploymentLogStyle(
   process.env.DEPLOY_LOG_STYLE,
 );
-const PG_SSL_WARNING_PREFIX =
-  "SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.";
-
 class CliUnavailableError extends Error {}
 
 class MigrationApprovalRequiredError extends Error {
@@ -144,26 +141,17 @@ function logDeploymentSuccess(message: string): void {
 export function summarizeDeploymentProcessWarning(
   warningName: string,
   warningMessage: string,
-  phase: DeploymentPhase,
-): string | undefined {
-  if (warningMessage.startsWith(PG_SSL_WARNING_PREFIX)) {
-    return phase === "validate"
-      ? "Database TLS: sslmode=requireは現在verify-full相当です。pgの次回major更新前に接続設定を見直してください。"
-      : undefined;
-  }
+): string {
   return `${warningName}: ${warningMessage.trim()}`;
 }
 
-function installDeploymentWarningHandler(phase: DeploymentPhase): void {
+function installDeploymentWarningHandler(): void {
   process.on("warning", (warning) => {
     const message = summarizeDeploymentProcessWarning(
       warning.name,
       warning.message,
-      phase,
     );
-    if (message !== undefined) {
-      console.warn(renderDeploymentWarning(message, DEPLOYMENT_LOG_STYLE));
-    }
+    console.warn(renderDeploymentWarning(message, DEPLOYMENT_LOG_STYLE));
   });
 }
 
@@ -2097,9 +2085,7 @@ async function main(): Promise<void> {
   const secrets = new SecretRegistry();
   const runner = new SystemCommandRunner(secrets, PROJECT_ROOT);
   try {
-    installDeploymentWarningHandler(
-      readDeploymentPhase(process.env.DEPLOY_PHASE),
-    );
+    installDeploymentWarningHandler();
     await runDeploymentWorkflow(runner, secrets);
   } catch (error) {
     if (error instanceof MigrationApprovalRequiredError) {

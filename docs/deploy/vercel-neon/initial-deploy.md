@@ -45,7 +45,7 @@ Neon Consoleで次を確認します。
 4. 既存admin userを含む対象databaseとroleがある。
 5. project / branch / endpoint / connection URIに加え、organization detailsとplanをreadできるNeon API keyを発行し、password managerへ保存する。project-scoped keyだけではorganization planの検証権限が不足する場合がある。
 
-pooled / direct connection stringはコピーしません。deployの各phaseがNeon APIから取得し、同じproject / branch / database / role、pooling、TLSを検証します。NeonのVercel Integrationは使用しません。[Neon API key](https://neon.com/docs/manage/api-keys)も参照してください。
+pooled / direct connection stringはコピーしません。deployの各phaseがNeon APIから取得し、同じproject / branch / database / role、pooling、TLSを検証します。Neon APIが返すraw URIは手編集せず、runnerが`sslmode=require`または`sslmode=verify-full`を検証してmemory上で`sslmode=verify-full`へ正規化します。NeonのVercel Integrationは使用しません。[Neon API key](https://neon.com/docs/manage/api-keys)も参照してください。
 
 ## 2. ローカル環境を準備する
 
@@ -89,7 +89,7 @@ setup成功後、`.env`がまだない場合だけ、このprofileをローカ�
 ./deploy.sh --profile <AWS_PROFILE_NAME>
 ```
 
-runnerはDocker内の固定Node / Vercel CLIを使い、Parameter StoreとNeon APIから対象情報を再取得します。role passwordのrotate後は、同じbranch / database / roleのpooled URIとdirect URIをAPIから動的に取得します。direct URIはmigration / DB検証のprocess内だけ、pooled URIはVercel Productionの`DATABASE_URL`同期に使います。いずれもSSM、local file、job outputへ保存しません。
+runnerはDocker内の固定Node / Vercel CLIを使い、Parameter StoreとNeon APIから対象情報を再取得します。role passwordのrotate後は、同じbranch / database / roleのpooled URIとdirect URIをAPIから動的に取得します。どちらもmemory上で`sslmode=verify-full`へ正規化し、direct URIはmigration / DB検証のprocess内だけ、pooled URIだけをVercel Productionの`DATABASE_URL`同期に使います。いずれもSSM、local file、job outputへ保存しません。
 
 project ID、connection string、token、admin credential、plan確認文字列、deploy承認は入力しません。migrationがup-to-dateなら、品質検査、Vercel環境変数同期、direct Production deploy、canonical smokeまで無人で進みます。pending migrationがある場合だけplanを表示し、適用前に1回`[y/N]`で承認を求めます。拒否した場合はDB、Vercel環境変数、Productionを変更せず停止します。
 
@@ -105,7 +105,7 @@ canonical smokeの成功後、最後に次のbannerが表示された時点でde
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-Neon APIから動的URIを取得できない、対象が一致しない、migrationまたはcanonical smokeが失敗した場合はメンテナンスを解除しません。対象を広げたり古いconnection stringへ戻したり、新しいdeployを重ねたりせず、失敗phaseとNeon / Vercelの実状態を確認します。
+Neon APIから動的URIを取得できない、対象が一致しない、TLSの証明書chainまたはhostname検証、migration、canonical smokeが失敗した場合はメンテナンスを解除しません。`sslmode=require`、`no-verify`、`NODE_TLS_REJECT_UNAUTHORIZED=0`へfallbackせず、対象を広げたり古いconnection stringへ戻したり、新しいdeployを重ねたりしないで、失敗phaseとNeon / Vercelの実状態を確認します。
 
 canonical smokeまで成功したら、新しいProductionの管理画面から`PRODUCTION`のメンテナンスを`DISABLED`にします。canonical公開HTMLが200へ戻り、`Cache-Control: no-store`がメンテナンス応答として残っていないことを確認して初回切替を完了します。解除に失敗した場合は、認証だけが故障しDBが正常であることを確認できる時に限り[メンテナンスモード緊急解除](maintenance-recovery.md)を使います。
 

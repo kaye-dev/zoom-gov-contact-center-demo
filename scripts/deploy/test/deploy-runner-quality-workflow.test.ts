@@ -20,6 +20,10 @@ const localRedeployRunbook = readFileSync(
   resolve(projectRoot, "docs/deploy/vercel-neon/redeploy.md"),
   "utf8",
 );
+const initialDeployRunbook = readFileSync(
+  resolve(projectRoot, "docs/deploy/vercel-neon/initial-deploy.md"),
+  "utf8",
+);
 
 test("DRQ-WF-01: 全PRとmainのexact SHAをdeploy runner内で検証する", () => {
   assert.match(workflow, /^name: Deploy runner quality$/mu);
@@ -158,4 +162,14 @@ test("DRQ-DOC-02: migration apply後のdrift復旧は自動rollbackと履歴改�
   assert.match(localRedeployRunbook, /prisma migrate resolve/u);
   assert.match(localRedeployRunbook, /prisma db push/u);
   assert.match(localRedeployRunbook, /CI check[^\n]*`main`/u);
+});
+
+test("DBTLS-DOC-01: runbookはTLS正規化とfallback禁止と完了bannerを固定する", () => {
+  for (const runbook of [initialDeployRunbook, localRedeployRunbook]) {
+    assert.match(runbook, /raw URIは手編集せず/u);
+    assert.match(runbook, /memory上で`sslmode=verify-full`へ正規化/u);
+    assert.match(runbook, /pooled URIだけをVercel Production/u);
+    assert.match(runbook, /`sslmode=require`、`no-verify`、`NODE_TLS_REJECT_UNAUTHORIZED=0`へfallback/u);
+    assert.match(runbook, /✓ PRODUCTION DEPLOYMENT SUCCEEDED/u);
+  }
 });

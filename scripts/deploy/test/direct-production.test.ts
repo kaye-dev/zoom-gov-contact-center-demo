@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import type { StoredDeploymentConfig } from "../lib/aws-config";
@@ -8,7 +11,12 @@ import {
   findUnsafeExpandCompatibleStatements,
   readReviewedMigrationChain,
 } from "../lib/migrations";
-import type { CommandRunner } from "../lib/process";
+import {
+  SecretRegistry,
+  SystemCommandRunner,
+  type CommandOptions,
+  type CommandRunner,
+} from "../lib/process";
 import {
   assertExistingProductionAuthSecret,
   assertProductionEnvironmentReady,
@@ -20,6 +28,7 @@ import {
   parseProductionEnvironmentAudit,
   readExpectedPreviousDeploymentId,
   runCanonicalDeploymentBoundSmoke,
+  setVercelEnvironment,
   shouldRequireLocalMigrationApproval,
   validateCanonicalDeploymentResult,
   validateProductionDeploymentEvidence,
@@ -131,13 +140,13 @@ function neonResponse(url: URL, ownerName: string = neonConfig.roleName): unknow
     assert.equal(url.searchParams.get("database_name"), neonConfig.databaseName);
     assert.equal(url.searchParams.get("role_name"), neonConfig.roleName);
     return {
-      uri: `postgresql://${neonConfig.roleName}:p%40ss@ep-production${pooled ? "-pooler" : ""}.ap-southeast-1.aws.neon.tech/${neonConfig.databaseName}?sslmode=require`,
+      uri: `postgresql://${neonConfig.roleName}:p%40ss@ep-production${pooled ? "-pooler" : ""}.ap-southeast-1.aws.neon.tech/${neonConfig.databaseName}?sslmode=require&channel_binding=require`,
     };
   }
   throw new Error(`Unexpected Neon API request: ${url.pathname}`);
 }
 
-test("Neon REST validation proves every stored target and retrieves both dynamic URIs", async () => {
+test("DBTLS-05: dynamic Neon URIを正規化してpooledだけをVercelへ同期する", async () => {
   const token = "synthetic-neon-api-key";
   const urls: URL[] = [];
   const request = async (
@@ -160,10 +169,47 @@ test("Neon REST validation proves every stored target and retrieves both dynamic
   assert.equal(context.database.endpointId, "ep-production");
   assert.match(context.database.pooledHost, /-pooler\./u);
   assert.doesNotMatch(context.database.directHost, /-pooler\./u);
+  assert.equal(
+    new URL(context.database.pooledUrl).searchParams.get("sslmode"),
+    "verify-full",
+  );
+  assert.equal(
+    new URL(context.database.directUrl).searchParams.get("sslmode"),
+    "verify-full",
+  );
+  assert.equal(
+    new URL(context.database.pooledUrl).searchParams.get("channel_binding"),
+    "require",
+  );
+  const calls: Array<{
+    arguments_: readonly string[];
+    options?: CommandOptions;
+  }> = [];
+  const runner: CommandRunner = {
+    run(_command, arguments_, options) {
+      calls.push({ arguments_, options });
+      return { status: 0, stdout: "", stderr: "" };
+    },
+  };
+  setVercelEnvironment(
+    runner,
+    { orgId: "team_abc123", projectId: "prj_abc123" },
+    "DATABASE_URL",
+    context.database.pooledUrl,
+    true,
+  );
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]?.options?.input, `${context.database.pooledUrl}\n`);
+  assert.doesNotMatch(calls[0]?.options?.input ?? "", /sslmode=require/u);
+  assert.equal(
+    (calls[0]?.options?.input ?? "").includes(context.database.directUrl),
+    false,
+  );
+  assert.equal(calls[0]?.arguments_.includes("DATABASE_URL_UNPOOLED"), false);
   assert.equal(urls.filter((url) => url.pathname.endsWith("connection_uri")).length, 2);
 });
 
-test("Neon REST target mismatches and error bodies fail closed without exposing secrets", async () => {
+test("DBTLS-07: 正規化後もURLとpasswordをlog、argv、fileへ露出しない", async () => {
   await assert.rejects(
     loadNeonConnectionContext(
       neonConfig,
@@ -194,6 +240,76 @@ test("Neon REST target mismatches and error bodies fail closed without exposing 
       return true;
     },
   );
+
+  const rawPooled = String(
+    (neonResponse(
+      new URL(
+        `https://console.neon.tech/api/v2/projects/${neonConfig.projectId}/connection_uri?pooled=true&branch_id=${neonConfig.branchId}&endpoint_id=ep-production&database_name=${neonConfig.databaseName}&role_name=${neonConfig.roleName}`,
+      ),
+    ) as { uri: string }).uri,
+  );
+  const rawDirect = rawPooled.replace("-pooler.", ".");
+  const context = await loadNeonConnectionContext(
+    neonConfig,
+    "synthetic-neon-api-key",
+    async (input) => Response.json(neonResponse(new URL(String(input)))),
+  );
+  const secrets = new SecretRegistry();
+  secrets.add(
+    rawPooled,
+    rawDirect,
+    context.database.pooledUrl,
+    context.database.directUrl,
+    "p%40ss",
+    "p@ss",
+  );
+  const runner = new SystemCommandRunner(secrets, process.cwd());
+  const result = runner.run(
+    process.execPath,
+    [
+      "-e",
+      "process.stdout.write(process.env.RAW || ''); process.stderr.write(process.env.NORMALIZED || '')",
+    ],
+    {
+      env: {
+        ...process.env,
+        RAW: rawPooled,
+        NORMALIZED: context.database.directUrl,
+      },
+    },
+  );
+  assert.equal(result.stdout, "[REDACTED]");
+  assert.equal(result.stderr, "[REDACTED]");
+  assert.throws(
+    () => runner.run(process.execPath, ["-e", context.database.directUrl]),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /registered secret in arguments/u);
+      assert.equal(error.message.includes(context.database.directUrl), false);
+      assert.equal(error.message.includes("p%40ss"), false);
+      assert.equal(error.message.includes("p@ss"), false);
+      return true;
+    },
+  );
+
+  const temporaryRoot = mkdtempSync(join(tmpdir(), "database-tls-evidence-"));
+  try {
+    const outputPath = join(temporaryRoot, "command-output.txt");
+    writeFileSync(outputPath, `${result.stdout}\n${result.stderr}\n`, "utf8");
+    const output = readFileSync(outputPath, "utf8");
+    for (const value of [
+      rawPooled,
+      rawDirect,
+      context.database.pooledUrl,
+      context.database.directUrl,
+      "p%40ss",
+      "p@ss",
+    ]) {
+      assert.equal(output.includes(value), false);
+    }
+  } finally {
+    rmSync(temporaryRoot, { recursive: true, force: true });
+  }
 });
 
 test("reviewed migration manifest exactly classifies the current SHA-verified chain", () => {

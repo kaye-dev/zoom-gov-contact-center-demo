@@ -273,13 +273,29 @@ for (const scenario of [
   );
 }
 
-test("database URLs require one sslmode=require and the exact Neon endpoint", () => {
+test("DBTLS-02: require入力をverify-fullへ正規化しverify-full入力は冪等である", () => {
   const pooled =
     "postgresql://demo:p%40ss@ep-safe-pooler.c-2.ap-southeast-1.aws.neon.tech/app?sslmode=require&channel_binding=require";
   const direct =
     "postgresql://demo:p%40ss@ep-safe.c-2.ap-southeast-1.aws.neon.tech/app?sslmode=require&channel_binding=require";
   const target = validateDatabaseUrls(pooled, direct);
   assert.equal(target.endpointId, "ep-safe");
+  for (const [actual, expectedHost] of [
+    [target.pooledUrl, "ep-safe-pooler.c-2.ap-southeast-1.aws.neon.tech"],
+    [target.directUrl, "ep-safe.c-2.ap-southeast-1.aws.neon.tech"],
+  ] as const) {
+    const url = new URL(actual);
+    assert.deepEqual(url.searchParams.getAll("sslmode"), ["verify-full"]);
+    assert.equal(url.searchParams.get("channel_binding"), "require");
+    assert.equal(url.hostname, expectedHost);
+    assert.equal(url.pathname, "/app");
+    assert.equal(url.username, "demo");
+    assert.equal(url.password, "p%40ss");
+  }
+  assert.deepEqual(
+    validateDatabaseUrls(target.pooledUrl, target.directUrl),
+    target,
+  );
   assert.doesNotThrow(() =>
     assertNeonEndpointMatches(
       JSON.stringify({
@@ -299,14 +315,36 @@ test("database URLs require one sslmode=require and the exact Neon endpoint", ()
       "project-safe",
     ),
   );
-  assert.throws(
-    () =>
-      validateDatabaseUrls(
-        `${pooled}&sslmode=disable`,
-        direct,
-      ),
-    /exactly once/,
-  );
+});
+
+test("DBTLS-04: 弱いTLS modeとoverrideを拒否する", () => {
+  const pooled =
+    "postgresql://demo:p%40ss@ep-safe-pooler.c-2.ap-southeast-1.aws.neon.tech/app?sslmode=require&channel_binding=require";
+  const direct =
+    "postgresql://demo:p%40ss@ep-safe.c-2.ap-southeast-1.aws.neon.tech/app?sslmode=require&channel_binding=require";
+
+  for (const mode of [
+    "disable",
+    "prefer",
+    "verify-ca",
+    "no-verify",
+    "unknown",
+  ]) {
+    assert.throws(
+      () => validateDatabaseUrls(pooled.replace("sslmode=require", `sslmode=${mode}`), direct),
+      /sslmode=require or sslmode=verify-full/,
+    );
+  }
+  for (const invalidPooled of [
+    pooled.replace("sslmode=require&", ""),
+    `${pooled}&sslmode=verify-full`,
+    pooled.replace("sslmode=require", "SSLMODE=require"),
+  ]) {
+    assert.throws(
+      () => validateDatabaseUrls(invalidPooled, direct),
+      /sslmode exactly once/,
+    );
+  }
   for (const override of [
     "host=attacker.invalid",
     "port=6432",
@@ -321,6 +359,14 @@ test("database URLs require one sslmode=require and the exact Neon endpoint", ()
       /forbidden identity or TLS override/,
     );
   }
+});
+
+test("database URL target validation rejects endpoint mismatches", () => {
+  const pooled =
+    "postgresql://demo:p%40ss@ep-safe-pooler.c-2.ap-southeast-1.aws.neon.tech/app?sslmode=require&channel_binding=require";
+  const direct =
+    "postgresql://demo:p%40ss@ep-safe.c-2.ap-southeast-1.aws.neon.tech/app?sslmode=require&channel_binding=require";
+  const target = validateDatabaseUrls(pooled, direct);
   assert.throws(
     () =>
       assertNeonEndpointMatches(

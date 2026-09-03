@@ -110,8 +110,8 @@ export function validateDatabaseUrls(
   }
 
   return {
-    pooledUrl: pooledValue.trim(),
-    directUrl: directValue.trim(),
+    pooledUrl: normalizeDatabaseTls(pooled),
+    directUrl: normalizeDatabaseTls(direct),
     endpointId: pooledEndpoint,
     database: decodeURIComponent(pooled.pathname.slice(1)),
     username: decodeURIComponent(pooled.username),
@@ -140,11 +140,14 @@ function parsePostgresUrl(value: string, kind: "pooled" | "direct"): URL {
   if (url.port && url.port !== "5432") {
     throw new Error(`The ${kind} database URL may only use port 5432.`);
   }
-  if (url.searchParams.get("sslmode") !== "require") {
-    throw new Error(`The ${kind} database URL must set sslmode=require.`);
-  }
   if (url.searchParams.getAll("sslmode").length !== 1) {
     throw new Error(`The ${kind} database URL must set sslmode exactly once.`);
+  }
+  const sslmode = url.searchParams.get("sslmode");
+  if (sslmode !== "require" && sslmode !== "verify-full") {
+    throw new Error(
+      `The ${kind} database URL must set sslmode=require or sslmode=verify-full.`,
+    );
   }
   const forbiddenQueryKeys = [...url.searchParams.keys()].filter((key) =>
     FORBIDDEN_POSTGRES_QUERY_KEYS.has(key.toLowerCase()),
@@ -158,6 +161,12 @@ function parsePostgresUrl(value: string, kind: "pooled" | "direct"): URL {
     throw new Error(`The ${kind} database URL must not include a fragment.`);
   }
   return url;
+}
+
+function normalizeDatabaseTls(url: URL): string {
+  const normalized = new URL(url);
+  normalized.searchParams.set("sslmode", "verify-full");
+  return normalized.toString();
 }
 
 export function redactDatabaseHost(host: string): string {
