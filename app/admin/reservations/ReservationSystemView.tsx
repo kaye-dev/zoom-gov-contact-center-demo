@@ -7,15 +7,18 @@ import Link from "next/link";
 import { ChevronLeftIcon } from "@/app/components/svg/ChevronLeftIcon";
 import { ChevronRightIcon } from "@/app/components/svg/ChevronRightIcon";
 import { Select } from "@/app/components/Select";
+import { ModalDialog } from "@/app/components/admin/ModalDialog";
 import { useI18n } from "@/app/i18n/LanguageProvider";
 import {
   RESERVATION_SERVICE_KEYS,
   addCalendarMonths,
   calendarDateToUtc,
   type ReservationAvailabilityStatus,
+  type ReservationBookingSummary,
   type ReservationCalendarSnapshot,
   type ReservationDaySummary,
   type ReservationServiceKey,
+  type ReservationSlotSummary,
 } from "@/lib/reservations";
 
 type ReservationSystemViewProps = {
@@ -39,11 +42,15 @@ export function ReservationSystemView({
   const randomButtonRef = useRef<HTMLButtonElement>(null);
   const [calendar, setCalendar] = useState(initialCalendar);
   const [selectedDate, setSelectedDate] = useState(initialSelectedDate);
+  const [selectedSlotStartMinute, setSelectedSlotStartMinute] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [feedback, setFeedback] = useState<"generated" | "load-error" | "generation-error" | null>(null);
   const serviceCopy = copy.services[calendar.service.key];
   const selectedDay = calendar.days.find((day) => day.date === selectedDate) ?? calendar.days[0];
+  const selectedSlot = selectedSlotStartMinute === null
+    ? null
+    : selectedDay?.slots.find((slot) => slot.startMinute === selectedSlotStartMinute) ?? null;
   const methodLabel = calendar.service.key === "civic-facility"
     ? copy.facilityMethod
     : copy.methods[calendar.service.method];
@@ -56,6 +63,7 @@ export function ReservationSystemView({
   const loadCalendar = async (service: ReservationServiceKey, month: string) => {
     setIsLoading(true);
     setFeedback(null);
+    setSelectedSlotStartMinute(null);
     try {
       const params = new URLSearchParams({ service, month });
       const response = await fetch(`/api/admin/reservations?${params.toString()}`, {
@@ -79,6 +87,7 @@ export function ReservationSystemView({
     if (!canEdit || isGenerating) return;
     setIsGenerating(true);
     setFeedback(null);
+    setSelectedSlotStartMinute(null);
     try {
       const response = await fetch("/api/admin/reservations/demo-fill", {
         method: "POST",
@@ -216,12 +225,31 @@ export function ReservationSystemView({
           copy={copy}
           onSelect={(date) => {
             setSelectedDate(date);
+            setSelectedSlotStartMinute(null);
             setFeedback(null);
             replaceUrl(calendar.service.key, calendar.month, date);
           }}
         />
-        <SelectedDatePanel day={selectedDay} serviceKey={calendar.service.key} method={calendar.service.method} locale={locale} copy={copy} />
+        <SelectedDatePanel
+          day={selectedDay}
+          serviceKey={calendar.service.key}
+          method={calendar.service.method}
+          locale={locale}
+          copy={copy}
+          selectedSlotStartMinute={selectedSlotStartMinute}
+          onSelectSlot={setSelectedSlotStartMinute}
+        />
       </div>
+      {selectedSlot && selectedDay ? (
+        <ReservationDialog
+          day={selectedDay}
+          slot={selectedSlot}
+          serviceKey={calendar.service.key}
+          locale={locale}
+          copy={copy}
+          onRequestClose={() => setSelectedSlotStartMinute(null)}
+        />
+      ) : null}
     </section>
   );
 }
@@ -281,30 +309,90 @@ function CalendarDay({ day, method, selected, locale, copy, onSelect }: { day: R
   );
 }
 
-function SelectedDatePanel({ day, serviceKey, method, locale, copy }: { day: ReservationDaySummary | undefined; serviceKey: ReservationServiceKey; method: ReservationCalendarSnapshot["service"]["method"]; locale: ReturnType<typeof useI18n>["locale"]; copy: ReservationCopy }) {
+function SelectedDatePanel({ day, serviceKey, method, locale, copy, selectedSlotStartMinute, onSelectSlot }: { day: ReservationDaySummary | undefined; serviceKey: ReservationServiceKey; method: ReservationCalendarSnapshot["service"]["method"]; locale: ReturnType<typeof useI18n>["locale"]; copy: ReservationCopy; selectedSlotStartMinute: number | null; onSelectSlot: (startMinute: number) => void }) {
   if (!day) return null;
+  const dateReservations = day.slots[0]?.reservations ?? [];
   return (
     <aside id="selected-date-panel" aria-labelledby="selected-date-heading" className="rounded-lg border border-line bg-surface-raised p-4 shadow-sm md:p-5 lg:sticky lg:top-24">
       <div className="space-y-1 border-b border-line-subtle pb-4">
         <p id="selected-service-name" className="text-sm font-semibold text-accent">{copy.services[serviceKey].name}</p>
         <h2 id="selected-date-heading" className="text-lg font-bold">{formatFullDate(day.date, locale)}</h2>
-        <p id="selected-date-summary" className="text-sm text-fg-muted">{method === "DATE" ? copy.availableDate : copy.availableTimes}</p>
+        <p id="selected-date-summary" className="text-sm text-fg-muted">{method === "DATE" ? copy.dateReservationSummary : copy.availableTimes}</p>
       </div>
-      <div id="slot-list" className="mt-4 space-y-3" hidden={!day.bookable}>
-        {day.slots.map((slot) => (
-          <article key={slot.startMinute} data-slot={slot.startMinute} className="rounded-md border border-line bg-surface p-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="font-bold">{method === "DATE" ? copy.dateSlot : formatSlotLabel(serviceKey, slot.startMinute, slot.endMinute, locale)}</h3>
-                <p className="mt-1 text-sm text-fg-muted">{formatTemplate(copy.bookedCount, { booked: slot.booked, capacity: slot.capacity, remaining: slot.remaining })}</p>
-              </div>
-              <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${statusBadgeClass(slot.status)}`}>{copy.statuses[slot.status]}</span>
-            </div>
-          </article>
-        ))}
-      </div>
+      {method === "DATE" ? (
+        <ReservationList reservations={dateReservations} locale={locale} copy={copy} className="mt-4" />
+      ) : (
+        <div id="slot-list" className="mt-4 space-y-3" hidden={!day.bookable}>
+          {day.slots.map((slot) => (
+            <button
+              key={slot.startMinute}
+              id={`reservation-slot-${slot.startMinute}`}
+              type="button"
+              data-slot={slot.startMinute}
+              aria-controls="reservation-dialog"
+              aria-expanded={selectedSlotStartMinute === slot.startMinute}
+              onClick={() => onSelectSlot(slot.startMinute)}
+              className="block w-full cursor-pointer rounded-md border border-line bg-surface p-3 text-left transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              <span className="flex items-start justify-between gap-3">
+                <span>
+                  <span className="block font-bold">{formatSlotLabel(serviceKey, slot.startMinute, slot.endMinute, locale)}</span>
+                  <span className="mt-1 block text-sm text-fg-muted">{formatTemplate(copy.bookedCount, { booked: slot.booked, capacity: slot.capacity, remaining: slot.remaining })}</span>
+                </span>
+                <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${statusBadgeClass(slot.status)}`}>{copy.statuses[slot.status]}</span>
+              </span>
+              <span className="mt-2 block text-xs font-semibold text-accent">{copy.slotAction}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <p id="no-slots-message" hidden={day.bookable} className="mt-4 rounded-md border border-line bg-surface px-4 py-5 text-center text-sm text-fg-muted">{copy.noSlots}</p>
     </aside>
+  );
+}
+
+function ReservationDialog({ day, slot, serviceKey, locale, copy, onRequestClose }: { day: ReservationDaySummary; slot: ReservationSlotSummary; serviceKey: ReservationServiceKey; locale: ReturnType<typeof useI18n>["locale"]; copy: ReservationCopy; onRequestClose: () => void }) {
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  return (
+    <ModalDialog
+      containerId="reservation-dialog"
+      title={copy.reservationListTitle}
+      description={formatTemplate(copy.slotReservationDescription, {
+        date: formatFullDate(day.date, locale),
+        slot: formatSlotLabel(serviceKey, slot.startMinute, slot.endMinute, locale),
+      })}
+      onRequestClose={onRequestClose}
+      initialFocusRef={closeButtonRef}
+      maxWidthClassName="max-w-lg"
+    >
+      <div className="mt-5 flex justify-end">
+        <button ref={closeButtonRef} id="reservation-dialog-close" type="button" onClick={onRequestClose} className="cursor-pointer rounded-md border border-line bg-surface px-3 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+          {copy.close}
+        </button>
+      </div>
+      <ReservationList reservations={slot.reservations} locale={locale} copy={copy} className="mt-4" />
+    </ModalDialog>
+  );
+}
+
+function ReservationList({ reservations, locale, copy, className }: { reservations: ReservationBookingSummary[]; locale: ReturnType<typeof useI18n>["locale"]; copy: ReservationCopy; className: string }) {
+  if (reservations.length === 0) {
+    return <p id="no-reservations-message" className={`${className} rounded-md border border-line bg-surface px-4 py-5 text-center text-sm text-fg-muted`}>{copy.noReservations}</p>;
+  }
+  return (
+    <div id="date-reservation-list" className={`${className} space-y-3`}>
+      {reservations.map((reservation) => (
+        <article key={reservation.id} data-reservation-source={reservation.source} className="rounded-md border border-line bg-surface p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="font-bold">{copy.reservationId}: {reservation.id}</h3>
+              <p className="mt-1 text-sm text-fg-muted">{copy.createdAt}: {formatReservationCreatedAt(reservation.createdAt, locale)}</p>
+            </div>
+            <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${reservationSourceBadgeClass(reservation.source)}`}>{copy.sources[reservation.source]}</span>
+          </div>
+        </article>
+      ))}
+    </div>
   );
 }
 
@@ -330,6 +418,17 @@ function formatTime(minutes: number) {
   return `${Math.floor(minutes / 60).toString().padStart(2, "0")}:${(minutes % 60).toString().padStart(2, "0")}`;
 }
 
+function formatReservationCreatedAt(value: string, locale: ReturnType<typeof useI18n>["locale"]) {
+  return new Intl.DateTimeFormat(localeTag(locale), {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "UTC",
+  }).format(new Date(value));
+}
+
 function localeTag(locale: string) {
   return { ja: "ja-JP", en: "en-US", "zh-Hans": "zh-CN", "zh-Hant": "zh-TW", ko: "ko-KR" }[locale] ?? "ja-JP";
 }
@@ -344,4 +443,10 @@ function statusTextClass(status: ReservationAvailabilityStatus) {
 
 function statusBadgeClass(status: ReservationAvailabilityStatus) {
   return status === "FULL" ? "bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-200" : status === "LIMITED" ? "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200" : "bg-green-100 text-green-800 dark:bg-green-950/60 dark:text-green-200";
+}
+
+function reservationSourceBadgeClass(source: ReservationBookingSummary["source"]) {
+  return source === "ZVA"
+    ? "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-200"
+    : "bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-200";
 }

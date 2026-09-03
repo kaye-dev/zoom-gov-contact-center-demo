@@ -13,16 +13,20 @@ import {
   listCalendarDates,
   utcDateToCalendarDate,
   type ReservationCalendarSnapshot,
+  type ReservationBookingSummary,
   type ReservationDaySummary,
   type ReservationServiceKey,
 } from "@/lib/reservations";
 
 export type RandomIndex = (maxExclusive: number) => number;
 
-type BookingCount = {
+type BookingRecord = {
+  id: string;
   serviceKey: string;
   reservationDate: Date;
   startMinute: number;
+  isDemo: boolean;
+  createdAt: Date;
 };
 
 export async function getReservationCalendarSnapshot(
@@ -40,9 +44,12 @@ export async function getReservationCalendarSnapshot(
       reservationDate: { gte: bounds.start, lt: bounds.end },
     },
     select: {
+      id: true,
       serviceKey: true,
       reservationDate: true,
       startMinute: true,
+      isDemo: true,
+      createdAt: true,
     },
   });
 
@@ -51,14 +58,22 @@ export async function getReservationCalendarSnapshot(
 
 export function buildReservationCalendarSnapshot(
   input: { service: ReservationServiceKey; month: string; now: Date },
-  bookings: readonly BookingCount[],
+  bookings: readonly BookingRecord[],
 ): ReservationCalendarSnapshot {
   const service = getReservationService(input.service);
   const bookingCounts = new Map<string, number>();
+  const reservationsBySlot = new Map<string, ReservationBookingSummary[]>();
   for (const booking of bookings) {
     const date = utcDateToCalendarDate(booking.reservationDate);
     const key = `${date}:${booking.startMinute}`;
     bookingCounts.set(key, (bookingCounts.get(key) ?? 0) + 1);
+    const reservations = reservationsBySlot.get(key) ?? [];
+    reservations.push({
+      id: booking.id,
+      createdAt: booking.createdAt.toISOString(),
+      source: booking.isDemo ? "DEMO" : "ZVA",
+    });
+    reservationsBySlot.set(key, reservations);
   }
 
   const days = listCalendarDates(input.month).map<ReservationDaySummary>((date) => {
@@ -76,7 +91,8 @@ export function buildReservationCalendarSnapshot(
     }
 
     const slots = slotDefinitions.map((slot) => {
-      const booked = bookingCounts.get(`${date}:${slot.startMinute}`) ?? 0;
+      const key = `${date}:${slot.startMinute}`;
+      const booked = bookingCounts.get(key) ?? 0;
       if (booked > slot.capacity) {
         console.warn("Reservation capacity exceeded.", {
           service: input.service,
@@ -90,6 +106,9 @@ export function buildReservationCalendarSnapshot(
         booked,
         remaining,
         status: getReservationAvailabilityStatus(slot.capacity, remaining),
+        reservations: (reservationsBySlot.get(key) ?? []).toSorted(
+          (left, right) => right.createdAt.localeCompare(left.createdAt) || left.id.localeCompare(right.id),
+        ),
       };
     });
     const capacity = slots.reduce((total, slot) => total + slot.capacity, 0);

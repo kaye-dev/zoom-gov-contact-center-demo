@@ -98,7 +98,7 @@ test("availability thresholds and disabled date boundaries are deterministic", (
   assert.equal(getReservationSlotsForDate(myNumber, "2026-08-31", now).length, 16);
 });
 
-test("calendar snapshots expose empty slots and aggregate booking rows", () => {
+test("RES-INSPECT-01 calendar snapshots expose an allowlisted, source-labeled reservation summary", () => {
   const empty = buildReservationCalendarSnapshot(
     { service: "my-number-card", month: "2026-09", now },
     [],
@@ -112,8 +112,22 @@ test("calendar snapshots expose empty slots and aggregate booking rows", () => {
   const occupied = buildReservationCalendarSnapshot(
     { service: "my-number-card", month: "2026-09", now },
     [
-      { serviceKey: "my-number-card", reservationDate: new Date("2026-09-01T00:00:00Z"), startMinute: 540 },
-      { serviceKey: "my-number-card", reservationDate: new Date("2026-09-01T00:00:00Z"), startMinute: 540 },
+      {
+        id: "demo-booking",
+        serviceKey: "my-number-card",
+        reservationDate: new Date("2026-09-01T00:00:00Z"),
+        startMinute: 540,
+        isDemo: true,
+        createdAt: new Date("2026-09-01T02:00:00Z"),
+      },
+      {
+        id: "zva-booking",
+        serviceKey: "my-number-card",
+        reservationDate: new Date("2026-09-01T00:00:00Z"),
+        startMinute: 540,
+        isDemo: false,
+        createdAt: new Date("2026-09-01T01:00:00Z"),
+      },
     ],
   );
   const slot = occupied.days[0]!.slots[0]!;
@@ -124,10 +138,14 @@ test("calendar snapshots expose empty slots and aggregate booking rows", () => {
     booked: 2,
     remaining: 1,
     status: "LIMITED",
+    reservations: [
+      { id: "demo-booking", createdAt: "2026-09-01T02:00:00.000Z", source: "DEMO" },
+      { id: "zva-booking", createdAt: "2026-09-01T01:00:00.000Z", source: "ZVA" },
+    ],
   });
 });
 
-test("reservation navigation, page, and semantic controls follow the approved contract", () => {
+test("RES-INSPECT-02/03 reservation controls connect date lists and accessible slot modals", () => {
   const shell = source("../app/admin/AdminShell.tsx");
   const layout = source("../app/admin/layout.tsx");
   const page = source("../app/admin/reservations/page.tsx");
@@ -145,23 +163,40 @@ test("reservation navigation, page, and semantic controls follow the approved co
   assert.match(view, /requestAnimationFrame\(\(\) => randomButtonRef\.current\?\.focus\(\)\)/u);
   assert.match(view, /disabled=\{!canEdit \|\| isGenerating\}/u);
   assert.match(view, /lg:grid-cols-\[minmax\(0,1fr\)_minmax\(18rem,24rem\)\]/u);
+  assert.match(view, /id="date-reservation-list"/u);
+  assert.match(view, /id=\{`reservation-slot-\$\{slot\.startMinute\}`\}/u);
+  assert.match(view, /aria-controls="reservation-dialog"/u);
+  assert.match(view, /<ModalDialog/u);
+  assert.match(view, /data-reservation-source=\{reservation\.source\}/u);
+  assert.match(view, /id="reservation-dialog-close"/u);
+  assert.match(view, /setSelectedSlotStartMinute\(null\)/u);
 });
 
-test("all locales contain complete reservation copy and access catalog entries", () => {
+test("RES-INSPECT-05 all locales contain complete reservation copy and access catalog entries", () => {
   for (const locale of locales) {
     const admin = dictionaries[locale].admin;
     const copy = admin.reservationManagement;
     assert.ok(admin.reservations.length > 0, locale);
     assert.deepEqual(Object.keys(copy.services), [...RESERVATION_SERVICE_KEYS], locale);
     assert.deepEqual(Object.keys(copy.statuses).sort(), ["AVAILABLE", "FULL", "LIMITED", "UNAVAILABLE"], locale);
+    assert.deepEqual(Object.keys(copy.sources).sort(), ["DEMO", "ZVA"], locale);
     assert.equal(copy.weekdays.length, 7, locale);
-    assert.ok(copy.title.length > 0 && copy.generated.length > 0 && copy.generationError.length > 0, locale);
+    assert.ok(
+      copy.title.length > 0
+      && copy.generated.length > 0
+      && copy.generationError.length > 0
+      && copy.dateReservationSummary.length > 0
+      && copy.reservationListTitle.length > 0
+      && copy.noReservations.length > 0
+      && copy.slotAction.length > 0,
+      locale,
+    );
     assert.ok(admin.accessControl.resourceTitles.reservations.length > 0, locale);
     assert.ok(admin.accessControl.resourceDescriptions.reservations.length > 0, locale);
   }
 });
 
-test("reservation persistence contains no raw PII and no Virtual Agent integration", () => {
+test("RES-INSPECT-06 reservation persistence contains no raw PII and no Virtual Agent integration", () => {
   const schema = source("../prisma/schema.prisma");
   const migration = source("../prisma/migrations/20260830120000_add_reservation_bookings/migration.sql");
   const implementation = [
@@ -180,4 +215,5 @@ test("reservation persistence contains no raw PII and no Virtual Agent integrati
     assert.doesNotMatch(migration, new RegExp(`\\b${forbidden}\\b`, "iu"));
   }
   assert.doesNotMatch(implementation, /Virtual Agent|Zoom SDK|webhook/iu);
+  assert.doesNotMatch(implementation, /externalReferenceId|callerAniDigest/iu);
 });

@@ -16,6 +16,14 @@ export type ReservationAvailabilityStatus =
   | "FULL"
   | "UNAVAILABLE";
 
+export type ReservationBookingSource = "ZVA" | "DEMO";
+
+export type ReservationBookingSummary = {
+  id: string;
+  createdAt: string;
+  source: ReservationBookingSource;
+};
+
 export type ReservationSlotSummary = {
   startMinute: number;
   endMinute: number;
@@ -23,6 +31,7 @@ export type ReservationSlotSummary = {
   booked: number;
   remaining: number;
   status: ReservationAvailabilityStatus;
+  reservations: ReservationBookingSummary[];
 };
 
 export type ReservationDaySummary = {
