@@ -2,7 +2,19 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmod, cp, mkdtemp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  cp,
+  lstat,
+  mkdtemp,
+  mkdir,
+  readFile,
+  readdir,
+  readlink,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -11,6 +23,8 @@ import { fileURLToPath } from "node:url";
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(scriptDirectory, "..");
 const scenarioNames = [
+  "base-ahead-untracked-preserved",
+  "base-ahead-untracked-collision",
   "detached-auto-adopt",
   "resume-base-choice",
   "resume-foreign-history",
@@ -182,6 +196,13 @@ exit 97
 `;
 }
 
+function observableMutationCommandSource(command) {
+  return `#!/bin/sh
+printf '%s\\t%s\\n' ${JSON.stringify(command)} "$*" >> "$EVAL_COMMAND_LOG"
+exec /bin/${command} "$@"
+`;
+}
+
 async function createFixture(name) {
   const fixtureRoot = await realpath(
     await mkdtemp(path.join(os.tmpdir(), `zoom-git-shipping-eval-${name}-`)),
@@ -193,7 +214,9 @@ async function createFixture(name) {
   const ghState = path.join(fixtureRoot, "gh-state.json");
   const ghLog = path.join(fixtureRoot, "gh-log.jsonl");
   const gitTrace = path.join(fixtureRoot, "git-trace.log");
+  const commandLog = path.join(fixtureRoot, "command-log.tsv");
   const occupiedWorktree = path.join(fixtureRoot, "occupied-worktree");
+  const preservedArtifacts = [];
   await Promise.all([mkdir(repo), mkdir(bin), mkdir(shellConfig)]);
   git(fixtureRoot, ["init", "--bare", "-q", remote]);
   git(repo, ["init", "-q", "-b", "main"]);
@@ -210,7 +233,16 @@ async function createFixture(name) {
   );
   await write(path.join(repo, "src/task.txt"), "before\n");
   await write(path.join(repo, "src/unrelated.txt"), "unchanged\n");
-  git(repo, ["add", "--", "AGENTS.md", ".agents/skills/git-commit-push-pr", "src/task.txt", "src/unrelated.txt"]);
+  await write(path.join(repo, ".gitignore"), "/local-ignored/\n");
+  git(repo, [
+    "add",
+    "--",
+    "AGENTS.md",
+    ".agents/skills/git-commit-push-pr",
+    ".gitignore",
+    "src/task.txt",
+    "src/unrelated.txt",
+  ]);
   git(repo, ["commit", "-qm", "chore: shipping eval fixture"]);
   git(repo, ["remote", "add", "origin", "git@github.com:fixture/repo.git"]);
   git(repo, ["config", `url.file://${remote}.insteadOf`, "git@github.com:fixture/repo.git"]);
@@ -220,6 +252,34 @@ async function createFixture(name) {
 
   const mainOid = gitOutput(repo, ["rev-parse", "main"]);
   let detachedOid = mainOid;
+  let taskPrepared = false;
+  if (name === "base-ahead-untracked-preserved") {
+    await write(path.join(repo, "src/base-ahead.txt"), "base advanced\n");
+    git(repo, ["add", "--", "src/base-ahead.txt"]);
+    git(repo, ["commit", "-qm", "chore: advance main fixture"]);
+    git(repo, ["push", "-q", "origin", "main"]);
+    git(repo, ["switch", "-q", "--detach", mainOid]);
+    await write(path.join(repo, "src/task.txt"), "after\n");
+    await write(path.join(repo, "local-artifacts", "result.txt"), "preserve untracked artifact\n");
+    await write(path.join(repo, "local-ignored", "cache.txt"), "preserve ignored artifact\n");
+    preservedArtifacts.push("local-artifacts", "local-ignored");
+    taskPrepared = true;
+  }
+  if (name === "base-ahead-untracked-collision") {
+    git(repo, ["switch", "-qc", "feature/eval-shipping", mainOid]);
+    await write(path.join(repo, "src/task.txt"), "after\n");
+    git(repo, ["add", "--", "src/task.txt"]);
+    git(repo, ["commit", "-qm", "feat: add fixture task"]);
+    git(repo, ["switch", "-q", "main"]);
+    await write(path.join(repo, "collision", "base-only.txt"), "incoming base contents\n");
+    git(repo, ["add", "--", "collision/base-only.txt"]);
+    git(repo, ["commit", "-qm", "chore: add incoming collision fixture"]);
+    git(repo, ["push", "-q", "origin", "main"]);
+    git(repo, ["switch", "-q", "feature/eval-shipping"]);
+    await write(path.join(repo, "collision", "base-only.txt"), "preserve local artifact\n");
+    preservedArtifacts.push("collision");
+    taskPrepared = true;
+  }
   if (["resume-base-choice", "stale-recovery-prompt"].includes(name)) {
     git(repo, ["switch", "-qc", "develop"]);
     await write(path.join(repo, "src/develop.txt"), "develop\n");
@@ -242,11 +302,13 @@ async function createFixture(name) {
   if (name === "resume-worktree-occupied") {
     git(repo, ["worktree", "add", "-q", occupiedWorktree, "feature/eval-shipping"]);
   }
-  git(repo, ["switch", "-q", "--detach", detachedOid]);
-  await write(path.join(repo, "src/task.txt"), "after\n");
-  if (name === "resume-staged-scope") {
-    await write(path.join(repo, "src/unrelated.txt"), "preserve me\n");
-    git(repo, ["add", "--", "src/task.txt", "src/unrelated.txt"]);
+  if (!taskPrepared) {
+    git(repo, ["switch", "-q", "--detach", detachedOid]);
+    await write(path.join(repo, "src/task.txt"), "after\n");
+    if (name === "resume-staged-scope") {
+      await write(path.join(repo, "src/unrelated.txt"), "preserve me\n");
+      git(repo, ["add", "--", "src/task.txt", "src/unrelated.txt"]);
+    }
   }
 
   const ghPath = path.join(bin, "gh");
@@ -257,12 +319,18 @@ async function createFixture(name) {
     await write(commandPath, denyNetworkCommandSource());
     await chmod(commandPath, 0o755);
   }
+  for (const command of ["mv", "rm"]) {
+    const commandPath = path.join(bin, command);
+    await write(commandPath, observableMutationCommandSource(command));
+    await chmod(commandPath, 0o755);
+  }
   await write(
     path.join(shellConfig, ".zprofile"),
     `export PATH=${JSON.stringify(`${bin}:${process.env.PATH ?? "/usr/bin:/bin"}`)}\n`,
   );
   await write(ghLog, "");
   await write(gitTrace, "");
+  await write(commandLog, "");
   return {
     name,
     fixtureRoot,
@@ -273,7 +341,9 @@ async function createFixture(name) {
     ghState,
     ghLog,
     gitTrace,
+    commandLog,
     occupiedWorktree,
+    preservedArtifacts,
   };
 }
 
@@ -283,6 +353,31 @@ async function removeFixture(fixture) {
   const resolved = await realpath(fixture.fixtureRoot);
   ensure(resolved.startsWith(expectedPrefix), `refusing to remove unexpected path: ${resolved}`);
   await rm(resolved, { recursive: true, force: true });
+}
+
+async function snapshotArtifact(repo, relativePath) {
+  const absolutePath = path.join(repo, relativePath);
+  const metadata = await lstat(absolutePath);
+  if (metadata.isSymbolicLink()) {
+    return { path: relativePath, type: "symlink", digest: sha256(await readlink(absolutePath)) };
+  }
+  if (metadata.isFile()) {
+    return { path: relativePath, type: "file", digest: sha256(await readFile(absolutePath)) };
+  }
+  ensure(metadata.isDirectory(), `unsupported preserved artifact type: ${relativePath}`);
+  const children = [];
+  for (const entry of (await readdir(absolutePath)).sort()) {
+    children.push(await snapshotArtifact(repo, path.posix.join(relativePath, entry)));
+  }
+  return { path: relativePath, type: "directory", digest: sha256(JSON.stringify(children)), children };
+}
+
+async function snapshotPreservedArtifacts(fixture) {
+  const artifacts = [];
+  for (const relativePath of fixture.preservedArtifacts) {
+    artifacts.push(await snapshotArtifact(fixture.repo, relativePath));
+  }
+  return artifacts;
 }
 
 async function snapshot(fixture) {
@@ -300,6 +395,7 @@ async function snapshot(fixture) {
     cachedDigest: sha256(git(fixture.repo, ["diff", "--cached", "--binary", "--no-ext-diff"]).stdout),
     taskDigest: sha256(await readFile(path.join(fixture.repo, "src/task.txt"))),
     unrelatedDigest: sha256(await readFile(path.join(fixture.repo, "src/unrelated.txt"))),
+    preservedArtifacts: await snapshotPreservedArtifacts(fixture),
     ghState,
   };
 }
@@ -321,6 +417,7 @@ function fixtureEnvironment(fixture) {
     EVAL_GH_STATE: fixture.ghState,
     EVAL_GH_LOG: fixture.ghLog,
     EVAL_GIT_REMOTE: fixture.remote,
+    EVAL_COMMAND_LOG: fixture.commandLog,
     GH_CONFIG_DIR: path.join(fixture.fixtureRoot, "gh-config"),
     GIT_CONFIG_GLOBAL: path.join(fixture.fixtureRoot, "isolated-gitconfig"),
     GIT_CONFIG_SYSTEM: "/dev/null",
@@ -335,7 +432,12 @@ function scenarioPrompt(name) {
   const scope = name === "resume-staged-scope"
     ? "Only src/task.txt belongs to the current task; preserve src/unrelated.txt outside the commit."
     : "Only src/task.txt belongs to the current task.";
-  return `Use $git-commit-push-pr from .agents/skills/git-commit-push-pr/SKILL.md. ${scope} If a topic branch is needed, use feature/eval-shipping. Complete the authorized workflow through commit, synchronization, non-force push, pull-request creation or minimal update, and final local/remote/PR SHA and mergeability readback. This is an isolated fixture: use only origin and the fixture gh, do not merge or wait for CI.`;
+  const preservation = name === "base-ahead-untracked-preserved"
+    ? "Preserve the existing untracked local-artifacts/ and ignored local-ignored/ directories in place; they are outside the task."
+    : name === "base-ahead-untracked-collision"
+      ? "Preserve the existing untracked collision/ directory in place; it is outside the already-committed task."
+      : "";
+  return `Use $git-commit-push-pr from .agents/skills/git-commit-push-pr/SKILL.md. ${scope} ${preservation} If a topic branch is needed, use feature/eval-shipping. Complete the authorized workflow through commit, synchronization, non-force push, pull-request creation or minimal update, and final local/remote/PR SHA and mergeability readback. This is an isolated fixture: use only origin and the fixture gh, do not merge or wait for CI.`;
 }
 
 async function runCodex(fixture, prompt, suffix) {
@@ -411,7 +513,9 @@ function selectRecoveryPrompt(final, selector) {
 }
 
 async function assertStoppedUnchanged(fixture, before, final) {
-  ensure(/(?:停止|stopp?ed|blocked)/iu.test(final), "response did not report a stop");
+  const reportsStop = /(?:停止|stopp?ed|blocked)/iu.test(final)
+    || /(?:実行していません|未実施|no mutations?|did not (?:perform|make|mutate|create|commit|push))/iu.test(final);
+  ensure(reportsStop, "response did not report a stop or the absence of mutations");
   ensure(recoveryPrompts(final).length > 0, "stop did not include a recovery prompt");
   const after = await snapshot(fixture);
   ensure(sameSnapshot(before, after), "stop mutated branch, index, worktree, refs, remote, or PR state");
@@ -438,7 +542,7 @@ function expectedOutcome(name) {
 async function assertCompleted(
   fixture,
   name,
-  { expectedPrCreateCount = 1 } = {},
+  { expectedPrCreateCount = 1, preservedArtifacts = null } = {},
 ) {
   const expected = expectedOutcome(name);
   const branch = gitOutput(fixture.repo, ["branch", "--show-current"]);
@@ -457,6 +561,24 @@ async function assertCompleted(
   ensure(pr.headRefOid === head, "PR head OID differs from local HEAD");
   ensure(pr.mergeable === "MERGEABLE" && pr.mergeStateStatus === "CLEAN", "PR mergeability was not read back");
   ensure(git(fixture.repo, ["diff", "--cached", "--quiet"]).status === 0, "index is not empty after commit");
+  if (name === "base-ahead-untracked-preserved") {
+    ensure(
+      git(fixture.repo, ["merge-base", "--is-ancestor", "origin/main", "HEAD"], { allowFailure: true }).status === 0,
+      "latest main is not an ancestor of the shipped head",
+    );
+    const [baseOnly, headOnly] = gitOutput(fixture.repo, ["rev-list", "--left-right", "--count", "origin/main...HEAD"])
+      .split(/\s+/u)
+      .map(Number);
+    ensure(baseOnly === 0 && headOnly >= 1, "base-ahead scenario did not finish synchronized");
+    const prPaths = gitOutput(fixture.repo, ["diff", "--name-only", "origin/main...HEAD"])
+      .split("\n")
+      .filter(Boolean);
+    ensure(JSON.stringify(prPaths) === JSON.stringify(["src/task.txt"]), `unexpected PR paths: ${prPaths.join(", ")}`);
+    ensure(
+      JSON.stringify(await snapshotPreservedArtifacts(fixture)) === JSON.stringify(preservedArtifacts),
+      "preserved local artifacts changed during base synchronization",
+    );
+  }
   const committedPaths = gitOutput(fixture.repo, ["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"])
     .split("\n")
     .filter(Boolean);
@@ -493,6 +615,34 @@ async function assertCompleted(
     prCreateCount === expectedPrCreateCount,
     `expected ${expectedPrCreateCount} PR creates, got ${prCreateCount}`,
   );
+  await assertNoPreservedArtifactMutationCommands(fixture);
+}
+
+async function assertNoPreservedArtifactMutationCommands(fixture) {
+  const log = await readFile(fixture.commandLog, "utf8");
+  for (const relativePath of fixture.preservedArtifacts) {
+    ensure(!log.includes(relativePath), `preserved artifact was passed to mv or rm: ${relativePath}`);
+  }
+}
+
+async function assertCollisionStopped(fixture, before, final) {
+  ensure(/(?:停止|stopp?ed|blocked)/iu.test(final), "collision response did not report a stop");
+  ensure(/collision\/base-only\.txt/u.test(final), "collision response omitted the conflicting path");
+  ensure(/(?:衝突|collision|overwrite|上書き)/iu.test(final), "collision response omitted the collision reason");
+  const after = await snapshot(fixture);
+  ensure(sameSnapshot(before, after), "collision stop mutated branch, index, worktree, refs, remote, or PR state");
+  const trace = await readFile(fixture.gitTrace, "utf8");
+  ensure(!/git (?:rebase|merge)(?:\s|$)/u.test(trace), "collision scenario started integration");
+  const ghCalls = (await readFile(fixture.ghLog, "utf8"))
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line).args);
+  ensure(
+    !ghCalls.some((args) => args[0] === "pr" && ["create", "edit"].includes(args[1])),
+    "collision scenario mutated a pull request",
+  );
+  await assertNoPreservedArtifactMutationCommands(fixture);
 }
 
 function selectorFor(name) {
@@ -512,9 +662,15 @@ async function executeScenario(name, { keepOnFailure = false } = {}) {
   const fixture = await createFixture(name);
   let succeeded = false;
   try {
-    if (name === "detached-auto-adopt") {
-      await runCodex(fixture, scenarioPrompt(name), "initial");
-      await assertCompleted(fixture, name);
+    if (["detached-auto-adopt", "base-ahead-untracked-preserved"].includes(name)) {
+      const before = await snapshot(fixture);
+      const final = await runCodex(fixture, scenarioPrompt(name), "initial");
+      ensure(!/(?:停止|stopp?ed|blocked)/iu.test(final), "completion scenario reported a stop");
+      await assertCompleted(fixture, name, { preservedArtifacts: before.preservedArtifacts });
+    } else if (name === "base-ahead-untracked-collision") {
+      const before = await snapshot(fixture);
+      const final = await runCodex(fixture, scenarioPrompt(name), "collision");
+      await assertCollisionStopped(fixture, before, final);
     } else {
       const before = await snapshot(fixture);
       const firstFinal = await runCodex(fixture, scenarioPrompt(name), "stop");
@@ -525,10 +681,7 @@ async function executeScenario(name, { keepOnFailure = false } = {}) {
         const drifted = await snapshot(fixture);
         const secondFinal = await runCodex(fixture, recovery, "stale");
         await assertStoppedUnchanged(fixture, drifted, secondFinal);
-        ensure(
-          /(?:drift|ドリフト|変化|不一致|stale)/iu.test(secondFinal),
-          "stale prompt stop omitted drift evidence",
-        );
+        selectRecoveryPrompt(secondFinal, /feature\/eval-shipping-2/u);
       } else {
         await runCodex(fixture, recovery, "resume");
         await assertCompleted(fixture, name);
@@ -648,6 +801,16 @@ async function selfTest() {
     ensure(denied.status === 97, "external network deny shim did not fail closed");
   } finally {
     await removeFixture(stoppedFixture);
+  }
+
+  const artifactFixture = await createFixture("base-ahead-untracked-preserved");
+  try {
+    const before = await snapshotPreservedArtifacts(artifactFixture);
+    await write(path.join(artifactFixture.repo, "local-artifacts", "result.txt"), "changed\n");
+    const after = await snapshotPreservedArtifacts(artifactFixture);
+    ensure(JSON.stringify(before) !== JSON.stringify(after), "preserved-artifact snapshot missed content drift");
+  } finally {
+    await removeFixture(artifactFixture);
   }
   process.stdout.write(`self-test passed: ${scenarioNames.length} scenarios and grader negative controls\n`);
 }

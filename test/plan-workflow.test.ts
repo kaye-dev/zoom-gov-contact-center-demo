@@ -561,6 +561,34 @@ test("git shippingはdetached引受け後も既存の禁止操作を維持する
   }
 });
 
+test("git shippingはbase drift時に非衝突artifactを保持して同期する", async () => {
+  const [shipping, workflow] = await Promise.all([
+    read(".agents/skills/git-commit-push-pr/SKILL.md"),
+    read("docs/development/codex-development-workflow.md"),
+  ]);
+
+  for (const pattern of [
+    /Base-only commits are a normal synchronization condition/,
+    /repository-relative path, file type, and content digest/,
+    /either path is an ancestor of the other/,
+    /Non-conflicting untracked or ignored artifacts may remain in place/,
+    /A non-conflicting untracked or ignored artifact alone is not this blocker/,
+    /require the preservation snapshot to match exactly/,
+    /pre-sync HEAD, branch, index, tracked diff, and preservation snapshot are restored/,
+  ]) {
+    assert.match(shipping, pattern);
+  }
+  for (const pattern of [
+    /最新baseが進んでいること自体は停止理由にしない/,
+    /同一path、祖先・子孫、file／directory／symlink置換/,
+    /path・type・内容digestのsnapshot/,
+    /非衝突artifactを元の場所に保持したまま/,
+    /自動stash・一時移動・削除・復元を行わず停止/,
+  ]) {
+    assert.match(workflow, pattern);
+  }
+});
+
 test("明示的な6 skill構成を保ち廃止skill・lifecycle・旧implementation agentを復活させない", async () => {
   const removed = [
     ".agents/skills/plan-critic/SKILL.md",

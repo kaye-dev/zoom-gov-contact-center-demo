@@ -118,11 +118,16 @@ After committing, verify that HEAD advanced, the index is empty, and the hash, s
 
 Fetch the remote again immediately before synchronization. Check both the topic branch's remote ref and `<remote>/<base>`.
 
-- **Unpublished topic branch:** require a clean working tree for integration, then run `git rebase --no-autostash <remote>/<base>`.
-- **Published topic branch:** determine publication from the remote ref, not merely upstream configuration. If the remote topic has commits not contained in local HEAD, stop for remote divergence. Otherwise, when the base is not already an ancestor, run `git merge --no-autostash --no-edit <remote>/<base>` without rewriting history.
-- **Unrelated dirty changes remain:** if synchronization is required, stop instead of stashing or risking those changes. If the latest base is already an ancestor, the unrelated changes may remain while shipping the scoped commit.
+Base-only commits are a normal synchronization condition, not a reason to request another invocation. Before integration, capture the pre-sync HEAD, branch, resolved remote base OID, remote topic OID when present, index digest, tracked diff, and a preservation snapshot for untracked paths outside the current-task allowlist, explicitly preserved paths, existing local plan or review artifacts, and ignored paths that could collide with incoming base paths. Make the snapshot NUL-safe and record only repository-relative path, file type, and content digest; never expose file contents or enumerate an entire ignored dependency tree.
 
-On a rebase or merge conflict, capture `git diff --name-only --diff-filter=U`, abort the operation, confirm the pre-integration state is restored, and stop without pushing. Do not resolve or retry automatically.
+Compute the merge base and incoming base name-status before touching the worktree. A preserved local path collides when an incoming tracked path is the same path, either path is an ancestor of the other, or the update replaces a file, directory, or symlink type. Stop before integration for that collision and report only the conflicting paths. When supported, also run `git merge-tree --write-tree <remote>/<base> HEAD` before integration to detect tracked-tree conflicts, but do not use it as a substitute for the local-path collision check.
+
+- **No base drift:** if `<remote>/<base>` is already an ancestor of `HEAD`, preserve unrelated changes and continue to the pre-push gates without integration.
+- **Unpublished topic branch:** when synchronization is required, require an empty index and no tracked working-tree changes. Non-conflicting untracked or ignored artifacts may remain in place. Run `git rebase --no-autostash <remote>/<base>` without moving, deleting, stashing, or restoring those artifacts.
+- **Published topic branch:** determine publication from the remote ref, not merely upstream configuration. If the remote topic has commits not contained in local HEAD, stop for remote divergence. Otherwise require the same empty-index, tracked-clean, and non-collision gates, then run `git merge --no-autostash --no-edit <remote>/<base>` without rewriting history.
+- **Tracked dirty changes remain:** if synchronization is required, stop instead of stashing, committing, moving, or discarding them. A non-conflicting untracked or ignored artifact alone is not this blocker and must not produce a recovery prompt.
+
+After successful integration, require the preservation snapshot to match exactly, then verify the task commit subject and current-task path allowlist before continuing. On a rebase or merge conflict, capture `git diff --name-only --diff-filter=U`, abort the operation, and confirm that the pre-sync HEAD, branch, index, tracked diff, and preservation snapshot are restored before stopping without push or pull-request mutation. Do not resolve or retry automatically. A preservation mismatch is a terminal failure and must be reported before push; never attempt an automatic repair.
 
 Immediately before push, require all of the following:
 
