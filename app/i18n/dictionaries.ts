@@ -17,6 +17,7 @@ import type {
 } from '@/lib/admin-access/types';
 import type {
   ReservationAvailabilityStatus,
+  ReservationBookingSource,
   ReservationServiceKey,
 } from '@/lib/reservations';
 import type { ReservationApiPermission } from '@/lib/reservation-api';
@@ -632,6 +633,15 @@ export type ReservationManagementDictionary = {
   bookedCount: string;
   openSlotCount: string;
   dateCount: string;
+  dateReservationSummary: string;
+  reservationListTitle: string;
+  reservationId: string;
+  createdAt: string;
+  sources: Record<ReservationBookingSource, string>;
+  noReservations: string;
+  slotAction: string;
+  slotReservationDescription: string;
+  close: string;
   readOnlyNotice: string;
   generated: string;
   loadingError: string;
@@ -833,7 +843,7 @@ const reservationManagementCopy: Record<Locale, ReservationManagementDictionary>
     weekdays: ['日', '月', '火', '水', '木', '金', '土'],
     statuses: { AVAILABLE: '空きあり', LIMITED: '残りわずか', FULL: '満員', UNAVAILABLE: '受付なし' },
     legend: '予約状況の凡例', availableTimes: '予約可能な時間を選択できます。', availableDate: 'この日の収集予約状況です。', noSlots: 'この日は予約を受け付けていません。', dateSlot: '収集日',
-    bookedCount: '予約 {booked}/{capacity}件・残り {remaining}件', openSlotCount: '空き{count}枠', dateCount: '{booked}/{capacity}件',
+    bookedCount: '予約 {booked}/{capacity}件・残り {remaining}件', openSlotCount: '空き{count}枠', dateCount: '{booked}/{capacity}件', dateReservationSummary: 'この日の予約情報です。', reservationListTitle: '予約一覧', reservationId: '予約 ID', createdAt: '作成日時', sources: { ZVA: 'ZVA', DEMO: 'デモ予約' }, noReservations: 'この日に確定している予約はありません。', slotAction: '予約一覧を確認', slotReservationDescription: '{date} {slot} の予約情報です。', close: '閉じる',
     readOnlyNotice: 'デモ予約の生成には予約システムの編集権限が必要です。', generated: '表示月の4業務にデモ予約を生成しました。', loadingError: '予約状況を読み込めませんでした。もう一度お試しください。', generationError: 'デモ予約を生成できませんでした。もう一度お試しください。',
   },
   en: {
@@ -846,7 +856,7 @@ const reservationManagementCopy: Record<Locale, ReservationManagementDictionary>
       'bulky-waste': { name: 'Bulky waste collection', description: 'Book a collection date from Monday through Saturday.' },
       'civic-facility': { name: 'Civic halls and meeting rooms', description: 'Book a morning, afternoon, or evening facility slot.' },
     },
-    weekdays: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], statuses: { AVAILABLE: 'Available', LIMITED: 'Almost full', FULL: 'Full', UNAVAILABLE: 'Closed' }, legend: 'Availability legend', availableTimes: 'Available times for this date.', availableDate: 'Collection availability for this date.', noSlots: 'Bookings are not accepted on this date.', dateSlot: 'Collection date', bookedCount: '{booked}/{capacity} booked · {remaining} remaining', openSlotCount: '{count} slots open', dateCount: '{booked}/{capacity}', readOnlyNotice: 'Edit permission for the reservation system is required to generate demo bookings.', generated: 'Demo bookings were generated for all four services in this month.', loadingError: 'Could not load availability. Please try again.', generationError: 'Could not generate demo bookings. Please try again.',
+    weekdays: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], statuses: { AVAILABLE: 'Available', LIMITED: 'Almost full', FULL: 'Full', UNAVAILABLE: 'Closed' }, legend: 'Availability legend', availableTimes: 'Available times for this date.', availableDate: 'Collection availability for this date.', noSlots: 'Bookings are not accepted on this date.', dateSlot: 'Collection date', bookedCount: '{booked}/{capacity} booked · {remaining} remaining', openSlotCount: '{count} slots open', dateCount: '{booked}/{capacity}', dateReservationSummary: 'Reservation details for this date.', reservationListTitle: 'Reservations', reservationId: 'Reservation ID', createdAt: 'Created', sources: { ZVA: 'ZVA', DEMO: 'Demo booking' }, noReservations: 'There are no confirmed reservations for this date.', slotAction: 'View reservations', slotReservationDescription: 'Reservation details for {date}, {slot}.', close: 'Close', readOnlyNotice: 'Edit permission for the reservation system is required to generate demo bookings.', generated: 'Demo bookings were generated for all four services in this month.', loadingError: 'Could not load availability. Please try again.', generationError: 'Could not generate demo bookings. Please try again.',
   },
   'zh-Hans': {
     apiKeys: reservationApiKeyCopy['zh-Hans'],
@@ -857,7 +867,7 @@ const reservationManagementCopy: Record<Locale, ReservationManagementDictionary>
       'bulky-waste': { name: '大件垃圾收集', description: '周一至周六可按日期预约收集。' },
       'civic-facility': { name: '公民馆、市民会馆和会议室', description: '可预约上午、下午或晚间设施时段。' },
     },
-    weekdays: ['日', '一', '二', '三', '四', '五', '六'], statuses: { AVAILABLE: '有空位', LIMITED: '余位不多', FULL: '已满', UNAVAILABLE: '不受理' }, legend: '预约状态图例', availableTimes: '请选择该日期可预约的时间。', availableDate: '该日期的收集预约情况。', noSlots: '该日期不受理预约。', dateSlot: '收集日期', bookedCount: '已预约 {booked}/{capacity}件・剩余 {remaining}件', openSlotCount: '空余{count}个时段', dateCount: '{booked}/{capacity}件', readOnlyNotice: '生成演示预约需要预约系统编辑权限。', generated: '已为本月全部4项业务生成演示预约。', loadingError: '无法加载预约情况，请重试。', generationError: '无法生成演示预约，请重试。',
+    weekdays: ['日', '一', '二', '三', '四', '五', '六'], statuses: { AVAILABLE: '有空位', LIMITED: '余位不多', FULL: '已满', UNAVAILABLE: '不受理' }, legend: '预约状态图例', availableTimes: '请选择该日期可预约的时间。', availableDate: '该日期的收集预约情况。', noSlots: '该日期不受理预约。', dateSlot: '收集日期', bookedCount: '已预约 {booked}/{capacity}件・剩余 {remaining}件', openSlotCount: '空余{count}个时段', dateCount: '{booked}/{capacity}件', dateReservationSummary: '该日期的预约信息。', reservationListTitle: '预约列表', reservationId: '预约 ID', createdAt: '创建时间', sources: { ZVA: 'ZVA', DEMO: '演示预约' }, noReservations: '该日期没有已确认的预约。', slotAction: '查看预约列表', slotReservationDescription: '{date} {slot} 的预约信息。', close: '关闭', readOnlyNotice: '生成演示预约需要预约系统编辑权限。', generated: '已为本月全部4项业务生成演示预约。', loadingError: '无法加载预约情况，请重试。', generationError: '无法生成演示预约，请重试。',
   },
   'zh-Hant': {
     apiKeys: reservationApiKeyCopy['zh-Hant'],
@@ -868,7 +878,7 @@ const reservationManagementCopy: Record<Locale, ReservationManagementDictionary>
       'bulky-waste': { name: '大型垃圾收集', description: '週一至週六可按日期預約收集。' },
       'civic-facility': { name: '公民館、市民會館及會議室', description: '可預約上午、下午或晚間設施時段。' },
     },
-    weekdays: ['日', '一', '二', '三', '四', '五', '六'], statuses: { AVAILABLE: '尚有空位', LIMITED: '名額將滿', FULL: '已額滿', UNAVAILABLE: '不受理' }, legend: '預約狀態圖例', availableTimes: '請選擇該日期可預約的時間。', availableDate: '該日期的收集預約狀況。', noSlots: '該日期不受理預約。', dateSlot: '收集日期', bookedCount: '已預約 {booked}/{capacity}件・剩餘 {remaining}件', openSlotCount: '尚有{count}個時段', dateCount: '{booked}/{capacity}件', readOnlyNotice: '產生示範預約需要預約系統編輯權限。', generated: '已為本月全部4項業務產生示範預約。', loadingError: '無法載入預約狀況，請重試。', generationError: '無法產生示範預約，請重試。',
+    weekdays: ['日', '一', '二', '三', '四', '五', '六'], statuses: { AVAILABLE: '尚有空位', LIMITED: '名額將滿', FULL: '已額滿', UNAVAILABLE: '不受理' }, legend: '預約狀況圖例', availableTimes: '請選擇該日期可預約的時間。', availableDate: '該日期的收集預約狀況。', noSlots: '該日期不受理預約。', dateSlot: '收集日期', bookedCount: '已預約 {booked}/{capacity}件・剩餘 {remaining}件', openSlotCount: '尚有{count}個時段', dateCount: '{booked}/{capacity}件', dateReservationSummary: '此日期的預約資訊。', reservationListTitle: '預約清單', reservationId: '預約 ID', createdAt: '建立時間', sources: { ZVA: 'ZVA', DEMO: '示範預約' }, noReservations: '此日期沒有已確認的預約。', slotAction: '查看預約清單', slotReservationDescription: '{date} {slot} 的預約資訊。', close: '關閉', readOnlyNotice: '產生示範預約需要預約系統編輯權限。', generated: '已為本月全部4項業務產生示範預約。', loadingError: '無法載入預約狀況，請重試。', generationError: '無法產生示範預約，請重試。',
   },
   ko: {
     apiKeys: reservationApiKeyCopy.ko,
@@ -879,7 +889,7 @@ const reservationManagementCopy: Record<Locale, ReservationManagementDictionary>
       'bulky-waste': { name: '대형 폐기물 수거', description: '월요일부터 토요일까지 수거일을 예약할 수 있습니다.' },
       'civic-facility': { name: '공민관·시민회관·회의실 이용', description: '오전, 오후 또는 야간 시설 이용 시간을 예약할 수 있습니다.' },
     },
-    weekdays: ['일', '월', '화', '수', '목', '금', '토'], statuses: { AVAILABLE: '예약 가능', LIMITED: '잔여 소수', FULL: '마감', UNAVAILABLE: '접수 없음' }, legend: '예약 현황 범례', availableTimes: '이 날짜에 예약 가능한 시간을 선택할 수 있습니다.', availableDate: '이 날짜의 수거 예약 현황입니다.', noSlots: '이 날짜에는 예약을 받지 않습니다.', dateSlot: '수거일', bookedCount: '예약 {booked}/{capacity}건・잔여 {remaining}건', openSlotCount: '빈 시간 {count}개', dateCount: '{booked}/{capacity}건', readOnlyNotice: '데모 예약을 생성하려면 예약 시스템 편집 권한이 필요합니다.', generated: '표시 월의 4개 업무에 데모 예약을 생성했습니다.', loadingError: '예약 현황을 불러올 수 없습니다. 다시 시도해 주세요.', generationError: '데모 예약을 생성할 수 없습니다. 다시 시도해 주세요.',
+    weekdays: ['일', '월', '화', '수', '목', '금', '토'], statuses: { AVAILABLE: '예약 가능', LIMITED: '잔여 소수', FULL: '마감', UNAVAILABLE: '접수 없음' }, legend: '예약 현황 범례', availableTimes: '이 날짜에 예약 가능한 시간을 선택할 수 있습니다.', availableDate: '이 날짜의 수거 예약 현황입니다.', noSlots: '이 날짜에는 예약을 받지 않습니다.', dateSlot: '수거일', bookedCount: '예약 {booked}/{capacity}건・잔여 {remaining}건', openSlotCount: '빈 시간 {count}개', dateCount: '{booked}/{capacity}건', dateReservationSummary: '이 날짜의 예약 정보입니다.', reservationListTitle: '예약 목록', reservationId: '예약 ID', createdAt: '생성 일시', sources: { ZVA: 'ZVA', DEMO: '데모 예약' }, noReservations: '이 날짜에 확정된 예약이 없습니다.', slotAction: '예약 목록 확인', slotReservationDescription: '{date} {slot}의 예약 정보입니다.', close: '닫기', readOnlyNotice: '데모 예약을 생성하려면 예약 시스템 편집 권한이 필요합니다.', generated: '표시 월의 4개 업무에 데모 예약을 생성했습니다.', loadingError: '예약 현황을 불러올 수 없습니다. 다시 시도해 주세요.', generationError: '데모 예약을 생성할 수 없습니다. 다시 시도해 주세요.',
   },
 };
 

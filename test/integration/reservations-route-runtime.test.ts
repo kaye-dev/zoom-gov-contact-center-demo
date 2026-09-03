@@ -14,9 +14,16 @@ const NO_ACCESS_ADMIN = "reservations-no-access-admin";
 
 type HonoRoute = typeof import("../../app/api/[[...route]]/route");
 type HonoHandler = HonoRoute["GET"] | HonoRoute["POST"];
+type SerializedReservation = { id: string; createdAt: string; source: "ZVA" | "DEMO" };
+type SerializedSlot = { startMinute: number; reservations: SerializedReservation[] };
+type SerializedCalendar = {
+  month: string;
+  service: { key: string; method: string };
+  days: Array<{ date: string; bookable: boolean; booked: number; slots: SerializedSlot[] }>;
+};
 
 test(
-  "reservation routes enforce contracts, preserve non-demo rows, and serialize generation",
+  "RES-INSPECT-04 reservation routes enforce contracts, preserve non-demo rows, and serialize generation",
   { timeout: 180_000 },
   async () => {
     await withIsolatedPostgresDatabase(async (databaseUrl) => {
@@ -72,13 +79,7 @@ test(
 
         const initialResponse = await invoke(route.GET, "GET", getPath, fullCookie);
         assert.equal(initialResponse.status, 200);
-        const initial = await initialResponse.json() as {
-          calendar: {
-            month: string;
-            service: { key: string; method: string };
-            days: Array<{ date: string; bookable: boolean; booked: number; slots: Array<{ startMinute: number }> }>;
-          };
-        };
+        const initial = await initialResponse.json() as { calendar: SerializedCalendar };
         assert.equal(initial.calendar.month, month);
         assert.deepEqual(initial.calendar.service, { key: "my-number-card", method: "DATETIME" });
         assert.ok(initial.calendar.days.some((day) => day.bookable && day.booked === 0));
@@ -103,7 +104,7 @@ test(
         const generated = await generatedResponse.json() as {
           month: string;
           generatedCount: number;
-          calendars: Record<string, { days: Array<{ status: string; slots: Array<{ status: string }> }> }>;
+          calendars: Record<string, { days: Array<{ status: string; slots: Array<{ status: string; reservations: SerializedReservation[] }> }> }>;
         };
         assert.equal(generated.month, month);
         assert.ok(generated.generatedCount > 0);
@@ -135,6 +136,20 @@ test(
         const persistedResponse = await invoke(route.GET, "GET", getPath, fullCookie);
         const persisted = await persistedResponse.json() as typeof initial;
         assert.ok(persisted.calendar.days.some((day) => day.booked > 0));
+        const preservedSlot = persisted.calendar.days
+          .find((day) => day.date === firstDay.date)!
+          .slots.find((slot) => slot.startMinute === startMinute)!;
+        const preservedReservation = preservedSlot.reservations.find(({ id }) => id === "preserved-booking")!;
+        assert.deepEqual(Object.keys(preservedReservation).sort(), ["createdAt", "id", "source"]);
+        assert.equal(preservedReservation.source, "ZVA");
+        assert.ok(Number.isFinite(Date.parse(preservedReservation.createdAt)));
+        assert.ok(
+          Object.values(generated.calendars).some((calendar) =>
+            calendar.days.some((day) =>
+              day.slots.some((slot) => slot.reservations.some(({ source }) => source === "DEMO")),
+            ),
+          ),
+        );
 
         const concurrent = await Promise.all([
           invoke(route.POST, "POST", "/api/admin/reservations/demo-fill", fullCookie, { month }),
