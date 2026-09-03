@@ -101,4 +101,13 @@ errorの直前に表示されたphaseを確認し、状態不明のまま再実�
 | Vercel env sync / Production deploy | 環境変数またはProductionが変更済みの可能性あり | Vercel deployment IDと最後に成功した工程を確認する     |
 | canonical smoke                     | Productionはすでに公開済み                     | deployを重ねず、canonicalの実状態を確認して復旧する    |
 
+### migration適用後にschema driftで停止した場合
+
+migration applyが成功した後のverifyでschema driftを検出した場合は、DBが変更済みでVercel Production deployは未開始の状態として扱います。状態不明のまま同じrunや`./deploy.sh`を再実行しません。
+
+1. 既存deploy runnerのread-only診断から`_prisma_migrations`、`prisma migrate status`、`prisma migrate diff`を確認し、適用済み、pending、failed、rolled-back、checksum不一致を区別する。database URLやcredentialをterminal、issue、logへ転記しない。
+2. migrationが適用済みでpendingがなく、diffが物理名metadataだけの場合は、適用済みmigration SQLや`_prisma_migrations`を変更せず、`schema.prisma`のmapping修正を新しいcommitとしてreviewする。
+3. 自動rollback、indexの手動rename、standalone SQL、`prisma migrate resolve`、`prisma db push`でdriftを消さない。failed、rolled-back、checksum不一致、想定外のdiffは個別のmigration復旧調査へ戻す。
+4. 修正SHAの`Deploy runner npm test`に含まれる隔離DBのmigration/schema parityと他のCI checkが成功し、`main`へ反映されたことを直接確認してから、新しいdeployを開始する。
+
 DB migrationはVercelのrollbackでは戻りません。認証だけが故障した場合やDB停止時は[メンテナンスモード緊急解除](maintenance-recovery.md)を参照してください。

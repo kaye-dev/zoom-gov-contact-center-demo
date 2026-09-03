@@ -8,6 +8,11 @@ const migrationUrl = new URL(
   `../prisma/migrations/${migrationName}/migration.sql`,
   import.meta.url,
 );
+const schemaUrl = new URL("../prisma/schema.prisma", import.meta.url);
+const disasterRadioIndexName =
+  "disaster_radio_subscriptions_normalizedEmail_normalizedPhone_ke";
+const sourceListIndexName =
+  "zaad_one_time_dispatch_source_lists_dispatchId_selectedOrder_ke";
 
 test("ZAAD migration is additive and preserves resident and dispatch invariants", () => {
   const migration = readFileSync(migrationUrl, "utf8");
@@ -54,7 +59,32 @@ test("ZAAD migration is additive and preserves resident and dispatch invariants"
   assert.doesNotMatch(migration, /^\s*(?:DROP|TRUNCATE|RENAME|UPDATE)\b/imu);
 });
 
-test("ZAAD migration manifest and reviewed chain bind the exact SQL hash", () => {
+test("ZMI-01: PostgreSQLで実在する2件のunique index名をPrisma schemaへmapする", () => {
+  const schema = readFileSync(schemaUrl, "utf8");
+  const disasterRadioModel = readModel(schema, "DisasterRadioSubscription");
+  const sourceListModel = readModel(schema, "ZaadOneTimeDispatchSourceList");
+
+  assert.match(
+    disasterRadioModel,
+    new RegExp(
+      `@@unique\\(\\[normalizedEmail, normalizedPhone\\], map: "${disasterRadioIndexName}"\\)`,
+      "u",
+    ),
+  );
+  assert.match(
+    sourceListModel,
+    new RegExp(
+      `@@unique\\(\\[dispatchId, selectedOrder\\], map: "${sourceListIndexName}"\\)`,
+      "u",
+    ),
+  );
+  assert.doesNotMatch(disasterRadioModel, /@@unique\([^\n]*\bname\s*:/u);
+  assert.doesNotMatch(sourceListModel, /@@unique\([^\n]*\bname\s*:/u);
+  assert.equal(Buffer.byteLength(disasterRadioIndexName, "utf8"), 63);
+  assert.equal(Buffer.byteLength(sourceListIndexName, "utf8"), 63);
+});
+
+test("ZMI-02: 適用済みZAAD migrationのSQLとmanifest hashを維持する", () => {
   const migration = readFileSync(migrationUrl, "utf8");
   const sha256 = createHash("sha256").update(migration).digest("hex");
   const manifest = JSON.parse(
@@ -82,6 +112,22 @@ test("ZAAD migration manifest and reviewed chain bind the exact SQL hash", () =>
       classification: "expand-compatible",
     },
   );
+  assert.equal(
+    manifest.migrations.findIndex(({ name }) => name === migrationName),
+    manifest.migrations.length - 2,
+  );
+  assert.equal(
+    manifest.migrations.at(-1)?.name,
+    "20260901160000_add_reservation_caller_ani_binding",
+  );
   assert.match(reviewed, new RegExp(migrationName, "u"));
   assert.match(reviewed, new RegExp(sha256, "u"));
 });
+
+function readModel(schema: string, modelName: string): string {
+  const match = new RegExp(`model ${modelName} \\{([\\s\\S]*?)\\n\\}`, "u").exec(
+    schema,
+  );
+  assert.ok(match, `Prisma model ${modelName} must exist.`);
+  return match[1];
+}

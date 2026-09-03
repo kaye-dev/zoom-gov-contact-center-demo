@@ -114,7 +114,7 @@ GitHub Secretsは作成しません。Vercel token、Neon API key、管理者pas
 
 ## 6. 保護設定と権限を検証する
 
-`Deploy runner npm test`はrequired status checkのcontext名です。Production credentialを受け取らず、PRのexact SHAから作った同じdeploy runner image内で`npm test`、`npm run typecheck`をnetworkなしで実行し、続いて秘密情報やhost mountを渡さない短命containerから`npm audit --omit=dev`を公式npm registryに対して実行します。このcheckの失敗時はProduction変更なしです。依存監査に失敗した場合は依存関係とlockfileを修正した新しいPR SHAでcheckを成功させてから、required status checkへ登録します。
+`Deploy runner npm test`はrequired status checkのcontext名です。Production credentialを受け取らず、PRのexact SHAから作った同じdeploy runner image内で`npm test`、`npm run typecheck`をnetworkなしで実行し、外部通信不能な隔離PostgreSQL 17へ全migrationを再生する`npm run test:migration-schema:db`でmigration/schema parityを検証します。隔離DBはsynthetic credentialだけを使い、host portとvolumeを公開せず、所有するcontainerとnetworkを削除します。その後、秘密情報やhost mountを渡さない短命containerから`npm audit --omit=dev`を公式npm registryに対して実行します。このcheckの失敗時はProduction変更なしです。migration/schema不一致または依存監査に失敗した場合は、原因を修正した新しいPR SHAでcheckを成功させてからrequired status checkへ登録します。
 
 1. `main`をbranch protectionまたはrulesetで保護し、Pull Request reviewと必須CIを設定する。
 2. `Plan artifact guard / Verify plan artifacts`と`Deploy runner npm test`をrequired status checkに登録する。strict modeを有効にし、最新`main`との組み合わせで両checkが成功するまでmergeを許可しない。

@@ -49,13 +49,13 @@ function readLocalAdminDatabaseUrl(): string {
   const url = new URL(raw);
   if (
     url.protocol !== "postgresql:" ||
-    !["127.0.0.1", "localhost"].includes(url.hostname) ||
+    !["127.0.0.1", "localhost", "migration-schema-db"].includes(url.hostname) ||
     url.pathname !== "/postgres" ||
     url.search !== "" ||
     url.hash !== ""
   ) {
     throw new Error(
-      `${ADMIN_DATABASE_URL_ENV} must target the local PostgreSQL maintenance database exactly.`,
+      `${ADMIN_DATABASE_URL_ENV} must target an approved PostgreSQL maintenance database exactly.`,
     );
   }
   return url.href;
@@ -86,6 +86,15 @@ function runPrismaMigrateDeploy(databaseUrl: string): void {
   assert.equal(
     result.status,
     0,
-    `Prisma migrate deploy failed:\n${result.stdout}\n${result.stderr}`,
+    `Prisma migrate deploy failed:\n${redactDatabaseUrl(result.stdout, databaseUrl)}\n${redactDatabaseUrl(result.stderr, databaseUrl)}`,
   );
+}
+
+function redactDatabaseUrl(output: string, databaseUrl: string): string {
+  const password = new URL(databaseUrl).password;
+  let redacted = output.replaceAll(databaseUrl, "postgresql://[REDACTED]");
+  if (password !== "") {
+    redacted = redacted.replaceAll(password, "[REDACTED]");
+  }
+  return redacted.replace(/postgresql:\/\/[^\s]+/giu, "postgresql://[REDACTED]");
 }
