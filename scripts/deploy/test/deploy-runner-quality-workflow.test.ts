@@ -34,10 +34,15 @@ test("DRQ-WF-01: 全PRとmainのexact SHAをdeploy runner内で検証する", ()
   const headCheck = workflow.indexOf('[[ "$(git rev-parse HEAD)" == "${GITHUB_SHA}" ]]');
   const archive = workflow.indexOf('git archive --format=tar "${GITHUB_SHA}"');
   const build = workflow.indexOf("docker build");
-  const run = workflow.indexOf("docker run --rm --init --network none");
+  const testRun = workflow.indexOf("docker run --rm --init --network none");
+  const typecheckRun = workflow.indexOf("            run typecheck");
   assert.ok(
-    headCheck >= 0 && headCheck < archive && archive < build && build < run,
-    "the exact checked-out SHA must be archived, built, and tested in order",
+    headCheck >= 0 &&
+      headCheck < archive &&
+      archive < build &&
+      build < testRun &&
+      testRun < typecheckRun,
+    "the exact checked-out SHA must be archived, built, tested, and typechecked in order",
   );
   assert.match(workflow, /--file "\$\{build_context\}\/Dockerfile\.deploy"/u);
   assert.match(workflow, /--build-arg "DEPLOY_GIT_SHA=\$\{GITHUB_SHA\}"/u);
@@ -54,11 +59,19 @@ test("DRQ-WF-02: PR品質checkはProduction権限と秘密情報を持たない"
   assert.doesNotMatch(workflow, /^\s+(?:--volume|-v)(?:\s|=)/mu);
 });
 
-test("DRQ-WF-03: deploy runner testはnetworkとhost mountなしで終了する", () => {
+test("DRQ-WF-03: deploy runner testとtypecheckはnetworkとhost mountなしで終了する", () => {
   assert.match(workflow, /^    timeout-minutes: 20$/mu);
   assert.match(
     workflow,
     /docker run --rm --init --network none \\\n+            --entrypoint npm \\\n+            "\$\{image\}" \\\n+            test/u,
+  );
+  assert.match(
+    workflow,
+    /docker run --rm --init --network none \\\n+            --entrypoint npm \\\n+            "\$\{image\}" \\\n+            run typecheck/u,
+  );
+  assert.equal(
+    [...workflow.matchAll(/docker run --rm --init --network none/gmu)].length,
+    2,
   );
   assert.doesNotMatch(workflow, /--env(?:-file)?\b/u);
 });
@@ -66,6 +79,10 @@ test("DRQ-WF-03: deploy runner testはnetworkとhost mountなしで終了する"
 test("DRQ-DOC-01: runbookはrequired checkと安全な復旧順序を固定する", () => {
   for (const runbook of [setupRunbook, redeployRunbook]) {
     assert.match(runbook, /Deploy runner npm test/u);
+    assert.match(
+      runbook,
+      /`Deploy runner npm test`[^\n]*`npm test`[^\n]*`npm run typecheck`/u,
+    );
     assert.match(runbook, /required status check/u);
     assert.match(runbook, /Production変更なし/u);
   }

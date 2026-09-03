@@ -114,7 +114,7 @@ GitHub Secretsは作成しません。Vercel token、Neon API key、管理者pas
 
 ## 6. 保護設定と権限を検証する
 
-`Deploy runner npm test`はProduction credentialを受け取らず、PRのexact SHAから作ったdeploy runner内で`npm test`を実行するだけのcheckです。このcheckの失敗時はProduction変更なしです。required status checkへ登録する前に、対象repositoryのPRでGitHub Actions由来のcheckが1回成功していることを確認します。
+`Deploy runner npm test`はrequired status checkのcontext名です。Production credentialを受け取らず、PRのexact SHAから作った同じdeploy runner image内で`npm test`、`npm run typecheck`の順に実行します。このcheckの失敗時はProduction変更なしです。required status checkへ登録する前に、対象repositoryのPRでGitHub Actions由来のcheckが1回成功していることを確認します。
 
 1. `main`をbranch protectionまたはrulesetで保護し、Pull Request reviewと必須CIを設定する。
 2. `Plan artifact guard / Verify plan artifacts`と`Deploy runner npm test`をrequired status checkに登録する。strict modeを有効にし、最新`main`との組み合わせで両checkが成功するまでmergeを許可しない。

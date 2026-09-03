@@ -184,7 +184,7 @@ test("implementはinvocation approval後にcoverage-driven finalを実行する"
   assert.match(implement, /do not create `pre-edit-parity\.json`/i);
   assert.match(implement, /matrixScope: coverage/);
   assert.match(implement, /matrixScope: full/);
-  assert.match(implement, /release.*ci.*scheduled.*explicit/s);
+  assert.match(implement, /release[\s\S]*ci[\s\S]*scheduled[\s\S]*explicit/);
   assert.match(implement, /Retry only the failed batch once/);
   assert.match(implement, /There is no run-wide time cutoff/);
   assert.match(implement, /in-app-browser-parity-adapter\.mjs/);
@@ -195,7 +195,7 @@ test("implementはinvocation approval後にcoverage-driven finalを実行する"
   assert.match(implement, /invalidate-run/);
   assert.match(implement, /resume-run/);
   assert.match(implement, /finalize-run/);
-  assert.match(implement, /task-specific adapters.*runtime shims/s);
+  assert.match(implement, /task-specific adapters[\s\S]*runtime shims/);
   assert.match(implement, /Run the full test suite only when/);
   assert.match(implement, /Run a production build only for/);
   assert.match(implement, /sourceImpactMap/);
@@ -204,7 +204,7 @@ test("implementはinvocation approval後にcoverage-driven finalを実行する"
   assert.match(workflow, /`coverage`を通常既定/);
   assert.match(workflow, /schema version 4/);
   assert.match(workflow, /task固有adapter、実行可能bundle、runtime shimを新設しない/);
-  assert.match(workflow, /全testは.*場合.*production buildは.*場合/s);
+  assert.match(workflow, /全testは[\s\S]*場合[\s\S]*production buildは[\s\S]*場合/);
   assert.match(workflow, /pre-editとaffectedのBrowser phaseは新規runで実行しない/);
   assert.match(workflow, /全target-state\/viewport\/theme coverage/);
   assert.match(workflow, /LLMには件数、失敗row ID/);

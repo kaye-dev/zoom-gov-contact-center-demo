@@ -22,6 +22,12 @@ const revisionModulePromise = import(
   ).href,
 );
 
+type WorkspaceModule = Awaited<typeof workspaceModulePromise>;
+type WorkspaceArtifactSink = Awaited<
+  ReturnType<WorkspaceModule["createWorkspaceArtifactSink"]>
+>;
+type WorkspaceArtifactRecord = Awaited<ReturnType<WorkspaceArtifactSink>>;
+
 const digest = `sha256:${"a".repeat(64)}`;
 const revision = `sha256:${"b".repeat(64)}`;
 const profileDigest = `sha256:${"c".repeat(64)}`;
@@ -378,12 +384,12 @@ function coverageFragment(
             status: "pass",
             production: value,
             prototype: value,
-            artifactPaths: [],
-            artifacts: [],
+            artifactPaths: [] as string[],
+            artifacts: [] as WorkspaceArtifactRecord[],
           };
         }),
-        artifactPaths: [],
-        artifacts: [],
+        artifactPaths: [] as string[],
+        artifacts: [] as WorkspaceArtifactRecord[],
       };
     }),
     capabilities: batchIndex === 0 ? {
@@ -1174,7 +1180,7 @@ test("WS-COVERAGE-05 finalizeはraw artifactを昇格してschema version 4 evid
     repositoryRootPath: fixture.root,
     runId: handshake.runId,
   });
-  const artifactsByRow = new Map<string, Array<Record<string, unknown>>>();
+  const artifactsByRow = new Map<string, WorkspaceArtifactRecord[]>();
   for (const anchor of definition.spec.coverage.anchorRows) {
     for (const surface of ["production", "prototype"]) {
       const record = await sink({
