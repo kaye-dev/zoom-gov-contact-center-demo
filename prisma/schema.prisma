@@ -486,7 +486,8 @@ model DisasterRadioSubscription {
 
   registeredBy user? @relation("DisasterRadioSubscriptionRegisteredBy", fields: [registeredByUserId], references: [id], onDelete: SetNull)
 
-  @@unique([normalizedEmail, normalizedPhone])
+  // PostgreSQL truncated the 64-byte migration identifier to this 63-byte name.
+  @@unique([normalizedEmail, normalizedPhone], map: "disaster_radio_subscriptions_normalizedEmail_normalizedPhone_ke")
   @@index([createdAt, id])
   @@index([consentStatus, syncStatus])
   @@index([zoomContactListId])
@@ -571,7 +572,8 @@ model ZaadOneTimeDispatchSourceList {
   dispatch ZaadOneTimeDispatch @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
 
   @@id([dispatchId, contactListId])
-  @@unique([dispatchId, selectedOrder])
+  // PostgreSQL truncated the 64-byte migration identifier to this 63-byte name.
+  @@unique([dispatchId, selectedOrder], map: "zaad_one_time_dispatch_source_lists_dispatchId_selectedOrder_ke")
   @@map("zaad_one_time_dispatch_source_lists")
 }
 

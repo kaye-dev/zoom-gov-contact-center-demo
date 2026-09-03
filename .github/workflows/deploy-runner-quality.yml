@@ -58,6 +58,96 @@ jobs:
             --entrypoint npm \
             "${image}" \
             run typecheck
+
+          resource_suffix="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          [[ "${resource_suffix}" =~ ^[0-9]+-[0-9]+$ ]]
+          [[ ${#resource_suffix} -le 32 ]]
+          migration_network="zoom-migration-schema-${resource_suffix}"
+          migration_database="zoom-migration-schema-db-${resource_suffix}"
+          migration_owner="github-actions-${resource_suffix}"
+          migration_owner_label="dev.keien.migration-schema-owner"
+
+          cleanup_owned_migration_resources() {
+            local cleanup_status=0
+            local actual_owner
+            if docker container inspect "${migration_database}" >/dev/null 2>&1; then
+              actual_owner="$(docker container inspect \
+                --format '{{ index .Config.Labels "dev.keien.migration-schema-owner" }}' \
+                "${migration_database}")"
+              if [[ "${actual_owner}" != "${migration_owner}" ]]; then
+                echo "Refusing to remove an unowned migration schema container." >&2
+                cleanup_status=1
+              elif ! docker rm --force "${migration_database}" >/dev/null; then
+                cleanup_status=1
+              fi
+            fi
+            if docker network inspect "${migration_network}" >/dev/null 2>&1; then
+              actual_owner="$(docker network inspect \
+                --format '{{ index .Labels "dev.keien.migration-schema-owner" }}' \
+                "${migration_network}")"
+              if [[ "${actual_owner}" != "${migration_owner}" ]]; then
+                echo "Refusing to remove an unowned migration schema network." >&2
+                cleanup_status=1
+              elif ! docker network rm "${migration_network}" >/dev/null; then
+                cleanup_status=1
+              fi
+            fi
+            return "${cleanup_status}"
+          }
+
+          cleanup_on_exit() {
+            local command_status=$?
+            local cleanup_status=0
+            trap - EXIT
+            cleanup_owned_migration_resources || cleanup_status=$?
+            if [[ "${command_status}" == "0" && "${cleanup_status}" != "0" ]]; then
+              command_status="${cleanup_status}"
+            fi
+            exit "${command_status}"
+          }
+          trap cleanup_on_exit EXIT
+
+          if docker container inspect "${migration_database}" >/dev/null 2>&1 || \
+            docker network inspect "${migration_network}" >/dev/null 2>&1; then
+            echo "Refusing to reuse an existing migration schema resource." >&2
+            exit 1
+          fi
+
+          docker network create --internal \
+            --label "${migration_owner_label}=${migration_owner}" \
+            "${migration_network}" >/dev/null
+          docker run --detach \
+            --name "${migration_database}" \
+            --label "${migration_owner_label}=${migration_owner}" \
+            --network "${migration_network}" \
+            --network-alias migration-schema-db \
+            --env "POSTGRES_USER=postgres" \
+            --env "POSTGRES_PASSWORD=migration-schema-ci-only" \
+            --env "POSTGRES_DB=postgres" \
+            postgres:17-bookworm >/dev/null
+
+          database_ready=0
+          for attempt in $(seq 1 30); do
+            if docker exec "${migration_database}" \
+              pg_isready --username postgres --dbname postgres >/dev/null 2>&1; then
+              database_ready=1
+              break
+            fi
+            [[ "${attempt}" == "30" ]] || sleep 1
+          done
+          if [[ "${database_ready}" != "1" ]]; then
+            docker logs "${migration_database}" >&2
+            exit 1
+          fi
+
+          docker run --rm --init --network "${migration_network}" \
+            --env "ADMIN_ACCESS_TEST_ADMIN_URL=postgresql://postgres:migration-schema-ci-only@migration-schema-db:5432/postgres" \
+            --entrypoint npm \
+            "${image}" \
+            run test:migration-schema:db
+          cleanup_owned_migration_resources
+          trap - EXIT
+
           docker run --rm --init --network bridge \
             --entrypoint npm \
             "${image}" \

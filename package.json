@@ -10,6 +10,7 @@
     "test": "node --import tsx --test test/*.test.ts scripts/deploy/test/*.test.ts",
     "test:deploy": "node --import tsx --test scripts/deploy/test/*.test.ts",
     "test:admin-access:db": "node --import tsx --test scripts/deploy/integration-test/*.test.ts",
+    "test:migration-schema:db": "node --import tsx --test scripts/deploy/integration-test/migration-schema-parity.test.ts",
     "test:zaad:integration": "node --import tsx --test test/integration/zaad-api-route-runtime.test.ts",
     "test:zaad:zoom-contract": "node --import tsx --test --test-concurrency=1 test/integration/zoom-contact-center-asset-contract.test.ts test/integration/zoom-contact-center-campaign-contract.test.ts",
     "test:zaad:zoom-contract:asset": "node --import tsx --test test/integration/zoom-contact-center-asset-contract.test.ts",

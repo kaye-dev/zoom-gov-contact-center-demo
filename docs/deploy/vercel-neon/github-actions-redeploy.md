@@ -10,7 +10,7 @@
 - 実行中の別Production deployがない。並行起動したrunは同じconcurrency groupで直列化され、進行中のrunはcancelされない。
 - AWS IAM Role、KMS key、4件のParameter Store設定を変更した場合は、先に権限テストをやり直している。
 
-`Deploy runner npm test`はrequired status checkのcontext名です。PRと`main` pushのexact SHAからdeploy runnerをbuildし、同じイメージ内で`npm test`、`npm run typecheck`をnetworkなしで実行し、続いて秘密情報やhost mountを渡さない短命containerから`npm audit --omit=dev`を公式npm registryに対して実行します。AWS OIDC、SSM、Vercel、Neon、GitHub Environmentやsecretは使わず、このcheckの成功・失敗だけではProduction変更なしです。失敗した場合はProduction workflowやAWS SSO再認証へ進まず、Docker build、イメージ内test、typecheck、依存関係、lockfileを修正した新しいPR SHAでcheckを成功させます。
+`Deploy runner npm test`はrequired status checkのcontext名です。PRと`main` pushのexact SHAからdeploy runnerをbuildし、同じイメージ内で`npm test`、`npm run typecheck`をnetworkなしで実行し、外部通信不能な隔離PostgreSQL 17へ全migrationを再生する`npm run test:migration-schema:db`でmigration/schema parityを検証します。隔離DBはsynthetic credentialだけを使い、host portとvolumeを公開せず、所有するcontainerとnetworkを削除します。その後、秘密情報やhost mountを渡さない短命containerから`npm audit --omit=dev`を公式npm registryに対して実行します。AWS OIDC、SSM、Vercel、Neon、GitHub Environmentやsecretは使わず、このcheckの成功・失敗だけではProduction変更なしです。失敗した場合はProduction workflowやAWS SSO再認証へ進まず、Docker build、イメージ内test、typecheck、migration/schema不一致、依存関係、lockfileを修正した新しいPR SHAでcheckを成功させます。
 
 branch protectionの`required_status_checks`が`null`または必要なcheckを含まない場合も、CI不要とは判定しません。2026年9月1日のread backでは設定文書と実repositoryの保護設定に差があったため、workflow dispatch前に対象SHAのcheck runsをGitHub ActionsまたはAPIで直接確認します。`Deploy runner npm test`と`Plan artifact guard / Verify plan artifacts`のどちらかが未実行、pending、failure、cancelledなら停止し、required checkへ再登録するか、成功した新しいSHAを用意してから進みます。
 
@@ -80,7 +80,7 @@ pending migrationがあるrunは`production-migration` Environmentの承認待�
 | 停止箇所 | 外部状態 | 対応 |
 | --- | --- | --- |
 | branch protectionにrequired status checkがない、または対象SHAのcheckが未完了 | Production変更なし | 保護設定だけで合格とみなさず、対象SHAの2件のcheck runsを直接確認し、未実行または未成功ならdispatchしない |
-| required status checkの`Deploy runner npm test` | Production変更なし | Docker build、イメージ内test、typecheck、依存関係、lockfileを修正し、新しいPR SHAでcheckを再実行する |
+| required status checkの`Deploy runner npm test` | Production変更なし | Docker build、イメージ内test、typecheck、migration/schema parity、依存関係、lockfileを修正し、新しいPR SHAでcheckを再実行する |
 | validate / plan | 外部変更なし | errorを修正してmainへmergeし、新しいrunを起動する |
 | migration承認待ち / 拒否 | 外部変更なし | 内容を再確認し、同じrunを不用意に再利用せず判断する |
 | migration apply / verify | DBが一部または全部変更済みの可能性あり | Neon migration状態とschemaを確認し、自動rollbackしない |

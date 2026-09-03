@@ -16,6 +16,10 @@ const redeployRunbook = readFileSync(
   resolve(projectRoot, "docs/deploy/vercel-neon/github-actions-redeploy.md"),
   "utf8",
 );
+const localRedeployRunbook = readFileSync(
+  resolve(projectRoot, "docs/deploy/vercel-neon/redeploy.md"),
+  "utf8",
+);
 
 test("DRQ-WF-01: 全PRとmainのexact SHAをdeploy runner内で検証する", () => {
   assert.match(workflow, /^name: Deploy runner quality$/mu);
@@ -36,6 +40,9 @@ test("DRQ-WF-01: 全PRとmainのexact SHAをdeploy runner内で検証する", ()
   const build = workflow.indexOf("docker build");
   const testRun = workflow.indexOf("docker run --rm --init --network none");
   const typecheckRun = workflow.indexOf("            run typecheck");
+  const migrationParityRun = workflow.indexOf(
+    "            run test:migration-schema:db",
+  );
   const auditRun = workflow.indexOf(
     "            audit --omit=dev --ignore-scripts --registry=https://registry.npmjs.org/",
   );
@@ -45,8 +52,9 @@ test("DRQ-WF-01: 全PRとmainのexact SHAをdeploy runner内で検証する", ()
       archive < build &&
       build < testRun &&
       testRun < typecheckRun &&
-      typecheckRun < auditRun,
-    "the exact checked-out SHA must be archived, built, tested, typechecked, and audited in order",
+      typecheckRun < migrationParityRun &&
+      migrationParityRun < auditRun,
+    "the exact checked-out SHA must be archived, built, tested, typechecked, checked for migration parity, and audited in order",
   );
   assert.match(workflow, /--file "\$\{build_context\}\/Dockerfile\.deploy"/u);
   assert.match(workflow, /--build-arg "DEPLOY_GIT_SHA=\$\{GITHUB_SHA\}"/u);
@@ -77,7 +85,6 @@ test("DRQ-WF-03: deploy runner testとtypecheckはnetworkとhost mountなしで�
     [...workflow.matchAll(/docker run --rm --init --network none/gmu)].length,
     2,
   );
-  assert.doesNotMatch(workflow, /--env(?:-file)?\b/u);
 });
 
 test("DRQ-WF-04: runtime auditだけがregistryへ接続し秘密情報とhost mountを受け取らない", () => {
@@ -89,21 +96,66 @@ test("DRQ-WF-04: runtime auditだけがregistryへ接続し秘密情報とhost m
     [...workflow.matchAll(/docker run --rm --init --network bridge/gmu)].length,
     1,
   );
-  assert.doesNotMatch(workflow, /--env(?:-file)?\b/u);
   assert.doesNotMatch(workflow, /^\s+(?:--volume|-v)(?:\s|=)/mu);
 });
 
-test("DRQ-DOC-01: runbookはrequired checkと安全な復旧順序を固定する", () => {
+test("DRQ-WF-05: migration parityは非空diffをCI check failureにする", () => {
+  const parityCommand = workflow.indexOf("run test:migration-schema:db");
+  const cleanup = workflow.indexOf("cleanup_owned_migration_resources", parityCommand);
+  const audit = workflow.indexOf("audit --omit=dev", cleanup);
+  assert.ok(parityCommand >= 0 && parityCommand < cleanup && cleanup < audit);
+  assert.match(workflow, /set -euo pipefail/u);
+  const parityInvocation = workflow.slice(
+    workflow.lastIndexOf("docker run --rm --init", parityCommand),
+    parityCommand + "run test:migration-schema:db".length,
+  );
+  assert.doesNotMatch(parityInvocation, /\|\|\s*true|^\s*if\s+docker run/mu);
+});
+
+test("DRQ-WF-06: migration parity DBは内部networkとsynthetic credentialだけを使用する", () => {
+  assert.match(workflow, /resource_suffix="\$\{GITHUB_RUN_ID\}-\$\{GITHUB_RUN_ATTEMPT\}"/u);
+  assert.ok(workflow.includes('[[ "${resource_suffix}" =~ ^[0-9]+-[0-9]+$ ]]'));
+  assert.match(workflow, /docker network create --internal/u);
+  assert.match(workflow, /--network-alias migration-schema-db/u);
+  assert.match(workflow, /postgres:17-bookworm/u);
+  assert.match(workflow, /POSTGRES_PASSWORD=migration-schema-ci-only/u);
+  assert.match(
+    workflow,
+    /ADMIN_ACCESS_TEST_ADMIN_URL=postgresql:\/\/postgres:migration-schema-ci-only@migration-schema-db:5432\/postgres/u,
+  );
+  assert.match(workflow, /for attempt in \$\(seq 1 30\); do/u);
+  assert.match(workflow, /pg_isready --username postgres --dbname postgres/u);
+  assert.match(workflow, /actual_owner[\s\S]*dev\.keien\.migration-schema-owner/u);
+  assert.match(workflow, /docker rm --force "\$\{migration_database\}"/u);
+  assert.match(workflow, /docker network rm "\$\{migration_network\}"/u);
+  assert.doesNotMatch(workflow, /^\s+(?:--publish|-p|--volume|-v)(?:\s|=)/mu);
+  assert.doesNotMatch(workflow, /\$\{\{\s*secrets\./u);
+});
+
+test("DRQ-DOC-01: runbookはCI migration parityと安全な復旧順序を固定する", () => {
   for (const runbook of [setupRunbook, redeployRunbook]) {
     assert.match(runbook, /Deploy runner npm test/u);
     assert.match(
       runbook,
       /`Deploy runner npm test`[^\n]*`npm test`[^\n]*`npm run typecheck`[^\n]*`npm audit --omit=dev`/u,
     );
+    assert.match(runbook, /test:migration-schema:db/u);
+    assert.match(runbook, /隔離PostgreSQL/u);
     assert.match(runbook, /required status check/u);
     assert.match(runbook, /Production変更なし/u);
   }
   assert.match(setupRunbook, /strict mode/u);
   assert.match(setupRunbook, /required context/u);
   assert.match(setupRunbook, /workflowを変更/u);
+});
+
+test("DRQ-DOC-02: migration apply後のdrift復旧は自動rollbackと履歴改変を禁止する", () => {
+  assert.match(localRedeployRunbook, /_prisma_migrations/u);
+  assert.match(localRedeployRunbook, /prisma migrate status/u);
+  assert.match(localRedeployRunbook, /prisma migrate diff/u);
+  assert.match(localRedeployRunbook, /自動rollback/u);
+  assert.match(localRedeployRunbook, /適用済みmigration SQL/u);
+  assert.match(localRedeployRunbook, /prisma migrate resolve/u);
+  assert.match(localRedeployRunbook, /prisma db push/u);
+  assert.match(localRedeployRunbook, /CI check[^\n]*`main`/u);
 });
