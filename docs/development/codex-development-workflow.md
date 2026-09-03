@@ -152,6 +152,8 @@ $implement plans/<slug>/goal.md
 
 force push、force-create、shared worktree checkout、stash、変更破棄、広域stage、自動競合解決、PR merge、CI待機は行わない。再開promptが許可できるindex変更は、列挙された対象外pathへの`git restore --staged --`だけとし、working treeを変更しない。競合、remote divergence、複数PR、認証・repository不一致など、再開promptが解消していない独立条件は停止条件とする。plan・review生成物は明示scope外ならstageも削除もしない。
 
+最新baseが進んでいること自体は停止理由にしない。同期が必要な場合は、incoming base pathとtask外の未追跡・ignored artifactについて、同一path、祖先・子孫、file／directory／symlink置換の衝突がないことを確認し、path・type・内容digestのsnapshotを取る。indexとtracked working treeが同期可能であれば、非衝突artifactを元の場所に保持したまま、未公開branchは`git rebase --no-autostash`、公開済みbranchはhistoryを書き換えないmergeで同期し、成功後またはabort後にsnapshotを照合する。tracked dirty、local artifactとのpath衝突、semantic conflictは自動stash・一時移動・削除・復元を行わず停止する。
+
 ## 任意の振り返り
 
 ### `$workflow-retrospective`（別task推奨）
