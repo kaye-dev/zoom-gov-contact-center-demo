@@ -14,6 +14,9 @@ DEPLOY_NEON_API_KEY_PARAMETER="/zoom-gov-contact-center-demo/production/deploy/n
 DEPLOY_ADMIN_PASSWORD_PARAMETER="/zoom-gov-contact-center-demo/production/deploy/admin-password"
 DEPLOY_CONTEXT_COMPLETION_MARKER="ZOOM_DEPLOY_SSM_CONTEXT_COMPLETE_V1"
 DEPLOY_PRIVATE_OUTPUT_ENTRYPOINT='chmod 700 /deploy-output && exec "$@"'
+DEPLOY_MINIMUM_DOCKER_MEMORY_BYTES=4000000000
+DEPLOY_COLIMA_TARGET_MEMORY_GIB=4
+DEPLOY_COLIMA_TARGET_MEMORY_BYTES=4294967296
 
 DEPLOY_BUILD_CONTEXT=""
 DEPLOY_GIT_DIRECTORY=""
@@ -27,6 +30,11 @@ DEPLOY_AWS_ACCOUNT_ID=""
 DEPLOY_EXPECTED_AWS_ACCOUNT_ID=""
 DEPLOY_ENV_WAS_ABSENT=0
 DEPLOY_LOG_STYLE="plain"
+DEPLOY_COLIMA_CONTEXT_NAME=""
+DEPLOY_COLIMA_PROFILE_NAME=""
+DEPLOY_COLIMA_DOCKER_ENDPOINT=""
+DEPLOY_COLIMA_CONFIGURED_MEMORY_BYTES=""
+DEPLOY_COLIMA_RESOLUTION_ERROR=""
 
 die() {
   echo "$*" >&2
@@ -102,6 +110,250 @@ require_host_tools() {
       die "Required host command is missing: ${command_name}"
   done
   docker version >/dev/null 2>&1 || die "Docker is unavailable. Start Docker and retry."
+}
+
+format_memory_gib() {
+  local memory_bytes="$1"
+  awk -v bytes="${memory_bytes}" 'BEGIN { printf "%.2f", bytes / 1073741824 }'
+}
+
+read_docker_memory_bytes() {
+  local memory_bytes
+  memory_bytes="$(docker info --format '{{.MemTotal}}' 2>/dev/null)" || \
+    die "Could not read Docker memory. Docker resource state is unknown."
+  if [[ ! "${memory_bytes}" =~ ^[0-9]+$ || "${memory_bytes}" -le 0 ]]; then
+    die "Docker returned an invalid total memory value. Docker resource state is unknown."
+  fi
+  printf '%s\n' "${memory_bytes}"
+}
+
+count_literal_occurrences() {
+  local value="$1"
+  local needle="$2"
+  local count=0
+  while [[ "${value}" == *"${needle}"* ]]; do
+    value="${value#*"${needle}"}"
+    count=$((count + 1))
+  done
+  printf '%s\n' "${count}"
+}
+
+extract_colima_json_string() {
+  local json="$1"
+  local field="$2"
+  local field_name="\"${field}\""
+  local prefix="\"${field}\":\""
+  local remainder value
+  [[ "$(count_literal_occurrences "${json}" "${field_name}")" == "1" ]] || return 1
+  [[ "$(count_literal_occurrences "${json}" "${prefix}")" == "1" ]] || return 1
+  remainder="${json#*"${prefix}"}"
+  value="${remainder%%\"*}"
+  [[ "${value}" != "${remainder}" && -n "${value}" && "${value}" != *\\* && "${value}" != *$'\n'* ]] || return 1
+  printf '%s\n' "${value}"
+}
+
+extract_colima_json_memory() {
+  local json="$1"
+  local field_name='"memory"'
+  local prefix='"memory":'
+  local remainder
+  local number_pattern='^([0-9]+)(,|})'
+  [[ "$(count_literal_occurrences "${json}" "${field_name}")" == "1" ]] || return 1
+  [[ "$(count_literal_occurrences "${json}" "${prefix}")" == "1" ]] || return 1
+  remainder="${json#*"${prefix}"}"
+  [[ "${remainder}" =~ ${number_pattern} ]] || return 1
+  [[ "${BASH_REMATCH[1]}" -gt 0 ]] || return 1
+  printf '%s\n' "${BASH_REMATCH[1]}"
+}
+
+colima_profile_from_context() {
+  local context_name="$1"
+  local profile_name
+  case "${context_name}" in
+    colima) profile_name="default" ;;
+    colima-*) profile_name="${context_name#colima-}" ;;
+    *) return 1 ;;
+  esac
+  if [[ ${#profile_name} -lt 1 || ${#profile_name} -gt 128 || ! "${profile_name}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+    return 1
+  fi
+  printf '%s\n' "${profile_name}"
+}
+
+load_colima_status() {
+  local profile_name="$1"
+  local status_json runtime docker_endpoint memory_bytes
+  status_json="$(colima status "${profile_name}" --json 2>/dev/null)" || return 1
+  [[ "${status_json}" == \{*\} && "${status_json}" != *$'\n'* ]] || return 1
+  runtime="$(extract_colima_json_string "${status_json}" runtime)" || return 1
+  docker_endpoint="$(extract_colima_json_string "${status_json}" docker_socket)" || return 1
+  memory_bytes="$(extract_colima_json_memory "${status_json}")" || return 1
+  [[ "${docker_endpoint}" == unix://* ]] || return 1
+  DEPLOY_COLIMA_PROFILE_NAME="${profile_name}"
+  DEPLOY_COLIMA_DOCKER_ENDPOINT="${docker_endpoint}"
+  DEPLOY_COLIMA_CONFIGURED_MEMORY_BYTES="${memory_bytes}"
+  [[ "${runtime}" == "docker" ]] || return 2
+}
+
+resolve_active_colima_owner() {
+  local context_name profile_name context_endpoint
+  DEPLOY_COLIMA_CONTEXT_NAME=""
+  DEPLOY_COLIMA_PROFILE_NAME=""
+  DEPLOY_COLIMA_DOCKER_ENDPOINT=""
+  DEPLOY_COLIMA_CONFIGURED_MEMORY_BYTES=""
+  DEPLOY_COLIMA_RESOLUTION_ERROR=""
+  if ! command -v colima >/dev/null 2>&1; then
+    DEPLOY_COLIMA_RESOLUTION_ERROR="Colima CLI is unavailable."
+    return 1
+  fi
+  context_name="$(docker context show 2>/dev/null)" || {
+    DEPLOY_COLIMA_RESOLUTION_ERROR="The active Docker context could not be read."
+    return 1
+  }
+  if [[ -z "${context_name}" || "${context_name}" == *$'\n'* ]]; then
+    DEPLOY_COLIMA_RESOLUTION_ERROR="The active Docker context is invalid."
+    return 1
+  fi
+  profile_name="$(colima_profile_from_context "${context_name}")" || {
+    DEPLOY_COLIMA_RESOLUTION_ERROR="The active Docker context is not an identifiable Colima context."
+    return 1
+  }
+  context_endpoint="$(docker context inspect "${context_name}" --format '{{.Endpoints.docker.Host}}' 2>/dev/null)" || {
+    DEPLOY_COLIMA_RESOLUTION_ERROR="The active Docker context endpoint could not be read."
+    return 1
+  }
+  if [[ "${context_endpoint}" != unix://* || "${context_endpoint}" == *$'\n'* ]]; then
+    DEPLOY_COLIMA_RESOLUTION_ERROR="The active Docker context endpoint is not a valid local Unix socket."
+    return 1
+  fi
+  if ! load_colima_status "${profile_name}"; then
+    DEPLOY_COLIMA_RESOLUTION_ERROR="The Colima profile status is unavailable, malformed, or not a Docker runtime."
+    return 1
+  fi
+  if [[ "${context_endpoint}" != "${DEPLOY_COLIMA_DOCKER_ENDPOINT}" ]]; then
+    DEPLOY_COLIMA_RESOLUTION_ERROR="The active Docker endpoint does not match the Colima profile socket."
+    return 1
+  fi
+  DEPLOY_COLIMA_CONTEXT_NAME="${context_name}"
+}
+
+report_active_containers() {
+  local container_list line
+  local count=0
+  container_list="$(docker ps --format '{{.ID}} {{.Names}} {{.Image}} {{.Status}}' 2>/dev/null)" || return
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    [[ -n "${line}" ]] || continue
+    printf '  %s\n' "${line}" >&2
+    count=$((count + 1))
+    [[ ${count} -lt 10 ]] || break
+  done <<< "${container_list}"
+}
+
+require_no_active_containers() {
+  local container_ids
+  container_ids="$(docker ps --quiet 2>/dev/null)" || \
+    die "Could not inspect active Docker containers. Colima was not changed."
+  if [[ -n "${container_ids}" ]]; then
+    log_wrapper_warning "Active Docker containers prevent an automatic Colima restart:"
+    report_active_containers
+    return 1
+  fi
+}
+
+die_for_manual_docker_memory_change() {
+  local memory_bytes="$1"
+  local reason="$2"
+  die "Docker memory is $(format_memory_gib "${memory_bytes}") GiB (${memory_bytes} bytes); at least 4 GB-class (${DEPLOY_MINIMUM_DOCKER_MEMORY_BYTES} bytes) is required. ${reason} Configure the current Docker engine with at least 4 GiB and retry ./deploy.sh. AWS, DB, and Vercel operations were not started."
+}
+
+ensure_deploy_runner_memory() {
+  local memory_bytes answer
+  local initial_context initial_profile initial_endpoint
+  memory_bytes="$(read_docker_memory_bytes)"
+  if [[ "${memory_bytes}" -ge "${DEPLOY_MINIMUM_DOCKER_MEMORY_BYTES}" ]]; then
+    log_wrapper_success "Docker memory verified: $(format_memory_gib "${memory_bytes}") GiB (${memory_bytes} bytes)."
+    return
+  fi
+
+  if [[ -n "${DOCKER_HOST:-}" || -n "${DOCKER_CONTEXT:-}" ]]; then
+    die_for_manual_docker_memory_change \
+      "${memory_bytes}" \
+      "DOCKER_HOST or DOCKER_CONTEXT explicitly overrides Docker endpoint ownership."
+  fi
+  if ! resolve_active_colima_owner; then
+    die_for_manual_docker_memory_change "${memory_bytes}" "${DEPLOY_COLIMA_RESOLUTION_ERROR}"
+  fi
+  if [[ "${DEPLOY_COLIMA_CONFIGURED_MEMORY_BYTES}" -ge "${DEPLOY_COLIMA_TARGET_MEMORY_BYTES}" ]]; then
+    die_for_manual_docker_memory_change \
+      "${memory_bytes}" \
+      "Colima profile '${DEPLOY_COLIMA_PROFILE_NAME}' already has at least 4 GiB configured, so it was not reduced to 4 GiB."
+  fi
+  if ! require_no_active_containers; then
+    die "Colima profile '${DEPLOY_COLIMA_PROFILE_NAME}' was not restarted. Stop or preserve the listed workloads explicitly, then retry ./deploy.sh. AWS, DB, and Vercel operations were not started."
+  fi
+  is_interactive_terminal || \
+    die_for_manual_docker_memory_change "${memory_bytes}" "An interactive terminal is required for automatic Colima reconfiguration."
+
+  initial_context="${DEPLOY_COLIMA_CONTEXT_NAME}"
+  initial_profile="${DEPLOY_COLIMA_PROFILE_NAME}"
+  initial_endpoint="${DEPLOY_COLIMA_DOCKER_ENDPOINT}"
+  log_wrapper_warning "Docker memory is $(format_memory_gib "${memory_bytes}") GiB; deploy runner requires at least 4 GB-class."
+  printf "Colima profile '%s': configured %.2f GiB -> %s GiB; active containers: 0.\n" \
+    "${initial_profile}" \
+    "$(format_memory_gib "${DEPLOY_COLIMA_CONFIGURED_MEMORY_BYTES}")" \
+    "${DEPLOY_COLIMA_TARGET_MEMORY_GIB}" >&2
+  printf "Colima profile '%s' のメモリを4 GiBへ変更して再起動し、このデプロイを続行しますか? [y/N] " \
+    "${initial_profile}" >&2
+  IFS= read -r answer || answer=""
+  if [[ ! "${answer}" =~ ^([yY]|[yY][eE][sS])$ ]]; then
+    die "Colima memory change was refused. Colima, AWS, DB, and Vercel were not changed."
+  fi
+
+  memory_bytes="$(read_docker_memory_bytes)"
+  if ! resolve_active_colima_owner || \
+      [[ "${DEPLOY_COLIMA_CONTEXT_NAME}" != "${initial_context}" || \
+         "${DEPLOY_COLIMA_PROFILE_NAME}" != "${initial_profile}" || \
+         "${DEPLOY_COLIMA_DOCKER_ENDPOINT}" != "${initial_endpoint}" ]]; then
+    die "Docker or Colima ownership changed after approval. Colima was not restarted. AWS, DB, and Vercel operations were not started."
+  fi
+  if [[ "${memory_bytes}" -ge "${DEPLOY_MINIMUM_DOCKER_MEMORY_BYTES}" ]]; then
+    log_wrapper_success "Docker memory now satisfies the deploy requirement; Colima restart was skipped."
+    return
+  fi
+  if [[ "${DEPLOY_COLIMA_CONFIGURED_MEMORY_BYTES}" -ge "${DEPLOY_COLIMA_TARGET_MEMORY_BYTES}" ]]; then
+    die_for_manual_docker_memory_change \
+      "${memory_bytes}" \
+      "Colima configuration changed after approval and is already at least 4 GiB."
+  fi
+  if ! require_no_active_containers; then
+    die "A Docker container appeared after approval. Colima was not restarted. AWS, DB, and Vercel operations were not started."
+  fi
+
+  log_wrapper_step "Colima profile '${initial_profile}' を4 GiBで再起動しています"
+  if ! colima stop "${initial_profile}"; then
+    die "Colima stop failed for profile '${initial_profile}'. It was not force-stopped or deleted. Check 'colima status ${initial_profile}' before retrying. AWS, DB, and Vercel operations were not started."
+  fi
+  if ! colima start "${initial_profile}" --memory "${DEPLOY_COLIMA_TARGET_MEMORY_GIB}" --save-config; then
+    die "Colima start failed for profile '${initial_profile}' after it was stopped. Check 'colima status ${initial_profile}', then recover with 'colima start ${initial_profile} --memory 4 --save-config'. AWS, DB, and Vercel operations were not started."
+  fi
+  docker version >/dev/null 2>&1 || \
+    die "Docker is unavailable after restarting Colima profile '${initial_profile}'. Check 'colima status ${initial_profile}' and the active Docker context. AWS, DB, and Vercel operations were not started."
+  if ! resolve_active_colima_owner || \
+      [[ "${DEPLOY_COLIMA_CONTEXT_NAME}" != "${initial_context}" || \
+         "${DEPLOY_COLIMA_PROFILE_NAME}" != "${initial_profile}" || \
+         "${DEPLOY_COLIMA_DOCKER_ENDPOINT}" != "${initial_endpoint}" ]]; then
+    die "Docker endpoint verification failed after restarting Colima profile '${initial_profile}'. Check 'colima status ${initial_profile}' and the active Docker context. AWS, DB, and Vercel operations were not started."
+  fi
+  if [[ "${DEPLOY_COLIMA_CONFIGURED_MEMORY_BYTES}" -lt "${DEPLOY_COLIMA_TARGET_MEMORY_BYTES}" ]]; then
+    die "Colima profile '${initial_profile}' still reports less than 4 GiB after restart. AWS, DB, and Vercel operations were not started."
+  fi
+  memory_bytes="$(read_docker_memory_bytes)"
+  if [[ "${memory_bytes}" -lt "${DEPLOY_MINIMUM_DOCKER_MEMORY_BYTES}" ]]; then
+    die_for_manual_docker_memory_change \
+      "${memory_bytes}" \
+      "Colima profile '${initial_profile}' restarted, but Docker still reports insufficient memory."
+  fi
+  log_wrapper_success "Colima profile '${initial_profile}' restarted and Docker memory verified: $(format_memory_gib "${memory_bytes}") GiB (${memory_bytes} bytes). Continuing deployment."
 }
 
 require_clean_worktree() {
@@ -650,6 +902,7 @@ main() {
   DEPLOY_LOG_STYLE="$(resolve_deploy_log_style)"
   require_host_tools
   require_clean_worktree
+  ensure_deploy_runner_memory
   resolve_aws_profile "${requested_profile}"
   read_aws_account_id
   log_wrapper_step "Immutable deploy runner imageを準備しています"

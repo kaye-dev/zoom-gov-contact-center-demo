@@ -51,6 +51,10 @@ pooled / direct connection stringはコピーしません。deployの各phaseが
 
 repository checkoutに使うGitとshellを除き、デプロイ用に追加するhost toolはDockerだけです。Docker EngineまたはDocker Desktopを起動します。Node.js、npm、Vercel CLI、Neon CLIをhostへインストールしません。
 
+ローカルの`./deploy.sh`はAWS認証やdeploy runner image buildより前に、Docker daemonが4 GB-class（`4,000,000,000` bytes以上）の利用可能メモリを持つことを確認します。メモリが不足し、active contextとsocketから現在のdaemonを所有するColima profileを完全に特定できた場合だけ、Colimaを4 GiBへ変更して通常再起動するか`[y/N]`で確認します。明示的な`y`または`yes`を入力すると、稼働containerが0件であることを再確認してから対象profileだけをstop/startし、profile、socket、構成メモリ、Dockerメモリを再検証した後、同じデプロイを続行します。
+
+稼働containerがある、非対話terminalである、変更を拒否した、`DOCKER_HOST`または`DOCKER_CONTEXT`が指定されている、Colima以外のDocker engineである、profileまたはsocketを特定できない場合は自動変更しません。利用中workloadとDocker設定を運用者が確認し、現在のengineへ4 GiB以上を割り当ててから同じcommandを再実行します。Colimaのstop/startまたは再検証に失敗した場合は、`colima status <profile>`でexact profileを確認し、必要なら`colima start <profile> --memory 4 --save-config`で通常起動します。このpreflightが完了するまでAWS、DB、Vercelの処理は開始されません。
+
 対象AWS accountへ接続するIAM Identity Center profileを`~/.aws/config`へ用意し、sessionが失効している場合は再loginします。初回setupを行うprofileには、専用KMS key / aliasと4件のParameter Storeを作成・検証する権限が必要です。通常deployとGitHub Actionsはread-only権限に分離します。
 
 ## 3. AWS Parameter Storeへ初回保存する
