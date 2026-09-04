@@ -261,6 +261,52 @@ test("Developer API settings navigation honors server-derived VIEW access", () =
   );
 });
 
+test("通常reloadはsynthetic resident metricsを初期表示しない", () => {
+  assert.match(
+    viewSource,
+    /useState<ResidentPayload>\(\s*reviewMode \? syntheticResidents : emptyResidents,?\s*\)/u,
+  );
+  assert.match(
+    viewSource,
+    /reviewMode \? syntheticResidents\.residents\[0\]\.id : ""/u,
+  );
+
+  const residentsSection = viewSource.slice(
+    viewSource.indexOf("function ResidentsSection"),
+    viewSource.indexOf("function MessagesSection"),
+  );
+  assert.match(residentsSection, /pending \? \(\s*<div\s+id="zaad-metrics-loading"/u);
+  assert.match(residentsSection, /id="zaad-metrics-ready"/u);
+  assert.match(residentsSection, /!pending \? \(\s*<p id="zaad-result-count"/u);
+  assert.match(residentsSection, /<PendingPanel id="zaad-table-loading" copy=\{copy\} \/>/u);
+  assert.match(residentsSection, /id="zaad-table-ready"/u);
+});
+
+test("ZAAD header reserves an auto-width action column at lg", () => {
+  const header = viewSource.slice(
+    viewSource.indexOf('<header\n        id="zaad-content"'),
+    viewSource.indexOf("</header>", viewSource.indexOf('id="zaad-content"')),
+  );
+  assert.match(header, /grid gap-5 lg:grid-cols-\[minmax\(0,1fr\)_auto\] lg:items-end/u);
+  assert.match(header, /className="max-w-4xl min-w-0"/u);
+  assert.match(header, /id="zaad-connection-actions"/u);
+  assert.match(header, /lg:min-w-max lg:flex-nowrap/u);
+});
+
+test("ZAAD connection controls stay parallel at lg regardless of label", () => {
+  const header = viewSource.slice(
+    viewSource.indexOf('<header\n        id="zaad-content"'),
+    viewSource.indexOf("</header>", viewSource.indexOf('id="zaad-content"')),
+  );
+  const badge = viewSource.slice(
+    viewSource.indexOf("function ConnectionBadge"),
+    viewSource.indexOf("function PendingPanel"),
+  );
+  assert.match(header, /lg:flex-nowrap/u);
+  assert.equal((header.match(/whitespace-nowrap/gu) ?? []).length, 2);
+  assert.match(badge, /whitespace-nowrap/u);
+});
+
 test("one-time confirmation renders the complete immutable preflight contract", () => {
   const confirmation = viewSource.slice(
     viewSource.indexOf("function OneTimeConfirmForm"),

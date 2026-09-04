@@ -205,8 +205,9 @@ export function ZaadView({
   const [connection, setConnection] = useState(
     reviewConnection ?? (reviewMode ? "connected" : "checking"),
   );
-  const [residents, setResidents] =
-    useState<ResidentPayload>(syntheticResidents);
+  const [residents, setResidents] = useState<ResidentPayload>(
+    reviewMode ? syntheticResidents : emptyResidents,
+  );
   const [messages, setMessages] = useState<Message[]>(syntheticMessages);
   const [contactLists, setContactLists] = useState<ContactList[]>(
     syntheticContactLists,
@@ -214,7 +215,7 @@ export function ZaadView({
   const [campaigns, setCampaigns] = useState<Campaign[]>(syntheticCampaigns);
   const [setting, setSetting] = useState<RegistrationSetting>(syntheticSetting);
   const [selectedResidentId, setSelectedResidentId] = useState(
-    syntheticResidents.residents[0].id,
+    reviewMode ? syntheticResidents.residents[0].id : "",
   );
   const [selectedMessageId, setSelectedMessageId] = useState(
     reviewSurface === "message-form" && reviewDialogMode === "create"
@@ -504,21 +505,24 @@ export function ZaadView({
     <div id="zaad-page" className="min-w-0" data-review-state={state}>
       <header
         id="zaad-content"
-        className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"
+        className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end"
       >
-        <div className="max-w-4xl">
+        <div className="max-w-4xl min-w-0">
           <p className="text-sm font-semibold text-accent">{copy.eyebrow}</p>
           <h1 className="mt-1 text-3xl font-bold text-fg">{copy.title}</h1>
           <p className="mt-3 text-sm leading-7 text-fg-muted md:text-base">
             {copy.description}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div
+          id="zaad-connection-actions"
+          className="flex flex-wrap items-center gap-3 lg:min-w-max lg:flex-nowrap"
+        >
           <ConnectionBadge state={connection} copy={copy} />
           {canViewDeveloperApi ? (
             <Link
               href="/admin/developer-api"
-              className="min-h-11 rounded-md border border-line px-4 py-2.5 text-sm font-semibold text-accent transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="min-h-11 whitespace-nowrap rounded-md border border-line px-4 py-2.5 text-sm font-semibold text-accent transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               {copy.apiSettings}
             </Link>
@@ -527,7 +531,7 @@ export function ZaadView({
               role="link"
               aria-disabled="true"
               aria-describedby="zaad-developer-api-permission-reason"
-              className="min-h-11 cursor-not-allowed rounded-md border border-line px-4 py-2.5 text-sm font-semibold text-fg-muted opacity-60"
+              className="min-h-11 cursor-not-allowed whitespace-nowrap rounded-md border border-line px-4 py-2.5 text-sm font-semibold text-fg-muted opacity-60"
             >
               {copy.apiSettings}
             </span>
@@ -910,22 +914,42 @@ function ResidentsSection({
           </ActionButton>
         </div>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric label={copy.residents.total} value={residents.metrics.total} />
-        <Metric
-          label={copy.residents.consented}
-          value={residents.metrics.consented}
-        />
-        <Metric
-          label={copy.residents.synced}
-          value={residents.metrics.synced}
-        />
-        <Metric
-          label={copy.residents.needsAttention}
-          value={residents.metrics.needsAttention}
-          warning
-        />
-      </div>
+      {pending ? (
+        <div
+          id="zaad-metrics-loading"
+          className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+          aria-busy="true"
+        >
+          {Array.from({ length: 4 }, (_, index) => (
+            <div
+              key={index}
+              className="h-28 animate-pulse rounded-lg border border-line bg-surface-hover"
+              aria-hidden="true"
+            />
+          ))}
+          <span className="sr-only">{copy.common.loading}</span>
+        </div>
+      ) : (
+        <div
+          id="zaad-metrics-ready"
+          className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+        >
+          <Metric label={copy.residents.total} value={residents.metrics.total} />
+          <Metric
+            label={copy.residents.consented}
+            value={residents.metrics.consented}
+          />
+          <Metric
+            label={copy.residents.synced}
+            value={residents.metrics.synced}
+          />
+          <Metric
+            label={copy.residents.needsAttention}
+            value={residents.metrics.needsAttention}
+            warning
+          />
+        </div>
+      )}
       <form
         className="flex flex-col gap-3 sm:flex-row"
         onSubmit={(event) => {
@@ -978,11 +1002,15 @@ function ResidentsSection({
             >
               {copy.residents.heading}
             </h3>
-            <p className="text-xs text-fg-muted">{residents.metrics.total}</p>
+            {!pending ? (
+              <p id="zaad-result-count" className="text-xs text-fg-muted">
+                {residents.metrics.total}
+              </p>
+            ) : null}
           </div>
         </div>
         {pending ? (
-          <PendingPanel copy={copy} />
+          <PendingPanel id="zaad-table-loading" copy={copy} />
         ) : state === "empty" || residents.residents.length === 0 ? (
           <EmptyPanel copy={copy} />
         ) : state === "failure" ? (
@@ -990,7 +1018,10 @@ function ResidentsSection({
             {copy.common.failure}
           </p>
         ) : (
-          <div className="mt-3 overflow-x-auto rounded-lg border border-line">
+          <div
+            id="zaad-table-ready"
+            className="mt-3 overflow-x-auto rounded-lg border border-line"
+          >
             <table className="w-full min-w-[1050px] divide-y divide-line-subtle text-sm">
               <thead className="bg-surface-raised">
                 <tr>
@@ -3606,7 +3637,7 @@ function ConnectionBadge({
         : "border-amber-700/30 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100";
   return (
     <span
-      className={`inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold ${tone}`}
+      className={`inline-flex min-h-11 items-center gap-2 whitespace-nowrap rounded-full border px-4 py-2 text-sm font-semibold ${tone}`}
     >
       <span className="h-2 w-2 rounded-full bg-current" aria-hidden="true" />
       {label}
@@ -3614,9 +3645,15 @@ function ConnectionBadge({
   );
 }
 
-function PendingPanel({ copy }: { copy: ZaadDictionary }) {
+function PendingPanel({
+  id,
+  copy,
+}: {
+  id?: string;
+  copy: ZaadDictionary;
+}) {
   return (
-    <div aria-busy="true" className="mt-6 space-y-4">
+    <div id={id} aria-busy="true" className="mt-6 space-y-4">
       <div className="h-24 animate-pulse rounded-lg bg-surface-hover" />
       <div className="h-72 animate-pulse rounded-lg bg-surface-hover" />
       <span className="sr-only">{copy.common.loading}</span>

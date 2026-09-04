@@ -666,6 +666,21 @@ function createInAppBrowserParityAdapter({
     }));
   }
 
+  async function waitForViewportReadback(requestedTabId, expected) {
+    const deadline = Date.now() + resolvedTimeouts.actionMs;
+    let measured = await measureViewport(requestedTabId);
+    while (
+      (measured?.width !== expected.width ||
+        measured?.height !== expected.height ||
+        measured?.dpr !== expected.dpr) &&
+      Date.now() < deadline
+    ) {
+      await tab.playwright.waitForTimeout(Math.min(50, Math.max(1, deadline - Date.now())));
+      measured = await measureViewport(requestedTabId);
+    }
+    return measured;
+  }
+
   async function assertRequestedViewport(requestedTabId) {
     if (!state.requestedViewport) return undefined;
     const measured = await measureViewport(requestedTabId);
@@ -784,7 +799,9 @@ function createInAppBrowserParityAdapter({
     state.viewportApplied = !viewportReset;
     let readback;
     try {
-      readback = await measureViewport(comparisonTabId);
+      readback = state.initialViewport && errors.length === 0
+        ? await waitForViewportReadback(comparisonTabId, state.initialViewport)
+        : await measureViewport(comparisonTabId);
     } catch {
       errors.push("cleanup readback failed");
     }

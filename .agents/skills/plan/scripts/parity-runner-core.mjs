@@ -976,7 +976,9 @@ function compareProbe(probe, productionResult, prototypeResult) {
   const production = normalizeProbeValue(probe, productionResult?.value);
   const prototype = normalizeProbeValue(probe, prototypeResult?.value);
   let equal;
-  if (probe.kind === "geometry") {
+  if (probe.kind === "route") {
+    equal = production?.matches === true && prototype?.matches === true;
+  } else if (probe.kind === "geometry") {
     equal = geometryMatches(production, prototype, probe.options.tolerancePx);
   } else {
     equal = JSON.stringify(production) === JSON.stringify(prototype);

@@ -55,6 +55,8 @@ function createFakeBrowser() {
     cdpNetworkDisable: 0,
     viewportSet: 0,
     viewportReset: 0,
+    viewportResetLagReads: 0,
+    viewportResetPendingReads: 0,
     loadStateOptions: undefined as undefined | { state?: string; timeoutMs?: number },
     logs: [] as Array<{ level: string; message: string; url?: string }>,
     resources: [] as Array<{ path: string; resourceType: string }>,
@@ -138,8 +140,12 @@ function createFakeBrowser() {
     },
     async reset() {
       state.viewportReset += 1;
-      state.width = 1280;
-      state.height = 720;
+      if (state.viewportResetLagReads > 0) {
+        state.viewportResetPendingReads = state.viewportResetLagReads;
+      } else {
+        state.width = 1280;
+        state.height = 720;
+      }
     },
   };
   const locator = (selector: string) => {
@@ -222,7 +228,15 @@ function createFakeBrowser() {
       async evaluate(fn: (...args: never[]) => unknown, arg?: unknown) {
         const source = fn.toString();
         if (source.includes("devicePixelRatio")) {
-          return { width: state.width, height: state.height, dpr: state.dpr };
+          const measured = { width: state.width, height: state.height, dpr: state.dpr };
+          if (state.viewportResetPendingReads > 0) {
+            state.viewportResetPendingReads -= 1;
+            if (state.viewportResetPendingReads === 0) {
+              state.width = 1280;
+              state.height = 720;
+            }
+          }
+          return measured;
         }
         if (source.includes("location.pathname")) return new URL(state.url).pathname;
         if (source.includes("rootClassPresent")) {
@@ -287,6 +301,7 @@ function createFakeBrowser() {
         }
         return null;
       },
+      async waitForTimeout() {},
       async waitForLoadState(options: { state?: string; timeoutMs?: number }) {
         state.loadStateOptions = options;
       },
@@ -460,6 +475,17 @@ test("IAB-02 390x844 DPR1 canary and cleanup", async () => {
   assert.equal(fixture.state.viewportReset, 1);
   assert.deepEqual(cleanup.baseline, { width: 1280, height: 720, dpr: 2 });
   assert.deepEqual(cleanup.readback, cleanup.baseline);
+
+  const delayedReset = createFakeBrowser();
+  delayedReset.state.viewportResetLagReads = 2;
+  const delayedResetAdapter = createInAppBrowserParityAdapter({
+    browser: delayedReset.browser,
+    tab: delayedReset.tab,
+  });
+  await delayedResetAdapter.setViewport("comparison", { width: 390, height: 844 });
+  const delayedCleanup = await delayedResetAdapter.cleanup();
+  assert.equal(delayedCleanup.status, "pass");
+  assert.deepEqual(delayedCleanup.readback, delayedCleanup.baseline);
 
   const missingViewport = createFakeBrowser();
   missingViewport.browser.capabilities.list = async () => [];

@@ -416,6 +416,36 @@ test("COMPAT-01 legacy CLI exports adapters and evidence readers", async () => {
   );
 });
 
+test("route probes accept distinct valid production and prototype paths", async () => {
+  const { compareProbe } = await parityModulePromise;
+  const routeProbe = {
+    id: "route-main",
+    kind: "route",
+    mode: "equal",
+    productionSelector: "main",
+    prototypeSelector: "main",
+    required: true,
+    options: {},
+  };
+
+  assert.equal(
+    compareProbe(
+      routeProbe,
+      { value: { matches: true, pathname: "/admin/zaad" } },
+      { value: { matches: true, pathname: "/index.html" } },
+    ).status,
+    "pass",
+  );
+  assert.equal(
+    compareProbe(
+      routeProbe,
+      { value: { matches: false, pathname: "/login" } },
+      { value: { matches: true, pathname: "/index.html" } },
+    ).status,
+    "fail",
+  );
+});
+
 test("phaseとrisk tagからsmoke・affected・全matrixを決定する", async () => {
   const { selectRows } = await parityModulePromise;
   const normal = selectRows({ phase: "smoke", contract });
