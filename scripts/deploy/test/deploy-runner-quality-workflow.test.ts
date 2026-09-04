@@ -94,13 +94,23 @@ test("DRQ-WF-03: deploy runner testとtypecheckはnetworkとhost mountなしで�
 test("DRQ-WF-04: runtime auditだけがregistryへ接続し秘密情報とhost mountを受け取らない", () => {
   assert.match(
     workflow,
-    /docker run --rm --init --network bridge \\\n+            --entrypoint npm \\\n+            "\$\{image\}" \\\n+            audit --omit=dev --ignore-scripts --registry=https:\/\/registry\.npmjs\.org\//u,
+    /if docker run --rm --init --network bridge \\\n+\s+--entrypoint npm \\\n+\s+"\$\{image\}" \\\n+\s+audit --omit=dev --ignore-scripts --registry=https:\/\/registry\.npmjs\.org\//u,
   );
   assert.equal(
     [...workflow.matchAll(/docker run --rm --init --network bridge/gmu)].length,
     1,
   );
   assert.doesNotMatch(workflow, /^\s+(?:--volume|-v)(?:\s|=)/mu);
+});
+
+test("DRQ-WF-04a: runtime auditは外部registry障害をboundedに再試行し、最終失敗を通過させない", () => {
+  assert.match(workflow, /audit_attempts=3/u);
+  assert.match(workflow, /for audit_attempt in \$\(seq 1 "\$\{audit_attempts\}"\); do/u);
+  assert.match(workflow, /--fetch-retries=0/u);
+  assert.match(workflow, /--fetch-timeout=30000/u);
+  assert.match(workflow, /sleep \$\(\(audit_attempt \* 5\)\)/u);
+  assert.match(workflow, /\[\[ "\$\{audit_status\}" == "0" \]\]/u);
+  assert.doesNotMatch(workflow, /audit[\s\S]*?\|\|\s*true/u);
 });
 
 test("DRQ-WF-05: migration parityは非空diffをCI check failureにする", () => {

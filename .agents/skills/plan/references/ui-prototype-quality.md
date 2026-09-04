@@ -31,13 +31,13 @@ Do not invent a hero, breadcrumb, sidebar, hamburger menu, card shadow, backgrou
 
 ### Reuse the production styling pipeline
 
-This application uses Tailwind CSS v4 and semantic tokens from `app/globals.css`.
+This application uses Tailwind CSS v4 and semantic tokens from `app/styles/ui-foundation.css`. Production source discovery remains in `app/globals.css` and is deliberately excluded from prototype compilation.
 
 1. Copy the exact production utility strings and direct-child structure for unchanged shell, rows, forms, buttons, inputs, focus styles, disabled states, and responsive variants.
 2. Create `prototype/tailwind.css` that imports the production stylesheet and registers every prototype HTML and JavaScript source. From `plans/<slug>/prototype/`, the import is:
 
    ```css
-   @import "../../../app/globals.css";
+   @import "../../../app/styles/ui-foundation.css";
    @source ".";
    ```
 
@@ -52,7 +52,7 @@ This application uses Tailwind CSS v4 and semantic tokens from `app/globals.css`
 
 4. Load only the generated `styles.css`. Keep HTML, CSS, and JavaScript in separate local files because the artifact server rejects inline script and style through its CSP. Do not use a CDN, remote asset, or copied token palette.
 
-Complete styling with production utilities and `app/globals.css`. Do not add handwritten declarations, `@apply` component classes, duplicated tokens, or parallel styling abstractions by default. If a concrete requirement cannot be expressed with the production pipeline, stop before writing CSS, show the missing behavior and proposed rule, obtain explicit approval, and record the narrow exception in `UI契約`.
+Complete styling with production utilities and `app/styles/ui-foundation.css`. Do not add handwritten declarations, `@apply` component classes, duplicated tokens, or parallel styling abstractions by default. If a concrete requirement cannot be expressed with the production pipeline, stop before writing CSS, show the missing behavior and proposed rule, obtain explicit approval, and record the narrow exception in `UI契約`.
 
 Keep complete Tailwind class names in HTML or JavaScript rather than constructing fragments. Register prototype files explicitly because generated plan directories are ignored by Git and automatic source detection can omit them.
 
