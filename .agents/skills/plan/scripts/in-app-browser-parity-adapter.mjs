@@ -632,10 +632,27 @@ function createInAppBrowserParityAdapter({
 
   async function navigateAndVerify(requestedTabId, url) {
     await comparisonTab(requestedTabId);
-    await tab.goto(url);
+    try {
+      await tab.goto(url);
+    } catch (error) {
+      const committedUrl = await tab.url();
+      const timedOut =
+        error !== null &&
+        typeof error === "object" &&
+        "message" in error &&
+        typeof error.message === "string" &&
+        /timed?\s*out|timeout/iu.test(error.message);
+      if (
+        !timedOut ||
+        !committedUrl ||
+        new URL(committedUrl).toString() !== new URL(url).toString()
+      ) {
+        throw error;
+      }
+    }
     await comparisonTab(requestedTabId);
     await tab.playwright.waitForLoadState({
-      state: "domcontentloaded",
+      state: "load",
       timeoutMs: resolvedTimeouts.navigationMs,
     });
     await comparisonTab(requestedTabId);
@@ -746,6 +763,7 @@ function createInAppBrowserParityAdapter({
     }
     const errors = [];
     let cdpCleared = !state.deviceMetricsApplied;
+    let cdpClearFailed = false;
     let viewportReset = !state.viewportApplied;
     if (state.networkEnabled) {
       if (!state.cdp) {
@@ -768,7 +786,7 @@ function createInAppBrowserParityAdapter({
           await state.cdp.send("Emulation.clearDeviceMetricsOverride");
           cdpCleared = true;
         } catch {
-          errors.push("CDP clear failed");
+          cdpClearFailed = true;
         }
       }
     }
@@ -780,22 +798,24 @@ function createInAppBrowserParityAdapter({
         errors.push("viewport reset failed");
       }
     }
-    state.deviceMetricsApplied = !cdpCleared;
-    state.viewportApplied = !viewportReset;
     let readback;
     try {
       readback = await measureViewport(comparisonTabId);
     } catch {
       errors.push("cleanup readback failed");
     }
-    if (
+    const restored =
       state.initialViewport &&
-      (readback?.width !== state.initialViewport.width ||
-        readback?.height !== state.initialViewport.height ||
-        readback?.dpr !== state.initialViewport.dpr)
-    ) {
+      readback?.width === state.initialViewport.width &&
+      readback?.height === state.initialViewport.height &&
+      readback?.dpr === state.initialViewport.dpr;
+    if (restored && cdpClearFailed) cdpCleared = true;
+    if (cdpClearFailed && !cdpCleared) errors.push("CDP clear failed");
+    if (state.initialViewport && !restored) {
       errors.push("cleanup readback did not restore the initial viewport and DPR");
     }
+    state.deviceMetricsApplied = !cdpCleared;
+    state.viewportApplied = !viewportReset;
     state.cleanupResult = {
       status: errors.length === 0 ? "pass" : "fail",
       tabId: comparisonTabId,

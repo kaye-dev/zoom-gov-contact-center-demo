@@ -612,6 +612,38 @@ export type Dictionary = {
   };
 };
 
+export type ReservationBookingListDictionary = {
+  entry: string;
+  back: string;
+  title: string;
+  description: string;
+  unknownEndTime: string;
+  filter: {
+    heading: string;
+    service: string;
+    allServices: string;
+    source: string;
+    allSources: string;
+    zva: string;
+    demo: string;
+    submit: string;
+  };
+  list: {
+    title: string;
+    description: string;
+    count: string;
+    reservationDateTime: string;
+    service: string;
+    reservationId: string;
+    source: string;
+    createdAt: string;
+    scrollRegion: string;
+    next: string;
+    emptyTitle: string;
+    emptyDescription: string;
+  };
+};
+
 export type ReservationManagementDictionary = {
   title: string;
   description: string;
@@ -646,6 +678,7 @@ export type ReservationManagementDictionary = {
   generated: string;
   loadingError: string;
   generationError: string;
+  bookings: ReservationBookingListDictionary;
   apiKeys: ReservationApiKeyDictionary;
 };
 
@@ -829,6 +862,11 @@ const reservationApiKeyCopy: Record<Locale, ReservationApiKeyDictionary> = {
 const reservationManagementCopy: Record<Locale, ReservationManagementDictionary> = {
   ja: {
     apiKeys: reservationApiKeyCopy.ja,
+    bookings: {
+      entry: '予約一覧', back: '予約システムに戻る', title: '予約一覧', description: '予約システムで確定した予約を確認します。予約業務や予約種別で表示内容を絞り込めます。', unknownEndTime: '{time}（終了時刻未定）',
+      filter: { heading: '予約一覧のフィルタ', service: '予約業務', allServices: 'すべての予約業務', source: '予約種別', allSources: 'すべての予約', zva: 'ZVA予約（デモ除外）', demo: 'デモ予約のみ', submit: '絞り込む' },
+      list: { title: '確定予約', description: '作成日時の新しい順に50件ずつ表示します。', count: '{count}件', reservationDateTime: '予約日時', service: '予約業務', reservationId: '予約 ID', source: '予約種別', createdAt: '作成日時', scrollRegion: '予約一覧表', next: '次の50件', emptyTitle: '条件に一致する予約はありません', emptyDescription: '予約業務または予約種別を変更して、もう一度お試しください。' },
+    },
     title: '予約システム',
     description: '自治体業務ごとの受付日と予約状況をカレンダーで確認します。',
     demoFill: '表示月のデモ予約を生成',
@@ -848,6 +886,11 @@ const reservationManagementCopy: Record<Locale, ReservationManagementDictionary>
   },
   en: {
     apiKeys: reservationApiKeyCopy.en,
+    bookings: {
+      entry: 'Reservation list', back: 'Back to the reservation system', title: 'Reservations', description: 'Review confirmed reservations and filter them by service or booking type.', unknownEndTime: '{time} (end time unavailable)',
+      filter: { heading: 'Filter reservations', service: 'Service', allServices: 'All services', source: 'Booking type', allSources: 'All reservations', zva: 'ZVA reservations (exclude demos)', demo: 'Demo reservations only', submit: 'Filter' },
+      list: { title: 'Confirmed reservations', description: 'Shows 50 reservations at a time, newest creation first.', count: '{count} results', reservationDateTime: 'Reservation date and time', service: 'Service', reservationId: 'Reservation ID', source: 'Booking type', createdAt: 'Created', scrollRegion: 'Reservation list table', next: 'Next 50', emptyTitle: 'No reservations match these conditions', emptyDescription: 'Change the service or booking type and try again.' },
+    },
     title: 'Reservation system', description: 'View appointment dates and availability for municipal services on a calendar.', demoFill: 'Generate demo bookings for this month', serviceLabel: 'Service', previousMonth: 'Previous month', currentMonth: 'Current month', nextMonth: 'Next month',
     methods: { DATE: 'Date booking', DATETIME: 'Date and time booking' }, facilityMethod: 'Facility time slots',
     services: {
@@ -860,6 +903,11 @@ const reservationManagementCopy: Record<Locale, ReservationManagementDictionary>
   },
   'zh-Hans': {
     apiKeys: reservationApiKeyCopy['zh-Hans'],
+    bookings: {
+      entry: '预约列表', back: '返回预约系统', title: '预约列表', description: '查看预约系统中已确认的预约，并可按预约业务或预约类型筛选。', unknownEndTime: '{time}（结束时间未定）',
+      filter: { heading: '预约列表筛选', service: '预约业务', allServices: '全部预约业务', source: '预约类型', allSources: '全部预约', zva: 'ZVA预约（排除演示）', demo: '仅演示预约', submit: '筛选' },
+      list: { title: '已确认预约', description: '按创建时间从新到旧，每次显示50条。', count: '{count}条', reservationDateTime: '预约日期时间', service: '预约业务', reservationId: '预约 ID', source: '预约类型', createdAt: '创建时间', scrollRegion: '预约列表表格', next: '后50条', emptyTitle: '没有符合条件的预约', emptyDescription: '请更改预约业务或预约类型后重试。' },
+    },
     title: '预约系统', description: '通过日历查看各项市政服务的受理日期和预约情况。', demoFill: '生成本月演示预约', serviceLabel: '预约业务', previousMonth: '上个月', currentMonth: '本月', nextMonth: '下个月', methods: { DATE: '按日期预约', DATETIME: '按日期和时间预约' }, facilityMethod: '设施使用时段',
     services: {
       'my-number-card': { name: '个人编号卡领取与更新', description: '工作日9:00至17:00可按30分钟预约到访。' },
@@ -871,6 +919,11 @@ const reservationManagementCopy: Record<Locale, ReservationManagementDictionary>
   },
   'zh-Hant': {
     apiKeys: reservationApiKeyCopy['zh-Hant'],
+    bookings: {
+      entry: '預約清單', back: '返回預約系統', title: '預約清單', description: '查看預約系統中已確認的預約，並可按預約業務或預約類型篩選。', unknownEndTime: '{time}（結束時間未定）',
+      filter: { heading: '預約清單篩選', service: '預約業務', allServices: '全部預約業務', source: '預約類型', allSources: '全部預約', zva: 'ZVA預約（排除示範）', demo: '僅示範預約', submit: '篩選' },
+      list: { title: '已確認預約', description: '按建立時間由新至舊，每次顯示50筆。', count: '{count}筆', reservationDateTime: '預約日期時間', service: '預約業務', reservationId: '預約 ID', source: '預約類型', createdAt: '建立時間', scrollRegion: '預約清單表格', next: '下50筆', emptyTitle: '沒有符合條件的預約', emptyDescription: '請更改預約業務或預約類型後再試。' },
+    },
     title: '預約系統', description: '透過日曆查看各項市政服務的受理日期及預約狀況。', demoFill: '產生本月示範預約', serviceLabel: '預約業務', previousMonth: '上個月', currentMonth: '本月', nextMonth: '下個月', methods: { DATE: '按日期預約', DATETIME: '按日期及時間預約' }, facilityMethod: '設施使用時段',
     services: {
       'my-number-card': { name: '個人編號卡領取及更新', description: '平日9:00至17:00可按30分鐘預約到訪。' },
@@ -882,6 +935,11 @@ const reservationManagementCopy: Record<Locale, ReservationManagementDictionary>
   },
   ko: {
     apiKeys: reservationApiKeyCopy.ko,
+    bookings: {
+      entry: '예약 목록', back: '예약 시스템으로 돌아가기', title: '예약 목록', description: '예약 시스템에서 확정된 예약을 확인하고 예약 업무 또는 예약 유형으로 필터링할 수 있습니다.', unknownEndTime: '{time}(종료 시간 미정)',
+      filter: { heading: '예약 목록 필터', service: '예약 업무', allServices: '모든 예약 업무', source: '예약 유형', allSources: '모든 예약', zva: 'ZVA 예약(데모 제외)', demo: '데모 예약만', submit: '필터' },
+      list: { title: '확정 예약', description: '생성 일시가 최신인 순으로 50건씩 표시합니다.', count: '{count}건', reservationDateTime: '예약 일시', service: '예약 업무', reservationId: '예약 ID', source: '예약 유형', createdAt: '생성 일시', scrollRegion: '예약 목록 표', next: '다음 50건', emptyTitle: '조건에 맞는 예약이 없습니다', emptyDescription: '예약 업무 또는 예약 유형을 변경한 후 다시 시도하세요.' },
+    },
     title: '예약 시스템', description: '달력에서 지방자치단체 업무별 접수일과 예약 현황을 확인합니다.', demoFill: '표시 월의 데모 예약 생성', serviceLabel: '예약 업무', previousMonth: '이전 달', currentMonth: '이번 달', nextMonth: '다음 달', methods: { DATE: '날짜 예약', DATETIME: '날짜 및 시간 예약' }, facilityMethod: '시설 이용 시간',
     services: {
       'my-number-card': { name: '마이넘버 카드 교부 및 갱신', description: '평일 9:00부터 17:00까지 30분 단위로 방문 시간을 예약할 수 있습니다.' },

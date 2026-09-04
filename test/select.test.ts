@@ -184,7 +184,7 @@ test("all application selects use the shared Select", () => {
 
   assert.deepEqual(violations, []);
   assert.equal(selectSource.match(/<select\b/g)?.length, 1);
-  assert.equal(sharedUsageCount, 12);
+  assert.equal(sharedUsageCount, 14);
   assert.match(designSource, /#### 6\.5\.2 セレクト/);
   assert.match(designSource, /app\/components\/Select\.tsx/);
 });

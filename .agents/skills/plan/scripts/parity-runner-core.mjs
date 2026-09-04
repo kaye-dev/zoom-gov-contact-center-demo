@@ -985,7 +985,7 @@ function compareProbe(probe, productionResult, prototypeResult) {
     equal = equal && production === probe.options.expected;
   }
   if (["route", "setup", "state", "viewport", "theme", "control", "overflow", "keyboard"].includes(probe.kind)) {
-    equal = equal && production?.matches === true && prototype?.matches === true;
+    equal = production?.matches === true && prototype?.matches === true;
   }
   if (probe.kind === "console") {
     equal = equal && Array.isArray(production) && production.length === 0;

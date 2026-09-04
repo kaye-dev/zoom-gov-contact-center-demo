@@ -666,6 +666,33 @@ test("runnerはrow内のprobeをsurface単位でbatchしてtab往復を増やさ
   assert.deepEqual(switches, ["production", "prototype"]);
 });
 
+test("surface固有routeは各pathnameが正しければ一致として扱う", async () => {
+  const { compareProbe } = await parityModulePromise;
+  const probe = {
+    id: "route-ready",
+    kind: "route",
+    mode: "equal",
+    productionSelector: "body",
+    prototypeSelector: "body",
+    required: true,
+    options: {},
+  };
+
+  assert.deepEqual(
+    compareProbe(
+      probe,
+      { value: { matches: true, pathname: "/admin/reservations" } },
+      { value: { matches: true, pathname: "/index.html" } },
+    ),
+    {
+      status: "pass",
+      production: { matches: true, pathname: "/admin/reservations" },
+      prototype: { matches: true, pathname: "/index.html" },
+      reason: undefined,
+    },
+  );
+});
+
 test("runnerは全rowを実行しscroll provenanceとmetricsを構造化する", async () => {
   const { BrowserParityRunner, validateParityEvidence } = await parityModulePromise;
   const evidence = await new BrowserParityRunner(createAdapter()).run({

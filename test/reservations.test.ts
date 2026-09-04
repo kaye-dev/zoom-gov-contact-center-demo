@@ -196,6 +196,84 @@ test("RES-INSPECT-05 all locales contain complete reservation copy and access ca
   }
 });
 
+test("RES-LIST-UI-01 reservation navigation and list controls follow the admin UI contract", () => {
+  const calendarView = source("../app/admin/reservations/ReservationSystemView.tsx");
+  const listView = source("../app/admin/reservations/bookings/ReservationBookingsView.tsx");
+
+  assert.match(calendarView, /id="reservation-booking-list-link"/u);
+  assert.match(calendarView, /href="\/admin\/reservations\/bookings"/u);
+  assert.match(calendarView, /\{copy\.bookings\.entry\}/u);
+  for (const selector of [
+    "back-to-reservation-system",
+    "reservation-booking-filter-form",
+    "booking-service-filter",
+    "booking-source-filter",
+    "booking-filter-submit",
+    "reservation-booking-list-wrap",
+    "reservation-booking-empty",
+    "reservation-booking-pagination",
+  ]) {
+    assert.match(listView, new RegExp(selector, "u"), selector);
+  }
+  assert.match(listView, /method="get"/u);
+  assert.match(listView, /role="region"/u);
+  assert.match(listView, /tabIndex=\{0\}/u);
+  assert.match(listView, /event\.target !== event\.currentTarget/u);
+  assert.match(listView, /left: event\.key === "ArrowRight" \? 48 : -48/u);
+  assert.match(listView, /max-w-full overflow-x-auto/u);
+  assert.match(listView, /cursor-pointer rounded-md/u);
+});
+
+test("RES-LIST-UI-02 empty results retain filters and hide table and pagination", () => {
+  const listView = source("../app/admin/reservations/bookings/ReservationBookingsView.tsx");
+  assert.match(listView, /const hasBookings = bookings\.length > 0/u);
+  assert.match(listView, /id="reservation-booking-list-wrap"[\s\S]*?hidden=\{!hasBookings\}/u);
+  assert.match(listView, /id="reservation-booking-empty" hidden=\{hasBookings\}/u);
+  assert.match(listView, /id="reservation-booking-pagination"[\s\S]*?hidden=\{!hasBookings\}/u);
+  assert.match(listView, /id="reservation-booking-filter-form"/u);
+  assert.match(listView, /id="reservation-booking-result-count"/u);
+});
+
+test("RES-LIST-I18N-01 all locales contain complete reservation-list copy", () => {
+  for (const locale of locales) {
+    const copy = dictionaries[locale].admin.reservationManagement.bookings;
+    assert.deepEqual(Object.keys(copy).sort(), [
+      "back",
+      "description",
+      "entry",
+      "filter",
+      "list",
+      "title",
+      "unknownEndTime",
+    ]);
+    assert.deepEqual(Object.keys(copy.filter).sort(), [
+      "allServices",
+      "allSources",
+      "demo",
+      "heading",
+      "service",
+      "source",
+      "submit",
+      "zva",
+    ]);
+    assert.deepEqual(Object.keys(copy.list).sort(), [
+      "count",
+      "createdAt",
+      "description",
+      "emptyDescription",
+      "emptyTitle",
+      "next",
+      "reservationDateTime",
+      "reservationId",
+      "scrollRegion",
+      "service",
+      "source",
+      "title",
+    ]);
+    assert.ok(copy.filter.zva.length > 0 && copy.list.emptyTitle.length > 0, locale);
+  }
+});
+
 test("RES-INSPECT-06 reservation persistence contains no raw PII and no Virtual Agent integration", () => {
   const schema = source("../prisma/schema.prisma");
   const migration = source("../prisma/migrations/20260830120000_add_reservation_bookings/migration.sql");

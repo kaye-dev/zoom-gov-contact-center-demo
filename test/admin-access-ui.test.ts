@@ -99,6 +99,28 @@ test("permission payload requires every supported cell exactly once", () => {
   });
 });
 
+test("RES-LIST-AUTH-01 reservation list reuses reservations VIEW access", () => {
+  const reservationResource = ADMIN_RESOURCE_CATALOG.find(
+    ({ key }) => key === "reservations",
+  );
+  assert.ok(reservationResource);
+  assert.ok(
+    (reservationResource.displayPaths as readonly string[]).includes(
+      "/admin/reservations/bookings",
+    ),
+  );
+  assert.deepEqual(reservationResource.supportedActions, ["VIEW", "UPDATE"]);
+
+  const page = source("../app/admin/reservations/bookings/page.tsx");
+  const shell = source("../app/admin/AdminShell.tsx");
+  assert.match(
+    page,
+    /requireAdminAccess\(\s*"reservations",\s*"VIEW",\s*RESERVATION_BOOKINGS_ROUTE/u,
+  );
+  assert.match(shell, /pathname === "\/admin\/reservations\/bookings"/u);
+  assert.match(shell, /"reservation-booking-list-page"/u);
+});
+
 test('role UI creates metadata first and renders the prototype permission controls', () => {
   const list = source('../app/admin/roles/RolesView.tsx');
   const modal = source('../app/components/admin/ModalDialog.tsx');
