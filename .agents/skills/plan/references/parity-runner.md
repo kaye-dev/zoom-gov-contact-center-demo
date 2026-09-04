@@ -12,6 +12,8 @@ Version 3 `parity-spec.json` contains exactly:
 - `coverage.targetOrder`, `viewportOrder`, `themeOrder`, `anchorRows`, and `riskRows`;
 - `sourceImpactMap`, `batchPolicy`, and `artifactPolicy`.
 
+Version 3 maps contract semantics without changing the `rowProbeMap` schema: every ID in a row's `expectedInvariantIds` has a same-ID required `equal` probe in that row's `probeIds`, and every ID in `intentionalDifferenceIds` has a same-ID required `different` probe there. Probe IDs are globally unique, so one arbitrary probe cannot stand in for multiple contract IDs. Missing, optional, wrong-mode, or row-unmapped same-ID probes fail static validation. Versions 1 and 2 retain their historical validation behavior.
+
 Every `stateSetups` entry covers one target/state pair on production and prototype and names one or more required coverage `assertionProbeIds`. Surface setup permits bounded string query fixtures and allowlisted `click`, `press`, `focus`, `fill`, `waitForVisible`, and `waitForHidden` actions. It rejects JavaScript, external URLs, credentials, cookies, token-like names, real email/phone data, and unbounded free text.
 
 `browserSetups` covers every comparison target exactly once. A surface uses one of:
@@ -26,17 +28,16 @@ Each risk row declares `id`, `targetId`, `state`, `viewport`, `theme`, `interact
 
 `sourceImpactMap` covers every `productionBaseline.sources` path exactly once. `target` and `shared` entries name affected target IDs; `global` names none because it invalidates all targets. Missing impact resolution fails closed to all targets.
 
-Validate and inspect without Browser work:
+Validate goal, contract, profile, source inventory, and deterministic selection without Browser work:
 
 ```sh
-node .agents/skills/plan/scripts/parity-runner.mjs validate plans/<slug>/prototype
-node .agents/skills/plan/scripts/parity-runner.mjs select plans/<slug>/prototype \
-  --phase final --matrix-scope coverage
+node .agents/skills/plan/scripts/parity-runner.mjs preflight plans/<slug>/prototype --context plan --target <changed-target> --state <changed-state> [--risk <risk>]
+node .agents/skills/plan/scripts/parity-runner.mjs preflight plans/<slug>/prototype --context implement
 node .agents/skills/plan/scripts/parity-runner.mjs select plans/<slug>/prototype \
   --phase final --matrix-scope full --execution-context ci
 ```
 
-`targeted` selection is for `$plan` smoke and legacy profiles. Current final runs use `coverage` or `full`. Full selection requires one of `release`, `ci`, `scheduled`, or `explicit`; it is never inferred from file count or a shared component alone.
+`targeted` selection is for `$plan` smoke and legacy profiles; every version 3 declared risk-row coordinate is additive even when its theme or viewport is outside the representative changed scope. Current final runs use `coverage` or `full`. Full selection requires one of `release`, `ci`, `scheduled`, or `explicit`; it is never inferred from file count or a shared component alone.
 
 ## Probe tiers
 
@@ -50,9 +51,9 @@ The adapter returns raw screenshot, DOM, and accessibility payloads only to an i
 
 `parity-runner-core.mjs` is pure ESM without Node dependencies. It owns validation, deterministic selection, comparison, coverage reports, invalidation resolution, and `BrowserParityRunner`. `parity-runner.mjs` is the Node facade. The common adapter is `in-app-browser-parity-adapter.mjs`; do not create task-specific adapters, executable bundles, or runtime shims.
 
-Use one fresh selected in-app Browser tab. Production and prototype run serially in that tab, with tab identity checked between operations. The adapter uses Browser viewport control and CDP `Emulation.setDeviceMetricsOverride`; `window.innerWidth`, `window.innerHeight`, and `window.devicePixelRatio` are authoritative. The capability canary requires selected-tab identity, `390x844 / DPR 1`, read-only evaluation, screenshot digest, and a network source when selected probes require one. Chrome, Playwright, Computer Use, or DPR 2 are not substitutes.
+Use one task-owned in-app Browser session with distinct task-owned production and prototype tab handles passed as `tabs: { production, prototype }`. The runner keys logical contexts by session, tab, surface, origin, and authorization profile; it stabilizes each context once and invalidates it after identity/setup failure. The adapter checks logical active-tab identity between operations, applies Browser viewport control plus per-tab CDP `Emulation.setDeviceMetricsOverride`, and treats `window.innerWidth`, `window.innerHeight`, and `window.devicePixelRatio` as authoritative. The canary requires `390x844 / DPR 1`, read-only evaluation, screenshot digest, and a network source when required. Other tasks must use separate sessions/tabs.
 
-The adapter captures the initial viewport/DPR and always clears CDP metrics, resets the Browser viewport, and compares the terminal readback to the baseline. Cleanup failure is terminal and prevents canonical evidence.
+The adapter performs exactly one navigation for each row/surface, captures the initial viewport/DPR, and always clears network/CDP metrics and resets viewport. Cleanup reads back immediately; only a mismatch retries with bounded backoff up to two seconds. Failure is terminal and retains only stable code, allowlisted cause category, operation/row/surface/probe context, and sanitized evidence.
 
 ## Workspace, batch, checkpoint, and resume
 
@@ -60,7 +61,7 @@ The ignored workspace is `.codex/parity-runs/<run-id>/`. Directories are `0700`;
 
 Prepare only after approval, static checks, and external runtime ownership/health readback:
 
-Local uses `http://localhost:3000`; worktrees use the ownership-verified allocated port in `3100-3899`. Obtain it through `./dev-compose.sh status --url`; matching CLI arguments do not themselves prove process, container, mount, or health ownership.
+Local uses `http://localhost:3000`; worktrees use the ownership-verified allocated port in `3100-3899`. Obtain owner, process/container, mount, health, and `PRODUCTION_URL` from one completed `./dev-compose.sh ensure`; do not wrap it in status polling, fixed sleep, or follow-log commands. Matching CLI arguments do not prove ownership.
 
 ```sh
 node .agents/skills/plan/scripts/parity-runner.mjs prepare-run plans/<slug>/prototype \
@@ -110,7 +111,7 @@ Target and shared invalidation preserve unrelated passing target batches. Global
 
 The artifact sink writes raw screenshot/DOM/accessibility files under the workspace, scans strings for secrets and personal data, and returns only `{path, sha256, bytes, kind, mediaType, surface, rowId, probeId}`. `artifactPolicy.maxBytes` is enforced. Artifacts never include credentials, authorization headers, cookies, tokens, response bodies, or real resident data.
 
-Before finalization, repeat external runtime ownership/health readback and pass the verified owner/checkout:
+Immediately before finalization, perform the one permitted runtime drift readback and pass the verified owner/checkout:
 
 ```sh
 node .agents/skills/plan/scripts/parity-runner.mjs finalize-run plans/<slug>/prototype \

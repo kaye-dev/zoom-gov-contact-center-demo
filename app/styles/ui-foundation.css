@@ -1,0 +1,124 @@
+@import "tailwindcss" source(none);
+
+/* .dark / .light を html に付与して切り替える。既定テーマはライト。 */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root.review-theme nextjs-portal {
+  display: none;
+}
+
+:root.theme-loading {
+  background: #ffffff;
+}
+
+:root.theme-loading.dark {
+  background: #0d1117;
+}
+
+:root.theme-loading body,
+:root.language-loading body {
+  visibility: hidden;
+}
+
+:root.theme-loading *,
+:root.theme-loading *::before,
+:root.theme-loading *::after,
+:root.language-loading *,
+:root.language-loading *::before,
+:root.language-loading *::after {
+  transition: none !important;
+}
+
+:root {
+  /* セマンティックトークン（意味ベース）。ライト値は従来の挙動を維持 */
+  --surface: #ffffff;        /* ページ/ボディ背景 */
+  --surface-raised: #ffffff; /* ヘッダー/フッター/カード等の浮いた面 */
+  --surface-hover: #e8f1fe;  /* ホバー背景（= primary-50） */
+  --surface-selected: #e8f1fe;
+  --surface-accent-subtle: #e8f1fe;
+  --line: #d1d5db;           /* 標準ボーダー（= gray-300） */
+  --line-subtle: #e5e7eb;    /* 仕切り線（= gray-200） */
+  --fg: #1f2937;             /* 本文（= gray-800） */
+  --fg-muted: #6b7280;       /* 補足/日付/サブタイトル（= gray-500） */
+  --icon-muted: #303640;     /* 生活情報アイコン */
+  --icon-strong: #00118f;    /* 生活情報アイコン（hover） */
+  --accent: #00118f;         /* リンク/ホバー文字/アクセント（= primary） */
+
+  /* body 用エイリアスは surface/fg に追従させる */
+  --background: var(--surface);
+  --foreground: var(--fg);
+}
+
+:root.dark {
+  /* GitHub Primerに倣い、ニュートラルな暗色面へsemantic roleで階層を付ける。 */
+  --surface: #0d1117;
+  --surface-raised: #161b22;
+  --surface-hover: #21262d;
+  --surface-selected: #21262d;
+  --surface-accent-subtle: rgb(56 139 253 / 10%);
+  --line: #30363d;
+  --line-subtle: #21262d;
+  --fg: #c9d1d9;
+  --fg-muted: #8b949e;
+  --icon-muted: #c9d1d9;
+  --icon-strong: #79c0ff;
+  --accent: #58a6ff;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  /* OS 標準フォントを使う（ビルド時に外部フォントを取得しない） */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    "Helvetica Neue", "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", Meiryo,
+    sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+
+  /* セマンティックトークンを Tailwind ユーティリティとして公開 */
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-selected: var(--surface-selected);
+  --color-surface-accent-subtle: var(--surface-accent-subtle);
+  --color-line: var(--line);
+  --color-line-subtle: var(--line-subtle);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-icon-muted: var(--icon-muted);
+  --color-icon-strong: var(--icon-strong);
+  --color-accent: var(--accent);
+
+  /* テーマカラー（Blue スケール） */
+  --color-primary-50: #e8f1fe;
+  --color-primary-100: #d9e6ff;
+  --color-primary-200: #c5d7fb;
+  --color-primary-300: #9db7f9;
+  --color-primary-400: #7096f8;
+  --color-primary-500: #4979f5;
+  --color-primary-600: #3460fb;
+  --color-primary-700: #264af4;
+  --color-primary-800: #0031d8;
+  --color-primary-900: #0017c1;
+  --color-primary-1000: #00118f;
+  --color-primary-1100: #000071;
+  --color-primary-1200: #000060;
+
+  /* primary は 1000 を基準色とする */
+  --color-primary: #00118f;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+/* Link と素の a のどちらでも、クリック可能なリンクは明示的に pointer にする。 */
+a[href]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+a[href][aria-disabled="true"] {
+  cursor: not-allowed;
+}

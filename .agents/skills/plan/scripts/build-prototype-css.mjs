@@ -89,7 +89,7 @@ while (pendingDirectories.length > 0) {
 }
 
 const input = await readFile(inputPath, "utf8");
-const expectedInput = '@import "../../../app/globals.css";\n@source ".";\n';
+const expectedInput = '@import "../../../app/styles/ui-foundation.css";\n@source ".";\n';
 if (input !== expectedInput) {
   throw new Error(
     "tailwind.css must exactly match the documented import and @source contract; custom directives are unavailable",

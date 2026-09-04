@@ -9,8 +9,8 @@ const layoutSource = readFileSync(
   new URL("../app/layout.tsx", import.meta.url),
   "utf8",
 );
-const globalsSource = readFileSync(
-  new URL("../app/globals.css", import.meta.url),
+const uiFoundationSource = readFileSync(
+  new URL("../app/styles/ui-foundation.css", import.meta.url),
   "utf8",
 );
 const themeSyncSource = readFileSync(
@@ -56,7 +56,7 @@ test("theme content stays hidden until the stored theme is synchronized", () => 
   assert.match(layoutSource, /<head>[\s\S]*?<script[\s\S]*?id="theme-init"/);
   assert.doesNotMatch(layoutSource, /next\/script|strategy="beforeInteractive"/);
   assert.match(
-    globalsSource,
+    uiFoundationSource,
     /:root\.theme-loading body,[\s\S]*?:root\.language-loading body\s*{\s*visibility: hidden;/,
   );
   assert.match(themeSyncSource, /useLayoutEffect\(\(\) =>\s*{/);
@@ -91,7 +91,7 @@ test("theme content stays hidden until the stored theme is synchronized", () => 
 
 test("theme toggle has its initial visual state before transitions are enabled", () => {
   assert.match(
-    globalsSource,
+    uiFoundationSource,
     /:root\.theme-loading \*[\s\S]*?transition: none !important;/,
   );
   assert.match(themeToggleSource, /translate-x-\[2px\]/);
@@ -105,7 +105,7 @@ test("theme toggle has its initial visual state before transitions are enabled",
 test("theme defaults to light without following the operating system", () => {
   assert.match(themeStoreSource, /if \(stored\) return stored === 'dark';\s*return false;/);
   assert.doesNotMatch(themeStoreSource, /matchMedia|prefers-color-scheme/);
-  assert.doesNotMatch(globalsSource, /prefers-color-scheme/);
+  assert.doesNotMatch(uiFoundationSource, /prefers-color-scheme/);
 });
 
 test("the pre-paint script restores dark only for an explicit dark preference", () => {
@@ -127,24 +127,24 @@ test("review theme query is development-only, loopback-only, and non-persistent"
   assert.equal(resolveReviewTheme({ hostname: "localhost", search: "?theme=blue" }, "development"), null);
   assert.equal(resolveReviewTheme({ hostname: "localhost", search: "?theme=dark&theme=light" }, "development"), null);
   assert.doesNotMatch(themeSyncSource, /localStorage\.setItem/);
-  assert.match(globalsSource, /:root\.review-theme nextjs-portal\s*{\s*display: none;/);
+  assert.match(uiFoundationSource, /:root\.review-theme nextjs-portal\s*{\s*display: none;/);
 });
 
 test("dark mode uses GitHub-style semantic canvas roles and native control scheme", () => {
-  assert.match(globalsSource, /--surface:\s*#0d1117;/);
-  assert.match(globalsSource, /--surface-raised:\s*#161b22;/);
-  assert.match(globalsSource, /--surface-selected:\s*#21262d;/);
+  assert.match(uiFoundationSource, /--surface:\s*#0d1117;/);
+  assert.match(uiFoundationSource, /--surface-raised:\s*#161b22;/);
+  assert.match(uiFoundationSource, /--surface-selected:\s*#21262d;/);
   assert.match(
-    globalsSource,
+    uiFoundationSource,
     /--surface-accent-subtle:\s*rgb\(56 139 253 \/ 10%\);/,
   );
-  assert.match(globalsSource, /--line:\s*#30363d;/);
-  assert.match(globalsSource, /--fg:\s*#c9d1d9;/);
-  assert.match(globalsSource, /--fg-muted:\s*#8b949e;/);
-  assert.match(globalsSource, /--accent:\s*#58a6ff;/);
-  assert.match(globalsSource, /--color-surface-selected:/);
-  assert.match(globalsSource, /--color-surface-accent-subtle:/);
-  assert.doesNotMatch(globalsSource, /--color-primary-950:/);
+  assert.match(uiFoundationSource, /--line:\s*#30363d;/);
+  assert.match(uiFoundationSource, /--fg:\s*#c9d1d9;/);
+  assert.match(uiFoundationSource, /--fg-muted:\s*#8b949e;/);
+  assert.match(uiFoundationSource, /--accent:\s*#58a6ff;/);
+  assert.match(uiFoundationSource, /--color-surface-selected:/);
+  assert.match(uiFoundationSource, /--color-surface-accent-subtle:/);
+  assert.doesNotMatch(uiFoundationSource, /--color-primary-950:/);
   assert.match(layoutSource, /scheme-light[^"]*dark:scheme-dark/);
 });
 

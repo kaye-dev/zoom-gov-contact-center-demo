@@ -299,6 +299,7 @@ test("RT-09: active leases are preserved and stopped stale leases are reclaimed"
 test("RT-05: Local status reports a foreign native listener without stopping it", (context) => {
   const fixture = createRuntimeFixture("local");
   const commandLog = join(fixture.root, "commands.log");
+  const dockerLog = join(fixture.root, "docker.log");
   context.after(() => rmSync(fixture.root, { force: true, recursive: true }));
   writeExecutable(
     join(fixture.stubDirectory, "lsof"),
@@ -313,6 +314,10 @@ test("RT-05: Local status reports a foreign native listener without stopping it"
   writeExecutable(join(fixture.stubDirectory, "ps"), 'printf "next-server (v16.3.0)\\n"');
   writeExecutable(join(fixture.stubDirectory, "curl"), "exit 0");
   writeExecutable(join(fixture.stubDirectory, "kill"), `printf 'kill\\n' >> '${commandLog}'`);
+  writeExecutable(
+    join(fixture.stubDirectory, "docker"),
+    `printf '%s\\n' "$*" >> '${dockerLog}'\nexit 1`,
+  );
   const result = execFileSyncWithResult(
     "zsh",
     [wrapperPath, "status"],
@@ -320,6 +325,11 @@ test("RT-05: Local status reports a foreign native listener without stopping it"
   );
   assert.notEqual(result.status, 0);
   assert.match(`${result.stdout}\n${result.stderr}`, /expected .*checkout/u);
+  assert.throws(() => readFileSync(commandLog, "utf8"), /ENOENT/u);
+  const ensure = execFileSyncWithResult("zsh", [wrapperPath, "ensure"], fixtureEnv(fixture));
+  assert.notEqual(ensure.status, 0);
+  assert.match(`${ensure.stdout}\n${ensure.stderr}`, /expected .*checkout/u);
+  assert.doesNotMatch(readFileSync(dockerLog, "utf8"), /compose|\bup\b|restart|stop/u);
   assert.throws(() => readFileSync(commandLog, "utf8"), /ENOENT/u);
 });
 
@@ -361,7 +371,14 @@ test("RT-04: Local ensure reuses an exact healthy native runtime without lifecyc
   const result = execFileSyncWithResult("zsh", [wrapperPath, "ensure"], fixtureEnv(fixture));
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /Reusing healthy native Next\.js PID 4242/u);
-  assert.match(result.stdout, /ACTIVE_RUNTIME_IDENTIFIER=4242/u);
+  const runtime = parseContext(result.stdout);
+  assert.equal(runtime.ACTIVE_RUNTIME_IDENTIFIER, "4242");
+  assert.equal(realpathSync(runtime.ACTIVE_RUNTIME_CWD), realpathSync(fixture.checkout));
+  assert.equal(realpathSync(runtime.ACTIVE_RUNTIME_MOUNT), realpathSync(fixture.checkout));
+  assert.equal(runtime.RUNTIME_OWNERSHIP, "verified");
+  assert.equal(runtime.ACTIVE_RUNTIME_HEALTH, "healthy");
+  assert.equal(runtime.RUNTIME_RESTART_REQUIRED, "0");
+  assert.equal(runtime.PRODUCTION_URL, "http://localhost:3000");
   assert.doesNotMatch(readFileSync(dockerLog, "utf8"), /compose|\bup\b|restart|stop/u);
   assert.throws(() => readFileSync(colimaLog, "utf8"), /ENOENT/u);
 });
@@ -618,4 +635,17 @@ test("RT-10 and RT-11: worktree exposure, labels, restart, and cleanup guards ar
   assert.match(worktreeCompose, /RUNTIME_VOLUME_CONFIG_DIGEST/u);
   assert.match(worktreeCompose, /RUNTIME_VOLUME_OWNER_SESSION_ID/u);
   assert.doesNotMatch(compose, /postgres-data:\n    labels:/u);
+});
+
+test("RT-12: web health wait has an explicit attempt cap and monotonic deadline", () => {
+  const wrapper = readFileSync(wrapperPath, "utf8");
+  const start = wrapper.indexOf("wait_for_runtime_health() {");
+  const end = wrapper.indexOf("\nensure_runtime_db_ready() {", start);
+  assert.ok(start >= 0 && end > start);
+  const waitFunction = wrapper.slice(start, end);
+  assert.match(waitFunction, /local deadline=\$\(\( SECONDS \+ 60 \)\)/u);
+  assert.match(waitFunction, /for attempt in \{1\.\.60\}/u);
+  assert.match(waitFunction, /\(\( SECONDS < deadline \)\) \|\| break\s+sleep 1/u);
+  assert.equal((waitFunction.match(/sleep 1/gu) ?? []).length, 1);
+  assert.match(waitFunction, /did not become healthy[\s\S]*return 1/u);
 });

@@ -2,7 +2,13 @@ import { ParityRunError, sha256Digest, stableNormalize } from "./parity-runner-c
 
 const defaultTimeouts = Object.freeze({
   actionMs: 5_000,
+  cleanupMs: 2_000,
+  cleanupPollMs: 100,
   navigationMs: 10_000,
+});
+const defaultClock = Object.freeze({
+  now: () => globalThis.performance.now(),
+  sleep: (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
 });
 const performanceEntryLimits = Object.freeze({
   entries: 500,
@@ -34,6 +40,23 @@ const cdpCommandRejectedMessage =
 
 function fail(code, message, evidence) {
   throw new ParityRunError(code, message, evidence);
+}
+
+async function runWithDeadline(operation, timeoutMs, { code, message, evidence, onTimeout }) {
+  let timer;
+  try {
+    return await new Promise((resolve, reject) => {
+      timer = setTimeout(() => {
+        onTimeout?.();
+        reject(new ParityRunError(code, message, evidence));
+      }, timeoutMs);
+      Promise.resolve()
+        .then(operation)
+        .then(resolve, reject);
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function cdpUnavailableEvidence({ operation, cdpAdvertised, cdpAcquired }) {
@@ -296,12 +319,14 @@ async function compactProjectionSnapshot(
   };
 }
 
-function createInAppBrowserParityAdapter({
+function createSingleTabParityAdapter({
   browser,
   tab,
   expectedDpr = 1,
   timeouts = {},
+  clock = defaultClock,
   artifactSink,
+  sharedViewportState,
 }) {
   requireObject(browser, "browser");
   requireObject(tab, "tab");
@@ -310,22 +335,37 @@ function createInAppBrowserParityAdapter({
   }
   const comparisonTabId = tab.id;
   const resolvedTimeouts = { ...defaultTimeouts, ...timeouts };
+  const resolvedClock = { ...defaultClock, ...clock };
+  for (const field of ["actionMs", "cleanupMs", "cleanupPollMs", "navigationMs"]) {
+    if (!Number.isFinite(resolvedTimeouts[field]) || resolvedTimeouts[field] < 0) {
+      fail("PARITY_UNEXPECTED_ERROR", `${field} must be a non-negative finite number`);
+    }
+  }
+  if (resolvedTimeouts.cleanupPollMs === 0) {
+    fail("PARITY_UNEXPECTED_ERROR", "cleanupPollMs must be greater than zero");
+  }
+  if (typeof resolvedClock.now !== "function" || typeof resolvedClock.sleep !== "function") {
+    fail("PARITY_UNEXPECTED_ERROR", "clock must provide now() and sleep()");
+  }
   if (artifactSink !== undefined && typeof artifactSink !== "function") {
     fail("PARITY_ARTIFACT_SINK_UNAVAILABLE", "artifactSink must be a function");
   }
   const state = {
     cdp: undefined,
     cdpOrigin: undefined,
-    viewport: undefined,
-    requestedViewport: undefined,
     deviceMetricsApplied: false,
-    viewportApplied: false,
-    initialViewport: undefined,
     consoleBaseline: undefined,
     currentOrigin: undefined,
     networkCursor: undefined,
     networkEnabled: false,
     cleanupResult: undefined,
+    navigationTimedOut: false,
+  };
+  const viewportState = sharedViewportState ?? {
+    viewport: undefined,
+    requestedViewport: undefined,
+    viewportApplied: false,
+    initialViewport: undefined,
   };
 
   async function storeArtifact({ probe, context, content, mediaType }) {
@@ -360,7 +400,18 @@ function createInAppBrowserParityAdapter({
     return requireTabId(await browser.tabs.selected(), comparisonTabId);
   }
 
+  function requireUsableAdapter() {
+    if (state.navigationTimedOut) {
+      fail(
+        "PARITY_NAVIGATION_TIMEOUT",
+        "comparison tab is quarantined after a navigation timeout",
+        { operation: "adapter-reuse" },
+      );
+    }
+  }
+
   async function comparisonTab(requestedTabId) {
+    requireUsableAdapter();
     if (requestedTabId !== comparisonTabId) {
       fail(
         "PARITY_SELECTED_TAB_DRIFT",
@@ -368,17 +419,107 @@ function createInAppBrowserParityAdapter({
       );
     }
     await selectedTab();
+    if (state.cleanupResult?.status === "pass") {
+      state.cleanupResult = undefined;
+      if (!sharedViewportState || viewportState.needsRunReset === true) {
+        viewportState.initialViewport = undefined;
+        viewportState.requestedViewport = undefined;
+        viewportState.needsRunReset = false;
+      }
+    }
     return tab;
   }
 
+  async function stabilizeContext(requestedTabId, context) {
+    await comparisonTab(requestedTabId);
+    const descriptor = requireObject(context, "surface context");
+    if (descriptor.surface !== "production" && descriptor.surface !== "prototype") {
+      fail(
+        "PARITY_ORIGIN_CONTEXT_INVALID",
+        "surface context must identify production or prototype",
+        { operation: "stabilizeContext" },
+      );
+    }
+    if (
+      typeof descriptor.authorizationProfile !== "string" ||
+      descriptor.authorizationProfile.trim() === "" ||
+      descriptor.authorizationProfile === "unknown" ||
+      descriptor.authorizationProfile.length > 128 ||
+      /[\u0000-\u001f\u007f]/u.test(descriptor.authorizationProfile)
+    ) {
+      fail(
+        "PARITY_AUTHORIZATION_PROFILE_REQUIRED",
+        "surface context requires a bounded authorization profile name",
+        { operation: "stabilizeContext", surface: descriptor.surface },
+      );
+    }
+    let requestedOrigin;
+    try {
+      const parsed = new URL(descriptor.origin);
+      if (
+        (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+        parsed.origin !== descriptor.origin
+      ) {
+        throw new TypeError("origin must be canonical");
+      }
+      requestedOrigin = parsed.origin;
+    } catch {
+      fail(
+        "PARITY_ORIGIN_CONTEXT_INVALID",
+        "surface context requires a canonical HTTP(S) origin",
+        { operation: "stabilizeContext", surface: descriptor.surface },
+      );
+    }
+
+    // Bootstrap the Browser capability through the same cached path used by
+    // setViewport. Context stabilization must not add a navigation: the row's
+    // normal prepareSurface navigation remains the single origin transition.
+    await getViewportCapability();
+    const currentUrl = await tab.url();
+    await comparisonTab(requestedTabId);
+    if (typeof currentUrl !== "string" || currentUrl === "") {
+      fail(
+        "PARITY_CURRENT_STATE_DRIFT",
+        "surface context URL readback is unavailable",
+        { operation: "stabilizeContext", surface: descriptor.surface },
+      );
+    }
+    let currentOrigin;
+    try {
+      currentOrigin = new URL(currentUrl).origin;
+    } catch {
+      fail(
+        "PARITY_CURRENT_STATE_DRIFT",
+        "surface context URL readback is invalid",
+        { operation: "stabilizeContext", surface: descriptor.surface },
+      );
+    }
+    if (state.currentOrigin !== undefined && currentOrigin !== state.currentOrigin) {
+      fail(
+        "PARITY_CURRENT_STATE_DRIFT",
+        "surface context origin changed outside the Browser adapter",
+        { operation: "stabilizeContext", surface: descriptor.surface },
+      );
+    }
+    return {
+      surface: descriptor.surface,
+      requestedOrigin,
+      currentOrigin,
+      requiresNavigation: currentOrigin !== requestedOrigin,
+      authorizationProfileDigest: await sha256Digest(
+        `parity:authorization-profile:v1\0${descriptor.authorizationProfile}`,
+      ),
+    };
+  }
+
   async function getViewportCapability() {
-    if (state.viewport) return state.viewport;
+    if (viewportState.viewport) return viewportState.viewport;
     try {
       const advertised = await browser.capabilities.list();
       if (!advertised.some((entry) => (typeof entry === "string" ? entry : entry?.id) === "viewport")) {
         fail("PARITY_VIEWPORT_CAPABILITY_UNAVAILABLE", "Browser viewport capability is not advertised");
       }
-      state.viewport = await browser.capabilities.get("viewport");
+      viewportState.viewport = await browser.capabilities.get("viewport");
     } catch (error) {
       if (error instanceof ParityRunError) throw error;
       fail(
@@ -387,10 +528,13 @@ function createInAppBrowserParityAdapter({
         { operation: "browser.capabilities.viewport" },
       );
     }
-    if (typeof state.viewport?.set !== "function" || typeof state.viewport?.reset !== "function") {
+    if (
+      typeof viewportState.viewport?.set !== "function" ||
+      typeof viewportState.viewport?.reset !== "function"
+    ) {
       fail("PARITY_VIEWPORT_CAPABILITY_UNAVAILABLE", "Browser viewport capability is incomplete");
     }
-    return state.viewport;
+    return viewportState.viewport;
   }
 
   async function getCdpCapability() {
@@ -632,7 +776,18 @@ function createInAppBrowserParityAdapter({
 
   async function navigateAndVerify(requestedTabId, url) {
     await comparisonTab(requestedTabId);
-    await tab.goto(url);
+    await runWithDeadline(
+      () => tab.goto(url),
+      resolvedTimeouts.navigationMs,
+      {
+        code: "PARITY_NAVIGATION_TIMEOUT",
+        message: "comparison tab navigation exceeded the bounded deadline",
+        evidence: { operation: "tab.goto", timeoutMs: resolvedTimeouts.navigationMs },
+        onTimeout: () => {
+          state.navigationTimedOut = true;
+        },
+      },
+    );
     await comparisonTab(requestedTabId);
     await tab.playwright.waitForLoadState({
       state: "domcontentloaded",
@@ -667,15 +822,15 @@ function createInAppBrowserParityAdapter({
   }
 
   async function assertRequestedViewport(requestedTabId) {
-    if (!state.requestedViewport) return undefined;
+    if (!viewportState.requestedViewport) return undefined;
     const measured = await measureViewport(requestedTabId);
     if (
-      measured?.width !== state.requestedViewport.width ||
-      measured?.height !== state.requestedViewport.height
+      measured?.width !== viewportState.requestedViewport.width ||
+      measured?.height !== viewportState.requestedViewport.height
     ) {
       fail(
         "PARITY_VIEWPORT_MISMATCH",
-        `viewport mismatch after navigation: expected ${state.requestedViewport.width}x${state.requestedViewport.height}`,
+        `viewport mismatch after navigation: expected ${viewportState.requestedViewport.width}x${viewportState.requestedViewport.height}`,
       );
     }
     if (measured.dpr !== expectedDpr) {
@@ -745,8 +900,9 @@ function createInAppBrowserParityAdapter({
       return state.cleanupResult;
     }
     const errors = [];
+    if (state.navigationTimedOut) errors.push("comparison tab remains quarantined after navigation timeout");
     let cdpCleared = !state.deviceMetricsApplied;
-    let viewportReset = !state.viewportApplied;
+    let viewportReset = !viewportState.viewportApplied;
     if (state.networkEnabled) {
       if (!state.cdp) {
         errors.push("active CDP network observation has no capability to disable");
@@ -772,28 +928,51 @@ function createInAppBrowserParityAdapter({
         }
       }
     }
-    if (state.viewportApplied && state.viewport) {
+    if (viewportState.viewportApplied && viewportState.viewport) {
       try {
-        await state.viewport.reset();
+        await viewportState.viewport.reset();
         viewportReset = true;
       } catch {
         errors.push("viewport reset failed");
       }
     }
     state.deviceMetricsApplied = !cdpCleared;
-    state.viewportApplied = !viewportReset;
+    viewportState.viewportApplied = !viewportReset;
+    const cleanupStartedAt = resolvedClock.now();
+    const cleanupDeadline = cleanupStartedAt + resolvedTimeouts.cleanupMs;
     let readback;
-    try {
-      readback = await measureViewport(comparisonTabId);
-    } catch {
-      errors.push("cleanup readback failed");
-    }
-    if (
-      state.initialViewport &&
-      (readback?.width !== state.initialViewport.width ||
-        readback?.height !== state.initialViewport.height ||
-        readback?.dpr !== state.initialViewport.dpr)
+    let readbackFailed = false;
+    const baselineRestored = () =>
+      !viewportState.initialViewport ||
+      (readback?.width === viewportState.initialViewport.width &&
+        readback?.height === viewportState.initialViewport.height &&
+        readback?.dpr === viewportState.initialViewport.dpr);
+    const measureCleanupReadback = async () => {
+      try {
+        await selectedTab();
+        readback = await tab.playwright.evaluate(() => ({
+          width: window.innerWidth,
+          height: window.innerHeight,
+          dpr: window.devicePixelRatio,
+        }));
+        readbackFailed = false;
+      } catch {
+        readback = undefined;
+        readbackFailed = true;
+      }
+    };
+    await measureCleanupReadback();
+    while (
+      errors.length === 0 &&
+      (readbackFailed || !baselineRestored()) &&
+      resolvedClock.now() < cleanupDeadline
     ) {
+      const remaining = cleanupDeadline - resolvedClock.now();
+      await resolvedClock.sleep(Math.min(resolvedTimeouts.cleanupPollMs, remaining));
+      await measureCleanupReadback();
+    }
+    if (readbackFailed) errors.push("cleanup readback failed");
+    else if (!baselineRestored()) {
       errors.push("cleanup readback did not restore the initial viewport and DPR");
     }
     state.cleanupResult = {
@@ -801,7 +980,7 @@ function createInAppBrowserParityAdapter({
       tabId: comparisonTabId,
       cdpCleared,
       viewportReset,
-      baseline: state.initialViewport,
+      baseline: viewportState.initialViewport,
       readback,
     };
     if (errors.length > 0) fail("PARITY_CLEANUP_FAILED", errors.join("; "), state.cleanupResult);
@@ -812,28 +991,49 @@ function createInAppBrowserParityAdapter({
     requiresBrowserSetups: true,
     sessionId: browser.browserId ?? "iab",
     comparisonTabId,
+    async activateOwnedTab(requestedTabId) {
+      requireUsableAdapter();
+      if (requestedTabId !== comparisonTabId) {
+        fail(
+          "PARITY_SELECTED_TAB_DRIFT",
+          `adapter is bound to ${comparisonTabId}, received ${requestedTabId}`,
+        );
+      }
+      const selected = await browser.tabs.selected();
+      if (selected?.id !== comparisonTabId) {
+        const cdp = await getCdpCapability();
+        try {
+          await cdp.send("Page.bringToFront");
+        } catch {
+          fail(
+            "PARITY_SELECTED_TAB_DRIFT",
+            "owned comparison tab could not be activated",
+            { operation: "cdp.send", command: "Page.bringToFront" },
+          );
+        }
+      }
+      await selectedTab();
+    },
     async activateTab(requestedTabId) {
       await comparisonTab(requestedTabId);
     },
     async activeTabId() {
       return (await browser.tabs.selected())?.id;
     },
+    stabilizeContext,
     async setViewport(requestedTabId, viewport) {
       await comparisonTab(requestedTabId);
       if (state.cleanupResult?.status === "fail") {
         fail("PARITY_CLEANUP_FAILED", "a failed Browser cleanup prevents adapter reuse", state.cleanupResult);
       }
-      if (state.cleanupResult?.status === "pass") {
-        state.cleanupResult = undefined;
-        state.initialViewport = undefined;
-        state.requestedViewport = undefined;
+      if (!viewportState.initialViewport) {
+        viewportState.initialViewport = await measureViewport(requestedTabId);
       }
-      if (!state.initialViewport) state.initialViewport = await measureViewport(requestedTabId);
-      state.requestedViewport = { width: viewport.width, height: viewport.height };
+      viewportState.requestedViewport = { width: viewport.width, height: viewport.height };
       const viewportCapability = await getViewportCapability();
       // The capability may apply the override before rejecting its promise. Mark
       // cleanup as necessary before crossing that external API boundary.
-      state.viewportApplied = true;
+      viewportState.viewportApplied = true;
       try {
         await viewportCapability.set({ width: viewport.width, height: viewport.height });
       } catch {
@@ -843,7 +1043,7 @@ function createInAppBrowserParityAdapter({
           { operation: "viewport.set" },
         );
       }
-      await applyDeviceMetricsOverride(state.requestedViewport);
+      await applyDeviceMetricsOverride(viewportState.requestedViewport);
     },
     measureViewport,
     async navigate(requestedTabId, url) {
@@ -851,9 +1051,11 @@ function createInAppBrowserParityAdapter({
       await advanceNetworkCursor();
       const targetOrigin = new URL(url).origin;
       const changesObservedOrigin =
-        state.currentOrigin !== undefined &&
-        state.currentOrigin !== targetOrigin &&
-        (state.cdp !== undefined || state.deviceMetricsApplied || state.networkEnabled);
+        (state.cdp !== undefined && state.cdpOrigin !== targetOrigin) ||
+        (state.currentOrigin !== undefined &&
+          state.currentOrigin !== targetOrigin &&
+          (state.deviceMetricsApplied || state.networkEnabled));
+      await captureConsoleBaseline();
       if (changesObservedOrigin) {
         const restoreNetworkObservation = state.networkEnabled;
         await disableNetworkObservationForOriginChange();
@@ -862,14 +1064,14 @@ function createInAppBrowserParityAdapter({
         state.currentOrigin = targetOrigin;
         state.cdp = undefined;
         state.cdpOrigin = undefined;
-        if (state.requestedViewport) {
-          await applyDeviceMetricsOverride(state.requestedViewport);
+        if (viewportState.requestedViewport) {
+          await applyDeviceMetricsOverride(viewportState.requestedViewport);
           await assertRequestedViewport(requestedTabId);
         }
         if (restoreNetworkObservation) await enableNetworkObservation();
+      } else {
+        await navigateAndVerify(requestedTabId, url);
       }
-      await captureConsoleBaseline();
-      await navigateAndVerify(requestedTabId, url);
       state.currentOrigin = targetOrigin;
       await assertRequestedViewport(requestedTabId);
     },
@@ -1490,6 +1692,138 @@ function createInAppBrowserParityAdapter({
     },
     cleanup,
   };
+  return guardAdapterOperations(adapter);
+}
+
+const routedTabOperations = Object.freeze([
+  "stabilizeContext",
+  "setViewport",
+  "measureViewport",
+  "navigate",
+  "setTheme",
+  "runAction",
+  "runProbe",
+  "measureScroll",
+  "performanceEntries",
+  "networkEntries",
+  "screenshotDigest",
+]);
+
+function createInAppBrowserParityAdapter(options) {
+  const descriptor = requireObject(options, "adapter options");
+  const { browser, tab, tabs, ...sharedOptions } = descriptor;
+  requireObject(browser, "browser");
+  if (tabs === undefined) {
+    return createSingleTabParityAdapter({ browser, tab, ...sharedOptions });
+  }
+
+  const surfaceTabs = requireObject(tabs, "surface tabs");
+  const productionTab = requireObject(surfaceTabs.production, "production tab");
+  const prototypeTab = requireObject(surfaceTabs.prototype, "prototype tab");
+  for (const [surface, surfaceTab] of [
+    ["production", productionTab],
+    ["prototype", prototypeTab],
+  ]) {
+    if (typeof surfaceTab.id !== "string" || surfaceTab.id === "") {
+      fail("PARITY_COMPARISON_TAB_REQUIRED", `${surface} tab must have a stable id`);
+    }
+  }
+  if (productionTab.id === prototypeTab.id) {
+    fail(
+      "PARITY_COMPARISON_TAB_REQUIRED",
+      "production and prototype require distinct comparison tabs",
+    );
+  }
+
+  const sharedViewportState = {
+    viewport: undefined,
+    requestedViewport: undefined,
+    viewportApplied: false,
+    initialViewport: undefined,
+    needsRunReset: false,
+  };
+  const tabAdapters = new Map(
+    [productionTab, prototypeTab].map((surfaceTab) => [
+      surfaceTab.id,
+      createSingleTabParityAdapter({
+        browser,
+        tab: surfaceTab,
+        ...sharedOptions,
+        sharedViewportState,
+      }),
+    ]),
+  );
+  let activeTabId;
+
+  function activeAdapter(requestedTabId) {
+    const selected = tabAdapters.get(requestedTabId);
+    if (!selected) {
+      fail(
+        "PARITY_SELECTED_TAB_DRIFT",
+        `comparison tab is not owned by this adapter: ${requestedTabId}`,
+      );
+    }
+    if (activeTabId !== requestedTabId) {
+      fail(
+        "PARITY_SELECTED_TAB_DRIFT",
+        `logical tab mismatch; expected ${activeTabId ?? "none"}, received ${requestedTabId}`,
+      );
+    }
+    return selected;
+  }
+
+  const adapter = {
+    requiresBrowserSetups: true,
+    sessionId: browser.browserId ?? "iab",
+    comparisonTabId: productionTab.id,
+    comparisonTabIds: {
+      production: productionTab.id,
+      prototype: prototypeTab.id,
+    },
+    async activateTab(requestedTabId) {
+      const selected = tabAdapters.get(requestedTabId);
+      if (!selected) {
+        fail(
+          "PARITY_SELECTED_TAB_DRIFT",
+          `comparison tab is not owned by this adapter: ${requestedTabId}`,
+        );
+      }
+      await selected.activateOwnedTab(requestedTabId);
+      activeTabId = requestedTabId;
+    },
+    async activeTabId() {
+      return (await browser.tabs.selected())?.id;
+    },
+    async cleanup() {
+      const results = [];
+      const failedTabIds = [];
+      for (const [tabId, selected] of tabAdapters) {
+        try {
+          await selected.activateOwnedTab(tabId);
+          activeTabId = tabId;
+          results.push(await selected.cleanup());
+        } catch (error) {
+          failedTabIds.push({
+            tabId,
+            code: error instanceof ParityRunError ? error.code : "PARITY_UNEXPECTED_ERROR",
+          });
+        }
+      }
+      if (failedTabIds.length > 0) {
+        fail("PARITY_CLEANUP_FAILED", "one or more comparison tabs failed cleanup", {
+          status: "fail",
+          tabs: results,
+          failedTabIds,
+        });
+      }
+      sharedViewportState.needsRunReset = true;
+      return { status: "pass", tabs: results };
+    },
+  };
+  for (const operation of routedTabOperations) {
+    adapter[operation] = async (requestedTabId, ...args) =>
+      activeAdapter(requestedTabId)[operation](requestedTabId, ...args);
+  }
   return guardAdapterOperations(adapter);
 }
 

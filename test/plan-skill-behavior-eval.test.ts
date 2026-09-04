@@ -20,9 +20,17 @@ type EvaluatorModule = {
   assertConfirmationHandoffSkillContracts(root?: string): Promise<void>;
   assertCoverageDrivenSkillContracts(root?: string): Promise<void>;
   codexEnvironment(): Record<string, string>;
-  executeScenario(name: string): Promise<void>;
+  executeScenario(name: string): Promise<{ name: string; status: string; durationMs: number }>;
+  failedScenariosFromManifest(manifest: unknown): string[];
   fixtureGitEnvironment(): Record<string, string>;
   gradePreparedScenario(fixture: PreparedFixture, final: string): Promise<void>;
+  parseArguments(argv: string[]): {
+    selected: string[];
+    all: boolean;
+    affectedFrom?: string;
+    resume?: string;
+    concurrency: 1 | 2;
+  };
   prepareScenario(
     name: string,
     fixtureName?: string,
@@ -39,7 +47,14 @@ type EvaluatorModule = {
       trackDescendants?: boolean;
     },
   ): Promise<{ stdout: string; stderr: string }>;
-  scenarios: Record<string, unknown>;
+  runBounded<T, R>(items: T[], concurrency: 1 | 2, worker: (item: T, index: number) => Promise<R>): Promise<R[]>;
+  scenarios: Record<string, { affectedPaths?: string[]; [key: string]: unknown }>;
+  selectAffectedScenarios(paths: string[]): string[];
+  writeResultManifest(
+    selection: Record<string, unknown>,
+    concurrency: 1 | 2,
+    results: Array<{ name: string; status: "pass" | "fail"; durationMs: number; errorCode?: string }>,
+  ): Promise<string>;
 };
 const evaluatorModulePromise = import(pathToFileURL(evaluator).href) as Promise<EvaluatorModule>;
 
@@ -47,7 +62,71 @@ async function temporaryEntries(prefix: string) {
   return (await readdir(tmpdir())).filter((entry) => entry.startsWith(prefix));
 }
 
-test("plan skill behavioral evalは実promptの9 scenarioを公開する", async () => {
+async function runWithInjectedCodexFailure(rawFailure: string) {
+  const fakeBin = await mkdtemp(path.join(tmpdir(), "plan-eval-retryable-bin-"));
+  const fakeCodex = path.join(fakeBin, "codex");
+  try {
+    await writeFile(
+      fakeCodex,
+      `#!/usr/bin/env node
+if (process.argv.includes("--version")) {
+  process.stdout.write("codex-eval-fixture 1.0.0\\n");
+  process.exit(0);
+}
+process.stderr.write(${JSON.stringify(rawFailure)});
+process.exit(1);
+`,
+    );
+    await chmod(fakeCodex, 0o755);
+    try {
+      await execFileAsync(
+        process.execPath,
+        [evaluator, "--scenario", "plan-canonical", "--concurrency", "2"],
+        {
+          cwd: root,
+          env: { ...process.env, PATH: `${fakeBin}${path.delimiter}${process.env.PATH ?? ""}` },
+        },
+      );
+      assert.fail("retryable evaluator fixture unexpectedly succeeded");
+    } catch (error) {
+      assert.ok(error && typeof error === "object" && "stdout" in error && "stderr" in error);
+      return {
+        stdout: String(error.stdout),
+        stderr: String(error.stderr),
+      };
+    }
+  } finally {
+    await rm(fakeBin, { recursive: true, force: true });
+  }
+}
+
+async function assertRetryableFailure(
+  context: { after(callback: () => void | Promise<void>): void },
+  rawFailure: string,
+  expectedCode: "RATE_LIMIT" | "RESOURCE_PRESSURE",
+  privateMarker: string,
+) {
+  const failure = await runWithInjectedCodexFailure(rawFailure);
+  const manifestMatch = /^RESULT_MANIFEST=(.+)$/mu.exec(failure.stdout);
+  assert.ok(manifestMatch);
+  const resultPath = manifestMatch[1];
+  context.after(() => rm(path.dirname(resultPath), { recursive: true, force: true }));
+  await access(resultPath);
+  const manifestText = await readFile(resultPath, "utf8");
+  const manifest = JSON.parse(manifestText);
+  assert.equal(manifest.results[0].errorCode, expectedCode);
+  assert.match(failure.stderr, new RegExp(`FAIL plan-canonical ${expectedCode}`, "u"));
+  assert.match(
+    failure.stderr,
+    new RegExp(
+      `node scripts/eval-plan-skills\\.mjs --resume ${resultPath.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")} --concurrency 1`,
+      "u",
+    ),
+  );
+  assert.doesNotMatch(`${failure.stdout}\n${failure.stderr}\n${manifestText}`, new RegExp(privateMarker, "u"));
+}
+
+test("plan skill behavioral evalは実promptの12 scenarioを公開する", async () => {
   const { stdout } = await execFileAsync(process.execPath, [evaluator, "--list"], { cwd: root });
   assert.deepEqual(stdout.trim().split("\n"), [
     "plan-canonical",
@@ -59,7 +138,46 @@ test("plan skill behavioral evalは実promptの9 scenarioを公開する", async
     "implement-browser-gate",
     "implement-browser-capability-failure",
     "review-ui-gate",
+    "workflow-performance-audit-bottleneck",
+    "workflow-performance-audit-no-bottleneck",
+    "workflow-performance-audit-insufficient-data",
   ]);
+});
+
+test("workflow audit eval fixtureはcanonical session IDと1:1 tool相関を実analyzerで検証する", async (context) => {
+  const evaluatorModule = await evaluatorModulePromise;
+  const fixtures = await Promise.all([
+    evaluatorModule.prepareScenario("workflow-performance-audit-bottleneck", `audit-contract-bottleneck-${process.pid}`),
+    evaluatorModule.prepareScenario("workflow-performance-audit-no-bottleneck", `audit-contract-clean-${process.pid}`),
+  ]);
+  context.after(() => Promise.all(fixtures.map(({ fixtureRoot }) => rm(fixtureRoot, { recursive: true, force: true }))));
+  const canonicalUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-8[0-9a-f]{3}-[0-9a-f]{12}$/u;
+
+  for (const fixture of fixtures) {
+    const sessionsRoot = path.join(fixture.repo, "audit-fixtures", "sessions");
+    for (const filename of await readdir(sessionsRoot)) {
+      const records = (await readFile(path.join(sessionsRoot, filename), "utf8"))
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line));
+      const sessionMeta = records.find(({ type }) => type === "session_meta");
+      assert.match(sessionMeta.payload.id, canonicalUuid);
+      const calls = records
+        .filter(({ type, payload }) => type === "response_item" && payload.type === "custom_tool_call")
+        .map(({ payload }) => payload.call_id)
+        .sort();
+      const items = records
+        .filter(({ type, payload }) => type === "event_msg" && payload.type === "item_completed" && payload.item?.type === "CommandExecution")
+        .map(({ payload }) => payload.item.id)
+        .sort();
+      const outputs = records
+        .filter(({ type, payload }) => type === "response_item" && payload.type === "custom_tool_call_output")
+        .map(({ payload }) => payload.call_id)
+        .sort();
+      assert.deepEqual(items, calls);
+      assert.deepEqual(outputs, calls);
+    }
+  }
 });
 
 test("plan skill behavioral evalはsymlink経由のCLI起動でもmainを実行する", async (context) => {
@@ -82,7 +200,132 @@ test("plan skill behavioral evalはsymlink経由のCLI起動でもmainを実行�
     "implement-browser-gate",
     "implement-browser-capability-failure",
     "review-ui-gate",
+    "workflow-performance-audit-bottleneck",
+    "workflow-performance-audit-no-bottleneck",
+    "workflow-performance-audit-insufficient-data",
   ]);
+});
+
+test("forward evalは変更pathから関連scenarioだけを選び、共通契約変更では全scenarioを選ぶ", async () => {
+  const evaluatorModule = await evaluatorModulePromise;
+  for (const scenario of Object.values(evaluatorModule.scenarios)) {
+    assert.ok((scenario.affectedPaths?.length ?? 0) > 0);
+  }
+  assert.deepEqual(
+    evaluatorModule.selectAffectedScenarios([".agents/skills/review/references/review-contract.md"]),
+    ["review-ui-gate"],
+  );
+  assert.deepEqual(
+    evaluatorModule.selectAffectedScenarios(["app/styles/ui-foundation.css"]),
+    ["plan-ui-revision", "implement-related-source-drift"],
+  );
+  assert.deepEqual(
+    evaluatorModule.selectAffectedScenarios(["docs/development/codex-development-workflow.md"]),
+    Object.keys(evaluatorModule.scenarios),
+  );
+  assert.deepEqual(evaluatorModule.selectAffectedScenarios(["README.md"]), []);
+});
+
+test("forward evalのCLIは明示選択、affected、resume、allを排他的に扱う", async () => {
+  const evaluatorModule = await evaluatorModulePromise;
+  assert.deepEqual(
+    evaluatorModule.parseArguments(["--scenario", "plan-canonical", "--concurrency", "1"]).selected,
+    ["plan-canonical"],
+  );
+  assert.equal(
+    evaluatorModule.parseArguments(["--affected-from", "develop"]).affectedFrom,
+    "develop",
+  );
+  assert.equal(evaluatorModule.parseArguments(["--resume", "/tmp/result.json"]).resume, "/tmp/result.json");
+  assert.equal(evaluatorModule.parseArguments(["--all"]).all, true);
+  assert.throws(() => evaluatorModule.parseArguments([]), /choose one of/u);
+  assert.throws(
+    () => evaluatorModule.parseArguments(["--all", "--scenario", "plan-canonical"]),
+    /choose exactly one/u,
+  );
+  assert.throws(
+    () => evaluatorModule.parseArguments(["--all", "--concurrency", "3"]),
+    /--concurrency must be 1 or 2/u,
+  );
+});
+
+test("forward evalは独立workを最大2並列で実行し、結果順を固定する", async () => {
+  const evaluatorModule = await evaluatorModulePromise;
+  let active = 0;
+  let maximum = 0;
+  const results = await evaluatorModule.runBounded([0, 1, 2, 3], 2, async (value) => {
+    active += 1;
+    maximum = Math.max(maximum, active);
+    await delay(value % 2 === 0 ? 20 : 5);
+    active -= 1;
+    return `result-${value}`;
+  });
+  assert.equal(maximum, 2);
+  assert.deepEqual(results, ["result-0", "result-1", "result-2", "result-3"]);
+});
+
+test("forward eval result manifestは失敗scenarioだけをresumeし、raw errorを保存しない", async (context) => {
+  const evaluatorModule = await evaluatorModulePromise;
+  const resultPath = await evaluatorModule.writeResultManifest(
+    { mode: "all", names: ["plan-canonical", "review-ui-gate"] },
+    2,
+    [
+      { name: "plan-canonical", status: "pass", durationMs: 10 },
+      { name: "review-ui-gate", status: "fail", durationMs: 20, errorCode: "raw error secret" },
+    ],
+  );
+  context.after(() => rm(path.dirname(resultPath), { recursive: true, force: true }));
+  const manifestText = await readFile(resultPath, "utf8");
+  const manifest = JSON.parse(manifestText);
+  assert.deepEqual(evaluatorModule.failedScenariosFromManifest(manifest), ["review-ui-gate"]);
+  assert.equal(manifest.results[1].errorCode, "SCENARIO_FAILED");
+  assert.doesNotMatch(manifestText, /stack|stderr|prompt|raw error/iu);
+  assert.throws(
+    () => evaluatorModule.failedScenariosFromManifest({
+      schemaVersion: 1,
+      results: [
+        { name: "plan-canonical", status: "fail" },
+        { name: "plan-canonical", status: "fail" },
+      ],
+    }),
+    /duplicate scenario/u,
+  );
+});
+
+test("forward evalはrate limitを安全なcategoryで保持し、実在manifestの直列resume commandを返す", async (context) => {
+  await assertRetryableFailure(
+    context,
+    "HTTP 429 Too Many Requests RATE_LIMIT_PRIVATE_DETAIL\n",
+    "RATE_LIMIT",
+    "RATE_LIMIT_PRIVATE_DETAIL",
+  );
+});
+
+test("forward evalはresource pressureを安全なcategoryで保持し、実在manifestの直列resume commandを返す", async (context) => {
+  await assertRetryableFailure(
+    context,
+    "resource pressure: cannot allocate memory RESOURCE_PRIVATE_DETAIL\n",
+    "RESOURCE_PRESSURE",
+    "RESOURCE_PRIVATE_DETAIL",
+  );
+});
+
+test("forward evalの並列fixtureはrepositoryとartifact pathを共有しない", async (context) => {
+  const evaluatorModule = await evaluatorModulePromise;
+  const fixtures = await Promise.all([
+    evaluatorModule.prepareScenario("plan-canonical", `parallel-a-${process.pid}`),
+    evaluatorModule.prepareScenario("plan-ui-revision", `parallel-b-${process.pid}`),
+  ]);
+  context.after(() => Promise.all(fixtures.map(({ fixtureRoot }) => rm(fixtureRoot, { recursive: true, force: true }))));
+  assert.notEqual(fixtures[0].fixtureRoot, fixtures[1].fixtureRoot);
+  assert.notEqual(fixtures[0].repo, fixtures[1].repo);
+  const isolatedArtifact = "plans/parallel-check/prototype/ui-contract.json";
+  await writeFile(path.join(fixtures[1].repo, "parallel-owner.txt"), isolatedArtifact);
+  await access(path.join(fixtures[1].repo, "parallel-owner.txt"));
+  await assert.rejects(
+    access(path.join(fixtures[0].repo, "parallel-owner.txt")),
+    { code: "ENOENT" },
+  );
 });
 
 test("plan skill behavioral evalのartifact graderはpositive/negative controlを判別する", async () => {
@@ -90,7 +333,38 @@ test("plan skill behavioral evalのartifact graderはpositive/negative control�
     cwd: root,
     timeout: 180_000,
   });
-  assert.match(stdout, /self-test passed: 9 scenarios/);
+  assert.match(stdout, /self-test passed: 12 scenarios/);
+});
+
+test("version 3のUI eval fixtureは各rowでcontract IDと同名のrequired probeを対応する", async (context) => {
+  const evaluatorModule = await evaluatorModulePromise;
+  const fixture = await evaluatorModule.prepareScenario(
+    "plan-ui-revision",
+    `explicit-contract-probe-map-${process.pid}`,
+  );
+  context.after(() => rm(fixture.fixtureRoot, { recursive: true, force: true }));
+  await fixture.scenario.simulate(fixture.repo);
+  const prototypeRoot = path.join(fixture.repo, "plans", "plan-ui-revision", "prototype");
+  const contract = JSON.parse(await readFile(path.join(prototypeRoot, "ui-contract.json"), "utf8"));
+  const spec = JSON.parse(await readFile(path.join(prototypeRoot, "parity-spec.json"), "utf8"));
+  const probes = new Map(spec.probes.map((probe: { id: string }) => [probe.id, probe]));
+  assert.equal(probes.size, spec.probes.length);
+
+  for (const mapping of spec.rowProbeMap) {
+    const row = contract.parityMatrix.find(({ id }: { id: string }) => id === mapping.rowId);
+    assert.ok(row);
+    for (const [field, expectedMode] of [
+      ["expectedInvariantIds", "equal"],
+      ["intentionalDifferenceIds", "different"],
+    ] as const) {
+      for (const contractId of row[field]) {
+        const probe = probes.get(contractId) as { required: boolean; mode: string };
+        assert.equal(probe.required, true);
+        assert.equal(probe.mode, expectedMode);
+        assert.ok(mapping.probeIds.includes(contractId));
+      }
+    }
+  }
 });
 
 test("WF-EVAL-01 capability failure", async (context) => {

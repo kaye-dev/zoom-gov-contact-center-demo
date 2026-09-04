@@ -87,6 +87,7 @@ const browserSetupTypes = new Set(["query", "aria-switch", "fixed"]);
 const safeQueryParameter = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/u;
 const safeQueryValue = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 const safeFixtureValue = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/u;
+const safeAuthorizationProfile = /^[a-z][a-z0-9]*(?:[._ -][a-z0-9]+)*$/u;
 const sensitiveQueryParameter = /(?:auth(?:orization)?|cookie|credential|key|password|secret|session|token)/iu;
 
 function ensure(condition, message) {
@@ -109,6 +110,17 @@ function requireExactKeys(value, keys, label) {
 
 function requireNonEmptyString(value, label) {
   ensure(typeof value === "string" && value.trim() !== "", `${label} must be a non-empty string`);
+  return value;
+}
+
+function requireAuthorizationProfile(value, label) {
+  ensure(
+    typeof value === "string" &&
+      value.length <= 128 &&
+      value !== "unknown" &&
+      safeAuthorizationProfile.test(value),
+    `${label} must be a sanitized authorization profile name`,
+  );
   return value;
 }
 
@@ -452,6 +464,10 @@ function validateParitySpec(spec, contract) {
   ensure(isPlainObject(contract), "ui-contract.json must contain an object");
   ensure(Array.isArray(contract.comparisonTargets), "ui-contract.json comparisonTargets must be an array");
   ensure(Array.isArray(contract.parityMatrix), "ui-contract.json parityMatrix must be an array");
+  requireAuthorizationProfile(
+    contract?.comparisonConditions?.authorization,
+    "ui-contract.json comparisonConditions.authorization",
+  );
 
   const targetIds = new Set(contract.comparisonTargets.map(({ id }) => id));
   const requiredTargetStates = new Set(
@@ -525,6 +541,7 @@ function validateParitySpec(spec, contract) {
   const mappedRowIds = new Set();
   const usedProbeIds = new Set();
   const probeIdsByRow = new Map();
+  const contractRowById = new Map(contract.parityMatrix.map((row) => [row.id, row]));
   for (const [index, mapping] of spec.rowProbeMap.entries()) {
     const label = `rowProbeMap[${index}]`;
     requireExactKeys(mapping, ["rowId", "probeIds"], label);
@@ -537,6 +554,35 @@ function validateParitySpec(spec, contract) {
     for (const probeId of mappedProbeIds) {
       ensure(probeIds.has(probeId), `${label} references an unknown probe: ${probeId}`);
       usedProbeIds.add(probeId);
+    }
+    if (spec.version === 3) {
+      const contractRow = contractRowById.get(rowId);
+      const mappedProbeIdSet = new Set(mappedProbeIds);
+      for (const [field, expectedMode] of [
+        ["expectedInvariantIds", "equal"],
+        ["intentionalDifferenceIds", "different"],
+      ]) {
+        const contractIds = requireUniqueStrings(
+          contractRow?.[field],
+          `ui-contract.json row ${rowId}.${field}`,
+          { allowEmpty: field === "intentionalDifferenceIds" },
+        );
+        for (const contractId of contractIds) {
+          const probe = probeById.get(contractId);
+          ensure(
+            probe,
+            `${label} contract ID ${contractId} must have a same-ID probe`,
+          );
+          ensure(
+            mappedProbeIdSet.has(contractId),
+            `${label} contract ID ${contractId} must map its same-ID probe in probeIds`,
+          );
+          ensure(
+            probe.required === true && probe.mode === expectedMode,
+            `${label} contract ID ${contractId} must map a required ${expectedMode} same-ID probe`,
+          );
+        }
+      }
     }
   }
   ensure(
@@ -751,24 +797,39 @@ function selectRows({
   const includeAllBreakpoints = normalizedRisks.some((risk) => responsiveRiskTags.has(risk));
   const fallbackTheme = scopedRows.some(({ theme }) => theme === "light") ? "light" : scopedRows[0].theme;
   const selected = scopedRows.filter((row) => includeAllThemes || row.theme === fallbackTheme);
-  if (includeAllBreakpoints || viewports.size > 0) return selected;
-
-  const grouped = new Map();
-  for (const row of selected) {
-    const key = JSON.stringify([row.targetId, row.state, row.theme]);
-    const current = grouped.get(key) ?? [];
-    current.push(row);
-    grouped.set(key, current);
-  }
   const result = new Set();
-  for (const rows of grouped.values()) {
-    const parsed = rows.map((row) => ({ row, ...parseViewport(row.viewport) }));
-    const mobile = parsed.find(({ width, height }) => width === 390 && height === 844);
-    if (mobile) result.add(mobile.row.id);
-    const desktopRows = parsed.filter(({ width }) => width >= 1024);
-    const desktop = (desktopRows.length > 0 ? desktopRows : parsed)
-      .sort((left, right) => right.width - left.width || right.height - left.height)[0];
-    result.add(desktop.row.id);
+  if (includeAllBreakpoints || viewports.size > 0) {
+    for (const row of selected) result.add(row.id);
+  } else {
+    const grouped = new Map();
+    for (const row of selected) {
+      const key = JSON.stringify([row.targetId, row.state, row.theme]);
+      const current = grouped.get(key) ?? [];
+      current.push(row);
+      grouped.set(key, current);
+    }
+    for (const rows of grouped.values()) {
+      const parsed = rows.map((row) => ({ row, ...parseViewport(row.viewport) }));
+      const mobile = parsed.find(({ width, height }) => width === 390 && height === 844);
+      if (mobile) result.add(mobile.row.id);
+      const desktopRows = parsed.filter(({ width }) => width >= 1024);
+      const desktop = (desktopRows.length > 0 ? desktopRows : parsed)
+        .sort((left, right) => right.width - left.width || right.height - left.height)[0];
+      result.add(desktop.row.id);
+    }
+  }
+  if (spec?.version === 3) {
+    const rowByCoordinate = new Map(contract.parityMatrix.map((row) => [rowCoordinate(row), row]));
+    for (const risk of spec.coverage.riskRows) {
+      const row = rowByCoordinate.get(JSON.stringify([
+        risk.targetId,
+        risk.state,
+        risk.viewport,
+        risk.theme,
+      ]));
+      ensure(row, `risk row ${risk.id} does not resolve to a parity row`);
+      result.add(row.id);
+    }
   }
   return contract.parityMatrix.filter(({ id }) => result.has(id));
 }
@@ -975,6 +1036,24 @@ function compareProbe(probe, productionResult, prototypeResult) {
   }
   const production = normalizeProbeValue(probe, productionResult?.value);
   const prototype = normalizeProbeValue(probe, prototypeResult?.value);
+  if (probe.kind === "route") {
+    const bothMatch = production?.matches === true && prototype?.matches === true;
+    const pathnamesDiffer =
+      typeof production?.pathname === "string" &&
+      typeof prototype?.pathname === "string" &&
+      production.pathname !== prototype.pathname;
+    const passed = bothMatch && (probe.mode === "equal" || pathnamesDiffer);
+    return {
+      status: passed ? "pass" : "fail",
+      production,
+      prototype,
+      reason: passed
+        ? undefined
+        : probe.mode === "equal"
+          ? "both surfaces must match their declared routes"
+          : "both surfaces must match their declared routes and use different pathnames",
+    };
+  }
   let equal;
   if (probe.kind === "geometry") {
     equal = geometryMatches(production, prototype, probe.options.tolerancePx);
@@ -984,7 +1063,7 @@ function compareProbe(probe, productionResult, prototypeResult) {
   if (probe.kind === "visibility" && probe.mode === "equal") {
     equal = equal && production === probe.options.expected;
   }
-  if (["route", "setup", "state", "viewport", "theme", "control", "overflow", "keyboard"].includes(probe.kind)) {
+  if (["setup", "state", "viewport", "theme", "control", "overflow", "keyboard"].includes(probe.kind)) {
     equal = equal && production?.matches === true && prototype?.matches === true;
   }
   if (probe.kind === "console") {
@@ -1070,11 +1149,27 @@ function throwParityError(code, message, evidence) {
   throw new ParityRunError(code, message, evidence);
 }
 
+function safeCause(error) {
+  const causeCode = error instanceof ParityRunError ? error.code : "PARITY_UNEXPECTED_ERROR";
+  let causeCategory = "unexpected";
+  if (causeCode === "PARITY_UNEXPECTED_ERROR") causeCategory = "unexpected";
+  else if (/CLEANUP/u.test(causeCode)) causeCategory = "cleanup";
+  else if (/AUTH/u.test(causeCode)) causeCategory = "authorization";
+  else if (/TAB|OWNER|SESSION/u.test(causeCode)) causeCategory = "ownership";
+  else if (/ROUTE|NAVIGAT|ORIGIN/u.test(causeCode)) causeCategory = "navigation";
+  else if (/DPR|VIEWPORT|CAPABILITY|CDP/u.test(causeCode)) causeCategory = "capability";
+  else if (/TIMEOUT|DEADLINE/u.test(causeCode)) causeCategory = "timeout";
+  else if (/PROBE|STATE/u.test(causeCode)) causeCategory = "probe";
+  else if (error instanceof ParityRunError) causeCategory = "parity";
+  return { causeCode, causeCategory };
+}
+
 class BrowserParityRunner {
   constructor(adapter) {
     requireAdapter(adapter);
     this.adapter = adapter;
     this.canary = undefined;
+    this.surfaceContexts = new Map();
     this.operations = 0;
   }
 
@@ -1087,7 +1182,7 @@ class BrowserParityRunner {
       throw new ParityRunError(
         "PARITY_UNEXPECTED_ERROR",
         `Unexpected Browser adapter failure during ${method}`,
-        { operation: method },
+        { operation: method, ...safeCause(error) },
       );
     }
   }
@@ -1105,6 +1200,17 @@ class BrowserParityRunner {
   async activate(tabId, label) {
     await this.call("activateTab", tabId);
     await this.assertActiveTab(tabId, label);
+  }
+
+  invalidateSurfaceContext(context) {
+    if (!isPlainObject(context)) return;
+    this.surfaceContexts.delete(JSON.stringify([
+      context.sessionId,
+      context.tabId,
+      context.surface,
+      context.origin,
+      context.authorizationProfile,
+    ]));
   }
 
   async capabilityCanary({ tabId, viewport, dpr, requiresNetwork, url }) {
@@ -1164,49 +1270,106 @@ class BrowserParityRunner {
     return this.canary;
   }
 
-  async prepareSurface({ tabId, row, surface, setup, baseUrl, dpr, expectedScroll }) {
+  async prepareSurface({
+    tabId,
+    row,
+    surface,
+    setup,
+    authorizationProfile,
+    baseUrl,
+    dpr,
+    expectedScroll,
+  }) {
     const label = `${row.id}/${surface}`;
-    await this.activate(tabId, label);
-    const viewport = parseViewport(row.viewport);
-    await this.call("setViewport", tabId, viewport);
-    await this.assertActiveTab(tabId, `${label} viewport`);
-    const measuredViewport = await this.call("measureViewport", tabId);
-    ensure(
-      measuredViewport?.width === viewport.width && measuredViewport?.height === viewport.height,
-      `${label}: viewport was not applied`,
-    );
-    ensure(measuredViewport.dpr === dpr, `${label}: DPR does not match the contract`);
-    const url = targetUrl(baseUrl, row, surface, setup);
-    await this.call("navigate", tabId, url);
-    await this.assertActiveTab(tabId, `${label} navigation`);
-    await this.call("setTheme", tabId, row.theme, {
-      targetId: row.targetId,
+    const origin = new URL(baseUrl).origin;
+    let invalidateContextOnFailure = false;
+    requireAuthorizationProfile(authorizationProfile, `${label}: authorization profile`);
+    const sessionId = this.adapter.sessionId ?? "unknown";
+    const contextKey = JSON.stringify([
+      sessionId,
+      tabId,
       surface,
-      setup: setup.browser ?? null,
-      url,
-    });
-    for (const action of setup.actions) {
-      await this.assertActiveTab(tabId, `${label} action ${action.type}`);
-      await this.call("runAction", tabId, action);
+      origin,
+      authorizationProfile,
+    ]);
+    try {
+      await this.activate(tabId, label);
+      if (!this.surfaceContexts.has(contextKey)) {
+        const authorizationProfileDigest = await sha256Digest(
+          `parity:authorization-profile:v1\0${authorizationProfile}`,
+        );
+        if (typeof this.adapter.stabilizeContext === "function") {
+          const stabilized = await this.call("stabilizeContext", tabId, {
+            surface,
+            origin,
+            authorizationProfile,
+          });
+          if (stabilized !== undefined) {
+            ensure(
+              isPlainObject(stabilized) &&
+                stabilized.surface === surface &&
+                stabilized.requestedOrigin === origin &&
+                stabilized.authorizationProfileDigest === authorizationProfileDigest,
+              `${label}: stabilized surface context does not match the requested context`,
+            );
+          }
+        }
+        this.surfaceContexts.set(contextKey, {
+          sessionId,
+          tabId,
+          surface,
+          origin,
+          authorizationProfile,
+          authorizationProfileDigest,
+        });
+      }
+      const viewport = parseViewport(row.viewport);
+      await this.call("setViewport", tabId, viewport);
+      await this.assertActiveTab(tabId, `${label} viewport`);
+      const measuredViewport = await this.call("measureViewport", tabId);
+      ensure(
+        measuredViewport?.width === viewport.width && measuredViewport?.height === viewport.height,
+        `${label}: viewport was not applied`,
+      );
+      ensure(measuredViewport.dpr === dpr, `${label}: DPR does not match the contract`);
+      const url = targetUrl(baseUrl, row, surface, setup);
+      invalidateContextOnFailure = true;
+      await this.call("navigate", tabId, url);
+      await this.assertActiveTab(tabId, `${label} navigation`);
+      await this.call("setTheme", tabId, row.theme, {
+        targetId: row.targetId,
+        surface,
+        setup: setup.browser ?? null,
+        url,
+      });
+      for (const action of setup.actions) {
+        await this.assertActiveTab(tabId, `${label} action ${action.type}`);
+        await this.call("runAction", tabId, action);
+      }
+      invalidateContextOnFailure = false;
+      const scroll = await this.call("measureScroll", tabId);
+      ensure(
+        isPlainObject(scroll) &&
+          typeof scroll.x === "number" &&
+          Number.isFinite(scroll.x) &&
+          typeof scroll.y === "number" &&
+          Number.isFinite(scroll.y),
+        `${label}: scroll measurement is invalid`,
+      );
+      ensure(
+        scroll.x === expectedScroll.x && scroll.y === expectedScroll.y,
+        `${label}: measured scroll does not match ui-contract.json`,
+      );
+      return {
+        url,
+        viewport: measuredViewport,
+        scroll: { x: scroll.x, y: scroll.y, source: scrollSource },
+        surfaceContext: this.surfaceContexts.get(contextKey),
+      };
+    } catch (error) {
+      if (invalidateContextOnFailure) this.surfaceContexts.delete(contextKey);
+      throw error;
     }
-    const scroll = await this.call("measureScroll", tabId);
-    ensure(
-      isPlainObject(scroll) &&
-        typeof scroll.x === "number" &&
-        Number.isFinite(scroll.x) &&
-        typeof scroll.y === "number" &&
-        Number.isFinite(scroll.y),
-      `${label}: scroll measurement is invalid`,
-    );
-    ensure(
-      scroll.x === expectedScroll.x && scroll.y === expectedScroll.y,
-      `${label}: measured scroll does not match ui-contract.json`,
-    );
-    return {
-      url,
-      viewport: measuredViewport,
-      scroll: { x: scroll.x, y: scroll.y, source: scrollSource },
-    };
   }
 
   async runProbe({ tabId, row, surface, probe, networkSource }) {
@@ -1223,6 +1386,7 @@ class BrowserParityRunner {
             rowId: row.id,
             surface,
             probeId: probe.id,
+            ...safeCause(error),
           },
         );
       }
@@ -1234,6 +1398,7 @@ class BrowserParityRunner {
           rowId: row.id,
           surface,
           probeId: probe.id,
+          ...safeCause(error),
         },
       );
     }
@@ -1286,6 +1451,19 @@ class BrowserParityRunner {
       (spec.browserSetups ?? []).map((setup) => [setup.targetId, setup]),
     );
     const inAppBrowserRun = this.adapter.requiresBrowserSetups === true;
+    if (
+      !isPlainObject(tabs) ||
+      typeof tabs.production !== "string" ||
+      tabs.production === "" ||
+      typeof tabs.prototype !== "string" ||
+      tabs.prototype === "" ||
+      tabs.production === tabs.prototype
+    ) {
+      throwParityError(
+        "PARITY_COMPARISON_TAB_REQUIRED",
+        "production and prototype require distinct comparison tab IDs",
+      );
+    }
     if (inAppBrowserRun) {
       ensure(
         contract.comparisonConditions.viewports.includes("390x844"),
@@ -1296,13 +1474,6 @@ class BrowserParityRunner {
       }
     }
     const firstViewport = inAppBrowserRun ? { width: 390, height: 844 } : parseViewport(rows[0].viewport);
-    const firstRow = rows[0];
-    const firstStateSetup = setupByTuple.get(JSON.stringify([firstRow.targetId, firstRow.state]));
-    const firstProductionSetup = {
-      ...firstStateSetup.production,
-      browser: browserSetupByTarget.get(firstRow.targetId)?.production,
-    };
-    const canaryUrl = targetUrl(baseUrls.production, firstRow, "production", firstProductionSetup);
     const requiresNetwork = rows.some((row) =>
       probeIdsByRow.get(row.id).some((probeId) => probeById.get(probeId).kind === "network"),
     );
@@ -1313,7 +1484,6 @@ class BrowserParityRunner {
       viewport: firstViewport,
       dpr: contract.comparisonConditions.dpr,
       requiresNetwork,
-      url: canaryUrl,
     });
     const selection = spec.version === 3
       ? {
@@ -1333,7 +1503,7 @@ class BrowserParityRunner {
       selection,
       runtime: run.runtime,
       sources: run.sources,
-      capabilities: canary,
+      capabilities: { ...canary, surfaceContexts: [] },
       rows: [],
       metrics: undefined,
       ...(spec.version === 3
@@ -1364,44 +1534,68 @@ class BrowserParityRunner {
           row,
           surface: "production",
           setup: { ...setup.production, browser: browserSetupByTarget.get(row.targetId)?.production },
+          authorizationProfile: contract.comparisonConditions.authorization,
           baseUrl: baseUrls.production,
           dpr: contract.comparisonConditions.dpr,
           expectedScroll: contract.comparisonConditions.scroll,
         });
+        evidence.capabilities.surfaceContexts = [
+          ...new Map(
+            [...evidence.capabilities.surfaceContexts, productionConditions.surfaceContext]
+              .map((context) => [stableStringify(context), context]),
+          ).values(),
+        ];
         const productionProbeResults = new Map();
         for (const probeId of probeIdsByRow.get(row.id)) {
-          productionProbeResults.set(
-            probeId,
-            await this.runProbe({
+          const probe = probeById.get(probeId);
+          try {
+            productionProbeResults.set(probeId, await this.runProbe({
               tabId: tabs.production,
               row,
               surface: "production",
-              probe: probeById.get(probeId),
+              probe,
               networkSource: canary.networkSource,
-            }),
-          );
+            }));
+          } catch (error) {
+            if (probe.kind === "setup" || probe.kind === "state") {
+              this.invalidateSurfaceContext(productionConditions.surfaceContext);
+            }
+            throw error;
+          }
         }
         const prototypeConditions = await this.prepareSurface({
           tabId: tabs.prototype,
           row,
           surface: "prototype",
           setup: { ...setup.prototype, browser: browserSetupByTarget.get(row.targetId)?.prototype },
+          authorizationProfile: contract.comparisonConditions.authorization,
           baseUrl: baseUrls.prototype,
           dpr: contract.comparisonConditions.dpr,
           expectedScroll: contract.comparisonConditions.scroll,
         });
+        evidence.capabilities.surfaceContexts = [
+          ...new Map(
+            [...evidence.capabilities.surfaceContexts, prototypeConditions.surfaceContext]
+              .map((context) => [stableStringify(context), context]),
+          ).values(),
+        ];
         const prototypeProbeResults = new Map();
         for (const probeId of probeIdsByRow.get(row.id)) {
-          prototypeProbeResults.set(
-            probeId,
-            await this.runProbe({
+          const probe = probeById.get(probeId);
+          try {
+            prototypeProbeResults.set(probeId, await this.runProbe({
               tabId: tabs.prototype,
               row,
               surface: "prototype",
-              probe: probeById.get(probeId),
+              probe,
               networkSource: canary.networkSource,
-            }),
-          );
+            }));
+          } catch (error) {
+            if (probe.kind === "setup" || probe.kind === "state") {
+              this.invalidateSurfaceContext(prototypeConditions.surfaceContext);
+            }
+            throw error;
+          }
         }
         const rowEvidence = {
           rowId: row.id,
@@ -1429,6 +1623,16 @@ class BrowserParityRunner {
           const production = productionProbeResults.get(probeId);
           const prototype = prototypeProbeResults.get(probeId);
           const comparison = compareProbe(probe, production, prototype);
+          if (comparison.status === "fail" && (probe.kind === "setup" || probe.kind === "state")) {
+            const productionMatches = production?.value?.matches === true;
+            const prototypeMatches = prototype?.value?.matches === true;
+            if (!productionMatches || (productionMatches && prototypeMatches)) {
+              this.invalidateSurfaceContext(productionConditions.surfaceContext);
+            }
+            if (!prototypeMatches || (productionMatches && prototypeMatches)) {
+              this.invalidateSurfaceContext(prototypeConditions.surfaceContext);
+            }
+          }
           const artifactRecords = [production?.artifact, prototype?.artifact].filter(Boolean);
           const artifacts = [
             production?.artifactPath ?? production?.artifact?.path,
@@ -1516,6 +1720,7 @@ class BrowserParityRunner {
 
   async run(input) {
     this.canary = undefined;
+    this.surfaceContexts = new Map();
     this.operations = 0;
     let result;
     let failure;
@@ -1531,11 +1736,16 @@ class BrowserParityRunner {
         if (result?.schemaVersion === 4) result.cleanup = cleanup;
         if (failure?.evidence?.capabilities) failure.evidence.capabilities.cleanup = cleanup;
         if (failure?.evidence?.schemaVersion === 4) failure.evidence.cleanup = cleanup;
-      } catch {
+      } catch (error) {
         throw new ParityRunError(
           "PARITY_CLEANUP_FAILED",
           "Browser cleanup did not complete",
-          failure?.evidence ?? result,
+          {
+            operation: "cleanup",
+            ...safeCause(error),
+            priorFailureCode: failure instanceof ParityRunError ? failure.code : null,
+            runEvidence: failure?.evidence ?? result,
+          },
         );
       }
     }
@@ -1562,6 +1772,7 @@ export {
   phases,
   probeKinds,
   requireExactKeys,
+  requireAuthorizationProfile,
   requireNonEmptyString,
   requireLoopbackBaseUrl,
   requireUniqueStrings,
