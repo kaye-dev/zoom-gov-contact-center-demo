@@ -148,7 +148,20 @@ jobs:
           cleanup_owned_migration_resources
           trap - EXIT
 
-          docker run --rm --init --network bridge \
-            --entrypoint npm \
-            "${image}" \
-            audit --omit=dev --ignore-scripts --registry=https://registry.npmjs.org/
+          audit_attempts=3
+          audit_status=1
+          for audit_attempt in $(seq 1 "${audit_attempts}"); do
+            if docker run --rm --init --network bridge \
+              --entrypoint npm \
+              "${image}" \
+              audit --omit=dev --ignore-scripts --registry=https://registry.npmjs.org/ \
+                --fetch-retries=0 \
+                --fetch-timeout=30000; then
+              audit_status=0
+              break
+            fi
+            if [[ "${audit_attempt}" != "${audit_attempts}" ]]; then
+              sleep $((audit_attempt * 5))
+            fi
+          done
+          [[ "${audit_status}" == "0" ]]
