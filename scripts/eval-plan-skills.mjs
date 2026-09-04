@@ -29,6 +29,7 @@ import process from "node:process";
 import { isDeepStrictEqual } from "node:util";
 import { fileURLToPath } from "node:url";
 import { prototypeRevisionInRepository } from "../.agents/skills/plan/scripts/prototype-revision.mjs";
+import { runCli as runWorkflowAuditAnalyzer } from "../.agents/skills/workflow-performance-audit/scripts/analyze-sessions.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(scriptDirectory, "..");
@@ -84,6 +85,11 @@ const outputTailCharacters = 64 * 1024;
 const maxFixtureFileBytes = 8 * 1024 * 1024;
 const maxFixtureTreeBytes = 64 * 1024 * 1024;
 const activeFixtureTreeComparisons = new Map();
+const scenarioFailureCodes = new Set([
+  "SCENARIO_FAILED",
+  "RATE_LIMIT",
+  "RESOURCE_PRESSURE",
+]);
 
 function ensure(condition, message) {
   if (!condition) throw new Error(message);
@@ -667,7 +673,7 @@ const target = process.argv[2];
 if (process.argv.length !== 3 || !/^plans\\/[a-z0-9][a-z0-9-]*\\/prototype$/u.test(target)) {
   throw new Error("invalid eval prototype path");
 }
-const expected = '@import "../../../app/globals.css";\\n@source ".";\\n';
+const expected = '@import "../../../app/styles/ui-foundation.css";\\n@source ".";\\n';
 const input = await readFile(path.join(target, "tailwind.css"), "utf8");
 if (input !== expected) throw new Error("invalid eval tailwind contract");
 const html = await readFile(path.join(target, "index.html"));
@@ -690,7 +696,13 @@ async function createBaseFixture(name) {
       mkdir(path.join(requestedRepo, "plans"), { recursive: true }),
     ]);
     const repo = await realpath(requestedRepo);
-    for (const skill of ["plan", "implement", "review"]) {
+    for (const skill of [
+      "plan",
+      "implement",
+      "review",
+      "workflow-performance-audit",
+      "workflow-retrospective",
+    ]) {
       await copySkill(repo, skill);
     }
     for (const agent of ["project_explorer", "independent_reviewer"]) {
@@ -720,6 +732,16 @@ config_file = "./agents/independent_reviewer.toml"
       path.join(repositoryRoot, "docs", "development", "codex-development-workflow.md"),
       path.join(repo, "docs", "development", "codex-development-workflow.md"),
     );
+    await mkdir(path.join(repo, "app", "styles"), { recursive: true });
+    await cp(
+      path.join(repositoryRoot, "app", "styles", "ui-foundation.css"),
+      path.join(repo, "app", "styles", "ui-foundation.css"),
+    );
+    await mkdir(path.join(repo, "scripts"), { recursive: true });
+    await cp(
+      path.join(repositoryRoot, "scripts", "validation-digest.mjs"),
+      path.join(repo, "scripts", "validation-digest.mjs"),
+    );
     await installEvalBuilder(repo);
     await write(
       repo,
@@ -739,7 +761,7 @@ config_file = "./agents/independent_reviewer.toml"
         2,
       ) + "\n",
     );
-    await write(repo, "app/globals.css", '@import "tailwindcss";\n');
+    await write(repo, "app/globals.css", '@import "./styles/ui-foundation.css";\n@source ".";\n');
     await write(repo, ".gitignore", "plans/*\n!plans/template.md\n");
     await runFixtureGit(repo, ["init", "-q"]);
     await runFixtureGit(repo, ["config", "user.email", "skill-eval@example.invalid"]);
@@ -1153,11 +1175,11 @@ function planUiContract(
 function paritySpec(contract) {
   const coverageProbeIds = [
     "route-ready",
-    "setup-ready",
+    "inv-shell",
     "state-visible",
     "viewport-exact",
-    "theme-exact",
-    "control-ready",
+    "inv-typography",
+    "inv-button-geometry",
     "overflow-clean",
     "console-clean",
   ];
@@ -1186,11 +1208,11 @@ function paritySpec(contract) {
     probes: [
       ...[
         { id: "route-ready", kind: "route", selector: "body", options: {} },
-        { id: "setup-ready", kind: "setup", selector: "body", options: {} },
+        { id: "inv-shell", kind: "setup", selector: "body", options: {} },
         { id: "state-visible", kind: "state", selector: "body", options: { expected: "visible" } },
         { id: "viewport-exact", kind: "viewport", selector: "body", options: {} },
-        { id: "theme-exact", kind: "theme", selector: "html", options: { rootClass: "row-theme", colorScheme: "row-theme" } },
-        { id: "control-ready", kind: "control", selector: "button", options: { expected: "enabled" } },
+        { id: "inv-typography", kind: "theme", selector: "html", options: { rootClass: "row-theme", colorScheme: "row-theme" } },
+        { id: "inv-button-geometry", kind: "control", selector: "button", options: { expected: "enabled" } },
         { id: "overflow-clean", kind: "overflow", selector: "body", options: { tolerancePx: 0 } },
         { id: "console-clean", kind: "console", selector: "body", options: {} },
       ].map(({ id, kind, selector, options }) => ({
@@ -1243,10 +1265,22 @@ function paritySpec(contract) {
         tier: "anchor",
         options: {},
       },
+      {
+        id: "delta-copy",
+        kind: "dom",
+        mode: "different",
+        productionSelector: "button",
+        prototypeSelector: "button",
+        required: true,
+        tier: "anchor",
+        options: {},
+      },
     ],
     rowProbeMap: contract.parityMatrix.map(({ id }) => ({
       rowId: id,
-      probeIds: id === firstRow.id ? [...coverageProbeIds, ...anchorProbeIds] : coverageProbeIds,
+      probeIds: id === firstRow.id
+        ? [...coverageProbeIds, ...anchorProbeIds, "delta-copy"]
+        : [...coverageProbeIds, "delta-copy"],
     })),
     coverage: {
       targetOrder: contract.comparisonTargets.map(({ id }) => id),
@@ -1284,7 +1318,7 @@ async function createPrototype(repo, slug, label, { sourcePath = "src/ui.txt" } 
   await write(
     repo,
     `plans/${slug}/prototype/tailwind.css`,
-    '@import "../../../app/globals.css";\n@source ".";\n',
+    '@import "../../../app/styles/ui-foundation.css";\n@source ".";\n',
   );
   const contract = uiContract(label, {
     commit,
@@ -1445,7 +1479,7 @@ async function writePlanUiArtifacts(repo) {
   await write(
     repo,
     `${prototypeRoot}/tailwind.css`,
-    '@import "../../../app/globals.css";\n@source ".";\n',
+    '@import "../../../app/styles/ui-foundation.css";\n@source ".";\n',
   );
   const contract = planUiContract(planUiLabel, { commit, checkout: repo });
   await write(
@@ -1801,6 +1835,170 @@ function reviewUiAllowedPaths() {
   return reviewReportAssets.map((name) => `plans/${reviewUiSlug}/review/${name}`);
 }
 
+function deterministicWorkflowAuditSessionId(mode, index) {
+  const value = createHash("sha256").update(`workflow-audit:${mode}:${index}`).digest("hex");
+  return `${value.slice(0, 8)}-${value.slice(8, 12)}-7${value.slice(13, 16)}-8${value.slice(17, 20)}-${value.slice(20, 32)}`;
+}
+
+function workflowAuditSessionRecords({ id, repo, commands }) {
+  const base = Date.parse("2026-08-28T01:00:00.000Z");
+  const timestamp = (offset) => new Date(base + offset).toISOString();
+  const records = [
+    {
+      timestamp: timestamp(0),
+      ordinal: 0,
+      type: "session_meta",
+      payload: { id, cwd: repo },
+    },
+    {
+      timestamp: timestamp(1_000),
+      ordinal: 1,
+      type: "event_msg",
+      payload: { type: "task_started", turn_id: "turn-1", started_at: timestamp(1_000) },
+    },
+    {
+      timestamp: timestamp(2_000),
+      ordinal: 2,
+      type: "event_msg",
+      payload: {
+        type: "item_completed",
+        turn_id: "turn-1",
+        started_at_ms: base + 2_000,
+        completed_at_ms: base + 2_001,
+        item: { type: "UserMessage", content: [{ text: "$implement" }] },
+      },
+    },
+  ];
+  for (const [index, command] of commands.entries()) {
+    const offset = 3_000 + index * 1_000;
+    const callId = `call-command-${index}`;
+    records.push({
+      timestamp: timestamp(offset),
+      ordinal: records.length,
+      type: "response_item",
+      payload: {
+        type: "custom_tool_call",
+        id: `tool-command-${index}`,
+        call_id: callId,
+        name: "exec",
+      },
+    });
+    records.push({
+      timestamp: timestamp(offset + 100),
+      ordinal: records.length,
+      type: "event_msg",
+      payload: {
+        type: "item_completed",
+        turn_id: "turn-1",
+        started_at_ms: base + offset + 100,
+        completed_at_ms: base + offset + 350,
+        item: {
+          type: "CommandExecution",
+          id: callId,
+          command,
+          status: "completed",
+          exit_code: 0,
+          duration: { secs: 0, nanos: 250_000_000 },
+        },
+      },
+    });
+    records.push({
+      timestamp: timestamp(offset + 400),
+      ordinal: records.length,
+      type: "response_item",
+      payload: {
+        type: "custom_tool_call_output",
+        id: `tool-output-${index}`,
+        call_id: callId,
+        output: "redacted",
+      },
+    });
+  }
+  records.push({
+    timestamp: timestamp(9_000),
+    ordinal: records.length,
+    type: "event_msg",
+    payload: {
+      type: "task_complete",
+      turn_id: "turn-1",
+      completed_at: timestamp(9_000),
+      duration_ms: 8_000,
+    },
+  });
+  return `${records.map((record) => JSON.stringify(record)).join("\n")}\n`;
+}
+
+async function prepareWorkflowAuditFixture(repo, mode) {
+  const sessionsRoot = path.join(repo, "audit-fixtures", "sessions");
+  const archivedRoot = path.join(repo, "audit-fixtures", "archived");
+  await Promise.all([
+    mkdir(sessionsRoot, { recursive: true }),
+    mkdir(archivedRoot, { recursive: true }),
+  ]);
+  const sessions = mode === "insufficient" ? 1 : 2;
+  for (let index = 0; index < sessions; index += 1) {
+    const commands = mode === "bottleneck"
+      ? ["npm test -- --token=WORKFLOW_AUDIT_SECRET", "npm test -- --token=WORKFLOW_AUDIT_SECRET"]
+      : [`node --test test/focused-${index}.test.ts`];
+    await writeFile(
+      path.join(sessionsRoot, `rollout-2026-08-28-audit-${mode}-${index}.jsonl`),
+      workflowAuditSessionRecords({
+        id: deterministicWorkflowAuditSessionId(mode, index),
+        repo,
+        commands,
+      }),
+    );
+  }
+  const result = await runWorkflowAuditAnalyzer({
+    argv: [
+      "--repository", repo,
+      "--from", "2026-08-27",
+      "--to", "2026-08-29",
+      "--timezone", "UTC",
+      "--sessions-root", sessionsRoot,
+      "--archived-root", archivedRoot,
+    ],
+    stdout: { write() {} },
+    now: new Date("2026-08-29T12:00:00.000Z"),
+  });
+  const expectedVerdict = {
+    bottleneck: "ボトルネックあり",
+    clean: "ボトルネックなし",
+    insufficient: "判定不能",
+  }[mode];
+  ensure(result.assessment.verdict === expectedVerdict, `workflow audit ${mode} fixture produced an unexpected analyzer verdict`);
+  if (mode === "bottleneck") {
+    ensure(
+      result.assessment.candidates.some(({ id }) => id === "WPA-P1-REPEATED-FULL-TEST"),
+      "workflow audit bottleneck fixture omitted the repeated full-test candidate",
+    );
+  }
+  if (mode === "clean") {
+    ensure(result.assessment.candidates.length === 0, "workflow audit clean fixture produced an analyzer candidate");
+  }
+  return { sessionsRoot, archivedRoot };
+}
+
+function workflowAuditPrompt(mode, sessionsRoot, archivedRoot) {
+  const expectation = {
+    bottleneck: "ボトルネックあり と WPA-P1-REPEATED-FULL-TEST",
+    clean: "ボトルネックなし と 改善提案なし・現行workflowを変更しない",
+    insufficient: "判定不能 と具体的な再実行条件",
+  }[mode];
+  return `$workflow-performance-audit を .agents/skills/workflow-performance-audit/SKILL.md から明示的に使用してください。current repositoryについて2026-08-27から2026-08-29までUTCで監査し、session sourceはexactに ${sessionsRoot} と ${archivedRoot} を使用してください。analyzerを一度だけ実行し、raw transcript、command本文、secret、report fileを出力せず、repository、Git、runtime、Browserを変更しないでください。最終回答にはanalyzerに基づく ${expectation} を明記してください。`;
+}
+
+async function gradeWorkflowAudit(repo, final, mode) {
+  const required = {
+    bottleneck: [/ボトルネックあり/u, /WPA-P1-REPEATED-FULL-TEST/u],
+    clean: [/ボトルネックなし/u, /改善提案なし・現行workflowを変更しない/u],
+    insufficient: [/判定不能/u, /再実行|rerun/iu],
+  }[mode];
+  ensure(required.every((pattern) => pattern.test(final)), `workflow audit final did not report the ${mode} assessment`);
+  ensure(!/WORKFLOW_AUDIT_SECRET|npm test --/u.test(final), "workflow audit exposed raw command or secret data");
+  await assertOnlyPaths(repo, []);
+}
+
 const scenarios = {
   "plan-canonical": {
     async prepare(repo) {
@@ -1963,7 +2161,7 @@ const scenarios = {
         'import test from "node:test";\ntest("UI-01", () => {});\n',
       );
     },
-    prompt: `$plan を .agents/skills/plan/SKILL.md から明示的に使用してください。slugは ${planUiSlug} です。authoritative requirementはsrc/ui.txtが所有するbutton copyを「${planUiLabel}」へ変更し、default state、light/dark、desktop 1280x800、mobile 390x844、breakpoint直前767x844、境界768x844で既存shell・typography・button geometryを維持することです。production baselineは現在のHEADとcheckout、route=/fixture、URL=http://localhost:3000/fixture、runtime owner=eval fixture runtime、complete sources inventoryはexactにsrc/ui.txtとapp/globals.cssです。HEADはgit rev-parse HEAD、checkoutはpwd -Pで得た絶対pathをmanifestとgoalのproduction baseline双方へ同じ値で記録してください。fixture=fixture A、authorization=admin fixture、query=theme、DPR=1、window.scrollX=0、window.scrollY=0、locale=jaとします。comparisonConditions.scrollはexact object {"x":0,"y":0}とし、goalにもscrollX 0、scrollY 0を記録してください。comparison targetはmain(entry=index.html、route=/fixture、surface=page)、invariant IDはinv-shell/inv-typography/inv-button-geometry、intentional difference IDはdelta-copyです。target × default state × 4 breakpoint × 2 themeの8 rowをstable ID main-default-<breakpoint>-<theme>で作ってください。canonical artifactはplans/${planUiSlug}/goal.mdとprototype配下のindex.html、app.js、tailwind.css、styles.css、ui-contract.json、parity-spec.jsonだけです。parity-spec.jsonはversion 3、全target/stateのidentity assertion、production/prototype両方のquery theme browserSetups、route/setup/state/viewport/theme/control/overflow/consoleのrequired coverage probe、代表anchorのDOM/accessibility/geometry/network probe、全rowのrowProbeMap、deterministic axis order、targetごとのanchor、sourceImpactMap、fixed batch/artifact policyを持たせてください。risk rowは具体的interactionがないため空配列にしてください。index.htmlはlocal styles.cssとapp.jsを参照しbuttonを表示し、app.jsはdocument.documentElement.dataset.readyをtrueにします。Tailwind inputはrepositoryのbuilder契約に従ってください。${browserUnavailable} Browser smokeは未確認と明記してplan作成を完了し、coverage/full matrixやpending row一覧、手動UI承認記録は作らないでください。UI承認方式は明示的な$implement invocationです。revisionをhelperで再計算し、要件クロージャはこのbutton UI要件の1行だけとしてtest/ui-label.test.tsのUI-01へ対応付けてください。production code、test、review artifact、Gitは変更しないでください。`,
+    prompt: `$plan を .agents/skills/plan/SKILL.md から明示的に使用してください。slugは ${planUiSlug} です。authoritative requirementはsrc/ui.txtが所有するbutton copyを「${planUiLabel}」へ変更し、default state、light/dark、desktop 1280x800、mobile 390x844、breakpoint直前767x844、境界768x844で既存shell・typography・button geometryを維持することです。production baselineは現在のHEADとcheckout、route=/fixture、URL=http://localhost:3000/fixture、runtime owner=eval fixture runtime、complete sources inventoryはexactにsrc/ui.txtとapp/globals.cssです。HEADはgit rev-parse HEAD、checkoutはpwd -Pで得た絶対pathをmanifestとgoalのproduction baseline双方へ同じ値で記録してください。fixture=fixture A、authorization=admin fixture、query=theme、DPR=1、window.scrollX=0、window.scrollY=0、locale=jaとします。comparisonConditions.scrollはexact object {"x":0,"y":0}とし、goalにもscrollX 0、scrollY 0を記録してください。comparison targetはmain(entry=index.html、route=/fixture、surface=page)、invariant IDはinv-shell/inv-typography/inv-button-geometry、intentional difference IDはdelta-copyです。target × default state × 4 breakpoint × 2 themeの8 rowをstable ID main-default-<breakpoint>-<theme>で作ってください。canonical artifactはplans/${planUiSlug}/goal.mdとprototype配下のindex.html、app.js、tailwind.css、styles.css、ui-contract.json、parity-spec.jsonだけです。parity-spec.jsonはversion 3、全target/stateのidentity assertion、production/prototype両方のquery theme browserSetups、route/setup/state/viewport/theme/control/overflow/consoleのrequired coverage probe、代表anchorのDOM/accessibility/geometry/network probe、全rowのrowProbeMap、deterministic axis order、targetごとのanchor、sourceImpactMap、fixed batch/artifact policyを持たせてください。各rowでは全invariant IDと同名のrequired equal probe、全intentional difference IDと同名のrequired different probeをrowProbeMap.probeIdsへ含め、既存schemaのまま明示対応してください。risk rowは具体的interactionがないため空配列にしてください。index.htmlはlocal styles.cssとapp.jsを参照しbuttonを表示し、app.jsはdocument.documentElement.dataset.readyをtrueにします。Tailwind inputはrepositoryのbuilder契約に従ってください。${browserUnavailable} Browser smokeは未確認と明記してplan作成を完了し、coverage/full matrixやpending row一覧、手動UI承認記録は作らないでください。UI承認方式は明示的な$implement invocationです。revisionをhelperで再計算し、要件クロージャはこのbutton UI要件の1行だけとしてtest/ui-label.test.tsのUI-01へ対応付けてください。production code、test、review artifact、Gitは変更しないでください。`,
     async grade(repo) {
       const goalPath = path.join(repo, `plans/${planUiSlug}/goal.md`);
       const prototypeRoot = path.join(repo, `plans/${planUiSlug}/prototype`);
@@ -1974,7 +2172,6 @@ const scenarios = {
       const spec = JSON.parse(
         await readFile(path.join(prototypeRoot, "parity-spec.json"), "utf8"),
       );
-      const revision = await calculateRevision(repo, planUiSlug);
       const { stdout } = await runFixtureGit(repo, ["rev-parse", "HEAD"]);
       const commit = stdout.trim();
 
@@ -2064,7 +2261,6 @@ const scenarios = {
         "UI plan manifest does not contain the complete immutable row set",
       );
 
-      assertSingleRevisionField(goal, "prototype revision", revision);
       ensure(
         !/^- (?:parity evidence|machine parity|UI承認記録):|[a-z0-9-]+=pending/mu.test(goal),
         "UI plan retained mutable plan-time evidence",
@@ -2081,6 +2277,26 @@ const scenarios = {
         isDeepStrictEqual(spec.rowProbeMap.map(({ rowId }) => rowId).sort(), contract.parityMatrix.map(({ id }) => id).sort()),
         "UI plan parity spec does not cover the immutable matrix exactly once",
       );
+      const probesById = new Map(spec.probes.map((probe) => [probe.id, probe]));
+      ensure(probesById.size === spec.probes.length, "UI plan parity spec probe IDs are not globally unique");
+      for (const mapping of spec.rowProbeMap) {
+        const row = contract.parityMatrix.find(({ id }) => id === mapping.rowId);
+        ensure(row, `UI plan parity spec maps unknown row ${mapping.rowId}`);
+        for (const [field, mode] of [
+          ["expectedInvariantIds", "equal"],
+          ["intentionalDifferenceIds", "different"],
+        ]) {
+          for (const contractId of row[field]) {
+            const probe = probesById.get(contractId);
+            ensure(
+              probe?.required === true && probe.mode === mode && mapping.probeIds.includes(contractId),
+              `UI plan parity spec contract ID ${contractId} lacks its required ${mode} same-ID probe for ${mapping.rowId}`,
+            );
+          }
+        }
+      }
+      const revision = await calculateRevision(repo, planUiSlug);
+      assertSingleRevisionField(goal, "prototype revision", revision);
       ensure(
         isDeepStrictEqual(spec.coverage.targetOrder, ["main"]) &&
           isDeepStrictEqual(spec.coverage.viewportOrder, contract.comparisonConditions.viewports) &&
@@ -2146,7 +2362,7 @@ const scenarios = {
       );
       ensure(
         (await readFile(path.join(prototypeRoot, "tailwind.css"), "utf8")) ===
-          '@import "../../../app/globals.css";\n@source ".";\n',
+          '@import "../../../app/styles/ui-foundation.css";\n@source ".";\n',
         "UI prototype Tailwind input is not canonical",
       );
       const styles = await readFile(path.join(prototypeRoot, "styles.css"), "utf8");
@@ -2154,7 +2370,7 @@ const scenarios = {
       ensure(styles.includes(expectedBuild), "UI prototype CSS was not built from the final HTML");
       ensure((await readFile(path.join(repo, "src/ui.txt"), "utf8")) === planUiSource, "plan edited production code");
       ensure(
-        (await readFile(path.join(repo, "app/globals.css"), "utf8")) === '@import "tailwindcss";\n',
+        (await readFile(path.join(repo, "app/globals.css"), "utf8")) === '@import "./styles/ui-foundation.css";\n@source ".";\n',
         "plan edited the shared production stylesheet",
       );
       ensure(!(await exists(path.join(repo, `plans/${planUiSlug}/review`))), "plan created a review artifact");
@@ -2220,6 +2436,16 @@ const scenarios = {
           "artifact outside the plan write allowlist\n",
         );
       },
+      async (repo) => {
+        const specPath = path.join(repo, `plans/${planUiSlug}/prototype/parity-spec.json`);
+        const spec = JSON.parse(await readFile(specPath, "utf8"));
+        spec.probes.find(({ id }) => id === "delta-copy").id = "inv-shell";
+        for (const mapping of spec.rowProbeMap) {
+          mapping.probeIds = mapping.probeIds.map((probeId) =>
+            probeId === "delta-copy" ? "inv-shell" : probeId);
+        }
+        await writeFile(specPath, `${JSON.stringify(spec, null, 2)}\n`);
+      },
     ],
   },
   "implement-stale-revision": {
@@ -2244,12 +2470,13 @@ const scenarios = {
       ensure((await readFile(path.join(repo, "src/ui.txt"), "utf8")) === "before\n", "implement edited production despite stale revision");
       ensure(/revision|digest|sha256|不一致|失効/iu.test(final), "implement did not report stale revision");
       ensureNoCompletionClaim(final);
-      const approvalPath = await assertSingleApprovalEvidence(repo, "stale-revision");
-      await assertOnlyPaths(repo, [approvalPath]);
+      ensure(
+        !(await exists(path.join(repo, "plans/stale-revision/evidence"))),
+        "implement created approval evidence before the stale-revision preflight passed",
+      );
+      await assertOnlyPaths(repo, []);
     },
-    async simulate(repo) {
-      await writeApprovalFixture(repo, "stale-revision");
-    },
+    async simulate() {},
     async break(repo) {
       await writeFile(path.join(repo, "src/ui.txt"), "after\n");
     },
@@ -2286,12 +2513,13 @@ const scenarios = {
         "implement did not identify the goal/manifest contract mismatch",
       );
       ensureNoCompletionClaim(final);
-      const approvalPath = await assertSingleApprovalEvidence(repo, "contract-mismatch");
-      await assertOnlyPaths(repo, [approvalPath]);
+      ensure(
+        !(await exists(path.join(repo, "plans/contract-mismatch/evidence"))),
+        "implement created approval evidence before the contract preflight passed",
+      );
+      await assertOnlyPaths(repo, []);
     },
-    async simulate(repo) {
-      await writeApprovalFixture(repo, "contract-mismatch");
-    },
+    async simulate() {},
     async break(repo) {
       await writeFile(path.join(repo, "src/ui.txt"), "after\n");
     },
@@ -2319,7 +2547,7 @@ const scenarios = {
     async afterCommit(repo) {
       await writeFile(
         path.join(repo, "app/globals.css"),
-        '@import "tailwindcss";\n/* unapproved shared-token drift */\n',
+        '@import "./styles/ui-foundation.css";\n@source ".";\n@source "../mdx-components.tsx";\n/* unapproved shared-token drift */\n',
       );
     },
     prompt: `$implement を .agents/skills/implement/SKILL.md から明示的に使用し、plans/related-source-drift/goal.mdを実装してください。productionBaseline.sourcesのpage fileだけでなく、宣言されたshared global style/token sourceをすべてworking treeと照合してください。driftがあればserverやBrowserを代替せずproduction編集前に停止してください。`,
@@ -2330,7 +2558,7 @@ const scenarios = {
       );
       ensure(
         (await readFile(path.join(repo, "app/globals.css"), "utf8")) ===
-          '@import "tailwindcss";\n/* unapproved shared-token drift */\n',
+          '@import "./styles/ui-foundation.css";\n@source ".";\n@source "../mdx-components.tsx";\n/* unapproved shared-token drift */\n',
         "implement changed the pre-existing related-source drift",
       );
       ensure(
@@ -2660,7 +2888,251 @@ const scenarios = {
       },
     ],
   },
+  "workflow-performance-audit-bottleneck": {
+    async prepare(repo) {
+      await prepareWorkflowAuditFixture(repo, "bottleneck");
+    },
+    prompt: workflowAuditPrompt(
+      "bottleneck",
+      "audit-fixtures/sessions",
+      "audit-fixtures/archived",
+    ),
+    async grade(repo, final) {
+      await gradeWorkflowAudit(repo, final, "bottleneck");
+    },
+    async simulate() {},
+    async break(repo) {
+      await write(repo, "workflow-audit-report.md", "forbidden report\n");
+    },
+    simulatedFinal: "ボトルネックあり: WPA-P1-REPEATED-FULL-TEST。raw commandやsecretは出力せず、変更も行っていません。",
+    negativeFinals: ["判定不能です。"],
+  },
+  "workflow-performance-audit-no-bottleneck": {
+    async prepare(repo) {
+      await prepareWorkflowAuditFixture(repo, "clean");
+    },
+    prompt: workflowAuditPrompt(
+      "clean",
+      "audit-fixtures/sessions",
+      "audit-fixtures/archived",
+    ),
+    async grade(repo, final) {
+      await gradeWorkflowAudit(repo, final, "clean");
+    },
+    async simulate() {},
+    async break(repo) {
+      await write(repo, "workflow-audit-report.md", "forbidden report\n");
+    },
+    simulatedFinal: "ボトルネックなし。改善提案なし・現行workflowを変更しない。",
+    negativeFinals: ["小さな改善を1件提案します。"],
+  },
+  "workflow-performance-audit-insufficient-data": {
+    async prepare(repo) {
+      await prepareWorkflowAuditFixture(repo, "insufficient");
+    },
+    prompt: workflowAuditPrompt(
+      "insufficient",
+      "audit-fixtures/sessions",
+      "audit-fixtures/archived",
+    ),
+    async grade(repo, final) {
+      await gradeWorkflowAudit(repo, final, "insufficient");
+    },
+    async simulate() {},
+    async break(repo) {
+      await write(repo, "workflow-audit-report.md", "forbidden report\n");
+    },
+    simulatedFinal: "判定不能です。完了sessionが2件以上になった後に再実行してください。",
+    negativeFinals: ["ボトルネックなしです。"],
+  },
 };
+
+const commonAffectedPaths = [
+  "docs/development/codex-development-workflow.md",
+  "scripts/eval-plan-skills.mjs",
+];
+
+const scenarioAffectedPaths = {
+  "plan-canonical": [
+    ".agents/skills/plan/SKILL.md",
+    ".agents/skills/plan/references/goal-quality.md",
+    "plans/template.md",
+    "test/plan-skill-behavior-eval.test.ts",
+  ],
+  "plan-existing-collision": [
+    ".agents/skills/plan/SKILL.md",
+    ".agents/skills/plan/references/goal-quality.md",
+    "plans/template.md",
+    "test/plan-skill-behavior-eval.test.ts",
+  ],
+  "plan-ui-revision": [
+    ".agents/skills/plan/SKILL.md",
+    ".agents/skills/plan/references/",
+    ".agents/skills/plan/scripts/",
+    "app/globals.css",
+    "app/styles/ui-foundation.css",
+    "plans/template.md",
+    "test/plan-skill-behavior-eval.test.ts",
+    "test/prototype-css-builder.test.ts",
+    "test/prototype-revision.test.ts",
+  ],
+  "implement-stale-revision": [
+    ".agents/skills/implement/SKILL.md",
+    ".agents/skills/plan/references/",
+    ".agents/skills/plan/scripts/",
+    "scripts/validation-digest.mjs",
+    "test/plan-skill-behavior-eval.test.ts",
+  ],
+  "implement-contract-mismatch": [
+    ".agents/skills/implement/SKILL.md",
+    ".agents/skills/plan/references/",
+    ".agents/skills/plan/scripts/",
+    "scripts/validation-digest.mjs",
+    "test/plan-skill-behavior-eval.test.ts",
+  ],
+  "implement-related-source-drift": [
+    ".agents/skills/implement/SKILL.md",
+    ".agents/skills/plan/references/",
+    ".agents/skills/plan/scripts/",
+    "app/globals.css",
+    "app/styles/ui-foundation.css",
+    "scripts/validation-digest.mjs",
+    "test/plan-skill-behavior-eval.test.ts",
+  ],
+  "implement-browser-gate": [
+    ".agents/skills/implement/SKILL.md",
+    ".agents/skills/plan/references/parity-runner.md",
+    ".agents/skills/plan/scripts/",
+    "dev-compose.sh",
+    "test/plan-skill-behavior-eval.test.ts",
+  ],
+  "implement-browser-capability-failure": [
+    ".agents/skills/implement/SKILL.md",
+    ".agents/skills/plan/references/parity-runner.md",
+    ".agents/skills/plan/scripts/",
+    "dev-compose.sh",
+    "test/plan-skill-behavior-eval.test.ts",
+  ],
+  "review-ui-gate": [
+    ".agents/skills/review/SKILL.md",
+    ".agents/skills/review/references/",
+    ".agents/skills/plan/references/parity-runner.md",
+    ".agents/skills/plan/scripts/",
+    "test/plan-skill-behavior-eval.test.ts",
+  ],
+  "workflow-performance-audit-bottleneck": [
+    ".agents/skills/workflow-performance-audit/",
+    "test/workflow-performance-audit.test.ts",
+    "test/plan-skill-behavior-eval.test.ts",
+  ],
+  "workflow-performance-audit-no-bottleneck": [
+    ".agents/skills/workflow-performance-audit/",
+    "test/workflow-performance-audit.test.ts",
+    "test/plan-skill-behavior-eval.test.ts",
+  ],
+  "workflow-performance-audit-insufficient-data": [
+    ".agents/skills/workflow-performance-audit/",
+    "test/workflow-performance-audit.test.ts",
+    "test/plan-skill-behavior-eval.test.ts",
+  ],
+};
+
+for (const [name, affectedPaths] of Object.entries(scenarioAffectedPaths)) {
+  ensure(scenarios[name], `affected-path mapping references unknown scenario: ${name}`);
+  scenarios[name].affectedPaths = [...affectedPaths];
+}
+
+function matchesAffectedPath(changedPath, affectedPath) {
+  return affectedPath.endsWith("/")
+    ? changedPath.startsWith(affectedPath)
+    : changedPath === affectedPath;
+}
+
+function selectAffectedScenarios(changedPaths) {
+  const normalized = [...new Set(changedPaths)].sort();
+  if (
+    normalized.some((changedPath) =>
+      commonAffectedPaths.some((affectedPath) => matchesAffectedPath(changedPath, affectedPath)),
+    )
+  ) {
+    return Object.keys(scenarios);
+  }
+  return Object.entries(scenarios)
+    .filter(([, scenario]) =>
+      normalized.some((changedPath) =>
+        scenario.affectedPaths.some((affectedPath) =>
+          matchesAffectedPath(changedPath, affectedPath),
+        ),
+      ),
+    )
+    .map(([name]) => name);
+}
+
+function gitPathsFrom(base) {
+  ensure(typeof base === "string" && base.length > 0 && !base.includes("\u0000"), "--affected-from requires a Git base ref");
+  const revision = spawnSync(
+    "git",
+    ["-C", repositoryRoot, "rev-parse", "--verify", `${base}^{commit}`],
+    { encoding: "utf8", timeout: 15_000, maxBuffer: 1024 * 1024 },
+  );
+  ensure(
+    !revision.error && revision.status === 0,
+    `EVAL_INVALID_BASE_REF: Git base ref could not be resolved: ${base}`,
+  );
+  const baseCommit = revision.stdout.trim();
+  ensure(/^[0-9a-f]{40,64}$/u.test(baseCommit), "EVAL_INVALID_BASE_REF: Git base ref did not resolve to a commit ID");
+  const diff = spawnSync(
+    "git",
+    ["-C", repositoryRoot, "diff", "--name-only", "-z", baseCommit, "--"],
+    { encoding: "utf8", timeout: 30_000, maxBuffer: 16 * 1024 * 1024 },
+  );
+  ensure(!diff.error && diff.status === 0, "EVAL_AFFECTED_DIFF_FAILED: changed paths could not be read");
+  const untracked = spawnSync(
+    "git",
+    ["-C", repositoryRoot, "ls-files", "--others", "--exclude-standard", "-z", "--"],
+    { encoding: "utf8", timeout: 30_000, maxBuffer: 16 * 1024 * 1024 },
+  );
+  ensure(!untracked.error && untracked.status === 0, "EVAL_AFFECTED_DIFF_FAILED: untracked paths could not be read");
+  return [...new Set(`${diff.stdout}${untracked.stdout}`.split("\u0000").filter(Boolean))].sort();
+}
+
+async function runBounded(items, concurrency, worker) {
+  ensure(concurrency === 1 || concurrency === 2, "--concurrency must be 1 or 2");
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  const runWorker = async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await worker(items[index], index);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, () => runWorker()),
+  );
+  return results;
+}
+
+function failedScenariosFromManifest(manifest) {
+  ensure(manifest && manifest.schemaVersion === 1, "EVAL_INVALID_RESULT_MANIFEST: unsupported schema");
+  ensure(Array.isArray(manifest.results), "EVAL_INVALID_RESULT_MANIFEST: results must be an array");
+  const seen = new Set();
+  const failed = [];
+  for (const result of manifest.results) {
+    ensure(
+      result && typeof result.name === "string" && scenarios[result.name],
+      "EVAL_INVALID_RESULT_MANIFEST: result has an unknown scenario",
+    );
+    ensure(!seen.has(result.name), "EVAL_INVALID_RESULT_MANIFEST: duplicate scenario result");
+    seen.add(result.name);
+    ensure(
+      result.status === "pass" || result.status === "fail",
+      "EVAL_INVALID_RESULT_MANIFEST: result status must be pass or fail",
+    );
+    if (result.status === "fail") failed.push(result.name);
+  }
+  return failed;
+}
 
 async function prepareScenario(name, fixtureName = name) {
   const scenario = scenarios[name];
@@ -2735,7 +3207,10 @@ async function assertCoverageDrivenSkillContracts(root = repositoryRoot) {
   ensure(
     /parity-spec\.json` version 3/u.test(plan) &&
       /state identity assertions/u.test(plan) &&
-      /at least one anchor row per target/u.test(plan),
+      /at least one anchor row per target/u.test(plan) &&
+      /same-ID required `equal` probe/u.test(reference) &&
+      /same-ID required `different` probe/u.test(reference) &&
+      /cannot stand in for multiple contract IDs/u.test(reference),
     "COV-EVAL-01: plan must author the version-3 coverage, anchor, and state contract",
   );
   ensure(
@@ -2796,6 +3271,7 @@ async function gradePreparedScenario(fixture, final) {
 }
 
 async function executeScenario(name, { keepOnFailure = false } = {}) {
+  const startedAt = Date.now();
   const fixture = await prepareScenario(name);
   let succeeded = false;
   try {
@@ -2828,6 +3304,7 @@ async function executeScenario(name, { keepOnFailure = false } = {}) {
     await gradePreparedScenario(fixture, final);
     succeeded = true;
     process.stdout.write(`PASS ${name}\n`);
+    return { name, status: "pass", durationMs: Date.now() - startedAt };
   } finally {
     if (succeeded || !keepOnFailure) {
       await removeFixture(fixture.fixtureRoot);
@@ -2883,24 +3360,174 @@ function parseArguments(argv) {
   const selected = [];
   let list = false;
   let self = false;
+  let all = false;
   let keepOnFailure = false;
+  let affectedFrom;
+  let resume;
+  let concurrency = 2;
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--list") list = true;
     else if (argument === "--self-test") self = true;
+    else if (argument === "--all") all = true;
     else if (argument === "--keep-on-failure") keepOnFailure = true;
     else if (argument === "--scenario") {
       const name = argv[index + 1];
       ensure(name && scenarios[name], `--scenario requires one of: ${Object.keys(scenarios).join(", ")}`);
       selected.push(name);
       index += 1;
+    } else if (argument === "--affected-from") {
+      affectedFrom = argv[index + 1];
+      ensure(affectedFrom, "--affected-from requires a Git base ref");
+      index += 1;
+    } else if (argument === "--resume") {
+      resume = argv[index + 1];
+      ensure(resume, "--resume requires a result manifest path");
+      index += 1;
+    } else if (argument === "--concurrency") {
+      const raw = argv[index + 1];
+      ensure(raw === "1" || raw === "2", "--concurrency must be 1 or 2");
+      concurrency = Number(raw);
+      index += 1;
     } else {
       throw new Error(`unknown argument: ${argument}`);
     }
   }
   ensure(!(list && self), "--list and --self-test cannot be combined");
-  ensure(!(self && selected.length > 0), "--self-test and --scenario cannot be combined");
-  return { selected, list, self, keepOnFailure };
+  const selectionModes = Number(selected.length > 0) + Number(Boolean(affectedFrom)) + Number(Boolean(resume)) + Number(all);
+  ensure(selectionModes <= 1, "choose exactly one of --scenario, --affected-from, --resume, or --all");
+  ensure(
+    !(list || self) || selectionModes === 0,
+    "--list and --self-test cannot be combined with scenario selection",
+  );
+  ensure(
+    list || self || selectionModes === 1,
+    "choose one of --scenario, --affected-from, --resume, or --all",
+  );
+  return {
+    selected: [...new Set(selected)],
+    list,
+    self,
+    all,
+    keepOnFailure,
+    affectedFrom,
+    resume,
+    concurrency,
+  };
+}
+
+async function readResultManifest(target) {
+  const resolved = path.resolve(target);
+  let parsed;
+  try {
+    parsed = JSON.parse(
+      await readBoundedRegularFile(resolved, 1024 * 1024, "eval result manifest"),
+    );
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new Error("EVAL_INVALID_RESULT_MANIFEST: manifest is not valid JSON");
+    }
+    throw error;
+  }
+  failedScenariosFromManifest(parsed);
+  return parsed;
+}
+
+async function writeResultManifest(selection, concurrency, results) {
+  const resultRoot = await mkdtemp(path.join(os.tmpdir(), "zoom-plan-skill-eval-result-"));
+  const resultPath = path.join(resultRoot, "result.json");
+  const passed = results.filter(({ status }) => status === "pass").length;
+  const failed = results.length - passed;
+  const manifest = {
+    schemaVersion: 1,
+    createdAt: new Date().toISOString(),
+    selection,
+    concurrency,
+    results: results.map(({ name, status, durationMs, errorCode }) => {
+      const safeErrorCode = status === "fail" && scenarioFailureCodes.has(errorCode)
+        ? errorCode
+        : status === "fail"
+          ? "SCENARIO_FAILED"
+          : undefined;
+      return {
+        name,
+        status,
+        durationMs,
+        ...(safeErrorCode ? { errorCode: safeErrorCode } : {}),
+      };
+    }),
+    summary: { total: results.length, passed, failed },
+  };
+  await writeFile(resultPath, `${JSON.stringify(manifest, null, 2)}\n`, {
+    flag: "wx",
+    mode: 0o600,
+  });
+  return resultPath;
+}
+
+function scenarioFailureCode(error) {
+  const code = error && typeof error === "object" && "code" in error
+    ? String(error.code).toUpperCase()
+    : "";
+  const message = error instanceof Error
+    ? error.message
+    : typeof error === "string"
+      ? error
+      : "";
+  if (
+    ["429", "ERR_RATE_LIMIT", "RATE_LIMIT", "RATE_LIMIT_EXCEEDED"].includes(code) ||
+    /(?:\b(?:http(?: status)?\s*)?429\b|too many requests|rate[_ -]?limit(?:ed|ing| exceeded)?|usage limit (?:has been )?(?:reached|exceeded))/iu.test(message)
+  ) {
+    return "RATE_LIMIT";
+  }
+  if (
+    ["EAGAIN", "EMFILE", "ENFILE", "ENOMEM", "ENOSPC", "ENOBUFS"].includes(code) ||
+    /(?:resource pressure|resource temporarily unavailable|out of memory|heap limit|cannot allocate memory|no space left on device|too many open files|file table overflow|no buffer space available)/iu.test(message)
+  ) {
+    return "RESOURCE_PRESSURE";
+  }
+  return "SCENARIO_FAILED";
+}
+
+function shellArgument(value) {
+  return /^[A-Za-z0-9_./:@%+=,-]+$/u.test(value)
+    ? value
+    : `'${value.replaceAll("'", `'"'"'`)}'`;
+}
+
+function retryableResumeCommand(resultPath) {
+  return `node scripts/eval-plan-skills.mjs --resume ${shellArgument(resultPath)} --concurrency 1`;
+}
+
+async function executeSelectedScenarios(names, options, selection) {
+  const results = await runBounded(names, options.concurrency, async (name) => {
+    const startedAt = Date.now();
+    try {
+      return await executeScenario(name, options);
+    } catch (error) {
+      const errorCode = scenarioFailureCode(error);
+      process.stderr.write(`FAIL ${name} ${errorCode}\n`);
+      return {
+        name,
+        status: "fail",
+        durationMs: Date.now() - startedAt,
+        errorCode,
+      };
+    }
+  });
+  const resultPath = await writeResultManifest(selection, options.concurrency, results);
+  process.stdout.write(`RESULT_MANIFEST=${resultPath}\n`);
+  const failures = results.filter(({ status }) => status === "fail");
+  const retryableFailure = failures.some(({ errorCode }) =>
+    errorCode === "RATE_LIMIT" || errorCode === "RESOURCE_PRESSURE",
+  );
+  ensure(
+    failures.length === 0,
+    retryableFailure
+      ? `EVAL_SCENARIOS_RETRYABLE: ${failures.length} scenario(s) failed; retry unfinished scenarios with:\n${retryableResumeCommand(resultPath)}`
+      : `EVAL_SCENARIOS_FAILED: ${failures.length} scenario(s) failed; resume with --resume ${resultPath}`,
+  );
+  return { results, resultPath };
 }
 
 async function main() {
@@ -2913,14 +3540,39 @@ async function main() {
     await selfTest();
     return;
   }
+  let selected;
+  let selection;
+  if (options.all) {
+    selected = Object.keys(scenarios);
+    selection = { mode: "all", names: selected };
+  } else if (options.affectedFrom) {
+    const changedPaths = gitPathsFrom(options.affectedFrom);
+    selected = selectAffectedScenarios(changedPaths);
+    selection = {
+      mode: "affected",
+      names: selected,
+      changedPathCount: changedPaths.length,
+    };
+  } else if (options.resume) {
+    const prior = await readResultManifest(options.resume);
+    selected = failedScenariosFromManifest(prior);
+    selection = { mode: "resume", names: selected };
+  } else {
+    selected = options.selected;
+    selection = { mode: "explicit", names: selected };
+  }
+  if (selected.length === 0) {
+    const resultPath = await writeResultManifest(selection, options.concurrency, []);
+    process.stdout.write(`no affected or failed scenarios\nRESULT_MANIFEST=${resultPath}\n`);
+    return;
+  }
   await run("codex", ["--version"], {
     cwd: repositoryRoot,
     timeoutMs: 15_000,
     env: codexEnvironment(),
     trackDescendants: false,
   });
-  const selected = options.selected.length > 0 ? options.selected : Object.keys(scenarios);
-  for (const name of selected) await executeScenario(name, options);
+  await executeSelectedScenarios(selected, options, selection);
 }
 
 async function isMainModule() {
@@ -2944,10 +3596,18 @@ export {
   assertCoverageDrivenSkillContracts,
   codexEnvironment,
   executeScenario,
+  executeSelectedScenarios,
+  failedScenariosFromManifest,
   fixtureGitEnvironment,
+  gitPathsFrom,
   gradePreparedScenario,
+  parseArguments,
   prepareScenario,
+  readResultManifest,
   run,
+  runBounded,
   scenarios,
+  selectAffectedScenarios,
   selfTest,
+  writeResultManifest,
 };

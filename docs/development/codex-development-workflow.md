@@ -31,6 +31,7 @@ plans/<slug>/
 | `$review` | `gpt-5.6-sol` | `high` |
 | `$git-commit-push-pr` | `gpt-5.6-luna` | `medium` |
 | `$workflow-retrospective` | `gpt-5.6-terra` | `high` |
+| `$workflow-performance-audit` | `gpt-5.6-terra` | `high` |
 
 read-only custom agentのモデルはスキルメタデータではなく、`.codex/config.toml`の登録と`.codex/agents/*.toml`で固定する。
 
@@ -40,7 +41,7 @@ read-only custom agentのモデルはスキルメタデータではなく、`.co
 | `$plan` | `project_explorer` | `gpt-5.6-luna` | `medium` | 複数subsystemまたは大量資料を横断するread-only探索だけで最大1体起動する。利用不能なら親が継続して未使用を報告する |
 | `$review` | `independent_reviewer` | `gpt-5.6-terra` | `high` | 分離したblind reviewとgoal適合reviewに2体を並行起動する。片方でも利用不能なら停止する |
 
-これらのcustom agentはすべて`read-only`とし、spawn時のmodelまたはreasoning overrideを渡さない。`$implement`、`$git-commit-push-pr`、`$workflow-retrospective`はsubagentへ委譲せず、親エージェントが単独で実行する。全体のsubagent既定モデル、既定reasoning、同時実行数制限はproject-local設定へ追加しない。上表以外の一般subagentは、Codexの通常動作として親taskで選択した設定を継承する。ユーザーまたは管理者の上位設定によるoverrideはrepositoryの管理対象外とする。
+これらのcustom agentはすべて`read-only`とし、spawn時のmodelまたはreasoning overrideを渡さない。`$implement`、`$git-commit-push-pr`、`$workflow-retrospective`、`$workflow-performance-audit`はsubagentへ委譲せず、親エージェントが単独で実行する。全体のsubagent既定モデル、既定reasoning、同時実行数制限はproject-local設定へ追加しない。上表以外の一般subagentは、Codexの通常動作として親taskで選択した設定を継承する。ユーザーまたは管理者の上位設定によるoverrideはrepositoryの管理対象外とする。
 
 `xhigh`、`max`、`ultra`は親エージェントのskill別推奨にもcustom agentの固定設定にも使わない。推奨設定で品質不足が確認された場合だけ、対象taskの親エージェントで明示的に選択する。
 
@@ -69,7 +70,7 @@ plan成果物のcleanupは、この流れとは別の明示操作として行う
 2. repository、runtime、code、testを確認し、UI変更時はclosest live UIも確認する。複数subsystemまたは大量資料を横断し、独立した要約で親のcontextを節約できる場合だけ、最大1体の`project_explorer`を使う。
 3. 自己完結した最終設計と`## 要件クロージャ`を`plans/<slug>/goal.md`へ書く。
 4. UI変更時は完成UI、完全Cartesian matrixを持つ`ui-contract.json` version 1、coverage/risk/anchorを宣言する`parity-spec.json` version 3を作る。
-5. goalを監査し、UI変更時はCSS build、contract/profile validation、coverage/full行数、revision計算を終えてから、返却直前に影響scopeのtargeted smokeを1回行う。
+5. goalを監査し、UI変更時はauthoring中のCSS buildを1回だけ行う。revisionをgoalへ記録後、`parity-runner.mjs preflight ... --context plan`を1回実行してgoal、contract/profile、source inventory、invariant/probe、coverage/full/selected行数をまとめて検証し、返却直前に影響scopeのtargeted smokeを1回行う。
 6. UI planは`./dev-prototype.sh --retain <slug>`でprototypeを確認可能な状態にし、goal、live URL、PID、owner、revision、smoke結果、未確認事項、停止commandを返す。非UI planは確認セッションを作らない。
 
 フィードバックでは同じplanを最終設計として更新する。Browserをauthoring中に使わず、静的作業が完了した返却直前に影響scopeのsmokeを1回だけ行う。全matrixや承認状態は作らない。
@@ -91,27 +92,27 @@ plan成果物のcleanupは、この流れとは別の明示操作として行う
 
 ### `$implement`
 
-1. goal、prototype revision、validation profile digestを検証し、fresh runへ承認を記録する。新規UI planは`parity-spec.json` version 3、target全件の`browserSetups`、state identity assertion、coverage/anchor probe、risk row、source impact、batch/artifact policyを必須とする。
+1. UI変更では承認済みprototypeを再buildせず、`parity-runner.mjs preflight ... --context implement`を1回実行してgoal、revision、profile digest、source inventory、selectionを検証し、fresh runへ承認を記録する。新規UI planはversion 3 profile、target全件のBrowser setup、state identity、coverage/anchor、risk、source impact、batch/artifact policyを必須とする。
 2. UI変更時はBrowserを開かず、HEAD、checkout mount、source、contract、deterministic coverage selectionを静的に検証する。
 3. 通常は`coverage`を固定し、全target-state、target-viewport、target-theme、risk、anchorを選ぶ。`full`はrelease、CI、定期、明示要求の独立実行だけにする。
 4. goalとUI契約に従って実装し、Browserを使わず対象testで確認する。
-5. 変更riskに比例するtest、lint、typecheck、必要な場合だけbuild、diff checkを行う。
-6. 完了候補ができた最後にruntime ownership/healthを読み戻し、common adapterと`prepare-run` / `next-batch` / `record-batch` / `record-failure` / `resume-run` / `invalidate-run` / `finalize-run`へ渡す。runnerがbounded batchを機械実行し、LLMへはcompact summaryだけを返す。
+5. `validation-digest.mjs`でHEAD、task scope、staged/unstaged/untrackedを含むvalidated diff digestを記録し、変更riskに比例するfocused test、lint、typecheck、必要な場合だけfull test/build、diff checkを行う。同じdigestではfull test/buildを各1回までとし、command・scope・pass statusが一致する結果を後工程で再利用する。
+6. 完了候補ができた最後に`./dev-compose.sh ensure`を1回のauthoritative operationとして完了まで待ち、その最終owner/health/mount/process/port/URLをcommon adapterと`prepare-run` / `next-batch` / `record-batch` / `record-failure` / `resume-run` / `invalidate-run` / `finalize-run`へ渡す。ensure中の外側status、固定sleep、poll、追尾logは禁止し、失敗時だけ同じprojectのbounded diagnosticを1回取得する。
 7. required coverageとcleanupのpass後だけschema version 4の最終証跡を書く。現在のinvocationにexact phrase `確認セッションを保持`がある場合だけ同じprototypeとownership検証済みappを確認セッションへhandoffし、なければagent-ownedなbaseline差分だけをcleanupする。
 
 明示的な`$implement`実行自体を現在のgoal、revision、profile digestへの承認とする。「承認します」という別回答やrevision転記は不要である。静的gateの失敗はproduction差分0件のまま停止する。Browser unavailable、required probe失敗、再試行後のterminal tool failure、drift、欠落coverageは自動UI検証完了にせず、実装差分、検証済みcoverage、未実行row、stable code、人間確認項目を報告する。
 
 `coverage`を通常既定とし、局所変更でも各targetの全state、全viewport、light/darkを最低1回確認する。具体的な交互作用はrisk row、詳細probeはanchor rowへ追加する。prototype・contract、global style、semantic token、共通shell、responsive規則を変更したという分類だけでは自動的にfullへ昇格しない。具体的な横断リスクと許可execution contextがある場合だけ、別の非LLM実行でfullを使う。
 
-pre-editとaffectedのBrowser phaseは新規runで実行しない。同じassertionを追加sweepや個別manual checkで重複確認しない。common adapterはpure ESMとdata-only JSON batchだけを読み込み、freshな選択済みtab 1つでproductionからprototypeへ直列に移動する。task固有adapter、実行可能bundle、runtime shimを新設しない。時間による打ち切りは設けず、required coverage全pass、required probe failure、同じfailure batchの1回再試行後のterminal failure、cleanup/readback terminal failureのいずれかで終了する。
+pre-editとaffectedのBrowser phaseは新規runで実行しない。同じassertionを追加sweepや個別manual checkで重複確認しない。common adapterはpure ESMとdata-only JSON batchだけを読み込み、task-owned Browser session内のproduction/prototype contextをsession・tab・surface・origin・authorization単位で初回だけ安定化し、1 row・1 surfaceを1 navigationで処理する。task固有adapter、実行可能bundle、runtime shimを新設しない。required coverage全pass、required probe failure、同じfailure batchの1回再試行後のterminal failure、cleanup/readback terminal failureのいずれかで終了する。
 
 実装不具合の修正後は、target固有ならそのtarget、shared sourceなら宣言consumer、global style/theme/shellなら全targetを無効化する。影響しないpass rowとsource変更のない静的検証結果は再利用し、先頭からやり直さない。
 
-局所変更は対象testとlint、typecheck、diff checkを基本とする。全testは無関係suiteへ波及し得る場合または信頼できる対象testがない場合、production buildはroute、configuration、bundling、server boundaryを変える場合またはrepositoryの明示要件がある場合だけ行う。
+局所変更は対象testとlint、typecheck、diff checkを基本とする。全testは無関係suiteへ波及し得る場合または信頼できる対象testがない場合、production buildはroute、configuration、bundling、server boundaryを変える場合またはrepositoryの明示要件がある場合だけ行う。source drift後は影響checkだけを再実行し、Browser-only failureで静的checkを繰り返さない。
 
 ### `$review`
 
-1. exact diffと必要なcontextを固定し、UI影響と構造化証跡を監査する。
+1. exact diffとvalidated diff digestを固定し、実装済みcheckはcommand・scope・pass status・digest一致時に再実行せず、UI影響と構造化証跡を監査する。
 2. blind diff reviewとgoal適合reviewを独立した履歴なし`independent_reviewer`で並行実行する。
 3. `plans/<slug>/review/`へHTML reportを作り、desktopと390×844で確認する。現在のinvocationにexact phrase `確認セッションを保持`がある場合だけ、review、prototype、ownership検証済みappを同じslugの確認セッションへhandoffする。
 
@@ -140,11 +141,11 @@ $implement plans/<slug>/goal.md
 
 1. Git規約、状態、remote、GitHub認証、repository対応を確認してfetchする。
 2. baseとtopic branchを解決し、protected branch上または安全条件を満たすdetached HEADならtopic branchを作る。
-3. 未commit変更があればcurrent taskのpathだけをstageし、検証後に1件のcommitを作る。
+3. 未commit変更があればcurrent taskのpathだけをstageする。staging前後でvalidated diff digestが一致すれば成功済みtest/buildを再利用し、`git diff --cached --check`とhookの後に1件のcommitを作る。不一致なら不足するscopeだけを検証する。
 4. 最新baseへ安全に同期する。
 5. historyを書き換えずにpushし、localとremoteのSHA一致を確認する。
 6. 同じheadのPRを作成するか、必要な箇所だけを更新する。
-7. PRのbase/head OID、draft、mergeability、merge stateをreadbackして報告する。
+7. PRのbase/head OID、draft、mergeability、merge stateを1回の`gh pr view --json`でreadbackして報告する。未確定値のためにpollせず、unverifiedとして分離する。
 
 現在のユーザーが明示した場合だけ実行する。detached HEADではremoteとGitHub repositoryを確認してfetchした後、HEADが唯一のbase候補の履歴内にあり、task path、index、未使用branch名が一意な場合だけ`git switch -c`で新規topic branchを作り、通常のshippingへ合流する。
 
@@ -164,6 +165,14 @@ force push、force-create、shared worktree checkout、stash、変更破棄、�
 
 この操作を標準フローの末尾へ追加せず、`$plan`、`$implement`、`$review`から自動実行・自動提案・自動通知しない。一時reportは他のplan生成物と同様に`plans:cleanup`の対象になる。
 
+### `$workflow-performance-audit`（複数taskの期間監査）
+
+同じrepositoryの複数taskについて実行時間の再発要因を調べる場合は、別taskから`$workflow-performance-audit`を明示実行する。既定は現在timezoneの直近4暦日で、local session JSONLを1-passで解析し、raw transcriptやcommand本文を返さない。active/current taskと監査中に変化したsourceは暫定値へ分離し、完了taskだけを比較する。
+
+判定は`ボトルネックあり`、`ボトルネックなし`、`判定不能`を区別する。P1は同じ回避可能なroot causeが2件以上の比較可能taskで再発した場合、P0は単一taskでも決定的なprogress-stop証拠がある場合に限る。必要telemetryが揃った2件以上で候補がなければ`改善提案なし・現行workflowを変更しない`と返し、証拠不足を「なし」へ補完しない。候補適用は行わず、実装する場合は別途`$plan`、代表taskを深掘りする場合は`$workflow-retrospective`を使う。
+
+この監査も標準フローへ自動追加せず、subagent、Browser、runtime、web、外部service、report file、Git/PR変更を使わない。
+
 ## UI変更の共通契約
 
 ### Prototypeと比較条件
@@ -173,7 +182,8 @@ prototypeは完成UI契約であり、data、persistence、authorization、backe
 ```sh
 node .agents/skills/plan/scripts/build-prototype-css.mjs plans/<slug>/prototype
 node .agents/skills/plan/scripts/prototype-revision.mjs plans/<slug>/prototype
-node .agents/skills/plan/scripts/parity-runner.mjs validate plans/<slug>/prototype
+node .agents/skills/plan/scripts/parity-runner.mjs preflight plans/<slug>/prototype \
+  --context plan --target <changed-target> --state <changed-state> [--risk <risk>]
 ./dev-prototype.sh <slug>
 ```
 
@@ -201,7 +211,7 @@ UIの最終的な視覚品質は人間が代表screenshotまたはURLを確認�
 1. Localはport 3000、worktreeはruntime manifestの割当portについて、関連process、container、Compose、dependencyのbaselineとownerを記録する。
 2. implementationと静的検証が終わるまでBrowserとprototype serverを起動しない。
 3. buildが必要な場合だけidentityを再確認し、agent-owned runtimeだけを停止する。
-4. 完了直前に`./dev-compose.sh ensure`で実アプリを再利用または起動し、`./dev-compose.sh status`の`RUNTIME_OWNERSHIP=verified`、`ACTIVE_RUNTIME_HEALTH=healthy`、`RUNTIME_RESTART_REQUIRED=0`、PID/container、cwd、mount、Compose project、portを読み戻す。続いて`./dev-compose.sh status --url`のURLとprototypeでfinal parityを行い、`finalize-run`直前にも同じreadbackを繰り返す。
+4. 完了直前に`./dev-compose.sh ensure`を1回実行し、同commandの最終出力にある`RUNTIME_OWNERSHIP=verified`、`ACTIVE_RUNTIME_HEALTH=healthy`、`RUNTIME_RESTART_REQUIRED=0`、PID/container、cwd、mount、Compose project、port、`PRODUCTION_URL`をauthoritative readbackとして使う。進行中に別status、固定sleep、30秒poll、`docker logs -f`を発行せず、`finalize-run`直前だけdriftを1回読む。ensure失敗時だけ同じprojectのstatus、process state、直近bounded logを各1回取得する。
 5. 最終確認後はworktreeだけ`./dev-compose.sh cleanup`を使い、baselineとの差分だけをcleanupする。
 
 Localでは同じcheckoutのhealthyなnative Next.jsまたは正しいCompose `web`を`http://localhost:3000`で再利用する。worktreeではcanonical checkout pathから固有Compose projectとweb・PostgreSQL・Studio portを割り当て、DB、named volume、network、originを他checkoutと分離する。保持するnamed volumeのcreation identityはsession間で固定し、可変なcurrent session labelを理由にdatabase再作成を要求しない。worktreeはloopbackだけにbindし、LANとCloudflareはLocal専用とする。
@@ -212,11 +222,11 @@ Localでは同じcheckoutのhealthyなnative Next.jsまたは正しいCompose `w
 
 ## Workflowの検証
 
-通常のcontract testは`npm test`、認証済みCodex CLIでのforward evalは`npm run eval:plan-skills`を使う。contract testは18×5×8×2 profileのcoverage 144行/full 1,440行、重複なし、risk/anchor tier、checkpoint/resume、target/shared/global invalidation、1回retry、compact summary、legacy readerを検証する。forward evalはplan smoke、invocation承認、coverage既定、full context制限、静的gate停止、terminal Browser failure、drift、raw output非返却、静的検証再利用を検証する。
+通常のcontract testは対象testを先に使い、workflow全体の変更、CI、release、明示要求では`npm test`を1回実行する。認証済みCodex CLIのforward evalは変更pathに対する`npm run eval:plan-skills -- --affected-from <base> --concurrency 2`を通常入口とし、共通skill/runtime契約変更時だけ全scenarioを1回実行する。fixture isolationやrate limitを満たせなければ`--concurrency 1`へ下げ、失敗後はresult manifestを`--resume`へ渡して失敗scenarioだけを再実行する。
 
 CLI evalはCodexアプリ内Browserを代替しない。runtime所有権、build、migration起因のverified Compose `web` restart、live parity、cleanupの契約を変えた場合は、shipping前にCodex DesktopでLocal再利用、worktree分離、foreign owner停止、session限定cleanupの成功・停止経路をmanual確認する。
 
-局所変更の評価でも宣言済み全state、viewport、theme coverageを省略しない。task固有adapter/shim、pre-edit/affected Browser、追加sweep、不要な全test/build、rowごとのLLM実況が0回であることを確認する。通常coverage、risk/anchor、checkpoint再利用とfull分離により、品質を落とさず直積・重複・context消費を削減できているかを評価する。
+contract testは18×5×8×2 profileのcoverage 144行/full 1,440行、preflight 1 command、1 row/surface 1 navigation、context安定化1回、cleanup happy-path wait 0回、digestごとのfull test/build各1回、checkpoint再利用を決定的に検証する。局所変更でも宣言済み全state、viewport、theme coverageを省略せず、task固有adapter/shim、pre-edit/affected Browser、追加sweep、外側固定sleep/追尾log/CI待ち、不要な全test/build、pass済みrow再実行、rowごとのLLM実況が0回であることを確認する。
 
 ## 権限とcleanup
 

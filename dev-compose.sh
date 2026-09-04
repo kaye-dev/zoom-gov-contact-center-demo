@@ -661,11 +661,13 @@ runtime_print_status() {
 
 wait_for_runtime_health() {
   local attempt
+  local deadline=$(( SECONDS + 60 ))
 
   for attempt in {1..60}; do
     if runtime_health_is_ready; then
       return 0
     fi
+    (( SECONDS < deadline )) || break
     sleep 1
   done
   print -u2 "The web runtime did not become healthy at http://localhost:${HOST_PORT}/api/health."

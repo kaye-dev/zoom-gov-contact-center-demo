@@ -72,6 +72,7 @@ function createFakeBrowser() {
       limit?: number;
     }>,
     navigation: [] as string[],
+    activations: [] as string[],
     actions: [] as string[],
     elements: new Map<string, { count?: number; visible?: boolean; text?: string; attributes?: Record<string, string | null> }>([
       ["html", { text: "fixture", attributes: {} }],
@@ -98,6 +99,9 @@ function createFakeBrowser() {
         state.cdpNetworkEnable += 1;
       } else if (method === "Network.disable") {
         state.cdpNetworkDisable += 1;
+      } else if (method === "Page.bringToFront") {
+        state.selectedId = tab.id;
+        state.activations.push(tab.id);
       }
     },
     async readEvents(options: {
@@ -344,12 +348,66 @@ function createFakeBrowser() {
   return { browser, tab, state, cdp, viewport };
 }
 
+function createPrototypeTab(fixture: ReturnType<typeof createFakeBrowser>) {
+  let currentUrl = "about:blank";
+  const navigation: string[] = [];
+  const baseEvaluate = fixture.tab.playwright.evaluate.bind(fixture.tab.playwright);
+  const prototypeCdp = {
+    async send(method: string, params?: Record<string, unknown>) {
+      if (method === "Page.bringToFront") {
+        fixture.state.selectedId = "prototype";
+        fixture.state.activations.push("prototype");
+        return;
+      }
+      return fixture.cdp.send(method, params);
+    },
+    readEvents: fixture.cdp.readEvents.bind(fixture.cdp),
+  };
+  return {
+    tab: {
+      ...fixture.tab,
+      id: "prototype",
+      capabilities: {
+        async list() {
+          return [{ id: "cdp" }];
+        },
+        async get(id: string) {
+          assert.equal(id, "cdp");
+          fixture.state.cdpGet += 1;
+          return prototypeCdp;
+        },
+      },
+      playwright: {
+        ...fixture.tab.playwright,
+        async evaluate(fn: (...args: never[]) => unknown, arg?: unknown) {
+          if (fn.toString().includes("location.pathname")) {
+            return new URL(currentUrl).pathname;
+          }
+          return baseEvaluate(fn, arg);
+        },
+      },
+      async goto(url: string) {
+        currentUrl = url;
+        navigation.push(url);
+        const selectedTheme = new URL(url).searchParams.get("theme");
+        if (selectedTheme) fixture.state.theme = selectedTheme;
+      },
+      async url() {
+        return currentUrl;
+      },
+    },
+    navigation,
+    currentUrl: () => currentUrl,
+  };
+}
+
 const contract = {
   comparisonConditions: {
     viewports: ["390x844", "1280x800"],
     dpr: 1,
     scroll: { x: 0, y: 0 },
     themes: ["light", "dark"],
+    authorization: "none",
   },
   comparisonTargets: [{ id: "main" }],
   parityMatrix: [
@@ -409,7 +467,7 @@ const spec = {
   }],
 };
 
-test("IAB-01 pure ESM import and single-tab run", async () => {
+test("IAB-01 pure ESM import and distinct-tab final run", async () => {
   const [adapterSource, coreSource] = await Promise.all([readFile(adapterPath, "utf8"), readFile(corePath, "utf8")]);
   for (const source of [adapterSource, coreSource]) {
     assert.doesNotMatch(source, /from ["']node:|\bprocess\b|node:fs/u);
@@ -436,14 +494,18 @@ test("IAB-01 pure ESM import and single-tab run", async () => {
     await sha256Digest(new Uint8Array([1, 2, 3, 4])),
   );
   const fixture = createFakeBrowser();
-  const adapter = createInAppBrowserParityAdapter({ browser: fixture.browser, tab: fixture.tab });
+  const prototype = createPrototypeTab(fixture);
+  const adapter = createInAppBrowserParityAdapter({
+    browser: fixture.browser,
+    tabs: { production: fixture.tab, prototype: prototype.tab },
+  });
   const evidence = await new BrowserParityRunner(adapter).run({
     definition: { contract, spec, prototypeRevision: digest, validationProfileDigest: digest },
     phase: "final",
     changedTargetIds: ["main"],
     changedStates: ["default"],
     changedViewports: ["390x844"],
-    tabs: { production: "comparison", prototype: "comparison" },
+    tabs: { production: fixture.tab.id, prototype: prototype.tab.id },
     baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
     run: {
       runId: "iab-01",
@@ -455,16 +517,135 @@ test("IAB-01 pure ESM import and single-tab run", async () => {
   assert.equal(evidence.rows[0].status, "pass");
   assert.equal(evidence.capabilities.cleanup.status, "pass");
   assert.equal(evidence.capabilities.sessionId, "iab-fixture");
-  assert.deepEqual(fixture.state.loadStateOptions, { state: "domcontentloaded", timeoutMs: 10_000 });
+  assert.deepEqual(
+    evidence.capabilities.surfaceContexts.map(({ surface }: { surface: string }) => surface),
+    ["production", "prototype"],
+  );
+  for (const surfaceContext of evidence.capabilities.surfaceContexts) {
+    assert.equal(surfaceContext.authorizationProfile, "none");
+    assert.equal(
+      surfaceContext.authorizationProfileDigest,
+      await sha256Digest("parity:authorization-profile:v1\0none"),
+    );
+  }
+  assert.deepEqual(fixture.state.loadStateOptions, { state: "load", timeoutMs: 10_000 });
   assert.equal(new URL(evidence.rows[0].actualConditions.urls.production).search, "");
   assert.match(fixture.state.navigation[0], /localhost:3142/u);
-  assert.match(fixture.state.navigation.at(-1) ?? "", /127\.0\.0\.1:4142/u);
+  assert.match(prototype.navigation[0], /127\.0\.0\.1:4142/u);
+});
+
+test("IAB-01b production/prototypeを別tab contextでnavigate・cache・cleanupする", async () => {
+  const { createInAppBrowserParityAdapter } = await adapterModulePromise;
+  const { BrowserParityRunner, sha256Digest } = await coreModulePromise;
+  const fixture = createFakeBrowser();
+  const prototype = createPrototypeTab(fixture);
+  const adapter = createInAppBrowserParityAdapter({
+    browser: fixture.browser,
+    tabs: { production: fixture.tab, prototype: prototype.tab },
+  });
+  const input = {
+    definition: { contract, spec, prototypeRevision: digest, validationProfileDigest: digest },
+    phase: "final",
+    changedTargetIds: ["main"],
+    changedStates: ["default"],
+    tabs: { production: fixture.tab.id, prototype: prototype.tab.id },
+    baseUrls: { production: "http://localhost:3000", prototype: "http://127.0.0.1:3100" },
+    run: {
+      runId: "run-multi-tab",
+      goalSha256: digest,
+      runtime: { owner: "fixture", checkout: "/fixture" },
+      sources: [],
+    },
+  };
+  const evidence = await new BrowserParityRunner(adapter).run(input);
+
+  assert.equal(evidence.rows[0].status, "pass");
+  assert.deepEqual(adapter.comparisonTabIds, {
+    production: "comparison",
+    prototype: "prototype",
+  });
+  assert.equal(fixture.state.navigation.length, 1);
+  assert.equal(prototype.navigation.length, 1);
+  assert.equal(new URL(prototype.currentUrl()).origin, "http://127.0.0.1:3100");
+  assert.deepEqual(
+    evidence.capabilities.surfaceContexts,
+    [
+      {
+        sessionId: "iab-fixture",
+        tabId: "comparison",
+        surface: "production",
+        origin: "http://localhost:3000",
+        authorizationProfile: "none",
+        authorizationProfileDigest: await sha256Digest("parity:authorization-profile:v1\0none"),
+      },
+      {
+        sessionId: "iab-fixture",
+        tabId: "prototype",
+        surface: "prototype",
+        origin: "http://127.0.0.1:3100",
+        authorizationProfile: "none",
+        authorizationProfileDigest: await sha256Digest("parity:authorization-profile:v1\0none"),
+      },
+    ],
+  );
+  assert.equal(evidence.capabilities.cleanup.status, "pass");
+  assert.deepEqual(
+    evidence.capabilities.cleanup.tabs.map(({ tabId }: { tabId: string }) => tabId),
+    ["comparison", "prototype"],
+  );
+  assert.ok(fixture.state.activations.includes("prototype"));
+  assert.equal(fixture.state.selectedId, "prototype");
+  const reused = await new BrowserParityRunner(adapter).run(input);
+  assert.equal(reused.capabilities.cleanup.status, "pass");
+
+  assert.throws(
+    () => createInAppBrowserParityAdapter({
+      browser: fixture.browser,
+      tabs: { production: fixture.tab, prototype: fixture.tab },
+    }),
+    (error: unknown) => assertSanitizedParityError(error, "PARITY_COMPARISON_TAB_REQUIRED"),
+  );
+});
+
+test("IAB-01c parallel Browser sessionのcleanupは他sessionを変更しない", async () => {
+  const { createInAppBrowserParityAdapter } = await adapterModulePromise;
+  const first = createFakeBrowser();
+  const second = createFakeBrowser();
+  first.browser.browserId = "iab-parallel-a";
+  second.browser.browserId = "iab-parallel-b";
+  const firstAdapter = createInAppBrowserParityAdapter({ browser: first.browser, tab: first.tab });
+  const secondAdapter = createInAppBrowserParityAdapter({ browser: second.browser, tab: second.tab });
+  await Promise.all([
+    firstAdapter.navigate("comparison", "http://localhost:3142/fixture"),
+    secondAdapter.navigate("comparison", "http://localhost:3242/fixture"),
+  ]);
+  await Promise.all([
+    firstAdapter.setViewport("comparison", { width: 390, height: 844 }),
+    secondAdapter.setViewport("comparison", { width: 1280, height: 900 }),
+  ]);
+  const secondBeforeCleanup = structuredClone(second.state);
+  assert.equal((await firstAdapter.cleanup()).status, "pass");
+  assert.deepEqual(second.state, secondBeforeCleanup);
+  assert.equal(first.state.viewportReset, 1);
+  assert.equal(first.state.cdpClear, 1);
+  assert.equal((await secondAdapter.cleanup()).status, "pass");
+  assert.equal(second.state.viewportReset, 1);
+  assert.equal(second.state.cdpClear, 1);
 });
 
 test("IAB-02 390x844 DPR1 canary and cleanup", async () => {
   const { createInAppBrowserParityAdapter } = await adapterModulePromise;
   const fixture = createFakeBrowser();
-  const adapter = createInAppBrowserParityAdapter({ browser: fixture.browser, tab: fixture.tab });
+  const adapter = createInAppBrowserParityAdapter({
+    browser: fixture.browser,
+    tab: fixture.tab,
+    clock: {
+      now: () => 0,
+      async sleep() {
+        assert.fail("cleanup happy path must not wait");
+      },
+    },
+  });
   await adapter.navigate("comparison", "http://localhost:3142/fixture");
   await adapter.setViewport("comparison", { width: 390, height: 844 });
   assert.deepEqual(await adapter.measureViewport("comparison"), { width: 390, height: 844, dpr: 1 });
@@ -737,6 +918,25 @@ test("IAB-02 390x844 DPR1 canary and cleanup", async () => {
     ]),
   );
   assert.equal(clearFailure.state.viewportReset, 1);
+
+  const clearTimeoutAfterCommit = createFakeBrowser();
+  const clearTimeoutOriginal = clearTimeoutAfterCommit.cdp.send.bind(clearTimeoutAfterCommit.cdp);
+  clearTimeoutAfterCommit.cdp.send = async (method: string, params?: Record<string, unknown>) => {
+    const result = await clearTimeoutOriginal(method, params);
+    if (method === "Emulation.clearDeviceMetricsOverride") {
+      throw { message: "CDP clear timeout after commit" };
+    }
+    return result;
+  };
+  const committedClearAdapter = createInAppBrowserParityAdapter({
+    browser: clearTimeoutAfterCommit.browser,
+    tab: clearTimeoutAfterCommit.tab,
+  });
+  await committedClearAdapter.setViewport("comparison", { width: 390, height: 844 });
+  const committedCleanup = await committedClearAdapter.cleanup();
+  assert.equal(committedCleanup.status, "pass");
+  assert.equal(committedCleanup.cdpCleared, true);
+  assert.deepEqual(committedCleanup.readback, committedCleanup.baseline);
 });
 
 test("IAB-03 single-tab surface ordering and selection drift", async () => {
@@ -767,6 +967,235 @@ test("IAB-03 single-tab surface ordering and selection drift", async () => {
       "token=",
     ]),
   );
+
+  const committedTimeout = createFakeBrowser();
+  const committedGoto = committedTimeout.tab.goto.bind(committedTimeout.tab);
+  committedTimeout.tab.goto = async (url: string) => {
+    await committedGoto(url);
+    throw { message: "navigation timeout after commit" };
+  };
+  const committedAdapter = createInAppBrowserParityAdapter({
+    browser: committedTimeout.browser,
+    tab: committedTimeout.tab,
+  });
+  await committedAdapter.navigate(
+    "comparison",
+    "http://localhost:3142/fixture?theme=light",
+  );
+  assert.deepEqual(committedTimeout.state.loadStateOptions, {
+    state: "load",
+    timeoutMs: 10_000,
+  });
+});
+
+test("IAB-03a unresolved tab.gotoはbounded navigation deadlineで停止する", async () => {
+  const { createInAppBrowserParityAdapter } = await adapterModulePromise;
+  const fixture = createFakeBrowser();
+  const originalGoto = fixture.tab.goto.bind(fixture.tab);
+  let releaseNavigation!: () => void;
+  const navigationGate = new Promise<void>((resolve) => {
+    releaseNavigation = resolve;
+  });
+  let navigationFinished: Promise<void> | undefined;
+  fixture.tab.goto = (url: string) => {
+    navigationFinished = navigationGate.then(() => originalGoto(url));
+    return navigationFinished;
+  };
+  const adapter = createInAppBrowserParityAdapter({
+    browser: fixture.browser,
+    tab: fixture.tab,
+    timeouts: { navigationMs: 5 },
+  });
+  await assert.rejects(
+    adapter.navigate("comparison", "http://localhost:3142/fixture?theme=light"),
+    (error: unknown) => {
+      const value = error as { code?: string; evidence?: Record<string, unknown>; message?: string };
+      assert.equal(value.code, "PARITY_NAVIGATION_TIMEOUT");
+      assert.deepEqual(value.evidence, { operation: "tab.goto", timeoutMs: 5 });
+      assert.doesNotMatch(value.message ?? "", /localhost|theme=/u);
+      return true;
+    },
+  );
+  assert.equal(fixture.state.navigation.length, 0);
+  await assert.rejects(
+    adapter.navigate("comparison", "http://localhost:3142/another"),
+    (error: unknown) => (error as { code?: string }).code === "PARITY_NAVIGATION_TIMEOUT",
+  );
+  await assert.rejects(
+    adapter.cleanup(),
+    (error: unknown) => (error as { code?: string }).code === "PARITY_CLEANUP_FAILED",
+  );
+  releaseNavigation();
+  await navigationFinished;
+  assert.equal(fixture.state.navigation.length, 1, "the late operation can settle but its adapter stays quarantined");
+  await assert.rejects(
+    adapter.activateTab("comparison"),
+    (error: unknown) => (error as { code?: string }).code === "PARITY_NAVIGATION_TIMEOUT",
+  );
+});
+
+test("IAB-03b 実adapterのsurface context安定化はkeyごとに一度だけ実operationを行う", async () => {
+  const { createInAppBrowserParityAdapter } = await adapterModulePromise;
+  const { BrowserParityRunner } = await coreModulePromise;
+  const fixture = createFakeBrowser();
+  const originalUrl = fixture.tab.url.bind(fixture.tab);
+  const originalCapabilityList = fixture.browser.capabilities.list.bind(
+    fixture.browser.capabilities,
+  );
+  const originalCapabilityGet = fixture.browser.capabilities.get.bind(
+    fixture.browser.capabilities,
+  );
+  let urlReadOperations = 0;
+  let capabilityListOperations = 0;
+  let capabilityGetOperations = 0;
+  fixture.tab.url = async () => {
+    urlReadOperations += 1;
+    return originalUrl();
+  };
+  fixture.browser.capabilities.list = async () => {
+    capabilityListOperations += 1;
+    return originalCapabilityList();
+  };
+  fixture.browser.capabilities.get = async (id: string) => {
+    capabilityGetOperations += 1;
+    return originalCapabilityGet(id);
+  };
+
+  const runner = new BrowserParityRunner(
+    createInAppBrowserParityAdapter({ browser: fixture.browser, tab: fixture.tab }),
+  );
+  const base = {
+    tabId: "comparison",
+    row: contract.parityMatrix[0],
+    setup: {
+      query: {},
+      actions: [],
+      browser: { type: "fixed", theme: "light" },
+    },
+    dpr: 1,
+    expectedScroll: { x: 0, y: 0 },
+  };
+
+  await runner.prepareSurface({
+    ...base,
+    surface: "production",
+    authorizationProfile: "admin",
+    baseUrl: "http://localhost:3000/",
+  });
+  assert.equal(urlReadOperations, 2, "context readback + row navigation readback");
+  assert.equal(fixture.state.navigation.length, 1);
+  assert.equal(capabilityListOperations, 1);
+  assert.equal(capabilityGetOperations, 1);
+
+  await runner.prepareSurface({
+    ...base,
+    surface: "production",
+    authorizationProfile: "admin",
+    baseUrl: "http://localhost:3000/",
+  });
+  assert.equal(urlReadOperations, 3, "same context skips its stabilization readback");
+  assert.equal(fixture.state.navigation.length, 2);
+
+  await runner.prepareSurface({
+    ...base,
+    surface: "production",
+    authorizationProfile: "auditor",
+    baseUrl: "http://localhost:3000/",
+  });
+  assert.equal(urlReadOperations, 5, "authorization profile creates one new context");
+  assert.equal(fixture.state.navigation.length, 3);
+
+  await runner.prepareSurface({
+    ...base,
+    surface: "production",
+    authorizationProfile: "auditor",
+    baseUrl: "http://localhost:3142/",
+  });
+  assert.equal(urlReadOperations, 7, "origin creates one new context");
+  assert.equal(fixture.state.navigation.length, 4);
+
+  await runner.prepareSurface({
+    ...base,
+    surface: "prototype",
+    authorizationProfile: "auditor",
+    baseUrl: "http://127.0.0.1:4142/",
+  });
+  assert.equal(urlReadOperations, 9, "surface creates one new context");
+  assert.equal(fixture.state.navigation.length, 5, "stabilization adds no navigation");
+  assert.equal(capabilityListOperations, 1, "capability bootstrap is reused");
+  assert.equal(capabilityGetOperations, 1, "capability bootstrap is reused");
+  assert.equal((await runner.adapter.cleanup()).status, "pass");
+});
+
+test("IAB-03c 実adapterのcontext安定化失敗はcacheせずrunnerが再試行できる", async () => {
+  const { createInAppBrowserParityAdapter } = await adapterModulePromise;
+  const { BrowserParityRunner } = await coreModulePromise;
+  const fixture = createFakeBrowser();
+  const originalUrl = fixture.tab.url.bind(fixture.tab);
+  const originalCapabilityList = fixture.browser.capabilities.list.bind(
+    fixture.browser.capabilities,
+  );
+  const originalCapabilityGet = fixture.browser.capabilities.get.bind(
+    fixture.browser.capabilities,
+  );
+  let urlReadOperations = 0;
+  let capabilityListOperations = 0;
+  let capabilityGetOperations = 0;
+  fixture.tab.url = async () => {
+    urlReadOperations += 1;
+    if (urlReadOperations === 1) {
+      throw new Error("Bearer context-secret Cookie: context=secret");
+    }
+    return originalUrl();
+  };
+  fixture.browser.capabilities.list = async () => {
+    capabilityListOperations += 1;
+    return originalCapabilityList();
+  };
+  fixture.browser.capabilities.get = async (id: string) => {
+    capabilityGetOperations += 1;
+    return originalCapabilityGet(id);
+  };
+
+  const runner = new BrowserParityRunner(
+    createInAppBrowserParityAdapter({ browser: fixture.browser, tab: fixture.tab }),
+  );
+  const input = {
+    tabId: "comparison",
+    row: contract.parityMatrix[0],
+    surface: "production",
+    setup: {
+      query: {},
+      actions: [],
+      browser: { type: "fixed", theme: "light" },
+    },
+    authorizationProfile: "admin",
+    baseUrl: "http://localhost:3000/",
+    dpr: 1,
+    expectedScroll: { x: 0, y: 0 },
+  };
+
+  await assert.rejects(
+    runner.prepareSurface(input),
+    (error: unknown) => assertSanitizedParityError(
+      error,
+      "PARITY_UNEXPECTED_ERROR",
+      ["Bearer", "Cookie", "context-secret"],
+    ),
+  );
+  assert.equal(urlReadOperations, 1);
+  assert.equal(fixture.state.navigation.length, 0);
+
+  await runner.prepareSurface(input);
+  assert.equal(urlReadOperations, 3, "retry repeats stabilization, then navigation readback");
+  assert.equal(fixture.state.navigation.length, 1);
+  assert.equal(capabilityListOperations, 1, "successful partial bootstrap is reused");
+  assert.equal(capabilityGetOperations, 1, "successful partial bootstrap is reused");
+
+  await runner.prepareSurface(input);
+  assert.equal(urlReadOperations, 4, "successful retry caches the context");
+  assert.equal(fixture.state.navigation.length, 2);
+  assert.equal((await runner.adapter.cleanup()).status, "pass");
 });
 
 test("IAB-04 contextual theme setup and readback", async () => {
@@ -1055,7 +1484,6 @@ test("IAB-05 action and probe mapping", async () => {
   );
   assert.deepEqual(originScopedNetwork.state.navigation, [
     "http://localhost:3142/fixture",
-    "http://127.0.0.1:4142/prototype.html",
     "http://127.0.0.1:4142/prototype.html",
   ]);
   assert.equal(originScopedNetwork.state.cdpNetworkEnable, 2);
@@ -1366,7 +1794,6 @@ test("IAB-07 cross-origin navigation reacquires CDP, reapplies DPR, and remains 
     assert.deepEqual(fixture.state.navigation, [
       "http://localhost:3142/fixture",
       "http://127.0.0.1:4142/prototype.html",
-      "http://127.0.0.1:4142/prototype.html",
     ]);
     assert.equal((await adapter.cleanup()).status, "pass");
     assert.ok(freshCommands.includes("Emulation.clearDeviceMetricsOverride"));
@@ -1398,7 +1825,7 @@ test("IAB-07 cross-origin navigation reacquires CDP, reapplies DPR, and remains 
     assert.equal(fixture.state.viewportReset, 1);
   });
 
-  await t.test("final reload failure still clears fresh CDP metrics and viewport", async () => {
+  await t.test("single origin-transition navigation failure still clears viewport state", async () => {
     const fixture = createFakeBrowser();
     const firstCdp = fixture.cdp;
     const freshCommands: string[] = [];
@@ -1421,7 +1848,7 @@ test("IAB-07 cross-origin navigation reacquires CDP, reapplies DPR, and remains 
     fixture.tab.goto = async (url: string) => {
       gotoCount += 1;
       await originalGoto(url);
-      if (gotoCount === 3) {
+      if (gotoCount === 2) {
         throw new Error("Bearer reload-secret Cookie: reload=secret https://localhost/?token=reload");
       }
     };
@@ -1439,9 +1866,85 @@ test("IAB-07 cross-origin navigation reacquires CDP, reapplies DPR, and remains 
     );
     const cleanup = await adapter.cleanup();
     assert.equal(cleanup.status, "pass");
-    assert.equal(fixture.state.cdpGet, 2);
-    assert.ok(freshCommands.includes("Emulation.clearDeviceMetricsOverride"));
+    assert.equal(fixture.state.cdpGet, 1);
+    assert.equal(freshCommands.length, 0);
     assert.equal(fixture.state.viewportReset, 1);
+  });
+});
+
+test("IAB-07b cleanupは不一致時だけbounded backoffする", async (t) => {
+  const { createInAppBrowserParityAdapter } = await adapterModulePromise;
+
+  await t.test("default deadlineはwall clockを参照しない", async () => {
+    const fixture = createFakeBrowser();
+    const originalDateNow = Date.now;
+    Date.now = () => {
+      throw new Error("wall clock must not drive cleanup deadlines");
+    };
+    try {
+      const adapter = createInAppBrowserParityAdapter({
+        browser: fixture.browser,
+        tab: fixture.tab,
+        timeouts: { cleanupMs: 10, cleanupPollMs: 1 },
+      });
+      await adapter.setViewport("comparison", { width: 390, height: 844 });
+      assert.equal((await adapter.cleanup()).status, "pass");
+    } finally {
+      Date.now = originalDateNow;
+    }
+  });
+
+  await t.test("eventual readbackは最初のretryでpassする", async () => {
+    const fixture = createFakeBrowser();
+    fixture.viewport.reset = async () => {
+      fixture.state.viewportReset += 1;
+    };
+    let now = 0;
+    const waits: number[] = [];
+    const adapter = createInAppBrowserParityAdapter({
+      browser: fixture.browser,
+      tab: fixture.tab,
+      timeouts: { cleanupMs: 2_000, cleanupPollMs: 100 },
+      clock: {
+        now: () => now,
+        async sleep(milliseconds: number) {
+          waits.push(milliseconds);
+          now += milliseconds;
+          fixture.state.width = 1280;
+          fixture.state.height = 720;
+        },
+      },
+    });
+    await adapter.setViewport("comparison", { width: 390, height: 844 });
+    assert.equal((await adapter.cleanup()).status, "pass");
+    assert.deepEqual(waits, [100]);
+  });
+
+  await t.test("terminal mismatchは2秒で停止する", async () => {
+    const fixture = createFakeBrowser();
+    fixture.viewport.reset = async () => {
+      fixture.state.viewportReset += 1;
+    };
+    let now = 0;
+    const waits: number[] = [];
+    const adapter = createInAppBrowserParityAdapter({
+      browser: fixture.browser,
+      tab: fixture.tab,
+      timeouts: { cleanupMs: 2_000, cleanupPollMs: 500 },
+      clock: {
+        now: () => now,
+        async sleep(milliseconds: number) {
+          waits.push(milliseconds);
+          now += milliseconds;
+        },
+      },
+    });
+    await adapter.setViewport("comparison", { width: 390, height: 844 });
+    await assert.rejects(
+      adapter.cleanup(),
+      (error: unknown) => (error as { code?: string }).code === "PARITY_CLEANUP_FAILED",
+    );
+    assert.equal(waits.reduce((total, value) => total + value, 0), 2_000);
   });
 });
 

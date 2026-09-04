@@ -12,7 +12,9 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import tailwindcss from "@tailwindcss/postcss";
+import postcss from "postcss";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const builderScript = path.join(
@@ -48,7 +50,7 @@ async function createPrototype(
     writeFile(path.join(absolute, "index.html"), '<div class="text-red-500">prototype</div>\n'),
     writeFile(
       path.join(absolute, "tailwind.css"),
-      '@import "../../../app/globals.css";\n@source ".";\n',
+      '@import "../../../app/styles/ui-foundation.css";\n@source ".";\n',
     ),
   ]);
   return { absolute, relative, styles };
@@ -72,6 +74,74 @@ test("canonical prototype directoryでTailwind CSSを生成する", async (conte
 
   assertBuildSucceeded(result, fixture);
   assert.match(await readFile(fixture.styles, "utf8"), /\.text-red-500/);
+});
+
+test("productionとprototypeは同じfoundationを使いsource探索範囲だけを分離する", async () => {
+  const [productionInput, foundation] = await Promise.all([
+    readFile(path.join(repositoryRoot, "app/globals.css"), "utf8"),
+    readFile(path.join(repositoryRoot, "app/styles/ui-foundation.css"), "utf8"),
+  ]);
+
+  assert.equal(
+    productionInput,
+    '@import "./styles/ui-foundation.css";\n\n/* Tailwind の探索範囲をproduction UIだけに限定する。 */\n@source ".";\n@source "../mdx-components.tsx";\n',
+  );
+  assert.match(foundation, /^@import "tailwindcss" source\(none\);/u);
+  assert.doesNotMatch(foundation, /@source/u);
+});
+
+test("foundation分離前後でproduction Tailwind生成物を完全一致させる", async () => {
+  const [productionInput, foundation] = await Promise.all([
+    readFile(path.join(repositoryRoot, "app/globals.css"), "utf8"),
+    readFile(path.join(repositoryRoot, "app/styles/ui-foundation.css"), "utf8"),
+  ]);
+  const foundationImport = '@import "./styles/ui-foundation.css";\n';
+  const tailwindImport = '@import "tailwindcss" source(none);\n';
+  assert.ok(productionInput.startsWith(foundationImport));
+  assert.ok(foundation.startsWith(tailwindImport));
+  assert.equal(
+    createHash("sha256").update(foundation).digest("hex"),
+    "492169e6d7a675e4b40fb58d6fa3fea1024565bdc82e2d7ad2b1a5d11753714b",
+    "production foundation snapshot changed; verify intentional token/global-style compatibility",
+  );
+  const legacyMonolith = foundation.replace(
+    tailwindImport,
+    `${tailwindImport}${productionInput.slice(foundationImport.length)}`,
+  );
+  const from = path.join(repositoryRoot, "app/globals.css");
+  const [legacy, split] = await Promise.all([
+    postcss([tailwindcss({ base: repositoryRoot })]).process(legacyMonolith, { from }),
+    postcss([tailwindcss({ base: repositoryRoot })]).process(productionInput, { from }),
+  ]);
+  assert.equal(split.css, legacy.css);
+  for (const utility of [".bg-surface", ".text-fg", ".border-line", ".hover\\:bg-surface-hover", ".md\\:px-6"]) {
+    assert.ok(split.css.includes(utility), `missing representative production utility: ${utility}`);
+  }
+});
+
+test("production sourceの追加でprototype CSSが変化しない", async (context) => {
+  const fixture = await createPrototype(context);
+  const productionSource = path.join(
+    repositoryRoot,
+    "app",
+    `.prototype-css-isolation-${randomUUID()}.tsx`,
+  );
+  context.after(() => rm(productionSource, { force: true }));
+
+  const first = runBuilder([fixture.relative]);
+  assertBuildSucceeded(first, fixture);
+  const before = await readFile(fixture.styles, "utf8");
+
+  await writeFile(
+    productionSource,
+    'export default function Fixture() { return <div className="bg-[#123456]">fixture</div>; }\n',
+  );
+  const second = runBuilder([fixture.relative]);
+  assertBuildSucceeded(second, fixture);
+  const after = await readFile(fixture.styles, "utf8");
+
+  assert.equal(after, before);
+  assert.doesNotMatch(after, /123456/iu);
 });
 
 test("repository外のcwdでも同じrepository-relative pathを同じ対象として扱う", async (context) => {
@@ -190,10 +260,10 @@ test("prototype内部のsubdirectory symlinkを拒否する", async (context) =>
 
 test("tailwind.cssの任意directiveをPostCSS実行前に拒否する", async (context) => {
   const cases = [
-    '@import "../../../app/globals.css";\n@source "../..";\n',
-    '@import "../../../app/globals.css";\n@config "./tailwind.config.js";\n',
-    '@import "../../../app/globals.css";\n@plugin "./plugin.cjs";\n',
-    '@import "../../../app/globals.css";\n@source ".";\nbody { color: red; }\n',
+    '@import "../../../app/styles/ui-foundation.css";\n@source "../..";\n',
+    '@import "../../../app/styles/ui-foundation.css";\n@config "./tailwind.config.js";\n',
+    '@import "../../../app/styles/ui-foundation.css";\n@plugin "./plugin.cjs";\n',
+    '@import "../../../app/styles/ui-foundation.css";\n@source ".";\nbody { color: red; }\n',
   ];
 
   for (const [index, contents] of cases.entries()) {

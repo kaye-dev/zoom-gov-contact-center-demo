@@ -130,9 +130,11 @@ export function AdminShell({ children, visibleItems }: AdminShellProps) {
   return (
     <div
       id={
-        pathname === "/admin/reservations/api-keys"
-          ? "reservation-api-keys-page"
-          : pathname === "/admin/reservations/api-keys/logs"
+        pathname === "/admin/reservations/bookings"
+          ? "reservation-booking-list-page"
+          : pathname === "/admin/reservations/api-keys"
+            ? "reservation-api-keys-page"
+            : pathname === "/admin/reservations/api-keys/logs"
             ? "reservation-api-logs-page"
             : pathname.startsWith("/admin/reservations/api-keys/logs/")
               ? "reservation-api-log-detail-page"

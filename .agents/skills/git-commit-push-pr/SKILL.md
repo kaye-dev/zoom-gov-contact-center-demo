@@ -36,7 +36,7 @@ Before any Git write or GitHub mutation:
 4. Run `gh --version`, `gh auth status` for the remote host, and `gh repo view` to prove that the GitHub repository matches the Git remote. Capture `OWNER/REPO` and pass it explicitly to every later `gh` command. A first failure from a sandboxed command is inconclusive when blocked network or credential-store access could produce the same authentication or connection error. In that case, use the shell tool's approval or sandbox-escalation mechanism to rerun the same read-only preflight once outside the sandbox. If the user's authenticated terminal succeeds while the agent shell does not (keyring, SSH agent, or network-shaped failure), create a task-owned tmux session in the repository and run the preflight and all later `gh` commands in that same session; do not infer invalid authentication and never request pasted tokens. Record the session name and stop it after readback. Do not report an invalid token from the sandboxed output alone; treat the escalated or tmux result as authoritative. If escalation/tmux is unavailable or the authoritative preflight still shows failed authentication, missing access, repository mismatch, or an API/network failure, stop. Do not install, log in, expose or replace a token, fork, or reinterpret a failed lookup as "no pull request".
 5. Fetch the chosen remote with pruning before deciding the base or branch state. If a fetch fails specifically because network, DNS, SSH agent, credential-store, or sandbox access is unavailable, rerun that exact read-only fetch once through the available approval or sandbox-escalation mechanism. A semantic Git rejection or a second failure is a blocker.
 
-Preserve the initial status so the final report can distinguish task changes from unrelated user changes. Before any branch or index mutation, capture the full HEAD SHA, local and remote refs, `git worktree list --porcelain`, exact staged name-status, a digest of `git diff --cached --binary --no-ext-diff`, and the proposed current-task paths. Do not put diff contents, credentials, tokens, environment values, or personal data in a recovery prompt.
+Preserve the initial status so the final report can distinguish task changes from unrelated user changes. Before any branch or index mutation, capture the full HEAD SHA, local and remote refs, `git worktree list --porcelain`, and one `node scripts/validation-digest.mjs --scope <task-path>` result for the proposed paths. It records staged, unstaged, untracked, scope, and validated diff digests without diff content; never put credentials, tokens, environment values, or personal data in a recovery prompt.
 
 ## 2. Resolve the base and topic branch
 
@@ -106,7 +106,7 @@ Determine the exact current-task paths from the invocation context and the actua
 - Stage with `git add -- <explicit paths>`. Never use `git add .`, `git add -A`, `git commit -a`, or a broad glob.
 - Exclude credentials, tokens, `.env*`, machine-local files, and unrelated generated artifacts unless the user explicitly put them in scope.
 
-Before committing, record the current HEAD, inspect both `git diff --cached --name-status` and the complete staged patch, and run `git diff --cached --check` plus validations required by repository rules or the changed scope. Record only commands that actually ran and their results.
+Before committing, record the current HEAD, inspect both `git diff --cached --name-status` and the complete staged patch, and rerun the digest helper after limited staging. If its validated diff digest matches the recorded implementation/review result, reuse those successful command/scope/status records and run only `git diff --cached --check` plus repository hooks; otherwise run the missing changed-scope validation first. Record only commands that actually ran and their results.
 
 Generate the commit message only from the staged diff. Follow repository conventions first; otherwise use a concrete Japanese Conventional Commit subject without a trailing period. Do not add AI attribution or `Co-authored-by`.
 
@@ -175,7 +175,7 @@ Do not run or wait for CI as part of this skill.
 
 ## 7. Verify GitHub state and report
 
-Use `gh pr view --json` to verify at least the pull request number, URL, base/head names and OIDs, draft state, `mergeable`, and `mergeStateStatus`. Compare the pull request base OID with the base SHA used by the pre-push checks. If mergeability or an expected OID is temporarily unavailable, retry at most three times with short waits totaling no more than 30 seconds.
+Use one `gh pr view --json` call to verify at least the pull request number, URL, base/head names and OIDs, draft state, `mergeable`, and `mergeStateStatus`, and compare its base OID with the pre-push base SHA. Do not poll or wait for a value that is temporarily unavailable; report that field as unverified.
 
 - `CONFLICTING` or `DIRTY`: report failure; do not call the workflow complete.
 - unresolved `UNKNOWN`: report mergeability as unverified.

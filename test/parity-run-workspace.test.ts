@@ -1,10 +1,29 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { access, chmod, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
+import {
+  access,
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rename,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
+
+const execFileAsync = promisify(execFile);
+const repositoryRoot = path.resolve(import.meta.dirname, "..");
+const runtimeHelperPath = path.join(repositoryRoot, "scripts", "dev-compose-runtime.zsh");
 
 const workspaceModulePromise = import(
   pathToFileURL(
@@ -37,6 +56,31 @@ function sha256(value: string) {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
+function surfaceContexts(sessionId: string) {
+  const authorizationProfile = contract.comparisonConditions.authorization;
+  const authorizationProfileDigest = sha256(
+    `parity:authorization-profile:v1\0${authorizationProfile}`,
+  );
+  return [
+    {
+      sessionId,
+      tabId: "comparison",
+      surface: "production",
+      origin: "http://localhost:3142",
+      authorizationProfile,
+      authorizationProfileDigest,
+    },
+    {
+      sessionId,
+      tabId: "prototype",
+      surface: "prototype",
+      origin: "http://127.0.0.1:4142",
+      authorizationProfile,
+      authorizationProfileDigest,
+    },
+  ];
+}
+
 function captureOutput() {
   let value = "";
   return {
@@ -51,6 +95,62 @@ function stdinText(value: string) {
       yield value;
     },
   };
+}
+
+async function readWorkspaceFiles(root: string): Promise<string[]> {
+  const values: string[] = [];
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    const target = path.join(root, entry.name);
+    if (entry.isDirectory()) values.push(...await readWorkspaceFiles(target));
+    else if (entry.isFile()) values.push(await readFile(target, "utf8"));
+  }
+  return values;
+}
+
+async function replaceRunRootWithExternal(runRoot: string, externalRoot: string) {
+  const originalRoot = `${runRoot}.original`;
+  await rename(runRoot, originalRoot);
+  await symlink(externalRoot, runRoot);
+  return originalRoot;
+}
+
+function parseRuntimeContext(output: string) {
+  return Object.fromEntries(output.trim().split("\n").filter((line) => line.includes("=")).map((line) => {
+    const separator = line.indexOf("=");
+    return [line.slice(0, separator), line.slice(separator + 1)];
+  }));
+}
+
+async function allocateFixtureRuntime(
+  fixtureRoot: string,
+  commonGitDirectory: string,
+  stateRoot: string,
+  suffix: string,
+) {
+  const gitDirectory = path.join(fixtureRoot, `linked-${suffix}.git`);
+  const stubDirectory = path.join(fixtureRoot, `runtime-bin-${suffix}`);
+  await Promise.all([
+    mkdir(gitDirectory),
+    mkdir(stubDirectory),
+  ]);
+  await Promise.all([
+    writeFile(path.join(stubDirectory, "docker"), "#!/bin/sh\nexit 1\n", { mode: 0o755 }),
+    writeFile(path.join(stubDirectory, "lsof"), "#!/bin/sh\nexit 1\n", { mode: 0o755 }),
+  ]);
+  const command = 'set -euo pipefail; source "$1"; dev_runtime_prepare; dev_runtime_print_context';
+  const { stdout } = await execFileAsync("zsh", ["-c", command, "zsh", runtimeHelperPath], {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      DEV_RUNTIME_CHECKOUT_OVERRIDE: fixtureRoot,
+      DEV_RUNTIME_GIT_DIR_OVERRIDE: gitDirectory,
+      DEV_RUNTIME_GIT_COMMON_DIR_OVERRIDE: commonGitDirectory,
+      DEV_RUNTIME_STATE_ROOT: stateRoot,
+      PATH: `${stubDirectory}:${process.env.PATH ?? ""}`,
+    },
+  });
+  return parseRuntimeContext(stdout);
 }
 
 const contract = {
@@ -119,7 +219,11 @@ const spec = {
   rowProbeMap: [{ rowId: "main-default-mobile-light", probeIds: ["dom-main"] }],
 };
 
-async function createFixture(context: { after(callback: () => Promise<void>): void }, runId: string) {
+async function createFixture(
+  context: { after(callback: () => Promise<void>): void },
+  runId: string,
+  { prototypeRevision = revision }: { prototypeRevision?: string } = {},
+) {
   const root = await mkdtemp(path.join(tmpdir(), "parity-workspace-"));
   context.after(() => rm(root, { recursive: true, force: true }));
   await mkdir(path.join(root, ".codex"), { mode: 0o700 });
@@ -130,13 +234,13 @@ async function createFixture(context: { after(callback: () => Promise<void>): vo
   const approval = runner.createApprovalEvidence({
     runId,
     goalSha256: digest,
-    prototypeRevision: revision,
+    prototypeRevision,
     validationProfileDigest: profileDigest,
     invokedAt: "2026-09-01T00:00:00.000Z",
   });
   const current = {
     goalSha256: digest,
-    prototypeRevision: revision,
+    prototypeRevision,
     validationProfileDigest: profileDigest,
     runtime: { owner: "fixture", checkout: "/fixture" },
     sources: [{ path: "src/ui.ts", sha256: sourceDigest }],
@@ -191,6 +295,7 @@ function fragment(handshake: { runId: string; batches: Array<{ batchId: string; 
       networkSource: "not-required",
       sessionId: "iab-fixture",
       screenshot: digest,
+      surfaceContexts: surfaceContexts("iab-fixture"),
     },
     metrics: {
       startedAt: "2026-09-01T00:00:00.000Z",
@@ -275,7 +380,7 @@ function createCoverageWorkspaceDefinition() {
     ["overflow", { tolerancePx: 0 }],
     ["console", {}],
   ].map(([kind, options]) => ({
-    id: `coverage-${kind}`,
+    id: kind === "state" ? "coverage" : `coverage-${kind}`,
     kind,
     mode: "equal",
     productionSelector: "main",
@@ -307,7 +412,7 @@ function createCoverageWorkspaceDefinition() {
       state: "ready",
       production: { query: {}, actions: [] },
       prototype: { query: {}, actions: [] },
-      assertionProbeIds: ["coverage-state"],
+      assertionProbeIds: ["coverage"],
     })),
     browserSetups: targets.map((target) => ({
       targetId: target.id,
@@ -399,6 +504,7 @@ function coverageFragment(
       networkSource: "not-required",
       sessionId: "coverage-fixture",
       screenshot: digest,
+      surfaceContexts: surfaceContexts("coverage-fixture"),
     } : null,
     metrics: {
       startedAt: "2026-09-01T00:00:00.000Z",
@@ -633,6 +739,114 @@ test("WS-03 scoped abort and secret exclusion", async (context) => {
   );
 });
 
+test("WS-PARALLEL-00 同一repositoryの別runはworkspace root作成raceを許容する", async (context) => {
+  const workspace = await workspaceModulePromise;
+  const fixture = await createFixture(context, "parallel-root-a");
+  const secondApproval = fixture.runner.createApprovalEvidence({
+    runId: "parallel-root-b",
+    goalSha256: digest,
+    prototypeRevision: revision,
+    validationProfileDigest: profileDigest,
+  });
+  const handshakes = await Promise.all([
+    prepare(workspace, fixture, "parallel-root-a"),
+    prepare(workspace, { ...fixture, approval: secondApproval }, "parallel-root-b"),
+  ]);
+  assert.notEqual(path.dirname(handshakes[0].manifestPath), path.dirname(handshakes[1].manifestPath));
+  await Promise.all(handshakes.map(({ manifestPath }) => access(manifestPath)));
+});
+
+test("WS-PARALLEL-01 parallel fixtureはport・workspace・revision・checkpointを共有しない", async (context) => {
+  const workspace = await workspaceModulePromise;
+  const revisions = [`sha256:${"e".repeat(64)}`, `sha256:${"f".repeat(64)}`];
+  const fixtures = await Promise.all([
+    createFixture(context, "parallel-a", { prototypeRevision: revisions[0] }),
+    createFixture(context, "parallel-b", { prototypeRevision: revisions[1] }),
+  ]);
+  const definitions = [createCoverageWorkspaceDefinition(), createCoverageWorkspaceDefinition()];
+  definitions.forEach((definition, index) => {
+    definition.prototypeRevision = revisions[index];
+  });
+  const runtimeRoot = await mkdtemp(path.join(tmpdir(), "parity-runtime-common-"));
+  context.after(() => rm(runtimeRoot, { recursive: true, force: true }));
+  const commonGitDirectory = path.join(runtimeRoot, "common.git");
+  const stateRoot = path.join(runtimeRoot, "state");
+  await mkdir(commonGitDirectory);
+  const runtimes = await Promise.all(fixtures.map((fixture, index) =>
+    allocateFixtureRuntime(
+      fixture.root,
+      commonGitDirectory,
+      stateRoot,
+      index === 0 ? "a" : "b",
+    )));
+  assert.notEqual(runtimes[0].RUNTIME_ID, runtimes[1].RUNTIME_ID);
+  assert.notEqual(runtimes[0].COMPOSE_PROJECT_NAME, runtimes[1].COMPOSE_PROJECT_NAME);
+  assert.notEqual(runtimes[0].HOST_PORT, runtimes[1].HOST_PORT);
+  const ports = runtimes.map((runtime) => ({
+    production: `http://localhost:${runtime.HOST_PORT}/`,
+    prototype: `http://127.0.0.1:${Number(runtime.HOST_PORT) + 1_000}/`,
+  }));
+  fixtures.forEach((fixture, index) => {
+    fixture.current.runtime.owner = runtimes[index].RUNTIME_ID;
+    fixture.current.runtime.checkout = runtimes[index].RUNTIME_CHECKOUT_PATH;
+    Object.assign(fixture.current.runtime, {
+      composeProject: runtimes[index].COMPOSE_PROJECT_NAME,
+      port: Number(runtimes[index].HOST_PORT),
+    });
+  });
+  const handshakes = await Promise.all(fixtures.map((fixture, index) =>
+    workspace.prepareRunWorkspace({
+      repositoryRootPath: fixture.root,
+      slug: "fixture",
+      runId: `parallel-${index === 0 ? "a" : "b"}`,
+      definition: definitions[index],
+      approval: fixture.approval,
+      current: fixture.current,
+      baseUrls: ports[index],
+      matrixScope: "coverage",
+      validateApproval: fixture.runner.validateApprovalEvidence,
+    })));
+
+  const manifests = await Promise.all(handshakes.map(({ manifestPath }) =>
+    readFile(manifestPath, "utf8").then(JSON.parse)));
+  for (const index of [0, 1]) {
+    assert.equal(manifests[index].runId, `parallel-${index === 0 ? "a" : "b"}`);
+    assert.equal(manifests[index].prototypeRevision, revisions[index]);
+    assert.deepEqual(manifests[index].baseUrls, ports[index]);
+    assert.deepEqual(manifests[index].runtime, {
+      owner: runtimes[index].RUNTIME_ID,
+      checkout: runtimes[index].RUNTIME_CHECKOUT_PATH,
+      composeProject: runtimes[index].COMPOSE_PROJECT_NAME,
+      port: Number(runtimes[index].HOST_PORT),
+    });
+  }
+  assert.notEqual(path.dirname(handshakes[0].manifestPath), path.dirname(handshakes[1].manifestPath));
+  await assert.rejects(access(path.join(fixtures[0].root, ".codex", "parity-runs", "parallel-b")));
+  await assert.rejects(access(path.join(fixtures[1].root, ".codex", "parity-runs", "parallel-a")));
+
+  const batches = await Promise.all(handshakes.map(({ runId }, index) =>
+    workspace.nextRunBatch({ repositoryRootPath: fixtures[index].root, runId })));
+  const secondCheckpointPath = path.join(path.dirname(handshakes[1].manifestPath), "checkpoint.json");
+  const secondCheckpointBefore = await readFile(secondCheckpointPath, "utf8");
+  await workspace.recordBatchFailure({
+    repositoryRootPath: fixtures[0].root,
+    runId: handshakes[0].runId,
+    batchId: batches[0].batch.batchId,
+    code: "PARITY_BROWSER_TRANSIENT",
+    diagnostic: "fixture-a transient failure",
+    transient: true,
+  });
+  assert.equal(await readFile(secondCheckpointPath, "utf8"), secondCheckpointBefore);
+  assert.equal(JSON.parse(secondCheckpointBefore).batches[0].status, "running");
+  await workspace.abortRunWorkspace({
+    repositoryRootPath: fixtures[0].root,
+    runId: handshakes[0].runId,
+  });
+  await assert.rejects(access(path.dirname(handshakes[0].manifestPath)));
+  await access(path.dirname(handshakes[1].manifestPath));
+  assert.equal(await readFile(secondCheckpointPath, "utf8"), secondCheckpointBefore);
+});
+
 test("WS-SEC-01 canary cleanup URL and secret fragment contract", async (context) => {
   const workspace = await workspaceModulePromise;
   const cases: Array<{
@@ -661,6 +875,28 @@ test("WS-SEC-01 canary cleanup URL and secret fragment contract", async (context
       mutate(value) { value.capabilities.networkSource = "performance-resource-timing"; },
     },
     {
+      id: "wrong-authorization-profile",
+      code: "PARITY_BATCH_INVALID",
+      mutate(value) { value.capabilities.surfaceContexts[0].authorizationProfile = "other"; },
+    },
+    {
+      id: "wrong-authorization-digest",
+      code: "PARITY_BATCH_INVALID",
+      mutate(value) { value.capabilities.surfaceContexts[0].authorizationProfileDigest = digest; },
+    },
+    {
+      id: "wrong-surface-origin",
+      code: "PARITY_BATCH_INVALID",
+      mutate(value) { value.capabilities.surfaceContexts[1].origin = "http://127.0.0.1:4242"; },
+    },
+    {
+      id: "same-surface-tab",
+      code: "PARITY_BATCH_INVALID",
+      mutate(value) {
+        value.capabilities.surfaceContexts[1].tabId = value.capabilities.surfaceContexts[0].tabId;
+      },
+    },
+    {
       id: "cleanup-readback",
       code: "PARITY_CLEANUP_FAILED",
       mutate(value) { value.terminalCleanup.readback.width = 1279; },
@@ -681,6 +917,60 @@ test("WS-SEC-01 canary cleanup URL and secret fragment contract", async (context
       mutate(value) {
         (value.rows[0].probes[0] as { production: unknown }).production = {
           message: "Bearer should-not-persist",
+        };
+      },
+    },
+    {
+      id: "basic-authorization",
+      code: "PARITY_BATCH_INVALID",
+      mutate(value) {
+        (value.rows[0].probes[0] as { production: unknown }).production = {
+          authorization: "Basic dXNlcjpwYXNz",
+        };
+      },
+    },
+    {
+      id: "credential-uri",
+      code: "PARITY_BATCH_INVALID",
+      mutate(value) {
+        (value.rows[0].probes[0] as { production: unknown }).production = {
+          dsn: "postgresql://fixture:password@localhost/database",
+        };
+      },
+    },
+    {
+      id: "api-key-assignment",
+      code: "PARITY_BATCH_INVALID",
+      mutate(value) {
+        (value.rows[0].probes[0] as { production: unknown }).production = {
+          message: "api_key=sk-live-secret-value",
+        };
+      },
+    },
+    {
+      id: "password-assignment",
+      code: "PARITY_BATCH_INVALID",
+      mutate(value) {
+        (value.rows[0].probes[0] as { production: unknown }).production = {
+          message: "PaSsWoRd = fixture-password",
+        };
+      },
+    },
+    {
+      id: "token-assignment",
+      code: "PARITY_BATCH_INVALID",
+      mutate(value) {
+        (value.rows[0].probes[0] as { production: unknown }).production = {
+          message: "ToKeN : fixture-token",
+        };
+      },
+    },
+    {
+      id: "authorization-token",
+      code: "PARITY_BATCH_INVALID",
+      mutate(value) {
+        (value.rows[0].probes[0] as { production: unknown }).production = {
+          authorization: "Token fixture-authorization",
         };
       },
     },
@@ -1022,7 +1312,7 @@ test("WS-CLI-02 coverage checkpoint commandは失敗batchだけを1回再開す�
       "record-failure", "plans/fixture/prototype",
       "--run-id", "ws-cli-coverage",
       "--batch-id", first.batch.batchId,
-      "--failure-code", "PARITY_BROWSER_TRANSIENT",
+      "--failure-code", "PARITY_NAVIGATION_TIMEOUT",
       "--diagnostic", "temporary disconnect",
       "--transient", "true",
     ],
@@ -1155,6 +1445,331 @@ test("WS-COVERAGE-04 artifact sinkはprivate artifactだけを保存し秘密値
     }),
     /sensitive data/u,
   );
+  for (const [probeId, content] of [
+    ["basic-authorization", JSON.stringify({ authorization: "Basic dXNlcjpwYXNz" })],
+    ["token-authorization", JSON.stringify({ authorization: "Token fixture-authorization" })],
+    ["credential-uri", JSON.stringify({ dsn: "postgresql://fixture:password@localhost/database" })],
+    ["binary-basic-authorization", Buffer.from("Basic dXNlcjpwYXNz", "utf8")],
+    ["binary-password", Buffer.from("PaSsWoRd = fixture-password", "utf8")],
+    ["binary-token", Buffer.from("ToKeN : fixture-token", "utf8")],
+    ["api-key-assignment", JSON.stringify({ detail: "X-API-Key: sk-live-secret-value" })],
+    ["camel-access-token", Buffer.from("accessToken=fixture-access-value", "utf8")],
+    ["camel-client-secret", Buffer.from("clientSecret=fixture-client-value", "utf8")],
+    ["camel-session-token", Buffer.from("sessionToken=fixture-session-value", "utf8")],
+    ["credential-assignment", Buffer.from("credential=fixture-credential-value", "utf8")],
+  ]) {
+    await assert.rejects(
+      sink({
+        kind: "dom",
+        rowId: "main-ready-0-light",
+        probeId,
+        surface: "prototype",
+        content,
+        mediaType: "application/json",
+      }),
+      /(?:sensitive data|authorization profile)/u,
+    );
+  }
+  await assert.rejects(
+    sink({
+      kind: "dom",
+      rowId: "main-ready-0-light",
+      probeId: "secret-media-type",
+      surface: "prototype",
+      content: "{}",
+      mediaType: "application/json; ToKeN = fixture-token",
+    }),
+    /sensitive data/u,
+  );
+  assert.doesNotMatch(
+    (await readWorkspaceFiles(path.dirname(handshake.manifestPath))).join("\n"),
+    /fixture-(?:access|client|session|credential)-value/u,
+  );
+  await assert.rejects(
+    access(path.join(
+      fixture.root,
+      "plans/fixture/evidence/ws-coverage-artifact/implementation-parity.json",
+    )),
+  );
+});
+
+test("WS-SEC-03 failure diagnosticは破棄しallowlist済み固定文だけをcheckpointとstdoutへ返す", async (context) => {
+  const workspace = await workspaceModulePromise;
+  const fixture = await createFixture(context, "ws-secret-diagnostic");
+  const definition = createCoverageWorkspaceDefinition();
+  const handshake = await workspace.prepareRunWorkspace({
+    repositoryRootPath: fixture.root,
+    slug: "fixture",
+    runId: "ws-secret-diagnostic",
+    definition,
+    approval: fixture.approval,
+    current: fixture.current,
+    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    matrixScope: "coverage",
+    validateApproval: fixture.runner.validateApprovalEvidence,
+  });
+  const next = await workspace.nextRunBatch({
+    repositoryRootPath: fixture.root,
+    runId: handshake.runId,
+  });
+  const canary = "password=hunter2 token=token-live-value Authorization: Token private-value";
+  const checkpointPath = path.join(path.dirname(handshake.manifestPath), "checkpoint.json");
+  const before = await readFile(checkpointPath, "utf8");
+  await assert.rejects(
+    workspace.recordBatchFailure({
+      repositoryRootPath: fixture.root,
+      runId: handshake.runId,
+      batchId: next.batch.batchId,
+      code: "PARITY_NOT_ALLOWLISTED",
+      diagnostic: canary,
+      transient: true,
+    }),
+    (error: unknown) => {
+      assert.match(String(error), /failure code is not allowlisted/u);
+      assert.doesNotMatch(String(error), /hunter2|token-live-value|private-value/u);
+      return true;
+    },
+  );
+  assert.equal(await readFile(checkpointPath, "utf8"), before);
+
+  const output = captureOutput();
+  await fixture.runner.runCli({
+    argv: [
+      "record-failure", "plans/fixture/prototype",
+      "--run-id", handshake.runId,
+      "--batch-id", next.batch.batchId,
+      "--failure-code", "PARITY_NAVIGATION_TIMEOUT",
+      "--diagnostic", canary,
+      "--transient", "true",
+    ],
+    repositoryRootPath: fixture.root,
+    stdout: output.stream,
+  });
+  const result = JSON.parse(output.read());
+  assert.equal(result.summary.errorCode, "PARITY_NAVIGATION_TIMEOUT");
+  assert.equal(result.summary.diagnostic, "Browser navigation exceeded its bounded deadline");
+
+  const persisted = (await readWorkspaceFiles(path.dirname(handshake.manifestPath))).join("\n");
+  for (const value of [output.read(), persisted]) {
+    assert.doesNotMatch(value, /hunter2|token-live-value|private-value|Authorization: Token/u);
+  }
+});
+
+test("WS-SEC-04 JSON readerはsymlink・byte超過・読取中のinode metadata変更を拒否する", async (context) => {
+  const workspace = await workspaceModulePromise;
+  const root = await mkdtemp(path.join(tmpdir(), "parity-json-reader-"));
+  context.after(() => rm(root, { recursive: true, force: true }));
+
+  const realTarget = path.join(root, "real.json");
+  const symlinkTarget = path.join(root, "symlink.json");
+  await writeFile(realTarget, '{"status":"pass"}\n', { mode: 0o600 });
+  await symlink(realTarget, symlinkTarget);
+  await assert.rejects(
+    workspace.readJsonFile(symlinkTarget, { limit: 128 }),
+    /must be a regular file/u,
+  );
+
+  const oversizedTarget = path.join(root, "oversized.json");
+  await writeFile(oversizedTarget, JSON.stringify({ padding: "x".repeat(128) }), { mode: 0o600 });
+  await assert.rejects(
+    workspace.readJsonFile(oversizedTarget, { limit: 64 }),
+    /exceeds the byte limit/u,
+  );
+
+  const racedTarget = path.join(root, "raced.json");
+  await writeFile(racedTarget, '{"status":"before"}\n', { mode: 0o600 });
+  await assert.rejects(
+    workspace.readJsonFile(racedTarget, {
+      limit: 128,
+      beforeMetadataReadback: () => writeFile(racedTarget, '{"status":"after","changed":true}\n'),
+    }),
+    /changed while it was being read/u,
+  );
+});
+
+test("WS-SEC-05 manifestとcheckpointの用途別byte上限を強制する", async (context) => {
+  const workspace = await workspaceModulePromise;
+  const definition = createCoverageWorkspaceDefinition();
+
+  const manifestFixture = await createFixture(context, "ws-large-manifest");
+  const manifestHandshake = await workspace.prepareRunWorkspace({
+    repositoryRootPath: manifestFixture.root,
+    slug: "fixture",
+    runId: "ws-large-manifest",
+    definition,
+    approval: manifestFixture.approval,
+    current: manifestFixture.current,
+    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    matrixScope: "coverage",
+    validateApproval: manifestFixture.runner.validateApprovalEvidence,
+  });
+  await writeFile(manifestHandshake.manifestPath, JSON.stringify({ padding: "x".repeat(2 * 1024 * 1024) }));
+  await assert.rejects(
+    workspace.nextRunBatch({ repositoryRootPath: manifestFixture.root, runId: manifestHandshake.runId }),
+    /exceeds the byte limit/u,
+  );
+
+  const checkpointFixture = await createFixture(context, "ws-large-checkpoint");
+  const checkpointHandshake = await workspace.prepareRunWorkspace({
+    repositoryRootPath: checkpointFixture.root,
+    slug: "fixture",
+    runId: "ws-large-checkpoint",
+    definition,
+    approval: checkpointFixture.approval,
+    current: checkpointFixture.current,
+    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    matrixScope: "coverage",
+    validateApproval: checkpointFixture.runner.validateApprovalEvidence,
+  });
+  const checkpointPath = path.join(path.dirname(checkpointHandshake.manifestPath), "checkpoint.json");
+  await writeFile(checkpointPath, JSON.stringify({ padding: "x".repeat(512 * 1024) }));
+  await assert.rejects(
+    workspace.nextRunBatch({ repositoryRootPath: checkpointFixture.root, runId: checkpointHandshake.runId }),
+    /exceeds the byte limit/u,
+  );
+});
+
+test("WS-SEC-06 runRootの外部symlink差替えはread・write・promote前に停止する", async (context) => {
+  const workspace = await workspaceModulePromise;
+  const definition = createCoverageWorkspaceDefinition();
+
+  const readFixture = await createFixture(context, "ws-parent-read");
+  const readHandshake = await workspace.prepareRunWorkspace({
+    repositoryRootPath: readFixture.root,
+    slug: "fixture",
+    runId: "ws-parent-read",
+    definition,
+    approval: readFixture.approval,
+    current: readFixture.current,
+    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    matrixScope: "coverage",
+    validateApproval: readFixture.runner.validateApprovalEvidence,
+  });
+  const readExternal = await mkdtemp(path.join(tmpdir(), "parity-external-read-"));
+  context.after(() => rm(readExternal, { recursive: true, force: true }));
+  await writeFile(path.join(readExternal, "sentinel.txt"), "read-safe\n");
+  const readExternalBefore = (await readWorkspaceFiles(readExternal)).join("\n");
+  await replaceRunRootWithExternal(path.dirname(readHandshake.manifestPath), readExternal);
+  await assert.rejects(
+    workspace.nextRunBatch({ repositoryRootPath: readFixture.root, runId: readHandshake.runId }),
+    /must be a real directory|directory identity changed/u,
+  );
+  assert.equal((await readWorkspaceFiles(readExternal)).join("\n"), readExternalBefore);
+
+  const writeFixture = await createFixture(context, "ws-parent-write");
+  const writeHandshake = await workspace.prepareRunWorkspace({
+    repositoryRootPath: writeFixture.root,
+    slug: "fixture",
+    runId: "ws-parent-write",
+    definition,
+    approval: writeFixture.approval,
+    current: writeFixture.current,
+    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    matrixScope: "coverage",
+    validateApproval: writeFixture.runner.validateApprovalEvidence,
+  });
+  const sink = await workspace.createWorkspaceArtifactSink({
+    repositoryRootPath: writeFixture.root,
+    runId: writeHandshake.runId,
+  });
+  const writeExternal = await mkdtemp(path.join(tmpdir(), "parity-external-write-"));
+  context.after(() => rm(writeExternal, { recursive: true, force: true }));
+  await mkdir(path.join(writeExternal, "artifacts"), { mode: 0o700 });
+  await writeFile(path.join(writeExternal, "sentinel.txt"), "write-safe\n");
+  const writeExternalBefore = (await readWorkspaceFiles(writeExternal)).join("\n");
+  await replaceRunRootWithExternal(path.dirname(writeHandshake.manifestPath), writeExternal);
+  await assert.rejects(
+    sink({
+      kind: "dom",
+      rowId: "main-ready-0-light",
+      probeId: "parent-swap",
+      surface: "prototype",
+      content: "{}",
+      mediaType: "application/json",
+    }),
+    /directory identity changed/u,
+  );
+  assert.equal((await readWorkspaceFiles(writeExternal)).join("\n"), writeExternalBefore);
+
+  const promoteFixture = await createFixture(context, "ws-parent-promote");
+  const evidenceRunRoot = path.join(promoteFixture.root, "plans", "fixture", "evidence", "ws-parent-promote");
+  await mkdir(evidenceRunRoot, { recursive: true, mode: 0o700 });
+  await chmod(path.dirname(evidenceRunRoot), 0o700);
+  await chmod(evidenceRunRoot, 0o700);
+  const promoteHandshake = await workspace.prepareRunWorkspace({
+    repositoryRootPath: promoteFixture.root,
+    slug: "fixture",
+    runId: "ws-parent-promote",
+    definition,
+    approval: promoteFixture.approval,
+    current: promoteFixture.current,
+    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    matrixScope: "coverage",
+    validateApproval: promoteFixture.runner.validateApprovalEvidence,
+  });
+  const promoteSink = await workspace.createWorkspaceArtifactSink({
+    repositoryRootPath: promoteFixture.root,
+    runId: promoteHandshake.runId,
+  });
+  const artifactsByRow = new Map<string, WorkspaceArtifactRecord[]>();
+  for (const anchor of definition.spec.coverage.anchorRows) {
+    for (const surface of ["production", "prototype"]) {
+      const record = await promoteSink({
+        kind: "screenshot",
+        rowId: anchor.rowId,
+        probeId: "anchor-screenshot",
+        surface,
+        content: new Uint8Array([1, 2, 3, surface === "production" ? 4 : 5]),
+        mediaType: "image/png",
+      });
+      artifactsByRow.set(anchor.rowId, [...(artifactsByRow.get(anchor.rowId) ?? []), record]);
+    }
+  }
+  for (let index = 0; index < promoteHandshake.batches.length; index += 1) {
+    const next = await workspace.nextRunBatch({
+      repositoryRootPath: promoteFixture.root,
+      runId: promoteHandshake.runId,
+    });
+    const value = coverageFragment(promoteHandshake, next.batch, definition);
+    for (const row of value.rows) {
+      const artifacts = artifactsByRow.get(row.rowId) ?? [];
+      if (artifacts.length === 0) continue;
+      const probe = row.probes.find(({ probeId }) => probeId === "anchor-screenshot")!;
+      probe.artifacts = artifacts;
+      probe.artifactPaths = artifacts.map(({ path: artifactPath }) => artifactPath as string);
+      row.artifacts = artifacts;
+      row.artifactPaths = [...probe.artifactPaths];
+    }
+    await workspace.recordBatchResult({
+      repositoryRootPath: promoteFixture.root,
+      runId: promoteHandshake.runId,
+      batchId: next.batch.batchId,
+      input: JSON.stringify(value),
+    });
+  }
+  const promoteExternal = await mkdtemp(path.join(tmpdir(), "parity-external-promote-"));
+  context.after(() => rm(promoteExternal, { recursive: true, force: true }));
+  await writeFile(path.join(promoteExternal, "sentinel.txt"), "promote-safe\n");
+  const promoteExternalBefore = (await readWorkspaceFiles(promoteExternal)).join("\n");
+  await assert.rejects(
+    workspace.finalizeRunWorkspace({
+      repositoryRootPath: promoteFixture.root,
+      slug: "fixture",
+      runId: promoteHandshake.runId,
+      approval: promoteFixture.approval,
+      current: promoteFixture.current,
+      definition,
+      validateBundle: promoteFixture.runner.validateEvidenceBundle,
+      writeEvidence: promoteFixture.runner.writeRunEvidence,
+      beforeArtifactPromotion: () => replaceRunRootWithExternal(
+        path.dirname(promoteHandshake.manifestPath),
+        promoteExternal,
+      ),
+    }),
+    /directory identity changed/u,
+  );
+  assert.equal((await readWorkspaceFiles(promoteExternal)).join("\n"), promoteExternalBefore);
+  await assert.rejects(access(path.join(evidenceRunRoot, "implementation-parity.json")));
 });
 
 test("WS-COVERAGE-05 finalizeはraw artifactを昇格してschema version 4 evidenceを作る", async (context) => {

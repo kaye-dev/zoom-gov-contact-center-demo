@@ -48,19 +48,19 @@ test('MDX and global styles apply the shared external-link behavior', () => {
     new URL('../mdx-components.tsx', import.meta.url),
     'utf8',
   );
-  const globalCss = readFileSync(
-    new URL('../app/globals.css', import.meta.url),
+  const uiFoundationCss = readFileSync(
+    new URL('../app/styles/ui-foundation.css', import.meta.url),
     'utf8',
   );
 
   assert.match(mdxSource, /\^\(\?:https\?:\)\?\\\/\\\//);
   assert.match(mdxSource, /<ExternalLink href=\{href\}/);
   assert.match(
-    globalCss,
+    uiFoundationCss,
     /a\[href\]:not\(\[aria-disabled="true"\]\)\s*\{\s*cursor: pointer;/,
   );
   assert.match(
-    globalCss,
+    uiFoundationCss,
     /a\[href\]\[aria-disabled="true"\]\s*\{\s*cursor: not-allowed;/,
   );
 });

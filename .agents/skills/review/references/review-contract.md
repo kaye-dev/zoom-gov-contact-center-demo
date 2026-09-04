@@ -54,7 +54,7 @@ Copy every file from `assets/review-report/` to `plans/<slug>/review/`, then rep
 - Risk is `critical`, `high`, `medium`, `low`, or `none`. Severity is `blocker`, `major`, `minor`, or `note`.
 - A group describes one intent, not one file. Rename/import follow-ups and similar mechanical edits belong with their purpose. `files` across all groups exactly equals `reviewedPaths`.
 - Locations use `path:line`, `path:start-end`, or `path@file`. If the intent cannot be explained, set the group summary to `要改善: 変更意図を説明できない` and assign an appropriate risk.
-- Validation status is `passed`, `failed`, `skipped`, or `unverified`, and records only commands actually run.
+- Validation status is `passed`, `failed`, `skipped`, or `unverified`, and records commands actually run or a reused command whose scope, passed status, and validated diff digest exactly match the reviewed snapshot.
 - For current UI evidence, use separate validation entries for automated state/viewport/theme coverage, risk rows, anchor rows, cleanup, human visual approval, and full parity. Never collapse `automationCoverageStatus`, `humanVisualApprovalStatus`, and `fullParityStatus` into one pass/fail statement.
 - Evidence lists may reference representative screenshot/URL and compact artifact records. Do not copy raw screenshot bytes, raw DOM, accessibility trees, workspace fragments, or large runner JSON into `review-data.json`.
 - Screen all strings before writing. Never include credentials, tokens, environment values, private keys, cookies, or raw reviewer transcripts.
