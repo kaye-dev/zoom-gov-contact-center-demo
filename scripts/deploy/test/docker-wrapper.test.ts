@@ -260,6 +260,569 @@ function runFixture(root: string, body: string) {
   });
 }
 
+type StubResponse = {
+  output?: string;
+  status?: number;
+};
+
+type MemoryPreflightScenario = {
+  memory?: StubResponse[];
+  contexts?: StubResponse[];
+  endpoints?: StubResponse[];
+  statuses?: StubResponse[];
+  activeContainers?: StubResponse[];
+  containerList?: string;
+  interactive?: boolean;
+  answer?: string;
+  colimaAvailable?: boolean;
+  stopStatus?: number;
+  startStatus?: number;
+  dockerVersionStatus?: number;
+  environment?: string[];
+  after?: string;
+};
+
+function colimaStatusJson(
+  memory: number,
+  endpoint = "unix:///Users/test/.colima/default/docker.sock",
+  runtime = "docker",
+): string {
+  return JSON.stringify({
+    display_name: "colima",
+    runtime,
+    docker_socket: endpoint,
+    memory,
+  });
+}
+
+function stubSequence(
+  root: string,
+  label: string,
+  responses: StubResponse[],
+): string {
+  const values = responses.length > 0 ? responses : [{ output: "" }];
+  const branches = values.map((response, index) => {
+    const marker = join(root, `${label}-${index}`);
+    const output = response.output
+      ? `printf '%s\\n' ${shellQuote(response.output)}`
+      : ":";
+    return [
+      `if [[ ! -e ${shellQuote(marker)} ]]; then`,
+      `  : > ${shellQuote(marker)}`,
+      `  ${output}`,
+      `  return ${response.status ?? 0}`,
+      "fi",
+    ].join("\n");
+  });
+  const last = values.at(-1) ?? { output: "" };
+  branches.push(
+    last.output ? `printf '%s\\n' ${shellQuote(last.output)}` : ":",
+    `return ${last.status ?? 0}`,
+  );
+  return branches.join("\n");
+}
+
+function runMemoryPreflightFixture(
+  root: string,
+  scenario: MemoryPreflightScenario = {},
+) {
+  const endpoint = "unix:///Users/test/.colima/default/docker.sock";
+  const stopArguments = join(root, "colima-stop-arguments");
+  const startArguments = join(root, "colima-start-arguments");
+  const contextArguments = join(root, "docker-context-arguments");
+  const statusArguments = join(root, "colima-status-arguments");
+  const colimaUnavailable = scenario.colimaAvailable === false
+    ? [
+        "command() {",
+        '  if [[ "$1" == "-v" && "$2" == "colima" ]]; then return 1; fi',
+        '  builtin command "$@"',
+        "}",
+      ].join("\n")
+    : "";
+  const body = [
+    ...(scenario.environment ?? []),
+    colimaUnavailable,
+    "docker() {",
+    '  if [[ "$1" == "info" && "$2" == "--format" ]]; then',
+    stubSequence(
+      root,
+      "docker-memory",
+      scenario.memory ?? [
+        { output: "2000000000" },
+        { output: "2000000000" },
+        { output: "4200000000" },
+      ],
+    ),
+    "  fi",
+    '  if [[ "$1" == "context" && "$2" == "show" ]]; then',
+    stubSequence(
+      root,
+      "docker-context",
+      scenario.contexts ?? [{ output: "colima" }],
+    ),
+    "  fi",
+    '  if [[ "$1" == "context" && "$2" == "inspect" ]]; then',
+    `    printf '<%s>\\n' "$@" >> ${shellQuote(contextArguments)}`,
+    stubSequence(
+      root,
+      "docker-endpoint",
+      scenario.endpoints ?? [{ output: endpoint }],
+    ),
+    "  fi",
+    '  if [[ "$1" == "ps" && "$2" == "--quiet" ]]; then',
+    stubSequence(
+      root,
+      "docker-containers",
+      scenario.activeContainers ?? [{ output: "" }],
+    ),
+    "  fi",
+    '  if [[ "$1" == "ps" && "$2" == "--format" ]]; then',
+    scenario.containerList
+      ? `    printf '%s\\n' ${shellQuote(scenario.containerList)}`
+      : "    :",
+    "    return 0",
+    "  fi",
+    '  if [[ "$1" == "version" ]]; then',
+    `    return ${scenario.dockerVersionStatus ?? 0}`,
+    "  fi",
+    '  printf "unexpected docker command: %s\\n" "$*" >&2',
+    "  return 97",
+    "}",
+    "colima() {",
+    '  if [[ "$1" == "status" ]]; then',
+    `    printf '<%s>\\n' "$@" >> ${shellQuote(statusArguments)}`,
+    stubSequence(
+      root,
+      "colima-status",
+      scenario.statuses ?? [
+        { output: colimaStatusJson(2_147_483_648) },
+        { output: colimaStatusJson(2_147_483_648) },
+        { output: colimaStatusJson(4_294_967_296) },
+      ],
+    ),
+    "  fi",
+    '  if [[ "$1" == "stop" ]]; then',
+    `    printf '<%s>\\n' "$@" > ${shellQuote(stopArguments)}`,
+    `    return ${scenario.stopStatus ?? 0}`,
+    "  fi",
+    '  if [[ "$1" == "start" ]]; then',
+    `    printf '<%s>\\n' "$@" > ${shellQuote(startArguments)}`,
+    `    return ${scenario.startStatus ?? 0}`,
+    "  fi",
+    '  printf "unexpected colima command: %s\\n" "$*" >&2',
+    "  return 96",
+    "}",
+    `is_interactive_terminal() { return ${scenario.interactive === false ? 1 : 0}; }`,
+    scenario.answer === undefined
+      ? "ensure_deploy_runner_memory"
+      : `ensure_deploy_runner_memory <<< ${shellQuote(scenario.answer)}`,
+    scenario.after ?? "",
+  ].filter(Boolean).join("\n");
+  return {
+    result: runFixture(root, body),
+    stopArguments,
+    startArguments,
+    contextArguments,
+    statusArguments,
+  };
+}
+
+test("MEM-01: Docker memoryが閾値以上ならColimaを呼ばず継続する", () => {
+  for (const memory of ["4000000000", "4000000001", "8307826688"]) {
+    const root = initializeWrapperFixture();
+    const colimaMarker = join(root, "unexpected-colima");
+    try {
+      const result = runFixture(
+        root,
+        [
+          `docker() { [[ "$1" == "info" ]] && printf '%s\\n' ${memory}; }`,
+          `colima() { : > ${shellQuote(colimaMarker)}; return 1; }`,
+          "ensure_deploy_runner_memory",
+          "printf continued",
+        ].join("\n"),
+      );
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stdout, /continued$/u);
+      assert.equal(spawnSync("test", ["-e", colimaMarker]).status, 1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+  const root = initializeWrapperFixture();
+  try {
+    const { result } = runMemoryPreflightFixture(root, {
+      memory: [{ output: "3999999999" }],
+      interactive: false,
+    });
+    assert.notEqual(result.status, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("MEM-02: active contextとColima statusのprofile runtime socketが完全一致する", () => {
+  for (const fixture of [
+    {
+      context: "colima",
+      endpoint: "unix:///Users/test/.colima/default/docker.sock",
+      profile: "default",
+    },
+    {
+      context: "colima-team",
+      endpoint: "unix:///Users/test/.colima/team/docker.sock",
+      profile: "team",
+    },
+  ]) {
+    const root = initializeWrapperFixture();
+    try {
+      const { result, statusArguments } = runMemoryPreflightFixture(root, {
+        contexts: [{ output: fixture.context }],
+        endpoints: [{ output: fixture.endpoint }],
+        statuses: [{ output: colimaStatusJson(2_147_483_648, fixture.endpoint) }],
+        activeContainers: [{ output: "container-id" }],
+      });
+      assert.notEqual(result.status, 0);
+      assert.match(
+        readFileSync(statusArguments, "utf8"),
+        new RegExp(`<status>\\n<${fixture.profile}>\\n<--json>`, "u"),
+      );
+      assert.match(result.stderr, /Active Docker containers/u);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+
+  for (const status of [
+    colimaStatusJson(2_147_483_648, "unix:///wrong/docker.sock"),
+    colimaStatusJson(2_147_483_648, undefined, "containerd"),
+    '{"runtime":"docker","docker_socket":"unix:///x","memory":"invalid"}',
+    '{"runtime":"docker","runtime":"docker","docker_socket":"unix:///x","memory":2147483648}',
+  ]) {
+    const root = initializeWrapperFixture();
+    try {
+      const { result, stopArguments } = runMemoryPreflightFixture(root, {
+        statuses: [{ output: status }],
+      });
+      assert.notEqual(result.status, 0);
+      assert.equal(spawnSync("test", ["-e", stopArguments]).status, 1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("MEM-03: Docker endpoint override時はColima変更前に停止する", () => {
+  for (const environment of [
+    ["DOCKER_HOST=unix:///explicit/docker.sock"],
+    ["DOCKER_CONTEXT=colima"],
+    ["DOCKER_HOST=unix:///explicit/docker.sock", "DOCKER_CONTEXT=colima"],
+  ]) {
+    const root = initializeWrapperFixture();
+    try {
+      const { result, stopArguments } = runMemoryPreflightFixture(root, { environment });
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /explicitly overrides Docker endpoint ownership/u);
+      assert.equal(spawnSync("test", ["-e", stopArguments]).status, 1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("MEM-04: 非Colimaまたは所有権不一致は変更せず停止する", () => {
+  const cases: MemoryPreflightScenario[] = [
+    { contexts: [{ output: "desktop-linux" }] },
+    { contexts: [{ output: "colima" }], endpoints: [{ output: "tcp://remote:2375" }] },
+    { colimaAvailable: false },
+    { statuses: [{ status: 1 }] },
+    { statuses: [{ output: colimaStatusJson(2_147_483_648, undefined, "containerd") }] },
+    { statuses: [{ output: colimaStatusJson(2_147_483_648, "unix:///wrong/docker.sock") }] },
+  ];
+  for (const scenario of cases) {
+    const root = initializeWrapperFixture();
+    try {
+      const { result, stopArguments } = runMemoryPreflightFixture(root, scenario);
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /Configure the current Docker engine/u);
+      assert.equal(spawnSync("test", ["-e", stopArguments]).status, 1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("MEM-05: 稼働コンテナがあればpromptとColima変更を行わない", () => {
+  const root = initializeWrapperFixture();
+  try {
+    const { result, stopArguments } = runMemoryPreflightFixture(root, {
+      activeContainers: [{ output: "one\ntwo" }],
+      containerList: "one app image:one Up 1 minute\ntwo db image:two Paused",
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /one app image:one/u);
+    assert.match(result.stderr, /two db image:two/u);
+    assert.doesNotMatch(result.stderr, /続行しますか/u);
+    assert.equal(spawnSync("test", ["-e", stopArguments]).status, 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("MEM-06: yとyesだけがColima変更を承認する", () => {
+  for (const answer of ["y", "yes", "Y", "YES"]) {
+    const root = initializeWrapperFixture();
+    try {
+      const { result, startArguments } = runMemoryPreflightFixture(root, { answer });
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(spawnSync("test", ["-e", startArguments]).status, 0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+  for (const answer of ["", "n", "later"]) {
+    const root = initializeWrapperFixture();
+    try {
+      const { result, stopArguments } = runMemoryPreflightFixture(root, { answer });
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /memory change was refused/u);
+      assert.equal(spawnSync("test", ["-e", stopArguments]).status, 1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("MEM-07: 非対話の低メモリColimaはpromptせず停止する", () => {
+  const root = initializeWrapperFixture();
+  try {
+    const { result, stopArguments } = runMemoryPreflightFixture(root, {
+      interactive: false,
+    });
+    assert.notEqual(result.status, 0);
+    assert.doesNotMatch(result.stderr, /続行しますか/u);
+    assert.match(result.stderr, /interactive terminal is required/u);
+    assert.equal(spawnSync("test", ["-e", stopArguments]).status, 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("MEM-08: 承認後driftはColima停止前に拒否する", () => {
+  const driftCases: MemoryPreflightScenario[] = [
+    {
+      answer: "y",
+      contexts: [{ output: "colima" }, { output: "colima-team" }],
+    },
+    {
+      answer: "y",
+      endpoints: [
+        { output: "unix:///Users/test/.colima/default/docker.sock" },
+        { output: "unix:///Users/test/.colima/changed/docker.sock" },
+      ],
+    },
+    {
+      answer: "y",
+      statuses: [
+        { output: colimaStatusJson(2_147_483_648) },
+        {
+          output: colimaStatusJson(
+            2_147_483_648,
+            "unix:///Users/test/.colima/changed/docker.sock",
+          ),
+        },
+      ],
+    },
+    {
+      answer: "y",
+      activeContainers: [{ output: "" }, { output: "new-container" }],
+    },
+  ];
+  for (const scenario of driftCases) {
+    const root = initializeWrapperFixture();
+    try {
+      const { result, stopArguments } = runMemoryPreflightFixture(root, scenario);
+      assert.notEqual(result.status, 0);
+      assert.equal(spawnSync("test", ["-e", stopArguments]).status, 1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+
+  const root = initializeWrapperFixture();
+  try {
+    const continued = join(root, "continued-without-restart");
+    const { result, stopArguments } = runMemoryPreflightFixture(root, {
+      answer: "yes",
+      memory: [{ output: "2000000000" }, { output: "4200000000" }],
+      after: `: > ${shellQuote(continued)}`,
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(spawnSync("test", ["-e", stopArguments]).status, 1);
+    assert.equal(spawnSync("test", ["-e", continued]).status, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+
+  const changedOwnerRoot = initializeWrapperFixture();
+  try {
+    const { result, stopArguments } = runMemoryPreflightFixture(changedOwnerRoot, {
+      answer: "yes",
+      memory: [{ output: "2000000000" }, { output: "4200000000" }],
+      endpoints: [
+        { output: "unix:///Users/test/.colima/default/docker.sock" },
+        { output: "unix:///Users/test/.colima/changed/docker.sock" },
+      ],
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /ownership changed after approval/u);
+    assert.equal(spawnSync("test", ["-e", stopArguments]).status, 1);
+  } finally {
+    rmSync(changedOwnerRoot, { recursive: true, force: true });
+  }
+});
+
+test("MEM-09: 承認済みprofileを4 GiBへ変更して再検証後に継続する", () => {
+  for (const fixture of [
+    {
+      context: "colima",
+      endpoint: "unix:///Users/test/.colima/default/docker.sock",
+      profile: "default",
+    },
+    {
+      context: "colima-team",
+      endpoint: "unix:///Users/test/.colima/team/docker.sock",
+      profile: "team",
+    },
+  ]) {
+    const root = initializeWrapperFixture();
+    const continued = join(root, "continued");
+    try {
+      const { result, stopArguments, startArguments } = runMemoryPreflightFixture(root, {
+        answer: "yes",
+        contexts: [{ output: fixture.context }],
+        endpoints: [{ output: fixture.endpoint }],
+        statuses: [
+          { output: colimaStatusJson(2_147_483_648, fixture.endpoint) },
+          { output: colimaStatusJson(2_147_483_648, fixture.endpoint) },
+          { output: colimaStatusJson(4_294_967_296, fixture.endpoint) },
+        ],
+        after: `: > ${shellQuote(continued)}`,
+      });
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(
+        readFileSync(stopArguments, "utf8"),
+        `<stop>\n<${fixture.profile}>\n`,
+      );
+      assert.equal(
+        readFileSync(startArguments, "utf8"),
+        `<start>\n<${fixture.profile}>\n<--memory>\n<4>\n<--save-config>\n`,
+      );
+      assert.equal(spawnSync("test", ["-e", continued]).status, 0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("MEM-10: Colima変更失敗はcloud操作前に停止する", () => {
+  const cases: MemoryPreflightScenario[] = [
+    { answer: "y", stopStatus: 1 },
+    { answer: "y", startStatus: 1 },
+    { answer: "y", dockerVersionStatus: 1 },
+    {
+      answer: "y",
+      statuses: [
+        { output: colimaStatusJson(2_147_483_648) },
+        { output: colimaStatusJson(2_147_483_648) },
+        { status: 1 },
+      ],
+    },
+    {
+      answer: "y",
+      statuses: [
+        { output: colimaStatusJson(2_147_483_648) },
+        { output: colimaStatusJson(2_147_483_648) },
+        { output: colimaStatusJson(4_294_967_296, "unix:///Users/test/.colima/other/docker.sock") },
+      ],
+    },
+    {
+      answer: "y",
+      memory: [{ output: "2000000000" }],
+      statuses: [
+        { output: colimaStatusJson(2_147_483_648) },
+        { output: colimaStatusJson(2_147_483_648) },
+        { output: colimaStatusJson(4_294_967_296) },
+      ],
+    },
+  ];
+  for (const scenario of cases) {
+    const root = initializeWrapperFixture();
+    const cloudMarker = join(root, "cloud-operation");
+    try {
+      const { result } = runMemoryPreflightFixture(root, {
+        ...scenario,
+        after: `: > ${shellQuote(cloudMarker)}`,
+      });
+      assert.notEqual(result.status, 0);
+      assert.equal(spawnSync("test", ["-e", cloudMarker]).status, 1);
+      assert.match(result.stderr, /profile 'default'|Docker memory|ownership/u);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("MEM-11: 構成済み4 GiB以上は低い値へ再設定しない", () => {
+  const root = initializeWrapperFixture();
+  try {
+    const { result, stopArguments } = runMemoryPreflightFixture(root, {
+      statuses: [{ output: colimaStatusJson(8_589_934_592) }],
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /already has at least 4 GiB configured/u);
+    assert.equal(spawnSync("test", ["-e", stopArguments]).status, 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("MEM-12: memory preflightはAWSとrunner buildより前に実行される", () => {
+  const source = readFileSync(deployScript, "utf8");
+  assert.match(
+    source,
+    /require_clean_worktree\s+ensure_deploy_runner_memory\s+resolve_aws_profile "\$\{requested_profile\}"\s+read_aws_account_id\s+log_wrapper_step "Immutable deploy runner imageを準備しています"\s+build_deploy_runner_image/u,
+  );
+  const root = initializeWrapperFixture();
+  const cloudMarker = join(root, "cloud-operation");
+  try {
+    const { result } = runMemoryPreflightFixture(root, {
+      interactive: false,
+      after: `: > ${shellQuote(cloudMarker)}`,
+    });
+    assert.notEqual(result.status, 0);
+    assert.equal(spawnSync("test", ["-e", cloudMarker]).status, 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("MEM-DOC-01: runbookはColima memory preflight契約を固定する", () => {
+  for (const path of [
+    "docs/deploy/vercel-neon/initial-deploy.md",
+    "docs/deploy/vercel-neon/redeploy.md",
+  ]) {
+    const runbook = readFileSync(join(projectRoot, path), "utf8");
+    assert.match(runbook, /4 GB-class/u);
+    assert.match(runbook, /Colima[^\n]*4 GiB/u);
+    assert.match(runbook, /\[y\/N\]/u);
+    assert.match(runbook, /稼働container/u);
+    assert.match(runbook, /Colima以外/u);
+    assert.match(runbook, /再検証/u);
+    assert.match(runbook, /AWS、DB、Vercel/u);
+    assert.match(runbook, /colima status <profile>/u);
+  }
+});
+
 test("pending migration phase returns 75 without changing caller errexit", () => {
   const root = initializeWrapperFixture();
   const output = join(root, "phase-output");

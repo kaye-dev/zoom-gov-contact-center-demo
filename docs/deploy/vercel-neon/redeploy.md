@@ -7,7 +7,7 @@ GitHub Actionsから実行する場合は[GitHub ActionsからProductionへ手�
 ## 実行前の確認
 
 - デプロイ対象がcommit済みで、worktreeがcleanである。
-- Dockerが起動している。
+- Dockerが起動し、4 GB-class（`4,000,000,000` bytes以上）の利用可能メモリを持つ。Colimaでは4 GiB以上を構成する。
 - 初回設定時と同じAWS accountのIAM Identity Center profileを利用できる。
 - Vercel Hobby / Neon Freeを使う個人・非商用デモであり、本番データや日本国内のデータ所在要件がない。
 - 同時に別のProduction deployやmigrationを実行していない。
@@ -27,6 +27,10 @@ git status --short
 `<AWS_PROFILE_NAME>`は秘密値ではありません。shell historyへtoken、API key、database URL、passwordを入力しません。
 
 ## 実行中の動作
+
+`deploy.sh`はclean worktree確認後、AWS profile、STS、SSM、deploy runner image buildより前にDockerメモリを検査します。4 GB-class以上なら追加入力なしで続行します。不足時は、明示的なDocker endpoint overrideがなく、active context、socket、`colima status <profile> --json`から現在のdaemonを所有するColima profileを完全に特定でき、稼働containerが0件の場合だけ、Colimaを4 GiBへ変更して再起動するか`[y/N]`で確認します。
+
+明示的な`y`または`yes`を入力すると、endpointと稼働container 0件を再確認してからexact profileを通常stop/startします。再起動後にprofile、socket、構成メモリ、Dockerメモリを再検証できた場合だけ、再帰実行せず同じ`deploy.sh`のAWS認証以降へ進みます。稼働containerあり、非対話、拒否、Colima以外のengine、Docker endpoint override、所有権不一致では、自動停止や設定変更を行いません。
 
 `deploy.sh`は固定versionのdeploy runner imageを使い、Parameter Storeの4件を値を表示せずに取得します。`config`が初回setupまたはcredential更新の途中状態なら、同じprofileで`./setup-deploy-aws.sh`を再実行するよう案内し、Production関連処理を始めず停止します。完了済みの場合は保存されたVercel / Neon対象をAPIで再確認し、Neonからpooled / direct connection stringを取得します。Neon APIが返すraw URIは手編集せず、runnerが`sslmode=require`または`sslmode=verify-full`を検証してmemory上で`sslmode=verify-full`へ正規化します。正規化済みdirect URIはmigrationとDB検証のprocess内だけで使い、pooled URIだけをVercel Productionの`DATABASE_URL`へ同期して、次の順に処理します。
 
@@ -94,10 +98,13 @@ profileをその回だけ指定する場合は各コマンドへ`--profile <AWS_
 
 errorの直前に表示されたphaseを確認し、状態不明のまま再実行しません。
 
+Docker memory preflightで停止した場合、AWS、DB、Vercelの処理は未開始です。稼働container、active Docker context、endpoint、対象profileを確認し、Colima以外のengineや明示的なendpoint overrideではengine側で4 GiB以上を手動設定します。承認後のColima stop/startまたは再検証に失敗した場合は、別profileを起動したりforce stop/deleteしたりせず、`colima status <profile>`でexact profileを確認し、停止中なら`colima start <profile> --memory 4 --save-config`で通常起動してから同じ`./deploy.sh`を再実行します。
+
 TLSの証明書chainまたはhostname検証に失敗した場合は、`sslmode=require`、`no-verify`、`NODE_TLS_REJECT_UNAUTHORIZED=0`へfallbackしません。下表で失敗phaseの外部状態を判定し、対象の証明書、hostname、Neon endpointを修復してから既存経路を再実行します。
 
 | 停止箇所                            | 外部状態                                       | 対応                                                   |
 | ----------------------------------- | ---------------------------------------------- | ------------------------------------------------------ |
+| Docker memory preflight             | Colima以外の外部変更なし                       | engine/profile/containerを確認して4 GiB以上へ復旧する  |
 | target / quality / migration plan   | 外部変更なし                                   | 設定またはコードを修正して再実行する                   |
 | migration apply / verify            | DBが一部または全部変更済みの可能性あり         | Neon migration状態とschemaを確認し、自動rollbackしない |
 | Vercel env sync / Production deploy | 環境変数またはProductionが変更済みの可能性あり | Vercel deployment IDと最後に成功した工程を確認する     |
