@@ -7,6 +7,7 @@ import { Select } from "@/app/components/Select";
 
 import { ContentCopyIcon } from "../../../components/svg/ContentCopyIcon";
 import { useI18n } from "../../../i18n/LanguageProvider";
+import { AdminSectionNavigation } from "../../AdminSectionNavigation";
 
 type CreatedUser = {
   email: string;
@@ -109,14 +110,21 @@ export function NewUserForm({
   };
 
   return (
-    <section className="mx-auto max-w-2xl space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-bold">{t.admin.createUserTitle}</h1>
-        <p className="text-sm leading-6 text-fg-muted">
-          {t.admin.createUserDescription}
-        </p>
+    <section>
+      <div data-admin-page-chrome className="space-y-4">
+        <div
+          data-admin-page-header
+          className="mx-auto max-w-2xl space-y-2"
+        >
+          <h1 className="text-2xl font-bold">{t.admin.createUserTitle}</h1>
+          <p className="text-sm leading-6 text-fg-muted">
+            {t.admin.createUserDescription}
+          </p>
+        </div>
+        <AdminSectionNavigation />
       </div>
 
+      <div data-admin-page-body className="mx-auto mt-6 max-w-2xl space-y-6">
       {createdUser ? (
         <div className="rounded-lg border border-accent/40 bg-surface-accent-subtle p-4 text-fg">
           <h2 className="text-lg font-bold">{t.admin.issuedPasswordTitle}</h2>
@@ -247,6 +255,7 @@ export function NewUserForm({
           {t.admin.createUser}
         </button>
       </form>
+      </div>
     </section>
   );
 }

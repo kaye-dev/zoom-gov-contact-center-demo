@@ -14,6 +14,7 @@ import {
 } from "@/lib/developer-api-settings";
 
 import { useI18n } from "../../i18n/LanguageProvider";
+import { AdminSectionNavigation } from "../AdminSectionNavigation";
 
 type Props = { initialSettings: DeveloperApiSettingsSnapshot; canEdit: boolean };
 type Section = DeveloperApiSettingsUpdate["section"];
@@ -228,13 +229,23 @@ export function DeveloperApiSettingsForm({ initialSettings, canEdit }: Props) {
   };
 
   return (
-    <section id="developer-api-content" className="mx-auto max-w-5xl space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-bold">{copy.title}</h1>
-        <p className="text-sm leading-6 text-fg-muted">{copy.description}</p>
+    <section id="developer-api-content">
+      <div data-admin-page-chrome className="space-y-4">
+        <div
+          data-admin-page-header
+          className="mx-auto max-w-5xl space-y-2"
+        >
+          <h1 className="text-2xl font-bold">{copy.title}</h1>
+          <p className="text-sm leading-6 text-fg-muted">{copy.description}</p>
+        </div>
+        <AdminSectionNavigation />
       </div>
 
-      <div id="developer-api-form" className="space-y-6">
+      <div
+        id="developer-api-form"
+        data-admin-page-body
+        className="mx-auto mt-6 max-w-5xl space-y-6"
+      >
         <form
           id="server-to-server-oauth-form"
           onSubmit={submit("server-to-server-oauth")}

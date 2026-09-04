@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { formatAdminDateTime } from "../date-format";
 import { useI18n } from "../../i18n/LanguageProvider";
+import { AdminSectionNavigation } from "../AdminSectionNavigation";
 
 type ResetStatus = "PENDING" | "APPROVED" | "REJECTED" | "CONSUMED";
 
@@ -75,12 +76,18 @@ export function PasswordResetRequestsView({
   };
 
   return (
-    <section className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">{t.admin.passwordResets}</h1>
-        <p className="text-sm text-fg-muted">{t.auth.forgotPasswordDescription}</p>
+    <section>
+      <div data-admin-page-chrome className="space-y-4">
+        <div data-admin-page-header>
+          <h1 className="text-2xl font-bold">{t.admin.passwordResets}</h1>
+          <p className="text-sm text-fg-muted">
+            {t.auth.forgotPasswordDescription}
+          </p>
+        </div>
+        <AdminSectionNavigation />
       </div>
 
+      <div data-admin-page-body className="mt-6 space-y-6">
       {issuedPassword ? (
         <div className="rounded-lg border border-accent/40 bg-surface-accent-subtle p-4 text-fg">
           <h2 className="text-lg font-bold">{t.admin.issuedPasswordTitle}</h2>
@@ -173,6 +180,7 @@ export function PasswordResetRequestsView({
             {t.admin.noResetRequests}
           </p>
         ) : null}
+      </div>
       </div>
     </section>
   );

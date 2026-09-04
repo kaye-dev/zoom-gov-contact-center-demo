@@ -302,6 +302,7 @@ export type Dictionary = {
     title: string;
     users: string;
     newUser: string;
+    createUserAction: string;
     passwordResets: string;
     phoneSettings: string;
     chatSettings: string;
@@ -311,6 +312,21 @@ export type Dictionary = {
     reservations: string;
     zaad: ZaadDictionary;
     settingsMenu: string;
+    navigation: {
+      dashboard: string;
+      usersSection: string;
+      settingsSection: string;
+      usersSectionNavigation: string;
+      settingsSectionNavigation: string;
+      backToSite: string;
+      openMenu: string;
+      closeMenu: string;
+      collapseSidebar: string;
+      expandSidebar: string;
+      accountMenuLabel: string;
+      openAccountMenu: string;
+      closeAccountMenu: string;
+    };
     userListTitle: string;
     searchPlaceholder: string;
     search: string;
@@ -335,6 +351,7 @@ export type Dictionary = {
     noUsers: string;
     noResetRequests: string;
     page: string;
+    paginationLabel: string;
     previous: string;
     next: string;
     issuedPasswordTitle: string;
@@ -1326,6 +1343,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       title: '管理画面',
       users: 'ユーザー管理',
       newUser: 'ユーザー作成',
+      createUserAction: '作成',
       passwordResets: '再設定申請',
       phoneSettings: '電話管理',
       chatSettings: 'AIチャット管理',
@@ -1334,6 +1352,21 @@ export const dictionaries: Record<Locale, Dictionary> = {
       developerApi: 'Developer API',
       reservations: '予約システム',
       settingsMenu: '設定',
+      navigation: {
+        dashboard: 'ダッシュボード',
+        usersSection: 'ユーザー',
+        settingsSection: '設定',
+        usersSectionNavigation: 'ユーザー管理セクション',
+        settingsSectionNavigation: '設定管理セクション',
+        backToSite: '公開サイトへ戻る',
+        openMenu: 'ナビゲーションを開く',
+        closeMenu: 'ナビゲーションを閉じる',
+        collapseSidebar: 'サイドナビゲーションを折りたたむ',
+        expandSidebar: 'サイドナビゲーションを展開する',
+        accountMenuLabel: 'アカウント操作',
+        openAccountMenu: '{name}のアカウントメニューを開く',
+        closeAccountMenu: '{name}のアカウントメニューを閉じる',
+      },
       reservationManagement: reservationManagementCopy.ja,
       zaad: zaadDictionaries.ja,
       userListTitle: 'ユーザー管理',
@@ -1361,6 +1394,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       noUsers: '該当するユーザーはいません。',
       noResetRequests: 'パスワード再設定申請はありません。',
       page: 'ページ',
+      paginationLabel: 'ユーザー一覧のページ',
       previous: '前へ',
       next: '次へ',
       issuedPasswordTitle: '仮パスワードを発行しました',
@@ -2139,6 +2173,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       title: 'Admin',
       users: 'User Management',
       newUser: 'Create User',
+      createUserAction: 'Create',
       passwordResets: 'Reset Requests',
       phoneSettings: 'Phone Management',
       chatSettings: 'AI Chat Management',
@@ -2147,6 +2182,21 @@ export const dictionaries: Record<Locale, Dictionary> = {
       developerApi: 'Developer API',
       reservations: 'Reservation system',
       settingsMenu: 'Settings',
+      navigation: {
+        dashboard: 'Dashboard',
+        usersSection: 'Users',
+        settingsSection: 'Settings',
+        usersSectionNavigation: 'User management sections',
+        settingsSectionNavigation: 'Settings sections',
+        backToSite: 'Back to public site',
+        openMenu: 'Open navigation',
+        closeMenu: 'Close navigation',
+        collapseSidebar: 'Collapse sidebar',
+        expandSidebar: 'Expand sidebar',
+        accountMenuLabel: 'Account actions',
+        openAccountMenu: 'Open account menu for {name}',
+        closeAccountMenu: 'Close account menu for {name}',
+      },
       reservationManagement: reservationManagementCopy.en,
       zaad: zaadDictionaries.en,
       userListTitle: 'User Management',
@@ -2174,6 +2224,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       noUsers: 'No matching users.',
       noResetRequests: 'No password reset requests.',
       page: 'Page',
+      paginationLabel: 'User list pages',
       previous: 'Previous',
       next: 'Next',
       issuedPasswordTitle: 'Temporary Password Issued',
@@ -2937,6 +2988,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       title: '管理页面',
       users: '用户管理',
       newUser: '创建用户',
+      createUserAction: '创建',
       passwordResets: '重置申请',
       phoneSettings: '电话管理',
       chatSettings: 'AI聊天管理',
@@ -2945,6 +2997,21 @@ export const dictionaries: Record<Locale, Dictionary> = {
       developerApi: 'Developer API',
       reservations: '预约系统',
       settingsMenu: '设置',
+      navigation: {
+        dashboard: '仪表板',
+        usersSection: '用户',
+        settingsSection: '设置',
+        usersSectionNavigation: '用户管理分区',
+        settingsSectionNavigation: '设置管理分区',
+        backToSite: '返回公开网站',
+        openMenu: '打开导航',
+        closeMenu: '关闭导航',
+        collapseSidebar: '收起侧边导航',
+        expandSidebar: '展开侧边导航',
+        accountMenuLabel: '帐户操作',
+        openAccountMenu: '打开{name}的帐户菜单',
+        closeAccountMenu: '关闭{name}的帐户菜单',
+      },
       reservationManagement: reservationManagementCopy['zh-Hans'],
       zaad: zaadDictionaries['zh-Hans'],
       userListTitle: '用户管理',
@@ -2971,6 +3038,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       noUsers: '没有符合条件的用户。',
       noResetRequests: '没有密码重置申请。',
       page: '页面',
+      paginationLabel: '用户列表分页',
       previous: '上一页',
       next: '下一页',
       issuedPasswordTitle: '已发放临时密码',
@@ -3687,6 +3755,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       title: '管理頁面',
       users: '使用者管理',
       newUser: '建立使用者',
+      createUserAction: '建立',
       passwordResets: '重設申請',
       phoneSettings: '電話管理',
       chatSettings: 'AI聊天管理',
@@ -3695,6 +3764,21 @@ export const dictionaries: Record<Locale, Dictionary> = {
       developerApi: 'Developer API',
       reservations: '預約系統',
       settingsMenu: '設定',
+      navigation: {
+        dashboard: '儀表板',
+        usersSection: '使用者',
+        settingsSection: '設定',
+        usersSectionNavigation: '使用者管理分區',
+        settingsSectionNavigation: '設定管理分區',
+        backToSite: '返回公開網站',
+        openMenu: '開啟導覽',
+        closeMenu: '關閉導覽',
+        collapseSidebar: '收合側邊導覽',
+        expandSidebar: '展開側邊導覽',
+        accountMenuLabel: '帳戶操作',
+        openAccountMenu: '開啟{name}的帳戶選單',
+        closeAccountMenu: '關閉{name}的帳戶選單',
+      },
       reservationManagement: reservationManagementCopy['zh-Hant'],
       zaad: zaadDictionaries['zh-Hant'],
       userListTitle: '使用者管理',
@@ -3721,6 +3805,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       noUsers: '沒有符合條件的使用者。',
       noResetRequests: '沒有密碼重設申請。',
       page: '頁面',
+      paginationLabel: '使用者列表分頁',
       previous: '上一頁',
       next: '下一頁',
       issuedPasswordTitle: '已發放臨時密碼',
@@ -4439,6 +4524,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       title: '관리 화면',
       users: '사용자 관리',
       newUser: '사용자 생성',
+      createUserAction: '생성',
       passwordResets: '재설정 신청',
       phoneSettings: '전화 관리',
       chatSettings: 'AI 채팅 관리',
@@ -4447,6 +4533,21 @@ export const dictionaries: Record<Locale, Dictionary> = {
       developerApi: 'Developer API',
       reservations: '예약 시스템',
       settingsMenu: '설정',
+      navigation: {
+        dashboard: '대시보드',
+        usersSection: '사용자',
+        settingsSection: '설정',
+        usersSectionNavigation: '사용자 관리 섹션',
+        settingsSectionNavigation: '설정 관리 섹션',
+        backToSite: '공개 사이트로 돌아가기',
+        openMenu: '탐색 열기',
+        closeMenu: '탐색 닫기',
+        collapseSidebar: '사이드 탐색 접기',
+        expandSidebar: '사이드 탐색 펼치기',
+        accountMenuLabel: '계정 작업',
+        openAccountMenu: '{name} 계정 메뉴 열기',
+        closeAccountMenu: '{name} 계정 메뉴 닫기',
+      },
       reservationManagement: reservationManagementCopy.ko,
       zaad: zaadDictionaries.ko,
       userListTitle: '사용자 관리',
@@ -4473,6 +4574,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       noUsers: '해당 사용자가 없습니다.',
       noResetRequests: '비밀번호 재설정 신청이 없습니다.',
       page: '페이지',
+      paginationLabel: '사용자 목록 페이지',
       previous: '이전',
       next: '다음',
       issuedPasswordTitle: '임시 비밀번호를 발급했습니다',

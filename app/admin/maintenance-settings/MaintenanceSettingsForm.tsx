@@ -22,6 +22,7 @@ import {
 } from "@/lib/site-settings";
 
 import { useI18n } from "../../i18n/LanguageProvider";
+import { AdminSectionNavigation } from "../AdminSectionNavigation";
 
 type MaintenanceSettingsFormProps = {
   environment: MaintenanceEnvironment;
@@ -282,21 +283,28 @@ export function MaintenanceSettingsForm({
   };
 
   return (
-    <section className="mx-auto max-w-5xl space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="max-w-3xl space-y-2">
-          <h1 className="text-2xl font-bold">{copy.title}</h1>
-          <p className="text-sm leading-6 text-fg-muted">
-            {copy.description}
-          </p>
-        </div>
-        <span
-          className={`inline-flex rounded-full border px-3 py-1 text-sm font-bold ${environmentBadgeClass(environment)}`}
+    <section>
+      <div data-admin-page-chrome className="space-y-4">
+        <div
+          data-admin-page-header
+          className="mx-auto flex max-w-5xl flex-wrap items-start justify-between gap-4"
         >
-          {copy.environmentLabel}: {copy.environments[environment]}
-        </span>
+          <div className="max-w-3xl space-y-2">
+            <h1 className="text-2xl font-bold">{copy.title}</h1>
+            <p className="text-sm leading-6 text-fg-muted">
+              {copy.description}
+            </p>
+          </div>
+          <span
+            className={`inline-flex rounded-full border px-3 py-1 text-sm font-bold ${environmentBadgeClass(environment)}`}
+          >
+            {copy.environmentLabel}: {copy.environments[environment]}
+          </span>
+        </div>
+        <AdminSectionNavigation />
       </div>
 
+      <div data-admin-page-body className="mx-auto mt-6 max-w-5xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface-raised p-4 shadow-sm">
         <h2 className="font-bold">{copy.effectiveStateTitle}</h2>
         <p
@@ -498,6 +506,7 @@ export function MaintenanceSettingsForm({
           </button>
         </div>
       </form>
+      </div>
     </section>
   );
 }

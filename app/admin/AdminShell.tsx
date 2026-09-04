@@ -1,291 +1,412 @@
 "use client";
 
-import Link from "next/link";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
 
-import { ArrowDropDownIcon } from "@/app/components/svg/ArrowDropDownIcon";
+import { CloseIcon } from "@/app/components/svg/CloseIcon";
+import { LeftPanelCloseIcon } from "@/app/components/svg/LeftPanelCloseIcon";
+import { LeftPanelOpenIcon } from "@/app/components/svg/LeftPanelOpenIcon";
+import { MenuIcon } from "@/app/components/svg/MenuIcon";
 import { authClient } from "@/lib/auth-client";
 
 import { useI18n } from "../i18n/LanguageProvider";
+import { AdminNavigation } from "./AdminNavigation";
+import {
+  buildAdminNavigation,
+  resolveAdminNavigationState,
+  type AdminNavigationItemKey,
+  type AdminNavigationModel,
+  type AdminNavigationState,
+} from "./admin-navigation";
+
+export type { AdminNavigationItemKey } from "./admin-navigation";
 
 type AdminShellProps = {
   children: ReactNode;
   visibleItems: AdminNavigationItemKey[];
+  currentUserName: string;
 };
 
-export type AdminNavigationItemKey =
-  | "users"
-  | "new-user"
-  | "password-reset-requests"
-  | "phone-settings"
-  | "chat-settings"
-  | "language-settings"
-  | "maintenance-settings"
-  | "developer-api"
-  | "reservations"
-  | "zaad"
-  | "roles";
-
-type AdminMenuKey = "users" | "settings";
-
-type AdminMenuGroup = {
-  key: AdminMenuKey;
-  label: string;
-  items: Array<{
-    key: AdminNavigationItemKey;
-    href: string;
-    label: string;
-  }>;
+type AdminNavigationContextValue = {
+  model: AdminNavigationModel;
+  navigationState: AdminNavigationState;
 };
 
-export function AdminShell({ children, visibleItems }: AdminShellProps) {
+const AdminNavigationContext = createContext<
+  AdminNavigationContextValue | undefined
+>(undefined);
+
+const FOCUSABLE_SELECTOR = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  '[tabindex]:not([tabindex="-1"])',
+].join(",");
+
+export function useAdminNavigationContext() {
+  const value = useContext(AdminNavigationContext);
+  if (!value) {
+    throw new Error(
+      "useAdminNavigationContext must be used within AdminShell",
+    );
+  }
+  return value;
+}
+
+export function AdminShell({
+  children,
+  visibleItems,
+  currentUserName,
+}: AdminShellProps) {
   const { t } = useI18n();
   const pathname = usePathname();
   const router = useRouter();
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [openMenu, setOpenMenu] = useState<AdminMenuKey | null>(null);
-  const navigationRef = useRef<HTMLElement>(null);
-  const usersMenuButtonRef = useRef<HTMLButtonElement>(null);
-  const settingsMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [accountMenuSurface, setAccountMenuSurface] = useState<
+    "desktop" | "drawer" | null
+  >(null);
+  const accountMenuSurfaceRef = useRef(accountMenuSurface);
+  const pageContentRef = useRef<HTMLDivElement>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
+  const drawerCloseButtonRef = useRef<HTMLButtonElement>(null);
+  const drawerTriggerRef = useRef<HTMLButtonElement>(null);
+  const previousPathnameRef = useRef(pathname);
+
+  const model = useMemo(
+    () => buildAdminNavigation(visibleItems, t),
+    [t, visibleItems],
+  );
+  const navigationState = useMemo(
+    () => resolveAdminNavigationState(pathname),
+    [pathname],
+  );
+  const navigationContext = useMemo(
+    () => ({ model, navigationState }),
+    [model, navigationState],
+  );
+
+  const closeDrawer = useCallback(() => {
+    setAccountMenuSurface(null);
+    setIsDrawerOpen(false);
+  }, []);
+  const toggleSidebar = useCallback(() => {
+    setAccountMenuSurface(null);
+    setIsSidebarExpanded((current) => !current);
+  }, []);
 
   useEffect(() => {
-    if (!openMenu) return;
+    accountMenuSurfaceRef.current = accountMenuSurface;
+  }, [accountMenuSurface]);
 
-    const onPointerDown = (event: MouseEvent) => {
-      if (!navigationRef.current?.contains(event.target as Node)) {
-        setOpenMenu(null);
+  useEffect(() => {
+    if (previousPathnameRef.current === pathname) return;
+    previousPathnameRef.current = pathname;
+    setAccountMenuSurface(null);
+    setIsDrawerOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.repeat ||
+        event.isComposing ||
+        event.key.toLowerCase() !== "b" ||
+        !event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.shiftKey ||
+        isDrawerOpen ||
+        !window.matchMedia("(min-width: 1024px)").matches
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      toggleSidebar();
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [isDrawerOpen, toggleSidebar]);
+
+  useEffect(() => {
+    const desktopQuery = window.matchMedia("(min-width: 1024px)");
+    const closeAccountMenu = () => setAccountMenuSurface(null);
+    desktopQuery.addEventListener("change", closeAccountMenu);
+    return () => desktopQuery.removeEventListener("change", closeAccountMenu);
+  }, []);
+
+  useEffect(() => {
+    if (!isDrawerOpen) return;
+
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const drawerTrigger = drawerTriggerRef.current;
+    const pageContent = pageContentRef.current;
+    const previousOverflow = document.body.style.overflow;
+    const previousInert = pageContent?.inert ?? false;
+    const previousAriaHidden = pageContent?.getAttribute("aria-hidden") ?? null;
+    const desktopQuery = window.matchMedia("(min-width: 1024px)");
+
+    document.body.style.overflow = "hidden";
+    if (pageContent) {
+      pageContent.inert = true;
+      pageContent.setAttribute("aria-hidden", "true");
+    }
+    drawerCloseButtonRef.current?.focus();
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        if (accountMenuSurfaceRef.current !== null) return;
+        event.preventDefault();
+        closeDrawer();
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const drawer = drawerRef.current;
+      if (!drawer) return;
+      const focusable = Array.from(
+        drawer.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+      ).filter((element) => element.getClientRects().length > 0);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        drawer.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || !drawer.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (
+        !event.shiftKey &&
+        (active === last || !drawer.contains(active))
+      ) {
+        event.preventDefault();
+        first.focus();
       }
     };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-
-      const trigger =
-        openMenu === "users"
-          ? usersMenuButtonRef.current
-          : settingsMenuButtonRef.current;
-      setOpenMenu(null);
-      trigger?.focus();
+    const closeAtDesktop = (event: MediaQueryListEvent) => {
+      if (event.matches) closeDrawer();
     };
 
-    document.addEventListener("mousedown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
+    desktopQuery.addEventListener("change", closeAtDesktop);
     return () => {
-      document.removeEventListener("mousedown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
+      desktopQuery.removeEventListener("change", closeAtDesktop);
+      document.body.style.overflow = previousOverflow;
+      if (pageContent) {
+        pageContent.inert = previousInert;
+        if (previousAriaHidden === null) {
+          pageContent.removeAttribute("aria-hidden");
+        } else {
+          pageContent.setAttribute("aria-hidden", previousAriaHidden);
+        }
+      }
+      const focusTarget = desktopQuery.matches
+        ? document.getElementById("admin-sidebar-toggle")
+        : (drawerTrigger ?? previouslyFocused);
+      focusTarget?.focus();
     };
-  }, [openMenu]);
-
-  const allMenuGroups: AdminMenuGroup[] = [
-    {
-      key: "users",
-      label: t.admin.users,
-      items: [
-        { key: "users", href: "/admin/users", label: t.admin.users },
-        { key: "new-user", href: "/admin/users/new", label: t.admin.newUser },
-        {
-          key: "password-reset-requests",
-          href: "/admin/password-reset-requests",
-          label: t.admin.passwordResets,
-        },
-      ],
-    },
-    {
-      key: "settings",
-      label: t.admin.settingsMenu,
-      items: [
-        { key: "phone-settings", href: "/admin/phone-settings", label: t.admin.phoneSettings },
-        { key: "chat-settings", href: "/admin/chat-settings", label: t.admin.chatSettings },
-        { key: "language-settings", href: "/admin/languages", label: t.admin.languageSettings },
-        {
-          key: "maintenance-settings",
-          href: "/admin/maintenance-settings",
-          label: t.admin.maintenanceSettings,
-        },
-        {
-          key: "roles",
-          href: "/admin/roles",
-          label: t.admin.accessControl.rolesNav,
-        },
-        {
-          key: "developer-api",
-          href: "/admin/developer-api",
-          label: t.admin.developerApi,
-        },
-      ],
-    },
-  ];
-  const menuGroups = allMenuGroups.map((group) => ({
-    ...group,
-    items: group.items.filter((item) => visibleItems.includes(item.key)),
-  })).filter((group) => group.items.length > 0);
+  }, [closeDrawer, isDrawerOpen]);
 
   const signOut = async () => {
+    if (isSigningOut) return;
     setIsSigningOut(true);
     await authClient.signOut();
     router.push("/login");
     router.refresh();
   };
 
+  const pageId = getAdminPageId(pathname);
+  const sidebarLabelClassName = isSidebarExpanded
+    ? "max-w-52 translate-x-0 opacity-100"
+    : "pointer-events-none max-w-0 -translate-x-2 opacity-0";
+
   return (
-    <div
-      id={
-        pathname === "/admin/reservations/bookings"
-          ? "reservation-booking-list-page"
-          : pathname === "/admin/reservations/api-keys"
-            ? "reservation-api-keys-page"
-            : pathname === "/admin/reservations/api-keys/logs"
-            ? "reservation-api-logs-page"
-            : pathname.startsWith("/admin/reservations/api-keys/logs/")
-              ? "reservation-api-log-detail-page"
-          : pathname.startsWith("/admin/reservations")
-            ? "reservation-system-page"
-            : undefined
-      }
-      className="min-h-screen bg-surface text-fg"
-    >
-      <header className="sticky top-0 z-50 border-b border-line bg-surface-raised">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-4 md:px-6">
-          <Link
-            href="/"
-            className="text-lg font-bold text-fg transition-colors hover:text-accent"
+    <AdminNavigationContext.Provider value={navigationContext}>
+      <div id={pageId} className="min-h-screen bg-surface text-fg">
+        <div
+          id="admin-shell"
+          data-sidebar-state={isSidebarExpanded ? "expanded" : "collapsed"}
+          ref={pageContentRef}
+          className={`min-h-screen lg:grid lg:transition-[grid-template-columns] lg:duration-200 lg:ease-out motion-reduce:transition-none ${
+            isSidebarExpanded
+              ? "lg:grid-cols-[18rem_minmax(0,1fr)]"
+              : "lg:grid-cols-[4.25rem_minmax(0,1fr)]"
+          }`}
+        >
+          <aside
+            id="admin-desktop-sidebar"
+            data-admin-sidebar
+            data-expanded={isSidebarExpanded}
+            className="hidden min-w-0 flex-col overflow-visible border-r border-line bg-surface-raised lg:sticky lg:top-0 lg:flex lg:h-screen"
           >
-            {t.cityName}
-          </Link>
-          <span className="text-sm text-fg-muted">{t.admin.title}</span>
-          <nav
-            ref={navigationRef}
-            aria-label={t.admin.title}
-            className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto"
+            <div
+              data-admin-identity
+              className="flex h-[76px] shrink-0 items-center gap-3 overflow-hidden px-4 py-5"
+            >
+              <button
+                id="admin-sidebar-toggle"
+                type="button"
+                aria-label={
+                  isSidebarExpanded
+                    ? t.admin.navigation.collapseSidebar
+                    : t.admin.navigation.expandSidebar
+                }
+                title={
+                  isSidebarExpanded
+                    ? t.admin.navigation.collapseSidebar
+                    : t.admin.navigation.expandSidebar
+                }
+                aria-controls="admin-desktop-sidebar"
+                aria-expanded={isSidebarExpanded}
+                aria-keyshortcuts="Meta+B"
+                onClick={toggleSidebar}
+                className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              >
+                {isSidebarExpanded ? (
+                  <LeftPanelCloseIcon className="h-6 w-6" />
+                ) : (
+                  <LeftPanelOpenIcon className="h-6 w-6" />
+                )}
+              </button>
+              <span
+                data-sidebar-label
+                aria-hidden={!isSidebarExpanded}
+                className={`self-start overflow-hidden whitespace-nowrap text-lg font-bold leading-7 transition-[max-width,max-height,opacity,transform] duration-200 ease-out motion-reduce:transition-none ${
+                  isSidebarExpanded ? "max-h-9" : "max-h-0"
+                } ${sidebarLabelClassName}`}
+              >
+                {t.cityName}
+              </span>
+            </div>
+            <AdminNavigation
+              model={model}
+              currentPrimaryKey={navigationState.primaryKey}
+              currentUserName={currentUserName}
+              isExpanded={isSidebarExpanded}
+              surface="desktop"
+              isSigningOut={isSigningOut}
+              isAccountMenuOpen={accountMenuSurface === "desktop"}
+              onAccountMenuOpenChange={(open) =>
+                setAccountMenuSurface(open ? "desktop" : null)
+              }
+              onSignOut={() => void signOut()}
+            />
+          </aside>
+
+          <div className="min-w-0">
+            <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-line bg-surface-raised px-4 lg:hidden">
+              <span className="font-bold">{t.cityName}</span>
+              <button
+                ref={drawerTriggerRef}
+                id="admin-menu-button"
+                type="button"
+                aria-label={t.admin.navigation.openMenu}
+                aria-controls="admin-mobile-navigation"
+                aria-expanded={isDrawerOpen}
+                onClick={() => setIsDrawerOpen(true)}
+                className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg text-fg transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              >
+                <MenuIcon className="h-6 w-6" />
+              </button>
+            </header>
+            <main className="w-full px-4 py-8 md:px-6 lg:pb-8 lg:pt-5">
+              {children}
+            </main>
+          </div>
+        </div>
+
+        {isDrawerOpen ? (
+          <div
+            id="admin-mobile-navigation"
+            className="fixed inset-0 z-[60] lg:hidden"
           >
-            {menuGroups.map(({ key, label, items }) => {
-                  const isOpen = openMenu === key;
-                  const menuId = `admin-${key}-menu`;
-
-                  return (
-                    <div
-                      key={key}
-                      className="relative"
-                      onBlur={(event) => {
-                        if (
-                          !event.currentTarget.contains(
-                            event.relatedTarget as Node | null,
-                          )
-                        ) {
-                          setOpenMenu((current) =>
-                            current === key ? null : current,
-                          );
-                        }
-                      }}
-                    >
-                      <button
-                        ref={
-                          key === "users"
-                            ? usersMenuButtonRef
-                            : settingsMenuButtonRef
-                        }
-                        type="button"
-                        aria-expanded={isOpen}
-                        aria-controls={menuId}
-                        onClick={() =>
-                          setOpenMenu((current) =>
-                            current === key ? null : key,
-                          )
-                        }
-                        className="flex cursor-pointer items-center gap-1 whitespace-nowrap rounded-md px-3 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-hover hover:text-accent"
-                      >
-                        <span>{label}</span>
-                        <ArrowDropDownIcon className="h-6 w-6 shrink-0" />
-                      </button>
-
-                      {isOpen ? (
-                        <ul
-                          id={menuId}
-                          className={`absolute top-full z-50 mt-2 min-w-48 overflow-hidden rounded-lg border border-line bg-surface-raised py-1 shadow-lg ${
-                            key === "users" ? "left-0" : "right-0"
-                          }`}
-                        >
-                          {items.map((item) => {
-                            const isCurrent = isCurrentAdminItem(pathname, item.key);
-
-                            return (
-                              <li key={item.href}>
-                                <Link
-                                  href={item.href}
-                                  aria-current={isCurrent ? "page" : undefined}
-                                  onClick={() => setOpenMenu(null)}
-                                  className={`block whitespace-nowrap px-4 py-2 text-sm font-semibold transition-colors hover:bg-surface-hover hover:text-accent ${
-                                    isCurrent ? "text-accent" : "text-fg"
-                                  }`}
-                                >
-                                  {item.label}
-                                </Link>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      ) : null}
-                    </div>
-                  );
-                })}
-            {visibleItems.includes("reservations") ? (
-              <Link
-                href="/admin/reservations"
-                aria-current={pathname.startsWith("/admin/reservations") ? "page" : undefined}
-                className={`whitespace-nowrap rounded-md px-3 py-2 text-sm font-semibold transition-colors hover:bg-surface-hover hover:text-accent ${
-                  pathname.startsWith("/admin/reservations") ? "text-accent" : "text-fg"
-                }`}
-              >
-                {t.admin.reservations}
-              </Link>
-            ) : null}
-            {visibleItems.includes("zaad") ? (
-              <Link
-                href="/admin/zaad"
-                aria-current={pathname.startsWith("/admin/zaad") ? "page" : undefined}
-                className={`whitespace-nowrap rounded-md px-3 py-2 text-sm font-semibold transition-colors hover:bg-surface-hover hover:text-accent ${
-                  pathname.startsWith("/admin/zaad") ? "text-accent" : "text-fg"
-                }`}
-              >
-                {t.admin.zaad.navLabel}
-              </Link>
-            ) : null}
             <button
               type="button"
-              onClick={signOut}
-              disabled={isSigningOut}
-              className="cursor-pointer rounded-md border border-line px-3 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label={t.admin.navigation.closeMenu}
+              onClick={closeDrawer}
+              className="absolute inset-0 cursor-default bg-black/45"
+            />
+            <div
+              ref={drawerRef}
+              id="admin-mobile-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-label={t.admin.title}
+              tabIndex={-1}
+              className="absolute inset-y-0 left-0 flex h-dvh w-80 max-w-[85vw] flex-col border-r border-line bg-surface-raised shadow-2xl"
             >
-              {t.auth.signOut}
-            </button>
-          </nav>
-        </div>
-      </header>
-      <main className="mx-auto w-full max-w-7xl px-4 py-8 md:px-6">
-        {children}
-      </main>
-    </div>
+              <div
+                data-admin-identity
+                className="flex h-16 shrink-0 items-center justify-between px-4"
+              >
+                <span className="font-bold">{t.cityName}</span>
+                <button
+                  ref={drawerCloseButtonRef}
+                  type="button"
+                  aria-label={t.admin.navigation.closeMenu}
+                  onClick={closeDrawer}
+                  className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg text-fg transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                >
+                  <CloseIcon className="h-6 w-6" />
+                </button>
+              </div>
+              <AdminNavigation
+                model={model}
+                currentPrimaryKey={navigationState.primaryKey}
+                currentUserName={currentUserName}
+                isExpanded
+                surface="drawer"
+                isSigningOut={isSigningOut}
+                isAccountMenuOpen={accountMenuSurface === "drawer"}
+                onAccountMenuOpenChange={(open) =>
+                  setAccountMenuSurface(open ? "drawer" : null)
+                }
+                onNavigate={closeDrawer}
+                onSignOut={() => void signOut()}
+              />
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </AdminNavigationContext.Provider>
   );
 }
 
-function isCurrentAdminItem(pathname: string, key: AdminNavigationItemKey) {
-  if (key === "new-user") return pathname === "/admin/users/new";
-  if (key === "users") {
-    return (
-      pathname === "/admin/users" ||
-      (pathname.startsWith("/admin/users/") && pathname !== "/admin/users/new")
-    );
+function getAdminPageId(pathname: string) {
+  if (pathname === "/admin/reservations/bookings") {
+    return "reservation-booking-list-page";
   }
-  if (key === "roles") return pathname.startsWith("/admin/roles");
-  const exactPaths: Record<Exclude<AdminNavigationItemKey, "users" | "new-user" | "roles" | "reservations" | "zaad">, string> = {
-    "password-reset-requests": "/admin/password-reset-requests",
-    "phone-settings": "/admin/phone-settings",
-    "chat-settings": "/admin/chat-settings",
-    "language-settings": "/admin/languages",
-    "maintenance-settings": "/admin/maintenance-settings",
-    "developer-api": "/admin/developer-api",
-  };
-  if (key === "reservations") return pathname.startsWith("/admin/reservations");
-  if (key === "zaad") return pathname.startsWith("/admin/zaad");
-  return pathname === exactPaths[key];
+  if (pathname === "/admin/reservations/api-keys") {
+    return "reservation-api-keys-page";
+  }
+  if (pathname === "/admin/reservations/api-keys/logs") {
+    return "reservation-api-logs-page";
+  }
+  if (pathname.startsWith("/admin/reservations/api-keys/logs/")) {
+    return "reservation-api-log-detail-page";
+  }
+  if (pathname.startsWith("/admin/reservations")) {
+    return "reservation-system-page";
+  }
+  return undefined;
 }

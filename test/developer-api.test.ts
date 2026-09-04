@@ -12,11 +12,15 @@ import {
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 
 test("Developer API navigation and page use the approved route and sections", () => {
-  const shell = read("../app/admin/AdminShell.tsx");
+  const navigation = read("../app/admin/admin-navigation.ts");
   const page = read("../app/admin/developer-api/page.tsx");
   const form = read("../app/admin/developer-api/DeveloperApiSettingsForm.tsx");
   const route = read("../app/api/[[...route]]/route.ts");
-  assert.match(shell, /key: "developer-api",\s*href: "\/admin\/developer-api"/u);
+  assert.match(
+    navigation,
+    /key: "developer-api",\s*href: settingsPaths\["developer-api"\]/u,
+  );
+  assert.match(navigation, /"developer-api": "\/admin\/developer-api"/u);
   assert.match(page, /requireAdminAccess\(\s*"developer-api",\s*"VIEW"/u);
   assert.match(
     route,

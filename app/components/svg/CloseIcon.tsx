@@ -7,6 +7,8 @@ export function CloseIcon({ className, height = 24, width = 24 }: { className?: 
       height={`${height}px`}
       width={`${width}px`}
       fill="currentColor"
+      aria-hidden="true"
+      focusable="false"
     >
       <path d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z" />
     </svg>

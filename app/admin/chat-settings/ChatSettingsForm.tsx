@@ -14,6 +14,7 @@ import {
 } from "@/lib/site-settings";
 
 import { useI18n } from "../../i18n/LanguageProvider";
+import { AdminSectionNavigation } from "../AdminSectionNavigation";
 
 type ChatSettingsFormProps = {
   initialSettings: ChatSettings;
@@ -132,16 +133,23 @@ export function ChatSettingsForm({
   };
 
   return (
-    <section className="mx-auto max-w-5xl space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-bold">
-          {t.admin.chatManagement.title}
-        </h1>
-        <p className="text-sm leading-6 text-fg-muted">
-          {t.admin.chatManagement.description}
-        </p>
+    <section>
+      <div data-admin-page-chrome className="space-y-4">
+        <div
+          data-admin-page-header
+          className="mx-auto max-w-5xl space-y-2"
+        >
+          <h1 className="text-2xl font-bold">
+            {t.admin.chatManagement.title}
+          </h1>
+          <p className="text-sm leading-6 text-fg-muted">
+            {t.admin.chatManagement.description}
+          </p>
+        </div>
+        <AdminSectionNavigation />
       </div>
 
+      <div data-admin-page-body className="mx-auto mt-6 max-w-5xl">
       <form onSubmit={submit} className="space-y-6">
         <fieldset
           className="space-y-4 rounded-lg border border-line bg-surface-raised p-5 shadow-sm md:p-6"
@@ -360,6 +368,7 @@ export function ChatSettingsForm({
             : t.admin.settings.save}
         </button>
       </form>
+      </div>
     </section>
   );
 }

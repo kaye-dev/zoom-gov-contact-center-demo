@@ -11,6 +11,8 @@ import type {
   AdminResourceKey,
 } from "@/lib/admin-access/types";
 
+import { AdminSectionNavigation } from "../../../AdminSectionNavigation";
+
 type UserAccessSummary = {
   user: {
     id: string;
@@ -51,24 +53,33 @@ export function UserAccessView({ summary }: { summary: UserAccessSummary }) {
 
   return (
     <section
-      className="mx-auto min-w-0 max-w-6xl space-y-6 overflow-x-hidden"
+      className="min-w-0"
       aria-labelledby="access-heading"
     >
-      <Link
-        href={`/admin/users/${encodeURIComponent(summary.user.id)}`}
-        className="inline-flex text-sm font-semibold text-accent transition-colors hover:text-primary-700 dark:hover:text-primary-300"
-      >
-        ← {copy.backToUserDetails}
-      </Link>
-      <div className="space-y-2">
-        <h1 id="access-heading" className="text-2xl font-bold">
-          {copy.userAccessHeading.replace("{name}", summary.user.name)}
-        </h1>
-        <p className="text-sm leading-6 text-fg-muted">
-          {copy.userAccessDescription}
-        </p>
+      <div data-admin-page-chrome className="space-y-4">
+        <div
+          data-admin-page-header
+          className="mx-auto max-w-6xl space-y-6"
+        >
+          <Link
+            href={`/admin/users/${encodeURIComponent(summary.user.id)}`}
+            className="inline-flex text-sm font-semibold text-accent transition-colors hover:text-primary-700 dark:hover:text-primary-300"
+          >
+            ← {copy.backToUserDetails}
+          </Link>
+          <div className="space-y-2">
+            <h1 id="access-heading" className="text-2xl font-bold">
+              {copy.userAccessHeading.replace("{name}", summary.user.name)}
+            </h1>
+            <p className="text-sm leading-6 text-fg-muted">
+              {copy.userAccessDescription}
+            </p>
+          </div>
+        </div>
+        <AdminSectionNavigation />
       </div>
 
+      <div data-admin-page-body className="mx-auto mt-6 max-w-6xl space-y-6">
       <dl className="grid gap-4 rounded-lg border border-line bg-surface-raised p-5 shadow-sm sm:grid-cols-3">
         <div>
           <dt className="text-sm font-semibold text-fg-muted">{t.admin.email}</dt>
@@ -165,6 +176,7 @@ export function UserAccessView({ summary }: { summary: UserAccessSummary }) {
             ))}
           </tbody>
         </table>
+      </div>
       </div>
     </section>
   );

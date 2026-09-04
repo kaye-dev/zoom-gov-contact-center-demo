@@ -26,6 +26,8 @@ import type {
   AdminResourceKey,
 } from "@/lib/admin-access/types";
 
+import { AdminSectionNavigation } from "../../AdminSectionNavigation";
+
 const DIRECTORY_PAGE_SIZE = 20;
 
 type RoleMatrixAction = {
@@ -287,47 +289,56 @@ export function RoleDetailsView({
   };
 
   return (
-    <section className="mx-auto min-w-0 max-w-6xl overflow-x-hidden">
-      <Link
-        href="/admin/roles"
-        className="inline-flex text-sm font-semibold text-accent transition-colors hover:text-primary-700 dark:hover:text-primary-300"
-      >
-        ← {copy.backToRoles}
-      </Link>
+    <section className="min-w-0">
+      <div data-admin-page-chrome className="space-y-4">
+        <div
+          data-admin-page-header
+          className="mx-auto max-w-6xl"
+        >
+          <Link
+            href="/admin/roles"
+            className="inline-flex text-sm font-semibold text-accent transition-colors hover:text-primary-700 dark:hover:text-primary-300"
+          >
+            ← {copy.backToRoles}
+          </Link>
 
-      <div className="mt-5 flex flex-wrap items-start gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="break-words text-2xl font-bold">{displayName}</h1>
-            {role.systemKey ? (
-              <span className="inline-flex rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-700 dark:bg-gray-700 dark:text-gray-100">
-                {copy.systemRole}
-              </span>
-            ) : null}
-            {editable ? (
-              <button
-                type="button"
-                onClick={openMetadataEditor}
-                disabled={isSaving}
-                aria-describedby={isSaving ? 'role-saving-reason' : undefined}
-                aria-label={`${copy.edit}: ${displayName}`}
-                className="inline-flex min-h-10 min-w-10 cursor-pointer items-center justify-center rounded-md text-fg-muted transition-colors hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-45"
-              >
-                <EditSquareIcon className="h-6 w-6" />
-              </button>
-            ) : null}
-            {isSaving ? (
-              <span id="role-saving-reason" className="sr-only">
-                {copy.saving}
-              </span>
-            ) : null}
+          <div className="mt-5 flex flex-wrap items-start gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="break-words text-2xl font-bold">{displayName}</h1>
+                {role.systemKey ? (
+                  <span className="inline-flex rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-700 dark:bg-gray-700 dark:text-gray-100">
+                    {copy.systemRole}
+                  </span>
+                ) : null}
+                {editable ? (
+                  <button
+                    type="button"
+                    onClick={openMetadataEditor}
+                    disabled={isSaving}
+                    aria-describedby={isSaving ? 'role-saving-reason' : undefined}
+                    aria-label={`${copy.edit}: ${displayName}`}
+                    className="inline-flex min-h-10 min-w-10 cursor-pointer items-center justify-center rounded-md text-fg-muted transition-colors hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    <EditSquareIcon className="h-6 w-6" />
+                  </button>
+                ) : null}
+                {isSaving ? (
+                  <span id="role-saving-reason" className="sr-only">
+                    {copy.saving}
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-2 text-sm leading-6 text-fg-muted">
+                {displayDescription ?? '—'}
+              </p>
+            </div>
           </div>
-          <p className="mt-2 text-sm leading-6 text-fg-muted">
-            {displayDescription ?? '—'}
-          </p>
         </div>
+        <AdminSectionNavigation />
       </div>
 
+      <div data-admin-page-body className="mx-auto mt-6 max-w-6xl">
       {!editable ? (
         <p
           role="status"
@@ -525,6 +536,7 @@ export function RoleDetailsView({
           </form>
         </ModalDialog>
       ) : null}
+      </div>
     </section>
   );
 }

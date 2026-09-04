@@ -16,6 +16,7 @@ import {
 } from "@/lib/site-settings";
 
 import { useI18n } from "../../i18n/LanguageProvider";
+import { AdminSectionNavigation } from "../AdminSectionNavigation";
 
 type LanguageSettingsFormProps = {
   initialSettings: LanguageSettings;
@@ -109,16 +110,23 @@ export function LanguageSettingsForm({
   };
 
   return (
-    <section className="mx-auto max-w-3xl space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-bold">
-          {t.admin.languageManagement.title}
-        </h1>
-        <p className="text-sm leading-6 text-fg-muted">
-          {t.admin.languageManagement.description}
-        </p>
+    <section>
+      <div data-admin-page-chrome className="space-y-4">
+        <div
+          data-admin-page-header
+          className="mx-auto max-w-3xl space-y-2"
+        >
+          <h1 className="text-2xl font-bold">
+            {t.admin.languageManagement.title}
+          </h1>
+          <p className="text-sm leading-6 text-fg-muted">
+            {t.admin.languageManagement.description}
+          </p>
+        </div>
+        <AdminSectionNavigation />
       </div>
 
+      <div data-admin-page-body className="mx-auto mt-6 max-w-3xl">
       <form
         onSubmit={submit}
         className="space-y-5 rounded-lg border border-line bg-surface-raised p-5 shadow-sm md:p-6"
@@ -171,6 +179,7 @@ export function LanguageSettingsForm({
             : t.admin.settings.save}
         </button>
       </form>
+      </div>
     </section>
   );
 }

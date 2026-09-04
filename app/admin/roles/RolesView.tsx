@@ -13,6 +13,7 @@ import { DeleteIcon } from "@/app/components/svg/DeleteIcon";
 import { EditSquareIcon } from "@/app/components/svg/EditSquareIcon";
 import { useI18n } from "@/app/i18n/LanguageProvider";
 
+import { AdminSectionNavigation } from "../AdminSectionNavigation";
 import { ConfirmationDialog } from "../users/ConfirmationDialog";
 
 type RoleSummary = {
@@ -87,27 +88,34 @@ export function RolesView({
   };
 
   return (
-    <section className="min-w-0 space-y-6 overflow-x-hidden">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-        <div className="space-y-2">
-          <h1 className="text-2xl font-bold">
-            {total} {copy.roleCount}
-          </h1>
-          <p className="max-w-3xl text-sm leading-6 text-fg-muted">
-            {copy.listDescription}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setIsCreateOpen(true)}
-          disabled={!canCreate}
-          aria-describedby={!canCreate ? 'roles-read-only-reason' : undefined}
-          className="cursor-pointer rounded-md bg-primary px-4 py-2 text-center text-sm font-semibold text-white transition-colors hover:bg-primary-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50 sm:ml-auto"
+    <section className="min-w-0">
+      <div data-admin-page-chrome className="space-y-4">
+        <div
+          data-admin-page-header
+          className="flex flex-col gap-4 sm:flex-row sm:items-start"
         >
-          + {copy.addRole}
-        </button>
+          <div className="space-y-2">
+            <h1 className="text-2xl font-bold">
+              {total} {copy.roleCount}
+            </h1>
+            <p className="max-w-3xl text-sm leading-6 text-fg-muted">
+              {copy.listDescription}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsCreateOpen(true)}
+            disabled={!canCreate}
+            aria-describedby={!canCreate ? 'roles-read-only-reason' : undefined}
+            className="cursor-pointer rounded-md bg-primary px-4 py-2 text-center text-sm font-semibold text-white transition-colors hover:bg-primary-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50 sm:ml-auto"
+          >
+            + {copy.addRole}
+          </button>
+        </div>
+        <AdminSectionNavigation />
       </div>
 
+      <div data-admin-page-body className="mt-6 space-y-6">
       {!canCreate ? (
         <p
           id="roles-read-only-reason"
@@ -335,6 +343,7 @@ export function RolesView({
           onConfirm={() => void removeRole()}
         />
       ) : null}
+      </div>
     </section>
   );
 }

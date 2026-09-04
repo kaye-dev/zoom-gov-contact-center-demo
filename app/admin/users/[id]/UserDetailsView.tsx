@@ -18,6 +18,7 @@ import {
 } from "@/lib/password-policy";
 
 import { useI18n } from "../../../i18n/LanguageProvider";
+import { AdminSectionNavigation } from "../../AdminSectionNavigation";
 import { ConfirmationDialog } from "../ConfirmationDialog";
 import { getLocalizedError } from "../UsersView";
 
@@ -369,23 +370,32 @@ export function UserDetailsView({
     null;
 
   return (
-    <section className="mx-auto max-w-4xl space-y-6">
-      <Link
-        href="/admin/users"
-        className="inline-flex text-sm font-semibold text-accent transition-colors hover:text-primary-700 dark:hover:text-primary-300"
-      >
-        ← {t.admin.userManagement.backToUsers}
-      </Link>
+    <section>
+      <div data-admin-page-chrome className="space-y-4">
+        <div
+          data-admin-page-header
+          className="mx-auto max-w-4xl space-y-6"
+        >
+          <Link
+            href="/admin/users"
+            className="inline-flex text-sm font-semibold text-accent transition-colors hover:text-primary-700 dark:hover:text-primary-300"
+          >
+            ← {t.admin.userManagement.backToUsers}
+          </Link>
 
-      <div>
-        <h1 className="text-2xl font-bold">
-          {t.admin.userManagement.detailsTitle}
-        </h1>
-        <p className="mt-1 text-sm leading-6 text-fg-muted">
-          {t.admin.userManagement.detailsDescription}
-        </p>
+          <div>
+            <h1 className="text-2xl font-bold">
+              {t.admin.userManagement.detailsTitle}
+            </h1>
+            <p className="mt-1 text-sm leading-6 text-fg-muted">
+              {t.admin.userManagement.detailsDescription}
+            </p>
+          </div>
+        </div>
+        <AdminSectionNavigation />
       </div>
 
+      <div data-admin-page-body className="mx-auto mt-6 max-w-4xl space-y-6">
       {!canUpdateUser ? (
         <div
           id="user-details-read-only"
@@ -1016,6 +1026,7 @@ export function UserDetailsView({
           </dl>
         </ConfirmationDialog>
       ) : null}
+      </div>
     </section>
   );
 }

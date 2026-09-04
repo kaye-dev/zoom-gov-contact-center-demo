@@ -338,3 +338,126 @@ test("password visibility controls use the requested Material Symbols SVG paths"
   assert.match(visibilitySource, /aria-hidden="true"/);
   assert.match(visibilityOffSource, /aria-hidden="true"/);
 });
+
+test("user list keeps the compact title and create action above section navigation", () => {
+  const listSource = readFileSync(
+    new URL("../app/admin/users/UsersView.tsx", import.meta.url),
+    "utf8",
+  );
+  const header = listSource.indexOf("data-admin-page-header");
+  const section = listSource.indexOf("<AdminSectionNavigation />", header);
+  const body = listSource.indexOf("data-admin-page-body", section);
+  const search = listSource.indexOf("<SearchInput", body);
+  const table = listSource.indexOf("<table", search);
+
+  assert.ok(header >= 0);
+  assert.ok(section > header);
+  assert.ok(body > section);
+  assert.ok(search > body);
+  assert.ok(table > search);
+  assert.match(listSource, /id="users-heading"/u);
+  assert.match(
+    listSource,
+    /className="whitespace-nowrap text-xl font-bold leading-7"/u,
+  );
+  assert.match(listSource, /\{t\.admin\.createUserAction\}/u);
+  assert.doesNotMatch(listSource, /\{t\.admin\.page\}/u);
+  assert.equal(dictionaries.ja.admin.createUserAction, "作成");
+});
+
+test("user list live search is IME-safe, debounced, replace-only, and button-free", () => {
+  const listSource = readFileSync(
+    new URL("../app/admin/users/UsersView.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(listSource, /const \[isComposing, setIsComposing\] = useState\(false\)/u);
+  assert.match(listSource, /if \(isComposing \|\| normalizedQuery === search\) return/u);
+  assert.match(listSource, /window\.setTimeout\(\(\) => \{/u);
+  assert.match(listSource, /\}, 200\)/u);
+  assert.match(listSource, /window\.clearTimeout\(timer\)/u);
+  assert.match(listSource, /onCompositionStart=\{\(\) => setIsComposing\(true\)\}/u);
+  assert.match(listSource, /onCompositionEnd=/u);
+  assert.match(listSource, /const params = new URLSearchParams\(window\.location\.search\)/u);
+  assert.match(listSource, /params\.delete\("page"\)/u);
+  assert.match(listSource, /params\.set\("search", normalizedQuery\)/u);
+  assert.match(listSource, /params\.delete\("search"\)/u);
+  assert.match(listSource, /router\.replace\(/u);
+  assert.doesNotMatch(listSource, /router\.push\(nextQuery/u);
+  assert.match(listSource, /queryState\.source !== search/u);
+  assert.match(listSource, /queryState\.value === queryState\.source/u);
+  assert.match(listSource, /data-admin-user-results/u);
+  assert.match(listSource, /aria-busy=\{isFiltering\}/u);
+  assert.match(listSource, /aria-live="polite"/u);
+  assert.match(listSource, /role="search"/u);
+  assert.doesNotMatch(listSource, /\{t\.admin\.(?:search|clear)\}/u);
+});
+
+test("user list redirects stale page queries to the last available page", () => {
+  const pageSource = readFileSync(
+    new URL("../app/admin/users/page.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    pageSource,
+    /const totalPages = Math\.max\(1, Math\.ceil\(total \/ PAGE_SIZE\)\)/u,
+  );
+  assert.match(pageSource, /if \(page > totalPages\)/u);
+  assert.match(
+    pageSource,
+    /redirect\(getCanonicalUsersHref\(search, totalPages\)\)/u,
+  );
+  assert.match(
+    pageSource,
+    /if \(page > 1\) params\.set\("page", String\(page\)\)/u,
+  );
+});
+
+test("user list shows shared pagination only for multiple pages and preserves search", () => {
+  const listSource = readFileSync(
+    new URL("../app/admin/users/UsersView.tsx", import.meta.url),
+    "utf8",
+  );
+  const pageSource = readFileSync(
+    new URL("../app/admin/users/page.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(listSource, /totalPages > 1 \? \(/u);
+  assert.match(listSource, /<Pagination/u);
+  assert.match(listSource, /id="admin-user-pagination"/u);
+  assert.match(listSource, /previousHref=\{previousHref\}/u);
+  assert.match(listSource, /nextHref=\{nextHref\}/u);
+  assert.match(listSource, /if \(search\) \{\s*params\.set\("search", search\)/u);
+  assert.match(listSource, /params\.set\("page", String\(page\)\)/u);
+  assert.match(pageSource, /total=\{total\}/u);
+  assert.match(pageSource, /totalPages=\{totalPages\}/u);
+});
+
+test("all locales include navigation, create-action, and pagination copy", () => {
+  for (const locale of locales) {
+    const admin = dictionaries[locale].admin;
+
+    assert.ok(admin.createUserAction.length > 0, locale);
+    assert.ok(admin.paginationLabel.length > 0, locale);
+    assert.deepEqual(Object.keys(admin.navigation).sort(), [
+      "accountMenuLabel",
+      "backToSite",
+      "closeAccountMenu",
+      "closeMenu",
+      "collapseSidebar",
+      "dashboard",
+      "expandSidebar",
+      "openAccountMenu",
+      "openMenu",
+      "settingsSection",
+      "settingsSectionNavigation",
+      "usersSection",
+      "usersSectionNavigation",
+    ]);
+    for (const value of Object.values(admin.navigation)) {
+      assert.ok(value.length > 0, locale);
+    }
+  }
+});

@@ -146,13 +146,13 @@ test("RES-INSPECT-01 calendar snapshots expose an allowlisted, source-labeled re
 });
 
 test("RES-INSPECT-02/03 reservation controls connect date lists and accessible slot modals", () => {
-  const shell = source("../app/admin/AdminShell.tsx");
+  const navigation = source("../app/admin/admin-navigation.ts");
   const layout = source("../app/admin/layout.tsx");
   const page = source("../app/admin/reservations/page.tsx");
   const view = source("../app/admin/reservations/ReservationSystemView.tsx");
 
-  assert.match(shell, /href="\/admin\/reservations"/u);
-  assert.match(shell, /visibleItems\.includes\("reservations"\)/u);
+  assert.match(navigation, /href: "\/admin\/reservations"/u);
+  assert.match(navigation, /visible\.has\("reservations"\)/u);
   assert.match(layout, /canAdminAccess\(actor, "reservations", "VIEW"\)/u);
   assert.match(page, /requireAdminAccess\(\s*"reservations",\s*"VIEW"/u);
   assert.match(view, /id="reservation-system-content"/u);
