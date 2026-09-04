@@ -1,0 +1,7 @@
+interface:
+  display_name: "Audit Workflow Performance"
+  short_description: "Audit recent Codex tasks for workflow bottlenecks"
+  default_prompt: "Use $workflow-performance-audit to analyze the last four days of Codex tasks for this repository and suggest only evidence-backed improvements."
+
+policy:
+  allow_implicit_invocation: false

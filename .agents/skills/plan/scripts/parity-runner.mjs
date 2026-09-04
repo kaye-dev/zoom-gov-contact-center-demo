@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { prototypeRevisionInRepository } from "./prototype-revision.mjs";
 import {
   abortRunWorkspace,
+  assertSecretFree,
   finalizeRunWorkspace,
   invalidateRunWorkspace,
   nextRunBatch,
@@ -49,6 +50,14 @@ const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(scriptDirectory, "../../../..");
 const privateDirectoryMode = 0o700;
 const privateFileMode = 0o600;
+const goalHeadings = [
+  "# 目的と完了条件",
+  "# 現状と根拠",
+  "# 実装方針",
+  "# インターフェースとデータフロー",
+  "# テスト計画",
+  "# 前提・対象外・リスク",
+];
 
 function sha256(value) {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
@@ -64,6 +73,17 @@ function permissionMode(metadata) {
 
 function formatPermissionMode(metadata) {
   return permissionMode(metadata).toString(8).padStart(4, "0");
+}
+
+function assertPersistedJsonSecretFree(value, label) {
+  let serialized;
+  try {
+    serialized = JSON.stringify(value);
+  } catch {
+    throw new Error(`${label} must be serializable as data-only JSON`);
+  }
+  ensure(typeof serialized === "string", `${label} must be serializable as data-only JSON`);
+  assertSecretFree(JSON.parse(serialized), label);
 }
 
 async function validatePrivateDirectory(target, label) {
@@ -99,6 +119,7 @@ async function validatePrivateFile(target, label) {
 }
 
 async function writePrivateJsonExclusive(target, evidence, label) {
+  assertPersistedJsonSecretFree(evidence, label);
   const handle = await open(target, "wx", privateFileMode);
   try {
     await handle.chmod(privateFileMode);
@@ -148,6 +169,246 @@ async function loadParityDefinition(requestedDirectory, requestedRoot = reposito
     spec,
     prototypeRevision: afterRevision,
     validationProfileDigest: sha256(specText),
+  };
+}
+
+function markdownSection(markdown, heading) {
+  const start = markdown.indexOf(`${heading}\n`);
+  ensure(start >= 0, `goal.md is missing ${heading}`);
+  const contentStart = start + heading.length + 1;
+  const nextHeading = markdown.slice(contentStart).search(heading.startsWith("## ") ? /^#{1,2} /mu : /^# /mu);
+  return nextHeading < 0
+    ? markdown.slice(contentStart)
+    : markdown.slice(contentStart, contentStart + nextHeading);
+}
+
+function parseMarkdownTableRow(line) {
+  const trimmed = line.trim();
+  ensure(trimmed.startsWith("|") && trimmed.endsWith("|"), "goal.md table row must start and end with |");
+  const cells = [];
+  let cell = "";
+  const body = trimmed.slice(1, -1);
+  for (let index = 0; index < body.length; index += 1) {
+    if (body[index] === "\\" && body[index + 1] === "|") {
+      cell += "|";
+      index += 1;
+    } else if (body[index] === "|") {
+      cells.push(cell.trim());
+      cell = "";
+    } else {
+      cell += body[index];
+    }
+  }
+  cells.push(cell.trim());
+  return cells;
+}
+
+function parseClosureTable(goalText) {
+  const section = markdownSection(goalText, "## 要件クロージャ");
+  const rows = section
+    .split("\n")
+    .filter((line) => line.trim().startsWith("|"))
+    .map(parseMarkdownTableRow);
+  ensure(rows.length >= 3, "goal.md 要件クロージャ must contain a header and at least one requirement row");
+  ensure(
+    stableStringify(rows[0]) === stableStringify(["要件", "goal内の設計", "prototype", "テスト", "完了条件"]),
+    "goal.md 要件クロージャ must use the canonical five-column header",
+  );
+  ensure(
+    rows[1].length === 5 && rows[1].every((cell) => /^:?-{3,}:?$/u.test(cell)),
+    "goal.md 要件クロージャ separator is invalid",
+  );
+  for (const [index, row] of rows.slice(2).entries()) {
+    ensure(row.length === 5 && row.every((cell) => cell !== ""), `goal.md 要件クロージャ row ${index + 1} is incomplete`);
+  }
+  return rows.length - 2;
+}
+
+function parseUiFields(goalText) {
+  const section = markdownSection(goalText, "## UI契約");
+  const fields = new Map();
+  for (const line of section.split("\n")) {
+    const match = /^- ([^:]+):\s*(.+)$/u.exec(line.trim());
+    if (match) fields.set(match[1], match[2].trim());
+  }
+  return fields;
+}
+
+function normalizeGoalValue(value) {
+  return value.replaceAll("`", "").replaceAll("\\", "/");
+}
+
+function mentionsCountOrIds(value, count, ids) {
+  if (new RegExp(`(^|\\D)${count}(\\D|$)`, "u").test(value)) return true;
+  return ids.every((id) => value.includes(id));
+}
+
+function validateGoalContract({ goalText, slug, prototypeRevision, contract, spec }) {
+  const actualHeadings = goalText.match(/^# .+$/gmu) ?? [];
+  ensure(
+    stableStringify(actualHeadings) === stableStringify(goalHeadings),
+    "goal.md must contain exactly the six canonical H1 sections in order",
+  );
+  const requirementRows = parseClosureTable(goalText);
+  const fields = parseUiFields(goalText);
+  for (const field of [
+    "UI変更",
+    "approval contract",
+    "validation profile",
+    "prototype revision",
+    "comparison targets",
+    "parity matrix",
+  ]) {
+    ensure(fields.has(field), `goal.md UI契約 is missing ${field}`);
+  }
+  ensure(!/^(?:なし|対象外|no)$/iu.test(fields.get("UI変更")), "preflight requires a UI goal");
+  const approval = normalizeGoalValue(fields.get("approval contract"));
+  const profile = normalizeGoalValue(fields.get("validation profile"));
+  ensure(
+    approval.includes(`plans/${slug}/prototype/ui-contract.json`) && /version\s*1/iu.test(approval),
+    "goal.md approval contract must reference ui-contract.json version 1",
+  );
+  ensure(
+    profile.includes(`plans/${slug}/prototype/parity-spec.json`) && /version\s*3/iu.test(profile),
+    "goal.md validation profile must reference parity-spec.json version 3",
+  );
+  ensure(
+    normalizeGoalValue(fields.get("prototype revision")).includes(prototypeRevision),
+    "goal.md prototype revision does not match the current prototype",
+  );
+  ensure(
+    mentionsCountOrIds(
+      normalizeGoalValue(fields.get("comparison targets")),
+      contract.comparisonTargets.length,
+      contract.comparisonTargets.map(({ id }) => id),
+    ),
+    "goal.md comparison targets do not match ui-contract.json",
+  );
+  ensure(
+    mentionsCountOrIds(
+      normalizeGoalValue(fields.get("parity matrix")),
+      contract.parityMatrix.length,
+      contract.parityMatrix.map(({ id }) => id),
+    ),
+    "goal.md parity matrix count does not match ui-contract.json",
+  );
+  const implementation = markdownSection(goalText, "# 実装方針");
+  ensure(
+    !/^\s*(?:[-*]\s*)?(?:`{1,3})?(?:node|npx|npm\s+exec)\s+[^\n`]*build-prototype-css\.mjs/imu.test(implementation) &&
+      !/`build-prototype-css\.mjs`\s*を\s*(?:再)?実行/u.test(implementation),
+    "goal.md must not instruct implement to rebuild an approved prototype",
+  );
+  ensure(spec.version === 3, "preflight requires parity-spec.json version 3");
+  return { status: "pass", requirementRows };
+}
+
+function validateInvariantProbeCoverage(contract, spec) {
+  if (spec.version === 3) {
+    validateParitySpec(spec, contract);
+    return {
+      status: "pass",
+      invariantMappings: contract.parityMatrix.reduce(
+        (count, row) => count + row.expectedInvariantIds.length,
+        0,
+      ),
+      intentionalDifferenceMappings: contract.parityMatrix.reduce(
+        (count, row) => count + row.intentionalDifferenceIds.length,
+        0,
+      ),
+    };
+  }
+  const probeById = new Map(spec.probes.map((probe) => [probe.id, probe]));
+  const probeIdsByRow = new Map(spec.rowProbeMap.map(({ rowId, probeIds }) => [rowId, probeIds]));
+  for (const row of contract.parityMatrix) {
+    const mapped = probeIdsByRow.get(row.id).map((probeId) => probeById.get(probeId));
+    if (row.expectedInvariantIds.length > 0) {
+      ensure(
+        mapped.some((probe) => probe.required === true && probe.mode === "equal"),
+        `row ${row.id} has visual invariants without a required equal probe`,
+      );
+    }
+    if (row.intentionalDifferenceIds.length > 0) {
+      ensure(
+        mapped.some((probe) => probe.required === true && probe.mode === "different"),
+        `row ${row.id} has intentional differences without a required different probe`,
+      );
+    }
+  }
+  return { status: "pass" };
+}
+
+async function createPreflightSummary({
+  definition,
+  context,
+  changedTargetIds = [],
+  changedStates = [],
+  changedViewports = [],
+  risks = ["normal"],
+  repositoryRootPath = repositoryRoot,
+}) {
+  ensure(context === "plan" || context === "implement", "--context must be plan or implement");
+  const goalText = await readFile(path.join(repositoryRootPath, "plans", definition.slug, "goal.md"), "utf8");
+  const goalContract = validateGoalContract({
+    goalText,
+    slug: definition.slug,
+    prototypeRevision: definition.prototypeRevision,
+    contract: definition.contract,
+    spec: definition.spec,
+  });
+  const invariantProbeCoverage = validateInvariantProbeCoverage(definition.contract, definition.spec);
+  const sources = await currentSourceDigests(definition.contract, repositoryRootPath);
+  const coverageRows = selectRows({
+    phase: "final",
+    contract: definition.contract,
+    spec: definition.spec,
+    matrixScope: "coverage",
+  });
+  if (context === "plan") {
+    ensure(changedTargetIds.length > 0, "plan preflight requires at least one --target");
+    ensure(changedStates.length > 0, "plan preflight requires at least one --state");
+  }
+  const selectedRows = context === "plan"
+    ? selectRows({
+      phase: "smoke",
+      contract: definition.contract,
+      spec: definition.spec,
+      changedTargetIds,
+      changedStates,
+      changedViewports,
+      risks,
+      matrixScope: "targeted",
+    })
+    : coverageRows;
+  const selectedIds = new Set(selectedRows.map(({ id }) => id));
+  const riskRows = definition.spec.coverage.riskRows.filter((risk) =>
+    selectedRows.some((row) =>
+      row.targetId === risk.targetId &&
+      row.state === risk.state &&
+      row.viewport === risk.viewport &&
+      row.theme === risk.theme,
+    ));
+  const anchorRows = definition.spec.coverage.anchorRows.filter(({ rowId }) => selectedIds.has(rowId));
+  return {
+    schemaVersion: 1,
+    status: "pass",
+    context,
+    prototypeRevision: definition.prototypeRevision,
+    validationProfileDigest: definition.validationProfileDigest,
+    goalContract,
+    invariantProbeCoverage,
+    sourceInventory: {
+      status: "pass",
+      count: sources.length,
+      digest: sha256(stableStringify(sources)),
+    },
+    selection: {
+      fullRowCount: definition.contract.parityMatrix.length,
+      coverageRowCount: coverageRows.length,
+      selectedRowCount: selectedRows.length,
+      riskRowCount: riskRows.length,
+      anchorRowCount: anchorRows.length,
+      digest: sha256(stableStringify(selectedRows.map(({ id }) => id))),
+    },
   };
 }
 
@@ -236,6 +497,101 @@ function validateArtifactRecord(artifact, label) {
   ensure(["production", "prototype"].includes(artifact.surface), `${label}.surface is invalid`);
   requireNonEmptyString(artifact.rowId, `${label}.rowId`);
   requireNonEmptyString(artifact.probeId, `${label}.probeId`);
+}
+
+function validateSurfaceContextProvenance(capabilities, contract) {
+  ensure(
+    Array.isArray(capabilities.surfaceContexts) && capabilities.surfaceContexts.length === 2,
+    "parity evidence must record production and prototype surface contexts",
+  );
+  const expectedAuthorizationProfile = contract.comparisonConditions.authorization;
+  const expectedAuthorizationProfileDigest = sha256(
+    `parity:authorization-profile:v1\0${expectedAuthorizationProfile}`,
+  );
+  const contexts = new Map();
+  for (const [index, context] of capabilities.surfaceContexts.entries()) {
+    const label = `parity evidence capabilities.surfaceContexts[${index}]`;
+    requireExactKeys(
+      context,
+      ["sessionId", "tabId", "surface", "origin", "authorizationProfile", "authorizationProfileDigest"],
+      label,
+    );
+    ensure(context.surface === "production" || context.surface === "prototype", `${label}.surface is invalid`);
+    ensure(!contexts.has(context.surface), "parity evidence surface contexts must be unique by surface");
+    requireNonEmptyString(context.sessionId, `${label}.sessionId`);
+    requireNonEmptyString(context.tabId, `${label}.tabId`);
+    ensure(context.sessionId === capabilities.sessionId, `${label}.sessionId does not match the capability session`);
+    const parsedOrigin = requireLoopbackBaseUrl(context.origin, context.surface);
+    ensure(parsedOrigin.origin === context.origin, `${label}.origin must be canonical`);
+    ensure(
+      context.authorizationProfile === expectedAuthorizationProfile,
+      `${label}.authorizationProfile does not match ui-contract.json`,
+    );
+    requireSha256(context.authorizationProfileDigest, `${label}.authorizationProfileDigest`);
+    ensure(
+      context.authorizationProfileDigest === expectedAuthorizationProfileDigest,
+      `${label}.authorizationProfileDigest does not match its sanitized profile name`,
+    );
+    contexts.set(context.surface, context);
+  }
+  ensure(
+    contexts.has("production") && contexts.has("prototype"),
+    "parity evidence surface context provenance is incomplete",
+  );
+  ensure(
+    new Set([...contexts.values()].map(({ tabId }) => tabId)).size === 2,
+    "parity evidence production and prototype contexts must use distinct tabs",
+  );
+  return contexts;
+}
+
+function validateCapabilityEvidence(capabilities, contract, schemaVersion) {
+  ensure(isPlainObject(capabilities), "parity evidence capabilities must be an object");
+  ensure(capabilities.status === "pass", "parity evidence capability canary must pass");
+  if (schemaVersion < 3) return undefined;
+  const optionalKeys = ["screenshot", "cleanup"].filter((key) =>
+    Object.prototype.hasOwnProperty.call(capabilities, key),
+  );
+  requireExactKeys(
+    capabilities,
+    ["status", "tabId", "viewport", "networkSource", "sessionId", "surfaceContexts", ...optionalKeys],
+    "parity evidence capabilities",
+  );
+  requireNonEmptyString(capabilities.tabId, "parity evidence capabilities.tabId");
+  requireNonEmptyString(capabilities.sessionId, "parity evidence capabilities.sessionId");
+  requireExactKeys(
+    capabilities.viewport,
+    ["width", "height", "dpr"],
+    "parity evidence capabilities.viewport",
+  );
+  for (const field of ["width", "height"]) {
+    ensure(
+      Number.isInteger(capabilities.viewport[field]) && capabilities.viewport[field] > 0,
+      `parity evidence capabilities.viewport.${field} must be a positive integer`,
+    );
+  }
+  ensure(
+    typeof capabilities.viewport.dpr === "number" &&
+      Number.isFinite(capabilities.viewport.dpr) &&
+      capabilities.viewport.dpr === contract.comparisonConditions.dpr,
+    "parity evidence capability DPR does not match ui-contract.json",
+  );
+  ensure(
+    ["not-required", "performance-resource-timing", "browser-network-log"].includes(
+      capabilities.networkSource,
+    ),
+    "parity evidence capability network source is invalid",
+  );
+  if (Object.prototype.hasOwnProperty.call(capabilities, "screenshot")) {
+    requireSha256(capabilities.screenshot, "parity evidence capabilities.screenshot");
+  }
+  if (Object.prototype.hasOwnProperty.call(capabilities, "cleanup")) {
+    ensure(
+      isPlainObject(capabilities.cleanup) && capabilities.cleanup.status === "pass",
+      "parity evidence capability cleanup must pass",
+    );
+  }
+  return validateSurfaceContextProvenance(capabilities, contract);
 }
 
 function validateRowEvidence(rowEvidence, manifestRow, contract, expectedProbes, schemaVersion = 3) {
@@ -366,6 +722,7 @@ function validateRowEvidence(rowEvidence, manifestRow, contract, expectedProbes,
 
 function validateParityEvidence(evidence, contract, spec) {
   if (spec) validateParitySpec(spec, contract);
+  assertPersistedJsonSecretFree(evidence, "parity evidence");
   ensure(isPlainObject(evidence), "parity evidence must be an object");
   ensure(
     [1, 2, 3, 4].includes(evidence.schemaVersion),
@@ -487,8 +844,11 @@ function validateParityEvidence(evidence, contract, spec) {
       JSON.stringify([...contract.productionBaseline.sources].sort()),
     "parity evidence sources do not match productionBaseline.sources",
   );
-  ensure(isPlainObject(evidence.capabilities), "parity evidence capabilities must be an object");
-  ensure(evidence.capabilities.status === "pass", "parity evidence capability canary must pass");
+  const surfaceContexts = validateCapabilityEvidence(
+    evidence.capabilities,
+    contract,
+    evidence.schemaVersion,
+  );
   ensure(Array.isArray(evidence.rows), "parity evidence rows must be an array");
   requireExactKeys(
     evidence.metrics,
@@ -540,6 +900,14 @@ function validateParityEvidence(evidence, contract, spec) {
     : undefined;
   for (const row of evidence.rows) {
     validateRowEvidence(row, manifestRows.get(row.rowId), contract, probesByRow?.get(row.rowId), evidence.schemaVersion);
+    if (row.actualConditions && surfaceContexts) {
+      for (const surface of ["production", "prototype"]) {
+        ensure(
+          new URL(row.actualConditions.urls[surface]).origin === surfaceContexts.get(surface).origin,
+          `parity evidence row ${row.rowId} ${surface} origin does not match its surface context`,
+        );
+      }
+    }
   }
   if (coverageEvidence) {
     ensure(spec?.version === 3, "schemaVersion 4 evidence requires parity-spec.json version 3");
@@ -659,6 +1027,7 @@ async function writeRunEvidence({ repositoryRootPath = repositoryRoot, slug, run
   ensure(/^[a-z0-9][a-z0-9-]*$/u.test(slug) && !["tmp", "reviews"].includes(slug), "invalid plan slug");
   ensure(/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(runId), "invalid run ID");
   ensure(["approval.json", "pre-edit-parity.json", "implementation-parity.json"].includes(name), "invalid evidence file name");
+  assertPersistedJsonSecretFree(evidence, name);
   const root = await realpath(repositoryRootPath);
   const planRoot = path.join(root, "plans", slug);
   const metadata = await lstat(planRoot);
@@ -676,12 +1045,13 @@ async function writeRunEvidence({ repositoryRootPath = repositoryRoot, slug, run
 function parseCliArguments(argv) {
   ensure(
     argv.length >= 2,
-    "usage: parity-runner.mjs <validate|select|prepare-run|next-batch|resume-run|record-batch|record-failure|invalidate-run|finalize-run|cleanup-run|abort-run> plans/<slug>/prototype [options]",
+    "usage: parity-runner.mjs <preflight|validate|select|prepare-run|next-batch|resume-run|record-batch|record-failure|invalidate-run|finalize-run|cleanup-run|abort-run> plans/<slug>/prototype [options]",
   );
   const [command, target, ...rest] = argv;
   ensure(
     [
       "validate",
+      "preflight",
       "select",
       "prepare-run",
       "next-batch",
@@ -717,12 +1087,14 @@ function parseCliArguments(argv) {
     failureCode: undefined,
     diagnostic: undefined,
     transient: undefined,
+    context: undefined,
   };
   for (let index = 0; index < rest.length; index += 1) {
     const argument = rest[index];
     const value = rest[index + 1];
     ensure(value, `${argument} requires a value`);
     if (argument === "--phase") options.phase = value;
+    else if (argument === "--context") options.context = value;
     else if (argument === "--target") options.changedTargetIds.push(value);
     else if (argument === "--state") options.changedStates.push(value);
     else if (argument === "--viewport") options.changedViewports.push(value);
@@ -910,6 +1282,19 @@ async function runCli({
     return;
   }
   const definition = await loadParityDefinition(target, root);
+  if (command === "preflight") {
+    ensure(options.context, "--context is required");
+    stdout.write(`${JSON.stringify(await createPreflightSummary({
+      definition,
+      context: options.context,
+      changedTargetIds: options.changedTargetIds,
+      changedStates: options.changedStates,
+      changedViewports: options.changedViewports,
+      risks: options.risks,
+      repositoryRootPath: root,
+    }), null, 2)}\n`);
+    return;
+  }
   if (command === "prepare-run") {
     ensure(options.productionUrl, "--production-url is required");
     ensure(options.prototypeUrl, "--prototype-url is required");
@@ -999,6 +1384,7 @@ export {
   createBatches,
   createCoverageReport,
   createRunContext,
+  createPreflightSummary,
   createApprovalEvidence,
   isVisibleSnapshot,
   loadParityDefinition,
@@ -1012,6 +1398,8 @@ export {
   stableStringify,
   validateApprovalEvidence,
   validateEvidenceBundle,
+  validateGoalContract,
+  validateInvariantProbeCoverage,
   validateParityEvidence,
   validateParitySpec,
   writeRunEvidence,

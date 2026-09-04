@@ -6,8 +6,8 @@ const layoutSource = readFileSync(
   new URL("../app/layout.tsx", import.meta.url),
   "utf8",
 );
-const globalsSource = readFileSync(
-  new URL("../app/globals.css", import.meta.url),
+const uiFoundationSource = readFileSync(
+  new URL("../app/styles/ui-foundation.css", import.meta.url),
   "utf8",
 );
 const providerSource = readFileSync(
@@ -26,7 +26,7 @@ test("language content stays hidden until storage, context and HTML lang agree",
   );
   assert.match(layoutSource, /lang={toHtmlLanguageTag\(DEFAULT_SITE_LOCALE\)}/);
   assert.match(
-    globalsSource,
+    uiFoundationSource,
     /:root\.language-loading body\s*{\s*visibility: hidden;/,
   );
   assert.match(providerSource, /useLayoutEffect\(\(\) =>\s*{/);
@@ -66,7 +66,7 @@ test("language changes persist before reloading the current document", () => {
 
 test("language loading suppresses initial transitions independently of theme", () => {
   assert.match(
-    globalsSource,
+    uiFoundationSource,
     /:root\.language-loading \*[\s\S]*?transition: none !important;/,
   );
 });

@@ -6,7 +6,7 @@ import { lstat, open, readdir, realpath } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { validateParitySpec } from "./parity-runner-core.mjs";
+import { requireAuthorizationProfile, validateParitySpec } from "./parity-runner-core.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(scriptDirectory, "../../../..");
@@ -470,7 +470,7 @@ async function validateContract(contract, availableFiles, repositoryRealPath) {
   }
   requireNonEmptyString(conditions.locale, "comparisonConditions.locale");
   requireNonEmptyString(conditions.fixture, "comparisonConditions.fixture");
-  requireNonEmptyString(conditions.authorization, "comparisonConditions.authorization");
+  requireAuthorizationProfile(conditions.authorization, "comparisonConditions.authorization");
   requireNonEmptyString(conditions.query, "comparisonConditions.query");
 
   const states = requireUniqueStrings(contract.baselineStateInventory, "baselineStateInventory");

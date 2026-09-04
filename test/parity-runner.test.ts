@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -177,7 +177,7 @@ function createCoverageFixture() {
   const coverageProbes = [
     ["route", "route", {}],
     ["setup", "setup", {}],
-    ["state", "state", { expected: "visible" }],
+    ["invariant", "state", { expected: "visible" }],
     ["viewport", "viewport", {}],
     ["theme", "theme", { rootClass: "row-theme", colorScheme: "row-theme" }],
     ["control", "control", { expected: "enabled" }],
@@ -227,7 +227,7 @@ function createCoverageFixture() {
       state,
       production: { query: { state }, actions: [] },
       prototype: { query: { state }, actions: [] },
-      assertionProbeIds: ["coverage-state", "coverage-control"],
+      assertionProbeIds: ["coverage-invariant", "coverage-control"],
     }))),
     probes: [...coverageProbes, anchorProbe, keyboardProbe],
     rowProbeMap: matrix.map(({ id }) => ({
@@ -301,6 +301,46 @@ function createAdapter(overrides: Record<string, unknown> = {}) {
     },
     ...overrides,
   };
+}
+
+function createUiGoal(slug: string, currentRevision: string, targetCount: number, rowCount: number, implementation = "変更を実装する。") {
+  return `# 目的と完了条件
+
+## 要件クロージャ
+
+| 要件 | goal内の設計 | prototype | テスト | 完了条件 |
+| --- | --- | --- | --- | --- |
+| UI | 契約化 | 作成 | 検証 | 一致 |
+
+## UI契約
+
+- UI変更: あり
+- approval contract: \`plans/${slug}/prototype/ui-contract.json\` version 1
+- validation profile: \`plans/${slug}/prototype/parity-spec.json\` version 3
+- prototype revision: ${currentRevision}
+- comparison targets: ${targetCount} targets
+- parity matrix: ${rowCount} rows
+
+# 現状と根拠
+
+根拠。
+
+# 実装方針
+
+${implementation}
+
+# インターフェースとデータフロー
+
+契約。
+
+# テスト計画
+
+検証。
+
+# 前提・対象外・リスク
+
+前提。
+`;
 }
 
 test("parity-specは全target/state・row・probeを厳密に検証する", async () => {
@@ -416,6 +456,298 @@ test("COMPAT-01 legacy CLI exports adapters and evidence readers", async () => {
   );
 });
 
+test("route probeはsurface固有routeへの一致をsemantic equalityとして扱う", async () => {
+  const { compareProbe } = await parityModulePromise;
+  const equalProbe = { kind: "route", mode: "equal", required: true };
+  assert.equal(
+    compareProbe(
+      equalProbe,
+      { value: { pathname: "/admin/users", matches: true } },
+      { value: { pathname: "/index.html", matches: true } },
+    ).status,
+    "pass",
+  );
+  assert.equal(
+    compareProbe(
+      equalProbe,
+      { value: { pathname: "/admin/users", matches: false } },
+      { value: { pathname: "/index.html", matches: true } },
+    ).status,
+    "fail",
+  );
+  assert.equal(
+    compareProbe(
+      { ...equalProbe, mode: "different" },
+      { value: { pathname: "/admin/users", matches: true } },
+      { value: { pathname: "/index.html", matches: true } },
+    ).status,
+    "pass",
+  );
+  assert.equal(
+    compareProbe(
+      { ...equalProbe, mode: "different" },
+      { value: { pathname: "/same", matches: true } },
+      { value: { pathname: "/same", matches: true } },
+    ).status,
+    "fail",
+  );
+});
+
+test("surface contextはsession・tab・surface・origin・authorizationごとに一度だけ安定化し失敗時に失効する", async () => {
+  const { BrowserParityRunner } = await parityModulePromise;
+  let stabilizations = 0;
+  let failAction = false;
+  let failScroll = false;
+  const runner = new BrowserParityRunner(createAdapter({
+    async stabilizeContext() {
+      stabilizations += 1;
+    },
+    async runAction() {
+      if (failAction) throw new Error("fixture state identity failure");
+    },
+    async measureScroll() {
+      if (failScroll) throw new Error("fixture scroll readback failure");
+      return { x: 0, y: 0 };
+    },
+  }));
+  const row = contract.parityMatrix[0];
+  const base = {
+    row,
+    setup: { query: {}, actions: [] },
+    dpr: 1,
+    expectedScroll: { x: 0, y: 0 },
+  };
+  await runner.prepareSurface({ ...base, tabId: "tab-a", surface: "production", authorizationProfile: "admin", baseUrl: "http://localhost:3000/" });
+  await runner.prepareSurface({ ...base, tabId: "tab-a", surface: "production", authorizationProfile: "admin", baseUrl: "http://localhost:3000/" });
+  assert.equal(stabilizations, 1);
+  await runner.prepareSurface({ ...base, tabId: "tab-a", surface: "production", authorizationProfile: "admin", baseUrl: "http://localhost:3142/" });
+  await runner.prepareSurface({ ...base, tabId: "tab-b", surface: "production", authorizationProfile: "admin", baseUrl: "http://localhost:3000/" });
+  await runner.prepareSurface({ ...base, tabId: "tab-a", surface: "prototype", authorizationProfile: "admin", baseUrl: "http://127.0.0.1:4000/" });
+  await runner.prepareSurface({ ...base, tabId: "tab-a", surface: "production", authorizationProfile: "auditor", baseUrl: "http://localhost:3000/" });
+  assert.equal(stabilizations, 5);
+  await assert.rejects(
+    runner.prepareSurface({ ...base, tabId: "tab-secret", surface: "production", authorizationProfile: "Basic dXNlcjpwYXNz", baseUrl: "http://localhost:3000/" }),
+    /sanitized authorization profile name/u,
+  );
+  assert.equal(stabilizations, 5);
+
+  failAction = true;
+  const failing = { ...base, setup: { query: {}, actions: [{ type: "click", selector: "button" }] } };
+  await assert.rejects(
+    runner.prepareSurface({ ...failing, tabId: "tab-c", surface: "production", authorizationProfile: "admin", baseUrl: "http://localhost:3000/" }),
+    /Unexpected Browser adapter failure/u,
+  );
+  failAction = false;
+  await runner.prepareSurface({ ...failing, tabId: "tab-c", surface: "production", authorizationProfile: "admin", baseUrl: "http://localhost:3000/" });
+  assert.equal(stabilizations, 7);
+
+  failScroll = true;
+  await assert.rejects(
+    runner.prepareSurface({ ...base, tabId: "tab-d", surface: "production", authorizationProfile: "admin", baseUrl: "http://localhost:3000/" }),
+    /Unexpected Browser adapter failure/u,
+  );
+  failScroll = false;
+  await runner.prepareSurface({ ...base, tabId: "tab-d", surface: "production", authorizationProfile: "admin", baseUrl: "http://localhost:3000/" });
+  assert.equal(stabilizations, 8, "late readback failure keeps the established context cache");
+});
+
+test("preflightはgoal・profile・source inventory・selectionを単一呼出で検証する", async (context) => {
+  const { loadParityDefinition, runCli } = await parityModulePromise;
+  const temporary = await realpath(await mkdtemp(path.join(tmpdir(), "parity-preflight-")));
+  context.after(() => rm(temporary, { recursive: true, force: true }));
+  const slug = "fixture-ui";
+  const prototypeRoot = path.join(temporary, "plans", slug, "prototype");
+  await mkdir(path.join(temporary, "src"), { recursive: true });
+  await mkdir(prototypeRoot, { recursive: true });
+  await writeFile(path.join(temporary, "src", "ui.ts"), "export const fixture = true;\n");
+  const fixture = createCoverageFixture();
+  fixture.contract.productionBaseline.checkout = temporary;
+  fixture.contract.stateAndInteraction = ["keyboard", "focus", "coverage", "anchor", "risk"];
+  fixture.spec.coverage.riskRows[0] = {
+    ...fixture.spec.coverage.riskRows[0],
+    targetId: fixture.targets[1].id,
+    state: "ready",
+    viewport: fixture.viewports[0],
+    theme: "dark",
+  };
+  const firstEntry = fixture.targets[0].entry;
+  fixture.targets[0].entry = "index.html";
+  for (const row of fixture.contract.parityMatrix) {
+    if (row.entry === firstEntry) row.entry = "index.html";
+  }
+  for (const target of fixture.targets) {
+    await writeFile(path.join(prototypeRoot, target.entry), `<!doctype html><main>${target.id}</main>\n`);
+  }
+  await writeFile(path.join(prototypeRoot, "ui-contract.json"), `${JSON.stringify(fixture.contract, null, 2)}\n`);
+  await writeFile(path.join(prototypeRoot, "parity-spec.json"), `${JSON.stringify(fixture.spec, null, 2)}\n`);
+  const definition = await loadParityDefinition(`plans/${slug}/prototype`, temporary);
+  await writeFile(
+    path.join(temporary, "plans", slug, "goal.md"),
+    createUiGoal(slug, definition.prototypeRevision, fixture.targets.length, fixture.contract.parityMatrix.length),
+  );
+
+  async function preflight(preflightContext: "plan" | "implement") {
+    let output = "";
+    await runCli({
+      argv: [
+        "preflight",
+        `plans/${slug}/prototype`,
+        "--context",
+        preflightContext,
+        ...(preflightContext === "plan"
+          ? ["--target", fixture.targets[1].id, "--state", "ready", "--risk", "theme"]
+          : []),
+      ],
+      repositoryRootPath: temporary,
+      stdout: { write(value: string) { output += value; } } as NodeJS.WriteStream,
+    });
+    return JSON.parse(output);
+  }
+
+  const plan = await preflight("plan");
+  const implement = await preflight("implement");
+  assert.equal(plan.status, "pass");
+  assert.equal(plan.goalContract.requirementRows, 1);
+  assert.equal(plan.sourceInventory.count, 1);
+  assert.equal(plan.selection.fullRowCount, 1440);
+  assert.equal(plan.selection.coverageRowCount, 145);
+  assert.ok(plan.selection.selectedRowCount < plan.selection.coverageRowCount);
+  assert.equal(plan.selection.riskRowCount, 1, "non-leading dark risk row must be in the selected plan scope");
+  assert.equal(implement.selection.selectedRowCount, implement.selection.coverageRowCount);
+
+  let missingScopeOutput = "";
+  await assert.rejects(
+    runCli({
+      argv: ["preflight", `plans/${slug}/prototype`, "--context", "plan"],
+      repositoryRootPath: temporary,
+      stdout: { write(value: string) { missingScopeOutput += value; } } as NodeJS.WriteStream,
+    }),
+    /plan preflight requires at least one --target/u,
+  );
+  assert.equal(missingScopeOutput, "");
+
+  await writeFile(
+    path.join(temporary, "plans", slug, "goal.md"),
+    createUiGoal(slug, definition.prototypeRevision, fixture.targets.length, fixture.contract.parityMatrix.length)
+      .replace("| UI | 契約化 |", "| UI | coverage \\| fullを契約化 |"),
+  );
+  assert.equal((await preflight("plan")).status, "pass");
+
+  await writeFile(
+    path.join(temporary, "plans", slug, "goal.md"),
+    createUiGoal(
+      slug,
+      definition.prototypeRevision,
+      fixture.targets.length,
+      fixture.contract.parityMatrix.length,
+      "node .agents/skills/plan/scripts/build-prototype-css.mjs plans/fixture-ui/prototype",
+    ),
+  );
+  await assert.rejects(preflight("implement"), /must not instruct implement to rebuild/u);
+
+  const invalidSpec = clone(fixture.spec);
+  const invalidContract = clone(fixture.contract);
+  (invalidContract as unknown as { intentionalDifferences: Array<{ id: string; description: string }> }).intentionalDifferences = [{ id: "delta", description: "intentional" }];
+  (invalidContract.parityMatrix[0] as unknown as { intentionalDifferenceIds: string[] }).intentionalDifferenceIds = ["delta"];
+  const { validateInvariantProbeCoverage } = await parityModulePromise;
+  assert.throws(
+    () => validateInvariantProbeCoverage(invalidContract, invalidSpec),
+    /contract ID delta must have a same-ID probe/u,
+  );
+});
+
+test("preflightは各contract IDと同名のrequired probeを対応付けて任意probeの代理を拒否する", async () => {
+  const { validateInvariantProbeCoverage, validateParitySpec } = await parityModulePromise;
+  type MutableProbe = {
+    id: string;
+    kind: string;
+    mode: string;
+    productionSelector: string;
+    prototypeSelector: string;
+    required: boolean;
+    tier: string;
+    options: unknown;
+  };
+  type MutableMapping = {
+    rowId: string;
+    probeIds: string[];
+  };
+  const fixture = createCoverageFixture() as unknown as {
+    contract: {
+      visualInvariants: Array<{ id: string; description: string }>;
+      intentionalDifferences: Array<{ id: string; description: string }>;
+      parityMatrix: Array<{
+        expectedInvariantIds: string[];
+        intentionalDifferenceIds: string[];
+      }>;
+    };
+    spec: { probes: MutableProbe[]; rowProbeMap: MutableMapping[] };
+  };
+  fixture.contract.visualInvariants.push({ id: "coverage-control", description: "control state" });
+  fixture.contract.intentionalDifferences.push(
+    { id: "delta-copy", description: "copy differs" },
+    { id: "delta-decoration", description: "decoration differs" },
+  );
+  for (const row of fixture.contract.parityMatrix) {
+    row.expectedInvariantIds.push("coverage-control");
+    row.intentionalDifferenceIds.push("delta-copy", "delta-decoration");
+  }
+  const differentProbes = [
+    {
+      ...fixture.spec.probes.find(({ id }) => id === "anchor-screenshot")!,
+      id: "delta-copy",
+      mode: "different",
+    },
+    {
+      ...fixture.spec.probes.find(({ id }) => id === "anchor-keyboard")!,
+      id: "delta-decoration",
+      mode: "different",
+    },
+  ];
+  fixture.spec.probes.push(...differentProbes);
+  for (const mapping of fixture.spec.rowProbeMap) {
+    mapping.probeIds = [...mapping.probeIds, ...differentProbes.map(({ id }) => id)];
+  }
+
+  assert.equal(validateParitySpec(fixture.spec, fixture.contract), fixture.spec);
+  assert.deepEqual(validateInvariantProbeCoverage(fixture.contract, fixture.spec), {
+    status: "pass",
+    invariantMappings: fixture.contract.parityMatrix.length * 2,
+    intentionalDifferenceMappings: fixture.contract.parityMatrix.length * 2,
+  });
+
+  const arbitraryProxy = clone(fixture);
+  arbitraryProxy.contract.visualInvariants.push({ id: "unbacked-invariant", description: "must be explicit" });
+  for (const row of arbitraryProxy.contract.parityMatrix) row.expectedInvariantIds.push("unbacked-invariant");
+  assert.throws(
+    () => validateInvariantProbeCoverage(arbitraryProxy.contract, arbitraryProxy.spec),
+    /contract ID unbacked-invariant must have a same-ID probe/u,
+  );
+
+  const rowUnmapped = clone(fixture.spec);
+  rowUnmapped.rowProbeMap[0].probeIds = rowUnmapped.rowProbeMap[0].probeIds.filter(
+    (probeId) => probeId !== "coverage-control",
+  );
+  assert.throws(
+    () => validateInvariantProbeCoverage(fixture.contract, rowUnmapped),
+    /contract ID coverage-control must map its same-ID probe in probeIds/u,
+  );
+
+  const optionalProbe = clone(fixture);
+  optionalProbe.spec.probes.find(({ id }) => id === "delta-copy")!.required = false;
+  assert.throws(
+    () => validateInvariantProbeCoverage(optionalProbe.contract, optionalProbe.spec),
+    /contract ID delta-copy must map a required different same-ID probe/u,
+  );
+
+  const wrongMode = clone(fixture);
+  wrongMode.spec.probes.find(({ id }) => id === "delta-copy")!.mode = "equal";
+  assert.throws(
+    () => validateInvariantProbeCoverage(wrongMode.contract, wrongMode.spec),
+    /contract ID delta-copy must map a required different same-ID probe/u,
+  );
+});
+
 test("phaseとrisk tagからsmoke・affected・全matrixを決定する", async () => {
   const { selectRows } = await parityModulePromise;
   const normal = selectRows({ phase: "smoke", contract });
@@ -488,6 +820,29 @@ test("COVERAGE-01 version 3 profileは144行で全軸をcoverしfullは明示con
   assert.equal(report.targetStates.length, 18 * 5);
   assert.equal(report.targetViewports.length, 18 * 8);
   assert.equal(report.targetThemes.length, 18 * 2);
+
+  const darkKeyboardRisk = clone(fixture);
+  darkKeyboardRisk.spec.coverage.riskRows[0] = {
+    ...darkKeyboardRisk.spec.coverage.riskRows[0],
+    theme: "dark",
+    interaction: "keyboard",
+    reason: "keyboard focus treatment differs in dark mode",
+  };
+  const riskSelection = parity.selectRows({
+    phase: "smoke",
+    contract: darkKeyboardRisk.contract,
+    spec: darkKeyboardRisk.spec,
+    changedTargetIds: [darkKeyboardRisk.targets[0].id],
+    changedStates: ["ready"],
+    changedViewports: [darkKeyboardRisk.viewports[0]],
+    risks: ["keyboard"],
+    matrixScope: "targeted",
+  });
+  assert.deepEqual(
+    riskSelection.map(({ theme }: { theme: string }) => theme),
+    ["light", "dark"],
+    "declared dark risk coordinate is additive even when the risk tag does not widen themes",
+  );
   assert.throws(
     () => parity.selectRows({
       phase: "final",
@@ -668,7 +1023,7 @@ test("runnerはrow内のprobeをsurface単位でbatchしてtab往復を増やさ
 
 test("runnerは全rowを実行しscroll provenanceとmetricsを構造化する", async () => {
   const { BrowserParityRunner, validateParityEvidence } = await parityModulePromise;
-  const evidence = await new BrowserParityRunner(createAdapter()).run({
+  const input = {
     definition: {
       contract,
       spec,
@@ -686,7 +1041,8 @@ test("runnerは全rowを実行しscroll provenanceとmetricsを構造化する",
       runtime: { owner: "fixture", checkout: "/fixture" },
       sources: [{ path: "src/ui.ts", sha256: digest }],
     },
-  });
+  };
+  const evidence = await new BrowserParityRunner(createAdapter()).run(input);
   assert.equal(evidence.rows.length, contract.parityMatrix.length);
   assert.equal(evidence.schemaVersion, 3);
   assert.ok(evidence.rows.every(({ status }: { status: string }) => status === "pass"));
@@ -698,6 +1054,28 @@ test("runnerは全rowを実行しscroll provenanceとmetricsを構造化する",
   assert.equal(evidence.metrics.shellCommands, 3);
   assert.ok(evidence.metrics.durationMs >= 0);
   assert.equal(validateParityEvidence(evidence, contract, spec), evidence);
+  await assert.rejects(
+    new BrowserParityRunner(createAdapter()).run({
+      ...input,
+      tabs: { production: "comparison", prototype: "comparison" },
+    }),
+    (error: unknown) => (error as { code?: string }).code === "PARITY_COMPARISON_TAB_REQUIRED",
+  );
+
+  const sameTabEvidence = clone(evidence);
+  sameTabEvidence.capabilities.surfaceContexts[1].tabId =
+    sameTabEvidence.capabilities.surfaceContexts[0].tabId;
+  assert.throws(
+    () => validateParityEvidence(sameTabEvidence, contract, spec),
+    /production and prototype contexts must use distinct tabs/u,
+  );
+
+  const secretCapability = clone(evidence);
+  secretCapability.capabilities.token = "must-not-persist";
+  assert.throws(
+    () => validateParityEvidence(secretCapability, contract, spec),
+    /forbidden key token/u,
+  );
 
   const legacyEvidence = clone(evidence);
   legacyEvidence.schemaVersion = 1;
@@ -882,6 +1260,8 @@ test("未知のBrowser例外は秘密を保持せずstable codeと対象row/prob
         rowId: "main-default-desktop-light",
         surface: "production",
         probeId: "dom-shell",
+        causeCode: "PARITY_UNEXPECTED_ERROR",
+        causeCategory: "unexpected",
       });
       assert.doesNotMatch(
         JSON.stringify({
@@ -917,6 +1297,25 @@ test("approvalとphase evidenceを同じfresh run directoryへ一度ずつ保存
   const temporary = await mkdtemp(path.join(tmpdir(), "parity-evidence-"));
   context.after(() => rm(temporary, { recursive: true, force: true }));
   await mkdir(path.join(temporary, "plans", "fixture"), { recursive: true });
+  for (const [runId, name, evidence] of [
+    ["run-secret-key", "implementation-parity.json", { capabilities: { token: "must-not-persist" } }],
+    ["run-secret-value", "implementation-parity.json", { diagnostic: "Bearer must-not-persist" }],
+    ["run-cookie", "implementation-parity.json", { cookie: "must-not-persist" }],
+    ["run-basic-approval", "approval.json", { authorization: "Basic dXNlcjpwYXNz" }],
+    ["run-credential-uri", "implementation-parity.json", { dsn: "postgresql://fixture:password@localhost/database" }],
+    ["run-api-key-value", "implementation-parity.json", { diagnostic: "api_key=sk-live-secret-value" }],
+  ] as const) {
+    await assert.rejects(
+      writeRunEvidence({
+        repositoryRootPath: temporary,
+        slug: "fixture",
+        runId,
+        name,
+        evidence,
+      }),
+      (error: unknown) => (error as { code?: string }).code === "PARITY_BATCH_INVALID",
+    );
+  }
   const approval = createApprovalEvidence({
     runId: "run-1",
     goalSha256: digest,

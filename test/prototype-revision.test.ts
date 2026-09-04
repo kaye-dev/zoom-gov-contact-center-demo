@@ -115,7 +115,7 @@ function coverageParitySpec() {
   const coverageProbes = [
     { id: "route-ready", kind: "route", selector: "body", options: {} },
     { id: "setup-ready", kind: "setup", selector: "body", options: {} },
-    { id: "state-visible", kind: "state", selector: "body", options: { expected: "visible" } },
+    { id: "inv-shell", kind: "state", selector: "body", options: { expected: "visible" } },
     { id: "viewport-exact", kind: "viewport", selector: "body", options: {} },
     { id: "theme-exact", kind: "theme", selector: "html", options: { rootClass: "row-theme", colorScheme: "row-theme" } },
     { id: "control-ready", kind: "control", selector: "button", options: { expected: "enabled" } },
@@ -130,7 +130,7 @@ function coverageParitySpec() {
       state: "default",
       production: { query: {}, actions: [] },
       prototype: { query: {}, actions: [] },
-      assertionProbeIds: ["state-visible"],
+      assertionProbeIds: ["inv-shell"],
     }],
     browserSetups: [{
       targetId: "main",
@@ -617,6 +617,16 @@ test("ui-contract.jsonの型、参照、matrix coverageを厳密に検証する"
         ),
       },
       /must include 390x844/i,
+    ],
+    [
+      {
+        ...baseline,
+        comparisonConditions: {
+          ...baseline.comparisonConditions,
+          authorization: "Basic dXNlcjpwYXNz",
+        },
+      },
+      /authorization.*sanitized authorization profile name/i,
     ],
     [
       {

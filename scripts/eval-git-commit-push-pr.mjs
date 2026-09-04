@@ -32,6 +32,8 @@ const scenarioNames = [
   "resume-worktree-occupied",
   "resume-staged-scope",
   "stale-recovery-prompt",
+  "validation-digest-reuse",
+  "validation-digest-stale",
 ];
 const codexEnvironmentKeys = [
   "HOME",
@@ -203,6 +205,27 @@ exec /bin/${command} "$@"
 `;
 }
 
+function fixtureValidationSource() {
+  return `#!/usr/bin/env node
+import { appendFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+const log = process.env.EVAL_VALIDATION_LOG;
+if (!log) process.exit(2);
+appendFileSync(log, "validation\\n");
+const result = spawnSync("git", ["diff", "--quiet", "HEAD", "--", "src/task.txt"]);
+process.exit(result.status === 1 ? 0 : 1);
+`;
+}
+
+function validationDigest(repo) {
+  const result = run(
+    process.execPath,
+    ["scripts/validation-digest.mjs", "--scope", "src/task.txt"],
+    { cwd: repo },
+  );
+  return JSON.parse(result.stdout);
+}
+
 async function createFixture(name) {
   const fixtureRoot = await realpath(
     await mkdtemp(path.join(os.tmpdir(), `zoom-git-shipping-eval-${name}-`)),
@@ -215,6 +238,7 @@ async function createFixture(name) {
   const ghLog = path.join(fixtureRoot, "gh-log.jsonl");
   const gitTrace = path.join(fixtureRoot, "git-trace.log");
   const commandLog = path.join(fixtureRoot, "command-log.tsv");
+  const validationLog = path.join(fixtureRoot, "validation-log.txt");
   const occupiedWorktree = path.join(fixtureRoot, "occupied-worktree");
   const preservedArtifacts = [];
   await Promise.all([mkdir(repo), mkdir(bin), mkdir(shellConfig)]);
@@ -227,6 +251,12 @@ async function createFixture(name) {
     path.join(repo, ".agents", "skills", "git-commit-push-pr"),
     { recursive: true },
   );
+  await mkdir(path.join(repo, "scripts"), { recursive: true });
+  await cp(
+    path.join(repositoryRoot, "scripts", "validation-digest.mjs"),
+    path.join(repo, "scripts", "validation-digest.mjs"),
+  );
+  await write(path.join(repo, "scripts", "fixture-validation.mjs"), fixtureValidationSource());
   await write(
     path.join(repo, "AGENTS.md"),
     "# Isolated shipping eval\n\nUse only the repo-local `$git-commit-push-pr` skill. The explicit invocation authorizes commit, push to the configured local fixture remote, and pull-request operations through the fixture `gh`. Never access another repository, remote, credential, or external service.\n",
@@ -240,6 +270,8 @@ async function createFixture(name) {
     "AGENTS.md",
     ".agents/skills/git-commit-push-pr",
     ".gitignore",
+    "scripts/validation-digest.mjs",
+    "scripts/fixture-validation.mjs",
     "src/task.txt",
     "src/unrelated.txt",
   ]);
@@ -311,6 +343,34 @@ async function createFixture(name) {
     }
   }
 
+  let validationRecord = null;
+  if (["validation-digest-reuse", "validation-digest-stale"].includes(name)) {
+    await write(validationLog, "");
+    const recorded = validationDigest(repo);
+    run(
+      process.execPath,
+      ["scripts/fixture-validation.mjs", "--scope", "src/task.txt"],
+      { cwd: repo, env: { ...process.env, EVAL_VALIDATION_LOG: validationLog } },
+    );
+    if (name === "validation-digest-stale") {
+      await write(path.join(repo, "src/task.txt"), "after with validated-source drift\n");
+    }
+    const current = validationDigest(repo);
+    ensure(
+      (name === "validation-digest-reuse") ===
+        (recorded.validatedDiffDigest === current.validatedDiffDigest),
+      `validation digest fixture did not establish ${name}`,
+    );
+    validationRecord = {
+      recordedDigest: recorded.validatedDiffDigest,
+      currentDigest: current.validatedDiffDigest,
+      command: "node scripts/fixture-validation.mjs --scope src/task.txt",
+      scope: "src/task.txt",
+      status: 0,
+      baselineLogLines: 1,
+    };
+  }
+
   const ghPath = path.join(bin, "gh");
   await write(ghPath, fakeGhSource());
   await chmod(ghPath, 0o755);
@@ -331,6 +391,7 @@ async function createFixture(name) {
   await write(ghLog, "");
   await write(gitTrace, "");
   await write(commandLog, "");
+  if (!(await exists(validationLog))) await write(validationLog, "");
   return {
     name,
     fixtureRoot,
@@ -342,6 +403,8 @@ async function createFixture(name) {
     ghLog,
     gitTrace,
     commandLog,
+    validationLog,
+    validationRecord,
     occupiedWorktree,
     preservedArtifacts,
   };
@@ -418,6 +481,7 @@ function fixtureEnvironment(fixture) {
     EVAL_GH_LOG: fixture.ghLog,
     EVAL_GIT_REMOTE: fixture.remote,
     EVAL_COMMAND_LOG: fixture.commandLog,
+    EVAL_VALIDATION_LOG: fixture.validationLog,
     GH_CONFIG_DIR: path.join(fixture.fixtureRoot, "gh-config"),
     GIT_CONFIG_GLOBAL: path.join(fixture.fixtureRoot, "isolated-gitconfig"),
     GIT_CONFIG_SYSTEM: "/dev/null",
@@ -437,7 +501,22 @@ function scenarioPrompt(name) {
     : name === "base-ahead-untracked-collision"
       ? "Preserve the existing untracked collision/ directory in place; it is outside the already-committed task."
       : "";
-  return `Use $git-commit-push-pr from .agents/skills/git-commit-push-pr/SKILL.md. ${scope} ${preservation} If a topic branch is needed, use feature/eval-shipping. Complete the authorized workflow through commit, synchronization, non-force push, pull-request creation or minimal update, and final local/remote/PR SHA and mergeability readback. This is an isolated fixture: use only origin and the fixture gh, do not merge or wait for CI.`;
+  const validation = ["validation-digest-reuse", "validation-digest-stale"].includes(name)
+    ? "A prior successful check is recorded in the fixture context supplied below. Recompute the validated diff digest before index mutation and after limited staging. Reuse the check only if digest, command, scope, and status all match; otherwise run that exact missing check once before commit."
+    : "";
+  return `Use $git-commit-push-pr from .agents/skills/git-commit-push-pr/SKILL.md. ${scope} ${preservation} ${validation} If a topic branch is needed, use feature/eval-shipping. Complete the authorized workflow through commit, synchronization, non-force push, pull-request creation or minimal update, and final local/remote/PR SHA and mergeability readback. This is an isolated fixture: use only origin and the fixture gh, do not merge or wait for CI.`;
+}
+
+function scenarioPromptWithValidation(fixture, name) {
+  if (!fixture.validationRecord) return scenarioPrompt(name);
+  const record = fixture.validationRecord;
+  return `${scenarioPrompt(name)}
+
+Recorded validation:
+- validatedDiffDigest: ${record.recordedDigest}
+- command: ${record.command}
+- scope: ${record.scope}
+- exit status: ${record.status}`;
 }
 
 async function runCodex(fixture, prompt, suffix) {
@@ -625,6 +704,23 @@ async function assertNoPreservedArtifactMutationCommands(fixture) {
   }
 }
 
+async function assertValidationDigestOutcome(fixture, name) {
+  ensure(fixture.validationRecord, `${name} omitted the validation fixture record`);
+  const invocations = (await readFile(fixture.validationLog, "utf8"))
+    .split("\n")
+    .filter(Boolean).length;
+  const expectedDelta = name === "validation-digest-reuse" ? 0 : 1;
+  ensure(
+    invocations - fixture.validationRecord.baselineLogLines === expectedDelta,
+    `${name} expected ${expectedDelta} validation reruns, observed ${invocations - fixture.validationRecord.baselineLogLines}`,
+  );
+  const trace = await readFile(fixture.gitTrace, "utf8");
+  ensure(
+    /git diff --cached --check/u.test(trace),
+    `${name} omitted git diff --cached --check`,
+  );
+}
+
 async function assertCollisionStopped(fixture, before, final) {
   ensure(/(?:停止|stopp?ed|blocked)/iu.test(final), "collision response did not report a stop");
   ensure(/collision\/base-only\.txt/u.test(final), "collision response omitted the conflicting path");
@@ -662,11 +758,19 @@ async function executeScenario(name, { keepOnFailure = false } = {}) {
   const fixture = await createFixture(name);
   let succeeded = false;
   try {
-    if (["detached-auto-adopt", "base-ahead-untracked-preserved"].includes(name)) {
+    if ([
+      "detached-auto-adopt",
+      "base-ahead-untracked-preserved",
+      "validation-digest-reuse",
+      "validation-digest-stale",
+    ].includes(name)) {
       const before = await snapshot(fixture);
-      const final = await runCodex(fixture, scenarioPrompt(name), "initial");
+      const final = await runCodex(fixture, scenarioPromptWithValidation(fixture, name), "initial");
       ensure(!/(?:停止|stopp?ed|blocked)/iu.test(final), "completion scenario reported a stop");
       await assertCompleted(fixture, name, { preservedArtifacts: before.preservedArtifacts });
+      if (name.startsWith("validation-digest-")) {
+        await assertValidationDigestOutcome(fixture, name);
+      }
     } else if (name === "base-ahead-untracked-collision") {
       const before = await snapshot(fixture);
       const final = await runCodex(fixture, scenarioPrompt(name), "collision");
@@ -811,6 +915,37 @@ async function selfTest() {
     ensure(JSON.stringify(before) !== JSON.stringify(after), "preserved-artifact snapshot missed content drift");
   } finally {
     await removeFixture(artifactFixture);
+  }
+
+  const reuseFixture = await createFixture("validation-digest-reuse");
+  try {
+    ensure(
+      reuseFixture.validationRecord.recordedDigest === reuseFixture.validationRecord.currentDigest,
+      "reuse fixture did not preserve the validated diff digest",
+    );
+    await write(reuseFixture.gitTrace, "trace: built-in: git diff --cached --check\n");
+    await assertValidationDigestOutcome(reuseFixture, "validation-digest-reuse");
+    run(
+      process.execPath,
+      ["scripts/fixture-validation.mjs", "--scope", "src/task.txt"],
+      { cwd: reuseFixture.repo, env: fixtureEnvironment(reuseFixture) },
+    );
+    await expectFailure(
+      async () => assertValidationDigestOutcome(reuseFixture, "validation-digest-reuse"),
+      "reuse grader accepted an unnecessary validation rerun",
+    );
+  } finally {
+    await removeFixture(reuseFixture);
+  }
+
+  const staleDigestFixture = await createFixture("validation-digest-stale");
+  try {
+    ensure(
+      staleDigestFixture.validationRecord.recordedDigest !== staleDigestFixture.validationRecord.currentDigest,
+      "stale fixture did not invalidate the recorded digest",
+    );
+  } finally {
+    await removeFixture(staleDigestFixture);
   }
   process.stdout.write(`self-test passed: ${scenarioNames.length} scenarios and grader negative controls\n`);
 }
