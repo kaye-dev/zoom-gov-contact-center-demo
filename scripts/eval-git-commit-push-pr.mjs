@@ -34,6 +34,7 @@ const scenarioNames = [
   "stale-recovery-prompt",
   "validation-digest-reuse",
   "validation-digest-stale",
+  "ui-manual-checklist",
 ];
 const codexEnvironmentKeys = [
   "HOME",
@@ -251,6 +252,11 @@ async function createFixture(name) {
     path.join(repo, ".agents", "skills", "git-commit-push-pr"),
     { recursive: true },
   );
+  await mkdir(path.join(repo, ".github", "PULL_REQUEST_TEMPLATE"), { recursive: true });
+  await cp(
+    path.join(repositoryRoot, ".github", "PULL_REQUEST_TEMPLATE", "ja.md"),
+    path.join(repo, ".github", "PULL_REQUEST_TEMPLATE", "ja.md"),
+  );
   await mkdir(path.join(repo, "scripts"), { recursive: true });
   await cp(
     path.join(repositoryRoot, "scripts", "validation-digest.mjs"),
@@ -263,12 +269,13 @@ async function createFixture(name) {
   );
   await write(path.join(repo, "src/task.txt"), "before\n");
   await write(path.join(repo, "src/unrelated.txt"), "unchanged\n");
-  await write(path.join(repo, ".gitignore"), "/local-ignored/\n");
+  await write(path.join(repo, ".gitignore"), "/local-ignored/\n/plans/\n");
   git(repo, [
     "add",
     "--",
     "AGENTS.md",
     ".agents/skills/git-commit-push-pr",
+    ".github/PULL_REQUEST_TEMPLATE/ja.md",
     ".gitignore",
     "scripts/validation-digest.mjs",
     "scripts/fixture-validation.mjs",
@@ -341,6 +348,61 @@ async function createFixture(name) {
       await write(path.join(repo, "src/unrelated.txt"), "preserve me\n");
       git(repo, ["add", "--", "src/task.txt", "src/unrelated.txt"]);
     }
+  }
+  if (name === "ui-manual-checklist") {
+    await write(
+      path.join(repo, "plans/ui-manual-checklist/goal.md"),
+      `# 目的と完了条件
+
+## 目的
+
+画面の表示文言を変更する。
+
+## 完了条件
+
+- 利用者が実画面を確認できる。
+
+## 要件クロージャ
+
+| 要件 | goal内の設計 | prototype | テスト | 完了条件 |
+| --- | --- | --- | --- | --- |
+| 表示文言を変更する | UI契約 | 対象外: fixture | static check | PRで利用者確認を引き継ぐ |
+
+# 現状と根拠
+
+fixture UI diffを対象とする。
+
+# 実装方針
+
+## UI契約
+
+- UI変更: あり
+
+# インターフェースとデータフロー
+
+変更なし。
+
+# テスト計画
+
+## ユーザー動作確認
+
+- [ ] \`UI-CHECK-01\` — 対象: fixture画面のtask label; 前提: fixture画面を表示できる; 操作: task labelを表示する; 期待結果: 表示がafterになる
+
+# 前提・対象外・リスク
+
+## 前提
+
+fixtureを使用する。
+
+## 対象外
+
+なし。
+
+## リスク
+
+実画面は未確認。
+`,
+    );
   }
 
   let validationRecord = null;
@@ -504,7 +566,10 @@ function scenarioPrompt(name) {
   const validation = ["validation-digest-reuse", "validation-digest-stale"].includes(name)
     ? "A prior successful check is recorded in the fixture context supplied below. Recompute the validated diff digest before index mutation and after limited staging. Reuse the check only if digest, command, scope, and status all match; otherwise run that exact missing check once before commit."
     : "";
-  return `Use $git-commit-push-pr from .agents/skills/git-commit-push-pr/SKILL.md. ${scope} ${preservation} ${validation} If a topic branch is needed, use feature/eval-shipping. Complete the authorized workflow through commit, synchronization, non-force push, pull-request creation or minimal update, and final local/remote/PR SHA and mergeability readback. This is an isolated fixture: use only origin and the fixture gh, do not merge or wait for CI.`;
+  const uiChecklist = name === "ui-manual-checklist"
+    ? "This is a UI change. Read the ignored plans/ui-manual-checklist/goal.md and tracked .github/PULL_REQUEST_TEMPLATE/ja.md. Transfer UI-CHECK-01 to the pull request as unchecked, keep actual automated commands separate, and create the new pull request as Draft because user verification remains pending."
+    : "";
+  return `Use $git-commit-push-pr from .agents/skills/git-commit-push-pr/SKILL.md. ${scope} ${preservation} ${validation} ${uiChecklist} If a topic branch is needed, use feature/eval-shipping. Complete the authorized workflow through commit, synchronization, non-force push, pull-request creation or minimal update, and final local/remote/PR SHA and mergeability readback. This is an isolated fixture: use only origin and the fixture gh, do not merge or wait for CI.`;
 }
 
 function scenarioPromptWithValidation(fixture, name) {
@@ -618,6 +683,25 @@ function expectedOutcome(name) {
   return { base: "main", branch: "feature/eval-shipping" };
 }
 
+function uiCheckStates(body) {
+  return new Map(
+    [...body.matchAll(/^- \[([ xX])\] `?(UI-CHECK-\d+)`?.*$/gmu)]
+      .map((match) => [match[2], match[1].toLowerCase() === "x" ? "checked" : "unchecked"]),
+  );
+}
+
+function assertExistingPrUserStatePreserved(before, after) {
+  ensure(before.isDraft === after.isDraft, "existing PR draft/ready state changed");
+  for (const line of before.body.split("\n").filter((entry) => entry.startsWith("手書きメモ:"))) {
+    ensure(after.body.includes(line), "existing PR manual note was removed");
+  }
+  const beforeChecks = uiCheckStates(before.body);
+  const afterChecks = uiCheckStates(after.body);
+  for (const [id, state] of beforeChecks) {
+    ensure(afterChecks.get(id) === state, `existing PR check state changed for ${id}`);
+  }
+}
+
 async function assertCompleted(
   fixture,
   name,
@@ -639,6 +723,16 @@ async function assertCompleted(
   ensure(pr.headRefName === expected.branch, "PR head branch differs");
   ensure(pr.headRefOid === head, "PR head OID differs from local HEAD");
   ensure(pr.mergeable === "MERGEABLE" && pr.mergeStateStatus === "CLEAN", "PR mergeability was not read back");
+  if (name === "ui-manual-checklist") {
+    ensure(pr.isDraft === true, "UI pull request with pending user checks was not created as Draft");
+    const automatic = /^### 自動確認\s*\n([\s\S]*?)(?=^### ユーザー動作確認\s*$)/mu.exec(pr.body)?.[1] ?? "";
+    const userChecks = /^### ユーザー動作確認\s*\n([\s\S]*?)(?=^## UI\s*$)/mu.exec(pr.body)?.[1] ?? "";
+    ensure(/(?:git|node|npm|hook|diff --cached --check)/u.test(automatic), "PR automated checks omitted executed commands");
+    ensure(!/UI-CHECK-01/u.test(automatic), "PR put user verification under automated checks");
+    ensure(/^- \[ \] `?UI-CHECK-01`?/mu.test(userChecks), "PR omitted unchecked UI-CHECK-01");
+    ensure(!/^- \[[xX]\] `?UI-CHECK-01`?/mu.test(pr.body), "PR falsely marked UI-CHECK-01 complete");
+    ensure(await exists(path.join(fixture.repo, "plans/ui-manual-checklist/goal.md")), "shipping removed the ignored goal");
+  }
   ensure(git(fixture.repo, ["diff", "--cached", "--quiet"]).status === 0, "index is not empty after commit");
   if (name === "base-ahead-untracked-preserved") {
     ensure(
@@ -763,6 +857,7 @@ async function executeScenario(name, { keepOnFailure = false } = {}) {
       "base-ahead-untracked-preserved",
       "validation-digest-reuse",
       "validation-digest-stale",
+      "ui-manual-checklist",
     ].includes(name)) {
       const before = await snapshot(fixture);
       const final = await runCodex(fixture, scenarioPromptWithValidation(fixture, name), "initial");
@@ -947,6 +1042,29 @@ async function selfTest() {
   } finally {
     await removeFixture(staleDigestFixture);
   }
+
+  const existingPr = {
+    isDraft: false,
+    body: "手書きメモ: この注意書きを保持する\n- [x] `UI-CHECK-01` — 確認済み\n",
+  };
+  assertExistingPrUserStatePreserved(existingPr, {
+    isDraft: false,
+    body: `${existingPr.body}- [ ] \`UI-CHECK-02\` — 新規確認\n`,
+  });
+  await expectFailure(
+    async () => assertExistingPrUserStatePreserved(existingPr, {
+      isDraft: false,
+      body: "- [ ] `UI-CHECK-01` — 勝手に未確認へ変更\n",
+    }),
+    "existing PR manual note/check-state negative control was accepted",
+  );
+  await expectFailure(
+    async () => assertExistingPrUserStatePreserved(existingPr, {
+      ...existingPr,
+      isDraft: true,
+    }),
+    "existing PR draft/ready negative control was accepted",
+  );
   process.stdout.write(`self-test passed: ${scenarioNames.length} scenarios and grader negative controls\n`);
 }
 

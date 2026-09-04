@@ -18,7 +18,7 @@ type PreparedFixture = {
 };
 type EvaluatorModule = {
   assertConfirmationHandoffSkillContracts(root?: string): Promise<void>;
-  assertCoverageDrivenSkillContracts(root?: string): Promise<void>;
+  assertStaticImplementationSkillContracts(root?: string): Promise<void>;
   codexEnvironment(): Record<string, string>;
   executeScenario(name: string): Promise<{ name: string; status: string; durationMs: number }>;
   failedScenariosFromManifest(manifest: unknown): string[];
@@ -126,7 +126,7 @@ async function assertRetryableFailure(
   assert.doesNotMatch(`${failure.stdout}\n${failure.stderr}\n${manifestText}`, new RegExp(privateMarker, "u"));
 }
 
-test("plan skill behavioral evalは実promptの12 scenarioを公開する", async () => {
+test("plan skill behavioral evalは実promptの11 scenarioを公開する", async () => {
   const { stdout } = await execFileAsync(process.execPath, [evaluator, "--list"], { cwd: root });
   assert.deepEqual(stdout.trim().split("\n"), [
     "plan-canonical",
@@ -135,8 +135,7 @@ test("plan skill behavioral evalは実promptの12 scenarioを公開する", asyn
     "implement-stale-revision",
     "implement-contract-mismatch",
     "implement-related-source-drift",
-    "implement-browser-gate",
-    "implement-browser-capability-failure",
+    "implement-static-ui-completion",
     "review-ui-gate",
     "workflow-performance-audit-bottleneck",
     "workflow-performance-audit-no-bottleneck",
@@ -197,8 +196,7 @@ test("plan skill behavioral evalはsymlink経由のCLI起動でもmainを実行�
     "implement-stale-revision",
     "implement-contract-mismatch",
     "implement-related-source-drift",
-    "implement-browser-gate",
-    "implement-browser-capability-failure",
+    "implement-static-ui-completion",
     "review-ui-gate",
     "workflow-performance-audit-bottleneck",
     "workflow-performance-audit-no-bottleneck",
@@ -333,7 +331,7 @@ test("plan skill behavioral evalのartifact graderはpositive/negative control�
     cwd: root,
     timeout: 180_000,
   });
-  assert.match(stdout, /self-test passed: 12 scenarios/);
+  assert.match(stdout, /self-test passed: 11 scenarios/);
 });
 
 test("version 3のUI eval fixtureは各rowでcontract IDと同名のrequired probeを対応する", async (context) => {
@@ -367,17 +365,17 @@ test("version 3のUI eval fixtureは各rowでcontract IDと同名のrequired pro
   }
 });
 
-test("WF-EVAL-01 capability failure", async (context) => {
+test("WF-EVAL-01 Browserなしでも静的UI実装を完了する", async (context) => {
   const evaluatorModule = await evaluatorModulePromise;
   const fixture = await evaluatorModule.prepareScenario(
-    "implement-browser-capability-failure",
-    `wf-eval-capability-${process.pid}`,
+    "implement-static-ui-completion",
+    `wf-eval-static-ui-${process.pid}`,
   );
   context.after(() => rm(fixture.fixtureRoot, { recursive: true, force: true }));
   await fixture.scenario.simulate(fixture.repo);
   await evaluatorModule.gradePreparedScenario(
     fixture,
-    "production実装は保持していますが、final capability canaryがPARITY_DPR_OVERRIDE_UNAVAILABLEで停止しました。別BrowserやChrome、Playwright、Computer Useへのfallbackは行わず、implementation-parity.jsonは生成していないため未完了です。",
+    "明示的な$implement invocationからapproval.jsonを作成し、production変更と静的検証は完了しました。static preflight: pass、node --test test/ui-label.test.ts: pass、git diff --check: pass。Browser、CDP、Playwright、Computer Useは使用せず、implementation-parity.jsonも生成していません。UI-CHECK-01は利用者確認として未実施です。",
   );
 });
 
@@ -391,14 +389,14 @@ test("CS-EVAL-01〜04: skill evalはconfirmation handoff契約を全scenarioのg
   assert.match(source, /assertConfirmationHandoffSkillContracts\(fixture\.repo\)/u);
 });
 
-test("COV-EVAL-01〜06: skill evalはcoverage-driven契約を全scenarioのgrade前に固定する", async () => {
+test("STATIC-EVAL-01〜06: skill evalは静的実装契約を全scenarioのgrade前に固定する", async () => {
   const evaluatorModule = await evaluatorModulePromise;
-  await evaluatorModule.assertCoverageDrivenSkillContracts(root);
+  await evaluatorModule.assertStaticImplementationSkillContracts(root);
   const source = await readFile(evaluator, "utf8");
-  for (const caseId of ["COV-EVAL-01", "COV-EVAL-02", "COV-EVAL-03", "COV-EVAL-04", "COV-EVAL-05", "COV-EVAL-06"]) {
+  for (const caseId of ["STATIC-EVAL-01", "STATIC-EVAL-02", "STATIC-EVAL-03", "STATIC-EVAL-04", "STATIC-EVAL-05", "STATIC-EVAL-06"]) {
     assert.match(source, new RegExp(caseId, "u"));
   }
-  assert.match(source, /assertCoverageDrivenSkillContracts\(fixture\.repo\)/u);
+  assert.match(source, /assertStaticImplementationSkillContracts\(fixture\.repo\)/u);
 });
 
 test("eval fixtureは外部MCPなしで必要なcustom agent定義を読み込める", async (context) => {

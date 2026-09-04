@@ -1,6 +1,6 @@
 # UI parity runner contract
 
-Use this reference when authoring UI plans, running `$implement`, or validating evidence in `$review`. `ui-contract.json` version 1 is the complete UI acceptance contract. Current Browser-enabled plans use `parity-spec.json` version 3 and final `implementation-parity.json` schema version 4. Older profiles and evidence remain read-only compatibility inputs.
+Use this reference when authoring UI plans or when release, CI, scheduled, or user-explicit parity verification is independently requested. Normal `$implement` uses only the static preflight and approval boundary; it never starts the Browser lifecycle or writes final parity evidence. Normal `$review` does not require parity evidence and reads it only when the review scope explicitly includes an existing run. `ui-contract.json` version 1 is the complete UI acceptance contract. Current Browser-enabled plans use `parity-spec.json` version 3 and optional final `implementation-parity.json` schema version 4. Older profiles and evidence remain read-only compatibility inputs.
 
 ## Contract, profile, and coverage
 
@@ -37,7 +37,7 @@ node .agents/skills/plan/scripts/parity-runner.mjs select plans/<slug>/prototype
   --phase final --matrix-scope full --execution-context ci
 ```
 
-`targeted` selection is for `$plan` smoke and legacy profiles; every version 3 declared risk-row coordinate is additive even when its theme or viewport is outside the representative changed scope. Current final runs use `coverage` or `full`. Full selection requires one of `release`, `ci`, `scheduled`, or `explicit`; it is never inferred from file count or a shared component alone.
+`targeted` selection is for `$plan` smoke and legacy profiles; every version 3 declared risk-row coordinate is additive even when its theme or viewport is outside the representative changed scope. Independently requested final runs use `coverage` or `full`. Full selection requires one of `release`, `ci`, `scheduled`, or `explicit`; it is never inferred from file count or a shared component alone.
 
 ## Probe tiers
 
@@ -59,7 +59,7 @@ The adapter performs exactly one navigation for each row/surface, captures the i
 
 The ignored workspace is `.codex/parity-runs/<run-id>/`. Directories are `0700`; files are `0600`; all paths are repository-contained, non-symlink, exclusively created, and read back. The immutable manifest fixes selection, row order, batch size, byte limit, runtime/source/profile digests, and artifact policy.
 
-Prepare only after approval, static checks, and external runtime ownership/health readback:
+In an independently requested parity task, prepare only after approval, static checks, and external runtime ownership/health readback. Do not run this lifecycle as part of normal `$implement`:
 
 Local uses `http://localhost:3000`; worktrees use the ownership-verified allocated port in `3100-3899`. Obtain owner, process/container, mount, health, and `PRODUCTION_URL` from one completed `./dev-compose.sh ensure`; do not wrap it in status polling, fixed sleep, or follow-log commands. Matching CLI arguments do not prove ownership.
 
@@ -142,4 +142,4 @@ Stable failure codes include `PARITY_SELECTED_TAB_DRIFT`, `PARITY_COMPARISON_TAB
 
 ## Legacy compatibility
 
-Profile versions 1 and 2 and parity evidence schemas 1, 2, and 3 remain read-only. Validate their historical row, digest, runtime, and cleanup contracts without adding version-3 profile or schema-4 evidence fields. New Browser-enabled plans use profile version 3; new final runs use evidence schema 4. A migration changes workflow text, skills, profile, runner, evidence schema, tests, and evaluator together. Rollback must restore that entire compatible set; never roll back only a writer or reader.
+Profile versions 1 and 2 and parity evidence schemas 1, 2, 3, and 4 remain read-only compatible. Validate existing evidence against its historical row, digest, runtime, and cleanup contract without migrating or adding fields. New Browser-enabled plans use profile version 3; independently requested new final runs use evidence schema 4. A migration changes workflow text, skills, profile, runner, evidence schema, tests, and evaluator together. Rollback must restore that entire compatible set; never roll back only a writer or reader.

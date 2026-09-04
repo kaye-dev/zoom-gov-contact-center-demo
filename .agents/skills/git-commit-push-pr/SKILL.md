@@ -159,19 +159,19 @@ Build the title and body only from:
 - validations actually executed in this workflow or reliably recorded in the current task
 - the repository pull request template and applicable repository instructions
 
+Use the canonical `plans/<slug>/goal.md` only to transfer its unambiguous `## ユーザー動作確認` handoff; it does not broaden the PR change scope. Copy every applicable stable `UI-CHECK-XX` item into `### ユーザー動作確認` as unchecked. Never mark a user check complete from static validation, prototype smoke, or an agent statement. When a small UI diff has no canonical goal, derive the minimum concrete unchecked checks from the actual diff and use `未確認 / 後続確認` for any prerequisite or expected result that cannot be proven. For a non-UI diff, write `- 対象外: UI変更なし`. Under `### 自動確認`, list only commands actually run and their observed results; keep manual checks out and do not present an unchecked item as a failed automated test.
+
 When a Codex thread or session ID is available and repository instructions do not forbid it, include a single `## Codex セッション` section with `codex resume <id>`.
 
-For a one-commit pull request, normally use the commit subject as the title. Use `gh pr create` with explicit repository, `--base`, `--head`, `--title`, and body input. Do not use `--dry-run` as a safety check because it can still push. If creation fails, search again before any retry so an ambiguous response cannot create a duplicate pull request. For a sandbox-shaped failure, perform that search through the approval or sandbox-escalation mechanism; if no matching pull request exists, retry the exact create command once through the same mechanism. After an ambiguous retry, search once more and report the observed state without another create attempt. Create a ready pull request only when required local validation passed and there are no known follow-ups; otherwise add `--draft` and state what remains unverified.
+For a one-commit pull request, normally use the commit subject as the title. Use `gh pr create` with explicit repository, `--base`, `--head`, `--title`, and body input. Do not use `--dry-run` as a safety check because it can still push. If creation fails, search again before any retry so an ambiguous response cannot create a duplicate pull request. For a sandbox-shaped failure, perform that search through the approval or sandbox-escalation mechanism; if no matching pull request exists, retry the exact create command once through the same mechanism. After an ambiguous retry, search once more and report the observed state without another create attempt. Create a new UI pull request as Draft whenever a required `UI-CHECK-XX` item remains unchecked. Otherwise create a ready pull request only when required local validation passed and there are no known follow-ups; when either condition is false, add `--draft` and state what remains unverified.
 
 ### One open pull request
 
-Pushing already updates its commits. Read the existing title and body, then use `gh pr edit` only when the actual diff, commits, or validation results make specific content stale. Preserve manual notes, unrelated sections, the existing base, the draft/ready state, and Codex session entries from other sessions; add or update only the current session entry when its ID is available. Do not add a noisy update comment when no metadata edit is needed. If an edit has a sandbox-shaped or ambiguous failure, reread the pull request through the approval or sandbox-escalation mechanism. Retry the exact edit once only when the intended metadata is still absent; after another ambiguous result, reread and report without further mutation.
+Pushing already updates its commits. Read the existing title and body, then use `gh pr edit` only when the actual diff, commits, validation results, or required user checks make specific content stale. Preserve manual notes, unrelated sections, the existing base, the draft/ready state, Codex session entries from other sessions, and the checked/unchecked state of every existing `UI-CHECK-XX` item. Match checklist items by stable ID: update only stale wording, append newly required IDs unchecked, and never silently uncheck or delete an existing item. Do not switch draft/ready state automatically. Add or update only the current session entry when its ID is available. Do not add a noisy update comment when no metadata edit is needed. If an edit has a sandbox-shaped or ambiguous failure, reread the pull request through the approval or sandbox-escalation mechanism. Retry the exact edit once only when the intended metadata is still absent; after another ambiguous result, reread and report without further mutation.
 
 ### Multiple open pull requests
 
-Stop and report the candidates. Do not choose one heuristically.
-
-Do not run or wait for CI as part of this skill.
+Stop and report the candidates. Do not choose one heuristically. Do not run or wait for CI as part of this skill.
 
 ## 7. Verify GitHub state and report
 
