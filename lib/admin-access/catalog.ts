@@ -79,6 +79,7 @@ export const ADMIN_RESOURCE_CATALOG = [
     key: "reservations",
     displayPaths: [
       "/admin/reservations",
+      "/admin/reservations/bookings",
       "/admin/reservations/api-keys",
       "/admin/reservations/api-keys/logs",
       "/admin/reservations/api-keys/logs/[id]",

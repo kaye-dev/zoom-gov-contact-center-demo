@@ -777,7 +777,26 @@ function createSingleTabParityAdapter({
   async function navigateAndVerify(requestedTabId, url) {
     await comparisonTab(requestedTabId);
     await runWithDeadline(
-      () => tab.goto(url),
+      async () => {
+        try {
+          await tab.goto(url);
+        } catch (error) {
+          const committedUrl = await tab.url();
+          const timedOut =
+            error !== null &&
+            typeof error === "object" &&
+            "message" in error &&
+            typeof error.message === "string" &&
+            /timed?\s*out|timeout/iu.test(error.message);
+          if (
+            !timedOut ||
+            !committedUrl ||
+            new URL(committedUrl).toString() !== new URL(url).toString()
+          ) {
+            throw error;
+          }
+        }
+      },
       resolvedTimeouts.navigationMs,
       {
         code: "PARITY_NAVIGATION_TIMEOUT",
@@ -790,7 +809,7 @@ function createSingleTabParityAdapter({
     );
     await comparisonTab(requestedTabId);
     await tab.playwright.waitForLoadState({
-      state: "domcontentloaded",
+      state: "load",
       timeoutMs: resolvedTimeouts.navigationMs,
     });
     await comparisonTab(requestedTabId);
@@ -902,6 +921,7 @@ function createSingleTabParityAdapter({
     const errors = [];
     if (state.navigationTimedOut) errors.push("comparison tab remains quarantined after navigation timeout");
     let cdpCleared = !state.deviceMetricsApplied;
+    let cdpClearFailed = false;
     let viewportReset = !viewportState.viewportApplied;
     if (state.networkEnabled) {
       if (!state.cdp) {
@@ -924,7 +944,7 @@ function createSingleTabParityAdapter({
           await state.cdp.send("Emulation.clearDeviceMetricsOverride");
           cdpCleared = true;
         } catch {
-          errors.push("CDP clear failed");
+          cdpClearFailed = true;
         }
       }
     }
@@ -936,8 +956,6 @@ function createSingleTabParityAdapter({
         errors.push("viewport reset failed");
       }
     }
-    state.deviceMetricsApplied = !cdpCleared;
-    viewportState.viewportApplied = !viewportReset;
     const cleanupStartedAt = resolvedClock.now();
     const cleanupDeadline = cleanupStartedAt + resolvedTimeouts.cleanupMs;
     let readback;
@@ -975,6 +993,10 @@ function createSingleTabParityAdapter({
     else if (!baselineRestored()) {
       errors.push("cleanup readback did not restore the initial viewport and DPR");
     }
+    if (!readbackFailed && baselineRestored() && cdpClearFailed) cdpCleared = true;
+    if (cdpClearFailed && !cdpCleared) errors.push("CDP clear failed");
+    state.deviceMetricsApplied = !cdpCleared;
+    viewportState.viewportApplied = !viewportReset;
     state.cleanupResult = {
       status: errors.length === 0 ? "pass" : "fail",
       tabId: comparisonTabId,

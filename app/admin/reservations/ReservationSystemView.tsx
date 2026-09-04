@@ -120,24 +120,31 @@ export function ReservationSystemView({
           <p className="text-sm leading-6 text-fg-muted">{copy.description}</p>
         </div>
         <div className="flex flex-wrap gap-3 sm:shrink-0">
-        <Link
-          id="api-key-management-link"
-          href="/admin/reservations/api-keys"
-          className="inline-flex items-center rounded-md border border-line bg-surface px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        >
-          {copy.apiKeys.entry}
-        </Link>
-        <button
-          ref={randomButtonRef}
-          id="random-fill-button"
-          type="button"
-          onClick={generateDemoReservations}
-          disabled={!canEdit || isGenerating}
-          aria-busy={isGenerating || undefined}
-          className="cursor-pointer rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {copy.demoFill}
-        </button>
+          <Link
+            id="reservation-booking-list-link"
+            href="/admin/reservations/bookings"
+            className="inline-flex items-center rounded-md border border-line bg-surface px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            {copy.bookings.entry}
+          </Link>
+          <Link
+            id="api-key-management-link"
+            href="/admin/reservations/api-keys"
+            className="inline-flex items-center rounded-md border border-line bg-surface px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            {copy.apiKeys.entry}
+          </Link>
+          <button
+            ref={randomButtonRef}
+            id="random-fill-button"
+            type="button"
+            onClick={generateDemoReservations}
+            disabled={!canEdit || isGenerating}
+            aria-busy={isGenerating || undefined}
+            className="cursor-pointer rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {copy.demoFill}
+          </button>
         </div>
       </div>
 

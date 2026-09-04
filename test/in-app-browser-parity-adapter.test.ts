@@ -513,7 +513,7 @@ test("IAB-01 pure ESM import and distinct-tab final run", async () => {
       await sha256Digest("parity:authorization-profile:v1\0none"),
     );
   }
-  assert.deepEqual(fixture.state.loadStateOptions, { state: "domcontentloaded", timeoutMs: 10_000 });
+  assert.deepEqual(fixture.state.loadStateOptions, { state: "load", timeoutMs: 10_000 });
   assert.equal(new URL(evidence.rows[0].actualConditions.urls.production).search, "");
   assert.match(fixture.state.navigation[0], /localhost:3142/u);
   assert.match(prototype.navigation[0], /127\.0\.0\.1:4142/u);
@@ -892,6 +892,25 @@ test("IAB-02 390x844 DPR1 canary and cleanup", async () => {
     ]),
   );
   assert.equal(clearFailure.state.viewportReset, 1);
+
+  const clearTimeoutAfterCommit = createFakeBrowser();
+  const clearTimeoutOriginal = clearTimeoutAfterCommit.cdp.send.bind(clearTimeoutAfterCommit.cdp);
+  clearTimeoutAfterCommit.cdp.send = async (method: string, params?: Record<string, unknown>) => {
+    const result = await clearTimeoutOriginal(method, params);
+    if (method === "Emulation.clearDeviceMetricsOverride") {
+      throw { message: "CDP clear timeout after commit" };
+    }
+    return result;
+  };
+  const committedClearAdapter = createInAppBrowserParityAdapter({
+    browser: clearTimeoutAfterCommit.browser,
+    tab: clearTimeoutAfterCommit.tab,
+  });
+  await committedClearAdapter.setViewport("comparison", { width: 390, height: 844 });
+  const committedCleanup = await committedClearAdapter.cleanup();
+  assert.equal(committedCleanup.status, "pass");
+  assert.equal(committedCleanup.cdpCleared, true);
+  assert.deepEqual(committedCleanup.readback, committedCleanup.baseline);
 });
 
 test("IAB-03 single-tab surface ordering and selection drift", async () => {
@@ -922,6 +941,25 @@ test("IAB-03 single-tab surface ordering and selection drift", async () => {
       "token=",
     ]),
   );
+
+  const committedTimeout = createFakeBrowser();
+  const committedGoto = committedTimeout.tab.goto.bind(committedTimeout.tab);
+  committedTimeout.tab.goto = async (url: string) => {
+    await committedGoto(url);
+    throw { message: "navigation timeout after commit" };
+  };
+  const committedAdapter = createInAppBrowserParityAdapter({
+    browser: committedTimeout.browser,
+    tab: committedTimeout.tab,
+  });
+  await committedAdapter.navigate(
+    "comparison",
+    "http://localhost:3142/fixture?theme=light",
+  );
+  assert.deepEqual(committedTimeout.state.loadStateOptions, {
+    state: "load",
+    timeoutMs: 10_000,
+  });
 });
 
 test("IAB-03a unresolved tab.gotoはbounded navigation deadlineで停止する", async () => {
