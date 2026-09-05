@@ -41,6 +41,7 @@ async function main(): Promise<void> {
       context.secrets.vercelToken,
       context.secrets.neonApiKey,
       context.secrets.adminPassword,
+      context.secrets.developerApiSettingsEncryptionKey,
     );
     console.log(
       `AWS deployment settings verified for profile '${profile ?? "OIDC"}'.`,

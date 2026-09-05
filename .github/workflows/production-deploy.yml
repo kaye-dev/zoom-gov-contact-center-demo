@@ -18,6 +18,7 @@ env:
   DEPLOY_VERCEL_TOKEN_PARAMETER: /zoom-gov-contact-center-demo/production/deploy/vercel-token
   DEPLOY_NEON_API_KEY_PARAMETER: /zoom-gov-contact-center-demo/production/deploy/neon-api-key
   DEPLOY_ADMIN_PASSWORD_PARAMETER: /zoom-gov-contact-center-demo/production/deploy/admin-password
+  DEPLOY_DEVELOPER_API_KEY_PARAMETER: /zoom-gov-contact-center-demo/production/deploy/developer-api-settings-encryption-key
 
 jobs:
   validate_and_plan:
@@ -94,10 +95,19 @@ jobs:
               "${DEPLOY_VERCEL_TOKEN_PARAMETER}" \
               "${DEPLOY_NEON_API_KEY_PARAMETER}" \
               "${DEPLOY_ADMIN_PASSWORD_PARAMETER}" \
+              "${DEPLOY_DEVELOPER_API_KEY_PARAMETER}" \
               --with-decryption \
               --output json \
               --no-cli-pager \
               --region "${AWS_REGION}" 2>/dev/null; then
+              printf '\n%s\n' 'ZOOM_DEPLOY_KEY_METADATA_V1'
+              if ! aws ssm describe-parameters \
+                --parameter-filters "Key=Name,Option=Equals,Values=${DEPLOY_DEVELOPER_API_KEY_PARAMETER}" \
+                --max-results 10 --output json --no-cli-pager \
+                --region "${AWS_REGION}" 2>/dev/null; then
+                echo "::error::SSM encryption key metadata inspection failed." >&2
+                return 1
+              fi
               printf '\n%s\n' 'ZOOM_DEPLOY_SSM_CONTEXT_COMPLETE_V1'
               return 0
             fi
@@ -232,10 +242,19 @@ jobs:
               "${DEPLOY_VERCEL_TOKEN_PARAMETER}" \
               "${DEPLOY_NEON_API_KEY_PARAMETER}" \
               "${DEPLOY_ADMIN_PASSWORD_PARAMETER}" \
+              "${DEPLOY_DEVELOPER_API_KEY_PARAMETER}" \
               --with-decryption \
               --output json \
               --no-cli-pager \
               --region "${AWS_REGION}" 2>/dev/null; then
+              printf '\n%s\n' 'ZOOM_DEPLOY_KEY_METADATA_V1'
+              if ! aws ssm describe-parameters \
+                --parameter-filters "Key=Name,Option=Equals,Values=${DEPLOY_DEVELOPER_API_KEY_PARAMETER}" \
+                --max-results 10 --output json --no-cli-pager \
+                --region "${AWS_REGION}" 2>/dev/null; then
+                echo "::error::SSM encryption key metadata inspection failed." >&2
+                return 1
+              fi
               printf '\n%s\n' 'ZOOM_DEPLOY_SSM_CONTEXT_COMPLETE_V1'
               return 0
             fi
@@ -341,10 +360,19 @@ jobs:
               "${DEPLOY_VERCEL_TOKEN_PARAMETER}" \
               "${DEPLOY_NEON_API_KEY_PARAMETER}" \
               "${DEPLOY_ADMIN_PASSWORD_PARAMETER}" \
+              "${DEPLOY_DEVELOPER_API_KEY_PARAMETER}" \
               --with-decryption \
               --output json \
               --no-cli-pager \
               --region "${AWS_REGION}" 2>/dev/null; then
+              printf '\n%s\n' 'ZOOM_DEPLOY_KEY_METADATA_V1'
+              if ! aws ssm describe-parameters \
+                --parameter-filters "Key=Name,Option=Equals,Values=${DEPLOY_DEVELOPER_API_KEY_PARAMETER}" \
+                --max-results 10 --output json --no-cli-pager \
+                --region "${AWS_REGION}" 2>/dev/null; then
+                echo "::error::SSM encryption key metadata inspection failed." >&2
+                return 1
+              fi
               printf '\n%s\n' 'ZOOM_DEPLOY_SSM_CONTEXT_COMPLETE_V1'
               return 0
             fi
@@ -483,10 +511,19 @@ jobs:
               "${DEPLOY_VERCEL_TOKEN_PARAMETER}" \
               "${DEPLOY_NEON_API_KEY_PARAMETER}" \
               "${DEPLOY_ADMIN_PASSWORD_PARAMETER}" \
+              "${DEPLOY_DEVELOPER_API_KEY_PARAMETER}" \
               --with-decryption \
               --output json \
               --no-cli-pager \
               --region "${AWS_REGION}" 2>/dev/null; then
+              printf '\n%s\n' 'ZOOM_DEPLOY_KEY_METADATA_V1'
+              if ! aws ssm describe-parameters \
+                --parameter-filters "Key=Name,Option=Equals,Values=${DEPLOY_DEVELOPER_API_KEY_PARAMETER}" \
+                --max-results 10 --output json --no-cli-pager \
+                --region "${AWS_REGION}" 2>/dev/null; then
+                echo "::error::SSM encryption key metadata inspection failed." >&2
+                return 1
+              fi
               printf '\n%s\n' 'ZOOM_DEPLOY_SSM_CONTEXT_COMPLETE_V1'
               return 0
             fi

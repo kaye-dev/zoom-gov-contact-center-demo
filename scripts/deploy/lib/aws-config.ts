@@ -11,24 +11,29 @@ export const DEPLOY_NEON_API_KEY_PARAMETER =
   `${DEPLOY_PARAMETER_PREFIX}/neon-api-key` as const;
 export const DEPLOY_ADMIN_PASSWORD_PARAMETER =
   `${DEPLOY_PARAMETER_PREFIX}/admin-password` as const;
+export const DEPLOY_DEVELOPER_API_KEY_PARAMETER =
+  `${DEPLOY_PARAMETER_PREFIX}/developer-api-settings-encryption-key` as const;
 export const DEPLOY_PARAMETER_NAMES = [
   DEPLOY_CONFIG_PARAMETER,
   DEPLOY_VERCEL_TOKEN_PARAMETER,
   DEPLOY_NEON_API_KEY_PARAMETER,
   DEPLOY_ADMIN_PASSWORD_PARAMETER,
+  DEPLOY_DEVELOPER_API_KEY_PARAMETER,
 ] as const;
 export const DEPLOY_SECRET_PARAMETER_NAMES = [
   DEPLOY_VERCEL_TOKEN_PARAMETER,
   DEPLOY_NEON_API_KEY_PARAMETER,
   DEPLOY_ADMIN_PASSWORD_PARAMETER,
+  DEPLOY_DEVELOPER_API_KEY_PARAMETER,
 ] as const;
 export const DEPLOY_KMS_ALIAS =
   "alias/zoom-gov-contact-center-demo-production-deploy" as const;
+export const DEPLOY_KEY_METADATA_MARKER = "ZOOM_DEPLOY_KEY_METADATA_V1";
 export const DEPLOY_CONTEXT_COMPLETION_MARKER =
   "ZOOM_DEPLOY_SSM_CONTEXT_COMPLETE_V1" as const;
 
 export type StoredDeploymentConfig = {
-  schemaVersion: 1;
+  schemaVersion: 3;
   policyVersion: "demo-v1";
   aws: {
     accountId: string;
@@ -58,6 +63,7 @@ export type StoredDeploymentConfig = {
     vercelToken: number;
     neonApiKey: number;
     adminPassword: number;
+    developerApiSettingsEncryptionKey: number;
   };
 };
 
@@ -74,7 +80,8 @@ export type DeploymentSetupField =
   | "admin.email";
 
 export type StoredDeploymentSetupDraft = {
-  schemaVersion: 2;
+  schemaVersion: 4;
+  developerApiKeyCreationPending?: true;
   policyVersion: "demo-v1";
   setupState: "incomplete";
   aws: {
@@ -107,12 +114,14 @@ const DEPLOYMENT_SECRET_VERSION_FIELDS = [
   "vercelToken",
   "neonApiKey",
   "adminPassword",
+  "developerApiSettingsEncryptionKey",
 ] as const satisfies readonly (keyof StoredDeploymentConfig["secretVersions"])[];
 
 export type DeploymentSecrets = {
   vercelToken: string;
   neonApiKey: string;
   adminPassword: string;
+  developerApiSettingsEncryptionKey: string;
 };
 
 export type LoadedDeploymentContext = {
@@ -187,7 +196,34 @@ export function loadDeploymentContext(
     profile === undefined ? undefined : validateAwsProfileName(profile);
   const accountId = getCallerAccountId(runner, selectedProfile);
   const parameters = getExactDeploymentParameters(runner, selectedProfile);
-  return buildLoadedDeploymentContext(accountId, parameters, selectedProfile);
+  const context = buildLoadedDeploymentContext(
+    accountId,
+    parameters,
+    selectedProfile,
+  );
+  const metadata = runner.run(
+    "aws",
+    addAwsTargetArguments(
+      [
+        "ssm",
+        "describe-parameters",
+        "--parameter-filters",
+        `Key=Name,Option=Equals,Values=${DEPLOY_DEVELOPER_API_KEY_PARAMETER}`,
+        "--max-results",
+        "10",
+        "--output",
+        "json",
+        "--no-cli-pager",
+      ],
+      selectedProfile,
+    ),
+  );
+  assertAwsCommandSucceeded(
+    metadata.status,
+    "SSM encryption key metadata inspection",
+  );
+  assertEncryptionKeyMetadata(metadata.stdout, context.config);
+  return context;
 }
 
 export function loadDeploymentContextFromStdin(
@@ -214,15 +250,23 @@ export function loadDeploymentContextFromStdin(
       "The SSM deployment context completion marker is invalid.",
     );
   }
+  const parts = payload.split(`\n${DEPLOY_KEY_METADATA_MARKER}\n`);
   const parameters = parseExactDeploymentParametersResponse(
-    payload,
+    parts[0],
     selectedProfile,
   );
-  return buildLoadedDeploymentContext(
+  const context = buildLoadedDeploymentContext(
     validatedAccountId,
     parameters,
     selectedProfile,
   );
+  if (parts.length !== 2) {
+    throw new InvalidDeploymentConfigurationError(
+      "SSM encryption key metadata is missing or duplicated.",
+    );
+  }
+  assertEncryptionKeyMetadata(parts[1], context.config);
+  return context;
 }
 
 function buildLoadedDeploymentContext(
@@ -276,6 +320,13 @@ function buildLoadedDeploymentContext(
     config.secretVersions.adminPassword,
   );
 
+  const developerApiSettingsEncryptionKey = requireSecretParameter(
+    parameters,
+    DEPLOY_DEVELOPER_API_KEY_PARAMETER,
+    config.secretVersions.developerApiSettingsEncryptionKey,
+  );
+  assertDeploymentEncryptionKey(developerApiSettingsEncryptionKey);
+
   return {
     ...(profile === undefined ? {} : { profile }),
     accountId,
@@ -284,6 +335,7 @@ function buildLoadedDeploymentContext(
       vercelToken,
       neonApiKey,
       adminPassword,
+      developerApiSettingsEncryptionKey,
     },
   };
 }
@@ -336,10 +388,37 @@ export function parseStoredDeploymentSetupState(
     );
   }
   const root = expectRecord(parsed, "deployment config");
-  if (root.schemaVersion === 1) {
+  if (root.schemaVersion === 3) {
     return { state: "complete", config: parseStoredDeploymentConfig(raw) };
   }
-  if (root.schemaVersion !== 2) {
+  if (root.schemaVersion === 1) {
+    const config = parseStoredDeploymentConfig(raw, true);
+    const values: Record<DeploymentSetupField, string> = {
+      "vercel.orgId": config.vercel.orgId,
+      "vercel.projectId": config.vercel.projectId,
+      "vercel.projectName": config.vercel.projectName,
+      "vercel.canonicalOrigin": config.vercel.canonicalOrigin,
+      "neon.projectId": config.neon.projectId,
+      "neon.projectName": config.neon.projectName,
+      "neon.branchId": config.neon.branchId,
+      "neon.databaseName": config.neon.databaseName,
+      "neon.roleName": config.neon.roleName,
+      "admin.email": config.admin.email,
+    };
+    return {
+      state: "incomplete",
+      draft: {
+        schemaVersion: 4,
+        policyVersion: "demo-v1",
+        setupState: "incomplete",
+        aws: config.aws,
+        kmsKeyArn: config.kmsKeyArn,
+        values,
+        secretVersions: config.secretVersions,
+      },
+    };
+  }
+  if (root.schemaVersion !== 2 && root.schemaVersion !== 4) {
     throw new InvalidDeploymentConfigurationError(
       "The deployment config schema or policy version is unsupported.",
     );
@@ -347,9 +426,28 @@ export function parseStoredDeploymentSetupState(
   return { state: "incomplete", draft: parseStoredDeploymentSetupDraft(root) };
 }
 
+export type LegacyStoredDeploymentConfig = Omit<
+  StoredDeploymentConfig,
+  "schemaVersion" | "secretVersions"
+> & {
+  schemaVersion: 1;
+  secretVersions: Omit<
+    StoredDeploymentConfig["secretVersions"],
+    "developerApiSettingsEncryptionKey"
+  >;
+};
+
 export function parseStoredDeploymentConfig(
   raw: string,
-): StoredDeploymentConfig {
+): StoredDeploymentConfig;
+export function parseStoredDeploymentConfig(
+  raw: string,
+  legacy: true,
+): LegacyStoredDeploymentConfig;
+export function parseStoredDeploymentConfig(
+  raw: string,
+  legacy = false,
+): StoredDeploymentConfig | LegacyStoredDeploymentConfig {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw) as unknown;
@@ -373,7 +471,10 @@ export function parseStoredDeploymentConfig(
     ],
     "deployment config",
   );
-  if (root.schemaVersion !== 1 || root.policyVersion !== "demo-v1") {
+  if (
+    root.schemaVersion !== (legacy ? 1 : 3) ||
+    root.policyVersion !== "demo-v1"
+  ) {
     throw new InvalidDeploymentConfigurationError(
       "The deployment config schema or policy version is unsupported.",
     );
@@ -469,20 +570,24 @@ export function parseStoredDeploymentConfig(
   );
   assertExactKeys(
     secretVersions,
-    ["vercelToken", "neonApiKey", "adminPassword"],
+    [
+      "vercelToken",
+      "neonApiKey",
+      "adminPassword",
+      ...(legacy ? [] : ["developerApiSettingsEncryptionKey"]),
+    ],
     "deployment config secretVersions",
   );
 
-  return {
-    schemaVersion: 1,
-    policyVersion: "demo-v1",
+  const common = {
+    policyVersion: "demo-v1" as const,
     aws: { accountId, region: DEPLOY_REGION },
     vercel: {
       orgId,
       projectId: vercelProjectId,
       projectName: vercelProjectName,
       canonicalOrigin,
-      expectedPlan: "hobby",
+      expectedPlan: "hobby" as const,
     },
     neon: {
       projectId: neonProjectId,
@@ -490,8 +595,8 @@ export function parseStoredDeploymentConfig(
       branchId,
       databaseName,
       roleName,
-      regionId: "aws-ap-southeast-1",
-      expectedPlan: "free",
+      regionId: "aws-ap-southeast-1" as const,
+      expectedPlan: "free" as const,
     },
     admin: { email },
     kmsKeyArn,
@@ -510,6 +615,18 @@ export function parseStoredDeploymentConfig(
       ),
     },
   };
+  if (legacy) return { ...common, schemaVersion: 1 };
+  return {
+    ...common,
+    schemaVersion: 3,
+    secretVersions: {
+      ...common.secretVersions,
+      developerApiSettingsEncryptionKey: expectVersion(
+        secretVersions.developerApiSettingsEncryptionKey,
+        "Developer API encryption key version",
+      ),
+    },
+  };
 }
 
 function parseStoredDeploymentSetupDraft(
@@ -525,11 +642,15 @@ function parseStoredDeploymentSetupDraft(
       "kmsKeyArn",
       "values",
       "secretVersions",
+      ...(root.schemaVersion === 4 &&
+      Object.hasOwn(root, "developerApiKeyCreationPending")
+        ? ["developerApiKeyCreationPending"]
+        : []),
     ],
     "deployment setup draft",
   );
   if (
-    root.schemaVersion !== 2 ||
+    (root.schemaVersion !== 2 && root.schemaVersion !== 4) ||
     root.policyVersion !== "demo-v1" ||
     root.setupState !== "incomplete"
   ) {
@@ -567,7 +688,11 @@ function parseStoredDeploymentSetupDraft(
   );
   assertAllowedKeys(
     rawSecretVersions,
-    DEPLOYMENT_SECRET_VERSION_FIELDS,
+    root.schemaVersion === 2
+      ? DEPLOYMENT_SECRET_VERSION_FIELDS.filter(
+          (field) => field !== "developerApiSettingsEncryptionKey",
+        )
+      : DEPLOYMENT_SECRET_VERSION_FIELDS,
     "deployment setup draft secretVersions",
   );
   const secretVersions: Partial<StoredDeploymentConfig["secretVersions"]> = {};
@@ -580,8 +705,20 @@ function parseStoredDeploymentSetupDraft(
     }
   }
 
+  if (
+    root.developerApiKeyCreationPending !== undefined &&
+    (root.developerApiKeyCreationPending !== true ||
+      secretVersions.developerApiSettingsEncryptionKey !== 1)
+  ) {
+    throw new InvalidDeploymentConfigurationError(
+      "Invalid Developer API key creation checkpoint.",
+    );
+  }
   return {
-    schemaVersion: 2,
+    schemaVersion: 4,
+    ...(root.developerApiKeyCreationPending === true
+      ? { developerApiKeyCreationPending: true as const }
+      : {}),
     policyVersion: "demo-v1",
     setupState: "incomplete",
     aws: { accountId, region: DEPLOY_REGION },
@@ -853,4 +990,42 @@ function expectSetupHttpsOrigin(value: unknown): string {
     );
   }
   return url.origin;
+}
+
+/** The application accepts canonical Base64 for exactly 32 bytes. Never include the value in errors. */
+export function assertDeploymentEncryptionKey(value: string): void {
+  if (
+    !/^[A-Za-z0-9+/]{43}=$/u.test(value) ||
+    Buffer.from(value, "base64").length !== 32 ||
+    Buffer.from(value, "base64").toString("base64") !== value
+  ) {
+    throw new InvalidDeploymentConfigurationError(
+      "Developer API encryption key must be canonical Base64 encoding of 32 bytes.",
+    );
+  }
+}
+
+export function assertEncryptionKeyMetadata(
+  raw: string,
+  config: StoredDeploymentConfig,
+): void {
+  const response = parseJsonRecord(raw, "SSM encryption key metadata");
+  const records = response.Parameters;
+  if (response.NextToken || !Array.isArray(records) || records.length !== 1) {
+    throw new InvalidDeploymentConfigurationError(
+      "SSM encryption key metadata was not returned exactly once.",
+    );
+  }
+  const metadata = expectRecord(records[0], "SSM encryption key metadata");
+  if (
+    metadata.Name !== DEPLOY_DEVELOPER_API_KEY_PARAMETER ||
+    metadata.Type !== "SecureString" ||
+    metadata.Tier !== "Standard" ||
+    metadata.KeyId !== config.kmsKeyArn ||
+    metadata.Version !== config.secretVersions.developerApiSettingsEncryptionKey
+  ) {
+    throw new InvalidDeploymentConfigurationError(
+      "SSM encryption key type, tier, KMS key, or version does not match the deployment config.",
+    );
+  }
 }

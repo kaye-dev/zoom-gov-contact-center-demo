@@ -6,18 +6,19 @@
 
 ## 前提
 
-[AWS Parameter Storeの初回設定](setup-deploy-aws.md)が完了し、`ap-northeast-1`に次の4 parameterが存在する必要があります。
+[AWS Parameter Storeの初回設定](setup-deploy-aws.md)が完了し、`ap-northeast-1`に次の5 parameterが存在する必要があります。
 
 ```text
 /zoom-gov-contact-center-demo/production/deploy/config
 /zoom-gov-contact-center-demo/production/deploy/vercel-token
 /zoom-gov-contact-center-demo/production/deploy/neon-api-key
 /zoom-gov-contact-center-demo/production/deploy/admin-password
+/zoom-gov-contact-center-demo/production/deploy/developer-api-settings-encryption-key
 ```
 
-`config`は`String`、残る3件は同じcustomer managed KMS keyを使う`SecureString`です。GitHubにはVercel token、Neon API key、管理者password、database URL、AWS access keyを保存しません。各jobがOIDCで短期AWS credentialを取得し、Parameter Storeを読み直します。秘密値とdatabase URLはjob output、artifact、cache、`GITHUB_ENV`へ渡しません。migration判定、plan digest、target fingerprint、新旧deployment IDだけを形式検証済みの非秘密値として後続jobへ渡します。
+`config`は`String`、残る4件は同じcustomer managed KMS keyを使う`SecureString`です。GitHubにはVercel token、Neon API key、管理者password、database URL、AWS access keyを保存しません。各jobがOIDCで短期AWS credentialを取得し、Parameter Storeを読み直します。秘密値とdatabase URLはjob output、artifact、cache、`GITHUB_ENV`へ渡しません。migration判定、plan digest、target fingerprint、新旧deployment IDだけを形式検証済みの非秘密値として後続jobへ渡します。
 
-Actionsでは、commit archiveからdeploy runner imageをbuildし終えるまでOIDC Roleを取得しません。OIDC後にrepositoryのNode.js、npm、Vercel CLI、TypeScriptをhostで実行せず、host AWS CLIのSTS / exact `GetParameters`とDocker CLIだけを使います。AWS credential、OIDC request token、`~/.aws`、GitHub tokenをphase containerへ渡さず、復号済みSSM responseだけを成功marker付きstdinとして渡します。
+Actionsでは、commit archiveからdeploy runner imageをbuildし終えるまでOIDC Roleを取得しません。OIDC後にrepositoryのNode.js、npm、Vercel CLI、TypeScriptをhostで実行せず、host AWS CLIのSTS / exact `GetParameters` / 鍵metadata用`DescribeParameters`とDocker CLIだけを使います。AWS credential、OIDC request token、`~/.aws`、GitHub tokenをphase containerへ渡さず、復号済みSSM responseだけを成功marker付きstdinとして渡します。
 
 ## setup用profileとlocal deploy用profileを分離する
 
@@ -26,12 +27,12 @@ Actionsでは、commit archiveからdeploy runner imageをbuildし終えるま�
 - `kms:CreateKey`だけは作成前にkey ARNを決定できないため`Resource: "*"`となる。専用の一時的なsetup identityへだけ許可し、初回完了後に外す。
 - 作成済みkeyに対する`kms:DescribeKey`、`kms:ListResourceTags`、`kms:GetKeyRotationStatus`、`kms:EnableKeyRotation`、`kms:TagResource`は、確認済みの専用key ARNへ限定する。
 - `kms:CreateAlias`は`arn:aws:kms:ap-northeast-1:<AWS_ACCOUNT_ID>:alias/zoom-gov-contact-center-demo-production-deploy`と、そのaliasが指す専用keyだけに限定する。`UpdateAlias`、`DeleteAlias`、`DisableKey`、`ScheduleKeyDeletion`は付与しない。
-- `ssm:GetParameters`、`ssm:PutParameter`、`ssm:AddTagsToResource`は後述する4件のexact parameter ARNだけに限定する。metadata照合に使う`ssm:DescribeParameters`はresource-level制御非対応のため、setup identityだけに許可する。
-- 3件のSecureStringに必要な`kms:Encrypt`、`kms:Decrypt`は専用keyへ限定し、KMS key policy側でもsetup identityを許可する。
+- `ssm:GetParameters`、`ssm:PutParameter`、`ssm:AddTagsToResource`は後述する5件のexact parameter ARNだけに限定する。metadata照合に使う`ssm:DescribeParameters`はresource-level制御非対応のため、setupと通常deploy identityに許可する。通常deployはDeveloper API暗号鍵のexact Name filterだけを使用する。
+- 4件のSecureStringに必要な`kms:Encrypt`、`kms:Decrypt`は専用keyへ限定し、KMS key policy側でもsetup identityを許可する。
 
 setup完了後は、作成されたkey ARNとparameter ARNを確認して上記権限を縮小またはsetup identity自体を無効化します。再設定・rotation時だけ期限付きで戻し、操作後に再び外します。
 
-ローカルの通常deploy用profileには、この文書の「Parameter Store/KMSのread policy」と同じpolicyだけを付与します。つまり4件のexact ARNへの`ssm:GetParameters`と、SSM経由・3件それぞれのexact `PARAMETER_ARN`に限定した`kms:Decrypt`だけです。KMS/SSMのlist、history、path read、write、delete権限は付与しません。`sts:GetCallerIdentity`によるaccount確認が通ることも確認します。ローカルprofileはIAM Identity Center等の短期sessionを使い、長期access keyを`.env`やDockerへ渡しません。
+ローカルの通常deploy用profileには、この文書の「Parameter Store/KMSのread policy」と同じpolicyだけを付与します。つまり5件のexact ARNへの`ssm:GetParameters`と、SSM経由・4件それぞれのexact `PARAMETER_ARN`に限定した`kms:Decrypt`、鍵metadata用の`ssm:DescribeParameters`です。後者はresource-level制御に対応しないため`Resource: "*"`を必要とし、リージョンを限定します。値の取得は5件のexact ARNに限定し、history、path read、write、delete権限は付与しません。`sts:GetCallerIdentity`によるaccount確認が通ることも確認します。ローカルprofileはIAM Identity Center等の短期sessionを使い、長期access keyを`.env`やDockerへ渡しません。
 
 profile名を分ける場合はsetup終了時の`.env`保存を拒否し、最初の`./deploy.sh --profile <READ_ONLY_PROFILE>`で通常deploy用profileを保存します。同じprofile名を継続利用する場合は、先に一時的なsetup権限を外し、このread policyだけになったことを確認します。
 
@@ -97,12 +98,31 @@ gh api 'repos/{owner}/{repo}/actions/oidc/customization/sub'
 
 ### Parameter Store/KMSのread policy
 
-Roleには4 parameterの読取と、3 SecureStringをSSM経由で復号する権限だけを付与します。次の`<AWS_ACCOUNT_ID>`、`<KMS_KEY_ID>`を実値に置き換えます。
+Roleには5 parameterの読取と、4 SecureStringをSSM経由で復号する権限と、鍵metadataを照合する`ssm:DescribeParameters`を付与します。次の`<AWS_ACCOUNT_ID>`、`<KMS_KEY_ID>`を実値に置き換えます。
 
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [
+    {
+      "Sid": "InspectEncryptionKeyMetadata",
+      "Effect": "Allow",
+      "Action": "ssm:DescribeParameters",
+      "Resource": "*",
+      "Condition": { "StringEquals": { "aws:RequestedRegion": "ap-northeast-1" } }
+    },
+    {
+      "Sid": "DecryptDeveloperApiKeyThroughSsm",
+      "Effect": "Allow",
+      "Action": "kms:Decrypt",
+      "Resource": "arn:aws:kms:ap-northeast-1:<AWS_ACCOUNT_ID>:key/<KMS_KEY_ID>",
+      "Condition": {
+        "StringEquals": {
+          "kms:ViaService": "ssm.ap-northeast-1.amazonaws.com",
+          "kms:EncryptionContext:PARAMETER_ARN": "arn:aws:ssm:ap-northeast-1:<AWS_ACCOUNT_ID>:parameter/zoom-gov-contact-center-demo/production/deploy/developer-api-settings-encryption-key"
+        }
+      }
+    },
     {
       "Sid": "ReadExactDeployParameters",
       "Effect": "Allow",
@@ -111,7 +131,8 @@ Roleには4 parameterの読取と、3 SecureStringをSSM経由で復号する権
         "arn:aws:ssm:ap-northeast-1:<AWS_ACCOUNT_ID>:parameter/zoom-gov-contact-center-demo/production/deploy/config",
         "arn:aws:ssm:ap-northeast-1:<AWS_ACCOUNT_ID>:parameter/zoom-gov-contact-center-demo/production/deploy/vercel-token",
         "arn:aws:ssm:ap-northeast-1:<AWS_ACCOUNT_ID>:parameter/zoom-gov-contact-center-demo/production/deploy/neon-api-key",
-        "arn:aws:ssm:ap-northeast-1:<AWS_ACCOUNT_ID>:parameter/zoom-gov-contact-center-demo/production/deploy/admin-password"
+        "arn:aws:ssm:ap-northeast-1:<AWS_ACCOUNT_ID>:parameter/zoom-gov-contact-center-demo/production/deploy/admin-password",
+        "arn:aws:ssm:ap-northeast-1:<AWS_ACCOUNT_ID>:parameter/zoom-gov-contact-center-demo/production/deploy/developer-api-settings-encryption-key"
       ]
     },
     {
@@ -154,9 +175,9 @@ Roleには4 parameterの読取と、3 SecureStringをSSM経由で復号する権
 }
 ```
 
-KMS key policy側もこのRoleへ上記条件付き`kms:Decrypt`を許可するか、account IAM policyによる権限委譲を有効にします。`config`は`String`なのでKMS復号権限の対象外です。KMS encryption contextにはprefix wildcardを使わず、3 SecureStringのparameter ARNを個別に完全一致させます。
+KMS key policy側もこのRoleへ上記条件付き`kms:Decrypt`を許可するか、account IAM policyによる権限委譲を有効にします。`config`は`String`なのでKMS復号権限の対象外です。KMS encryption contextにはprefix wildcardを使わず、4 SecureStringのparameter ARNを個別に完全一致させます。
 
-`GetParametersByPath`、`GetParameterHistory`、list、write、deleteは付与しません。親pathへのrecursive権限は配下すべてを読めるため、子parameterのDenyを後付けしても安全な境界になりません。[GetParametersByPathの権限制約](https://docs.aws.amazon.com/systems-manager/latest/userguide/sysman-paramstore-access.html)を参照してください。
+`GetParametersByPath`、`GetParameterHistory`、その他のlist、write、deleteは付与しません。親pathへのrecursive権限は配下すべてを読めるため、子parameterのDenyを後付けしても安全な境界になりません。[GetParametersByPathの権限制約](https://docs.aws.amazon.com/systems-manager/latest/userguide/sysman-paramstore-access.html)を参照してください。
 
 ## 4. GitHub Environmentを2つ作成する
 
@@ -207,9 +228,9 @@ Production deployの前に、temporary test workflowまたはAWS側のpolicy sim
 
 1. Roleが2件のexact subjectからだけAssumeRoleできる。
 2. 別Environment、別repository、main以外のrefではAssumeRoleできない。
-3. 4 parameterへの`GetParameters`だけ成功する。
+3. 5 parameterへの`GetParameters`だけ成功する。
 4. prefix外、history、path recursive、write、deleteが拒否される。
-5. 3 SecureString以外のencryption contextや、SSM以外からの直接Decryptが拒否される。
+5. 4 SecureString以外のencryption contextや、SSM以外からの直接Decryptが拒否される。
 6. Docker build中のnpm lifecycleにAWS / OIDC credentialがなく、build contextが`GITHUB_SHA`の`git archive`だけである。
 7. phase containerのenvironment、argv、mount、Docker inspectにAWS credential、GitHub token、`~/.aws`がなく、SSM JSONがstdinだけで渡される。
 8. workflow log、artifact、cache、raw result、job outputに秘密値とdatabase URLが残らず、許可した非秘密outputだけが転記される。
@@ -219,3 +240,5 @@ Parameter StoreとSTSのAPI callはCloudTrailの監査対象です。監査で�
 ## 8. Actions deployを実行する
 
 設定後の実行と失敗時の扱いは[GitHub Actionsからの再デプロイ](github-actions-redeploy.md)を参照してください。EnvironmentやVariableを作成しただけではProductionへ変更は発生しません。
+
+Developer API暗号鍵の初期導入・移行・復旧条件は[専用手順](developer-api-encryption-key.md)を参照してください。

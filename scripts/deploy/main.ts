@@ -13,6 +13,7 @@ import {
   loadDeploymentContextFromStdin,
   MissingDeploymentParametersError,
   type DeploymentSecrets,
+  assertDeploymentEncryptionKey,
   type StoredDeploymentConfig,
 } from "./lib/aws-config";
 import { inspectDatabase } from "./lib/database";
@@ -88,6 +89,7 @@ const AWS_CREDENTIAL_ENVIRONMENT_NAMES = [
   "GITHUB_TOKEN",
 ] as const;
 const PRODUCTION_ENV_ALLOWLIST = new Set([
+  "DEVELOPER_API_SETTINGS_ENCRYPTION_KEY",
   "DATABASE_URL",
   "BETTER_AUTH_SECRET",
   "BETTER_AUTH_URL",
@@ -167,6 +169,7 @@ export type VerifiedDeploymentTarget = {
   projectName: string;
   database: DatabaseTarget;
   adminCredentials: SmokeCredentials;
+  developerApiSettingsEncryptionKey: string;
   targetFingerprint: string;
   vercelEnvironment: NodeJS.ProcessEnv;
 };
@@ -528,6 +531,7 @@ export async function verifyStoredDeploymentTarget(
   deploymentSecrets: DeploymentSecrets,
   expectedTargetFingerprint?: string,
 ): Promise<VerifiedDeploymentTarget> {
+  assertDeploymentEncryptionKey(deploymentSecrets.developerApiSettingsEncryptionKey);
   const targetFingerprint = createDeploymentTargetFingerprint(config);
   if (
     expectedTargetFingerprint !== undefined &&
@@ -541,6 +545,7 @@ export async function verifyStoredDeploymentTarget(
     deploymentSecrets.vercelToken,
     deploymentSecrets.neonApiKey,
     deploymentSecrets.adminPassword,
+    deploymentSecrets.developerApiSettingsEncryptionKey,
   );
   if (
     config.vercel.expectedPlan !== "hobby" ||
@@ -607,6 +612,7 @@ export async function verifyStoredDeploymentTarget(
     canonicalUrl,
     projectName: project.name,
     database: neon.database,
+    developerApiSettingsEncryptionKey: deploymentSecrets.developerApiSettingsEncryptionKey,
     adminCredentials: {
       email: validatedAdmin.email,
       password: validatedAdmin.password,
@@ -616,10 +622,11 @@ export async function verifyStoredDeploymentTarget(
   };
 }
 
-function syncProductionEnvironment(
+export function syncProductionEnvironment(
   runner: CommandRunner,
   target: VerifiedDeploymentTarget,
 ): void {
+  assertDeploymentEncryptionKey(target.developerApiSettingsEncryptionKey);
   const before = listProductionEnvironment(
     runner,
     target.link,
@@ -658,6 +665,16 @@ function syncProductionEnvironment(
       target.vercelEnvironment,
     );
   }
+
+  setVercelEnvironment(
+    runner,
+    target.link,
+    "DEVELOPER_API_SETTINGS_ENCRYPTION_KEY",
+    target.developerApiSettingsEncryptionKey,
+    true,
+    true,
+    target.vercelEnvironment,
+  );
 
   const after = listProductionEnvironment(
     runner,
@@ -1012,6 +1029,7 @@ export function createSecretFreeBuildEnvironment(
     "NEON_API_KEY",
     "DATABASE_URL",
     "DATABASE_URL_UNPOOLED",
+    "DEVELOPER_API_SETTINGS_ENCRYPTION_KEY",
     "BETTER_AUTH_SECRET",
     "BETTER_AUTH_URL",
     "BETTER_AUTH_TRUSTED_ORIGINS",
@@ -1745,6 +1763,7 @@ export function assertAllowedProductionEnvironment(
   for (const name of [
     "DATABASE_URL",
     "BETTER_AUTH_SECRET",
+    "DEVELOPER_API_SETTINGS_ENCRYPTION_KEY",
   ]) {
     if (audit.names.has(name) && audit.types.get(name) !== "sensitive") {
       throw new Error(`${name} must be a Vercel Sensitive value.`);

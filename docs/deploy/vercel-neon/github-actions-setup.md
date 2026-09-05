@@ -46,18 +46,19 @@ Dockerを起動し、対象AWS accountへ接続できるIAM Identity Center prof
 ./setup-deploy-aws.sh --profile <AWS_SETUP_PROFILE>
 ```
 
-画面の指示に従ってVercel / Neon対象と3件の秘密値を登録します。setupは`ap-northeast-1`に専用KMS keyと次の4 parameterだけを作成します。
+画面の指示に従ってVercel / Neon対象と3件の秘密値を登録します。Developer API暗号鍵は初回だけ自動生成されます。setupは`ap-northeast-1`に専用KMS keyと次の5 parameterだけを作成します。
 
 ```text
 /zoom-gov-contact-center-demo/production/deploy/config
 /zoom-gov-contact-center-demo/production/deploy/vercel-token
 /zoom-gov-contact-center-demo/production/deploy/neon-api-key
 /zoom-gov-contact-center-demo/production/deploy/admin-password
+/zoom-gov-contact-center-demo/production/deploy/developer-api-settings-encryption-key
 ```
 
 repositoryを別名でフォークしても、workflowとscriptsが参照する上記path、KMS alias、Regionは自動では変わりません。変更する場合はworkflow、scripts、tests、IAM policy、docsを同時に変更してください。入力、再開、更新、rotationの詳細は[AWS Parameter Storeの初回設定](setup-deploy-aws.md)を参照します。
 
-setup完了後は一時的な書込権限を外します。通常のlocal deployとActionsには、4件のexact `ssm:GetParameters`と3件の条件付き`kms:Decrypt`だけを許可します。
+setup完了後は一時的な書込権限を外します。通常のlocal deployとActionsには、5件のexact `ssm:GetParameters`と4件の条件付き`kms:Decrypt`と鍵metadata用の`ssm:DescribeParameters`を許可します。
 
 ## 3. 最初のlocal Production deployを完了する
 
@@ -87,7 +88,7 @@ Actionsを有効化する前に、同じ設定でlocal deployとcanonical smoke�
 
    新規forkでは`sub_claim_prefix`にimmutableなowner ID / repository IDが含まれる場合があります。元repositoryの`repo:kaye-dev/zoom-gov-contact-center-demo`をコピーしません。`use_default`が`false`の場合はcustom subjectを推測せず、[GitHub OIDC reference](https://docs.github.com/en/actions/reference/security/oidc)に従って完全一致値を作ります。
 
-4. Actions専用IAM Roleを作成し、4 parameterへのread policyと専用KMS keyへの条件付きdecrypt policyを付与する。
+4. Actions専用IAM Roleを作成し、5 parameterへのread policyと専用KMS keyへの条件付きdecrypt policy、鍵metadata用の`ssm:DescribeParameters`を付与する。
 5. Role ARNを控える。AWS access keyは作成しない。
 
 trust policy、read policy、KMS key policyのJSONは[AWS IAM / GitHub OIDC設定](aws-iam-oidc.md)をそのまま使用し、`<AWS_ACCOUNT_ID>`、`<KMS_KEY_ID>`、`<OIDC_SUB_PREFIX>`だけをフォーク先の実値へ置き換えます。OIDCは長期AWS credentialをGitHubへ保存せず、jobごとに短期credentialを取得するために使用します。
@@ -127,7 +128,7 @@ GitHub Secretsは作成しません。Vercel token、Neon API key、管理者pas
 
 4. deploy関連ファイルの変更にCODEOWNERS reviewを設定する。
 5. IAM Roleが2件のexact OIDC subject以外からAssumeRoleできないことを確認する。
-6. Roleが4 parameterだけを読め、SSM経由の3件だけをdecryptできることを確認する。
+6. Roleが5 parameterだけを読め、SSM経由の4件だけをdecryptできることを確認する。
 7. GitHubのEnvironmentにSecretsがなく、repository Variablesが上記2件だけであることを確認する。
 
 required checkのworkflowを変更、rename、削除する場合は、replacement checkを先に成功させてrequired化するか、review済みのbranch protection変更で旧required contextを除去し、そのreadback後にworkflowを変更します。workflowだけを先に削除して全PRをpendingにしません。
@@ -152,3 +153,5 @@ token、project ID、database URLの追加入力はありません。migration�
 - IAM trust policyがフォーク先の実際の2 subjectだけを許可している。
 - GitHubには秘密値と長期AWS credentialがない。
 - canonical smokeまで成功し、対象commitとdeployment IDを確認できる。
+
+Developer API暗号鍵の初期導入・移行・復旧条件は[専用手順](developer-api-encryption-key.md)を参照してください。

@@ -4,8 +4,11 @@ import { test } from "node:test";
 import {
   AwsDeploymentAccessError,
   DEPLOY_ADMIN_PASSWORD_PARAMETER,
+  DEPLOY_DEVELOPER_API_KEY_PARAMETER,
   DEPLOY_CONFIG_PARAMETER,
   DEPLOY_CONTEXT_COMPLETION_MARKER,
+  DEPLOY_KEY_METADATA_MARKER,
+  assertEncryptionKeyMetadata,
   DEPLOY_NEON_API_KEY_PARAMETER,
   DEPLOY_PARAMETER_NAMES,
   DEPLOY_REGION,
@@ -33,7 +36,7 @@ const accountId = "123456789012";
 const kmsKeyArn = `arn:aws:kms:${DEPLOY_REGION}:${accountId}:key/12345678-1234-1234-1234-123456789012`;
 
 const validConfig: StoredDeploymentConfig = {
-  schemaVersion: 1,
+  schemaVersion: 3,
   policyVersion: "demo-v1",
   aws: { accountId, region: DEPLOY_REGION },
   vercel: {
@@ -58,11 +61,12 @@ const validConfig: StoredDeploymentConfig = {
     vercelToken: 4,
     neonApiKey: 5,
     adminPassword: 6,
+    developerApiSettingsEncryptionKey: 1,
   },
 };
 
 const validDraft: StoredDeploymentSetupDraft = {
-  schemaVersion: 2,
+  schemaVersion: 4,
   policyVersion: "demo-v1",
   setupState: "incomplete",
   aws: { accountId, region: DEPLOY_REGION },
@@ -102,9 +106,32 @@ const parameterResponse = (invalid: readonly string[] = []) => ({
       Value: "admin-secret-value",
       Version: 6,
     },
+    {
+      Name: DEPLOY_DEVELOPER_API_KEY_PARAMETER,
+      Type: "SecureString",
+      Value: Buffer.alloc(32, 7).toString("base64"),
+      Version: 1,
+    },
   ].filter((parameter) => !invalid.includes(parameter.Name)),
   InvalidParameters: [...invalid],
 });
+
+const keyMetadata = () => ({
+  Parameters: [
+    {
+      Name: DEPLOY_DEVELOPER_API_KEY_PARAMETER,
+      Type: "SecureString",
+      Tier: "Standard",
+      KeyId: kmsKeyArn,
+      Version: 1,
+    },
+  ],
+});
+const markedContext = (
+  response = parameterResponse(),
+  metadata: unknown = keyMetadata(),
+) =>
+  `${JSON.stringify(response)}\n${DEPLOY_KEY_METADATA_MARKER}\n${JSON.stringify(metadata)}\n${DEPLOY_CONTEXT_COMPLETION_MARKER}\n`;
 
 class RecordingRunner implements CommandRunner {
   readonly calls: Array<{
@@ -148,11 +175,12 @@ function createSuccessfulRunner(): RecordingRunner {
     if (arguments_[0] === "ssm" && arguments_[1] === "get-parameters") {
       return success(parameterResponse());
     }
+    if (arguments_[1] === "describe-parameters") return success(keyMetadata());
     throw new Error(`Unexpected AWS call: ${arguments_.join(" ")}`);
   });
 }
 
-test("loadDeploymentContext performs STS then one exact GetParameters call", () => {
+test("loadDeploymentContext reads exact parameters and encryption key metadata", () => {
   const runner = createSuccessfulRunner();
   const context = loadDeploymentContext(runner, "splai-prd");
 
@@ -163,13 +191,15 @@ test("loadDeploymentContext performs STS then one exact GetParameters call", () 
     vercelToken: "vercel-secret-value",
     neonApiKey: "neon-secret-value",
     adminPassword: "admin-secret-value",
+    developerApiSettingsEncryptionKey: Buffer.alloc(32, 7).toString("base64"),
   });
-  assert.equal(runner.calls.length, 2);
+  assert.equal(runner.calls.length, 3);
   assert.deepEqual(
     runner.calls.map(({ arguments_ }) => arguments_.slice(0, 2)),
     [
       ["sts", "get-caller-identity"],
       ["ssm", "get-parameters"],
+      ["ssm", "describe-parameters"],
     ],
   );
   const getParameters = runner.calls[1].arguments_;
@@ -256,7 +286,7 @@ test("loadDeploymentContext rejects secret version mismatch", () => {
 });
 
 test("stdin deployment context needs no AWS runner or credential files", () => {
-  const payload = `${JSON.stringify(parameterResponse())}\n${DEPLOY_CONTEXT_COMPLETION_MARKER}\n`;
+  const payload = markedContext();
   const context = loadDeploymentContextFromStdin(
     payload,
     accountId,
@@ -572,4 +602,127 @@ test("setup argument parser accepts only the public interface", () => {
     () => parseAwsSetupArguments(["--profile", "splai-prd", "--force"]),
     /Unsupported setup argument/,
   );
+});
+
+test("Developer API key validation and metadata fail closed without exposing values", () => {
+  for (const value of [
+    "",
+    "invalid",
+    Buffer.alloc(31).toString("base64"),
+    `${Buffer.alloc(32).toString("base64")}\n`,
+  ]) {
+    const response = parameterResponse();
+    response.Parameters.find(
+      (p) => p.Name === DEPLOY_DEVELOPER_API_KEY_PARAMETER,
+    )!.Value = value;
+    assert.throws(
+      () => loadDeploymentContextFromStdin(markedContext(response), accountId),
+      InvalidDeploymentConfigurationError,
+    );
+  }
+  for (const patch of [
+    { Type: "String" },
+    { Tier: "Advanced" },
+    { KeyId: "wrong-key" },
+    { Version: 2 },
+    { Name: DEPLOY_ADMIN_PASSWORD_PARAMETER },
+  ]) {
+    const metadata = keyMetadata();
+    Object.assign(metadata.Parameters[0], patch);
+    assert.throws(
+      () =>
+        loadDeploymentContextFromStdin(
+          markedContext(parameterResponse(), metadata),
+          accountId,
+        ),
+      /does not match/,
+    );
+  }
+  assert.throws(
+    () =>
+      assertEncryptionKeyMetadata(
+        JSON.stringify({ Parameters: [] }),
+        validConfig,
+      ),
+    /exactly once/,
+  );
+  assert.throws(
+    () =>
+      assertEncryptionKeyMetadata(
+        JSON.stringify({ ...keyMetadata(), NextToken: "more" }),
+        validConfig,
+      ),
+    /exactly once/,
+  );
+  const response = parameterResponse();
+  response.Parameters.find(
+    (p) => p.Name === DEPLOY_DEVELOPER_API_KEY_PARAMETER,
+  )!.Version = 2;
+  assert.throws(
+    () => loadDeploymentContextFromStdin(markedContext(response), accountId),
+    /version does not match/,
+  );
+  assert.throws(
+    () =>
+      loadDeploymentContextFromStdin(
+        markedContext(parameterResponse([DEPLOY_DEVELOPER_API_KEY_PARAMETER])),
+        accountId,
+      ),
+    MissingDeploymentParametersError,
+  );
+});
+
+test("legacy configs and drafts are accepted only for setup migration", () => {
+  const legacyVersions = { vercelToken: 4, neonApiKey: 5, adminPassword: 6 };
+  const legacy = {
+    ...validConfig,
+    schemaVersion: 1,
+    secretVersions: legacyVersions,
+  };
+  assert.throws(
+    () => parseStoredDeploymentConfig(JSON.stringify(legacy)),
+    /unsupported/,
+  );
+  const migrated = parseStoredDeploymentSetupState(JSON.stringify(legacy));
+  assert.equal(migrated.state, "incomplete");
+  if (migrated.state !== "incomplete")
+    throw new Error("expected migration draft");
+  assert.equal(migrated.draft.schemaVersion, 4);
+  assert.deepEqual(migrated.draft.secretVersions, legacyVersions);
+  assert.equal(
+    migrated.draft.values["vercel.canonicalOrigin"],
+    validConfig.vercel.canonicalOrigin,
+  );
+  const response = parameterResponse();
+  response.Parameters[0].Value = JSON.stringify(legacy);
+  assert.throws(
+    () => loadDeploymentContextFromStdin(markedContext(response), accountId),
+    MissingDeploymentParametersError,
+  );
+  const oldDraft = { ...validDraft, schemaVersion: 2 };
+  assert.deepEqual(parseStoredDeploymentSetupState(JSON.stringify(oldDraft)), {
+    state: "incomplete",
+    draft: validDraft,
+  });
+});
+
+test("KMS metadata access denial stops with no secret-bearing AWS output", () => {
+  const runner = new RecordingRunner((_command, args) => {
+    if (args[0] === "sts") return success({ Account: accountId });
+    if (args[1] === "get-parameters") return success(parameterResponse());
+    return {
+      status: 255,
+      stdout: "synthetic-secret",
+      stderr: "synthetic-secret",
+    };
+  });
+  assert.throws(
+    () => loadDeploymentContext(runner),
+    (error: unknown) => {
+      assert.ok(error instanceof AwsDeploymentAccessError);
+      assert.ok(!error.message.includes("synthetic-secret"));
+      return true;
+    },
+  );
+  assert.equal(runner.calls.length, 3);
 });

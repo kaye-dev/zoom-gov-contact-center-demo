@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   DEPLOY_ADMIN_PASSWORD_PARAMETER,
+  DEPLOY_DEVELOPER_API_KEY_PARAMETER,
   DEPLOY_CONFIG_PARAMETER,
   DEPLOY_KMS_ALIAS,
   DEPLOY_NEON_API_KEY_PARAMETER,
@@ -66,10 +67,11 @@ function createConfig(
     vercelToken: 1,
     neonApiKey: 1,
     adminPassword: 1,
+    developerApiSettingsEncryptionKey: 1,
   },
 ): StoredDeploymentConfig {
   return {
-    schemaVersion: 1,
+    schemaVersion: 3,
     policyVersion: "demo-v1",
     aws: { accountId, region: DEPLOY_REGION },
     vercel: {
@@ -99,7 +101,7 @@ function createDraft(
   values: StoredDeploymentSetupDraft["values"] = completeDraftValues,
 ): StoredDeploymentSetupDraft {
   return {
-    schemaVersion: 2,
+    schemaVersion: 4,
     policyVersion: "demo-v1",
     setupState: "incomplete",
     aws: { accountId, region: DEPLOY_REGION },
@@ -406,6 +408,14 @@ function completeParameters(
         Version: config.secretVersions.adminPassword,
       },
     ],
+    [
+      DEPLOY_DEVELOPER_API_KEY_PARAMETER,
+      {
+        Type: "SecureString",
+        Value: Buffer.alloc(32, 7).toString("base64"),
+        Version: config.secretVersions.developerApiSettingsEncryptionKey,
+      },
+    ],
   ]);
 }
 
@@ -615,12 +625,14 @@ test("initial setup checkpoints every field and prepares each secret version", a
       DEPLOY_CONFIG_PARAMETER,
       DEPLOY_ADMIN_PASSWORD_PARAMETER,
       DEPLOY_CONFIG_PARAMETER,
+      DEPLOY_DEVELOPER_API_KEY_PARAMETER,
+      DEPLOY_CONFIG_PARAMETER,
     ],
   );
 
   const fieldCheckpoints = puts.slice(0, 11).map(({ Value }) => {
     const draft = JSON.parse(Value) as StoredDeploymentSetupDraft;
-    assert.equal(draft.schemaVersion, 2);
+    assert.equal(draft.schemaVersion, 4);
     assert.equal(draft.setupState, "incomplete");
     return Object.keys(draft.values).length;
   });
@@ -648,7 +660,7 @@ test("initial setup checkpoints every field and prepares each secret version", a
     neonApiKey: 1,
     adminPassword: 1,
   });
-  assert.equal(JSON.parse(puts[17]?.Value ?? "{}").schemaVersion, 1);
+  assert.equal(JSON.parse(puts.at(-1)?.Value ?? "{}").schemaVersion, 3);
 
   for (const input of puts) {
     if (input.Name === DEPLOY_CONFIG_PARAMETER) {
@@ -769,7 +781,7 @@ test("in-progress setup displays all saved, missing, and retry-required items wi
       .split("\n")
       .filter((line) => /^  \[(?:保存済み|未設定|再入力が必要)\]/.test(line))
       .length,
-    13,
+    14,
     status,
   );
   assert.match(status, /\[保存済み\] Vercel team ID: team_abc123/);
@@ -849,6 +861,8 @@ test("in-progress setup resumes without re-prompting saved fields and secret", a
       DEPLOY_CONFIG_PARAMETER,
       DEPLOY_ADMIN_PASSWORD_PARAMETER,
       DEPLOY_CONFIG_PARAMETER,
+      DEPLOY_DEVELOPER_API_KEY_PARAMETER,
+      DEPLOY_CONFIG_PARAMETER,
     ],
   );
 });
@@ -890,6 +904,8 @@ test("prepared secret version resumes after a crash before SecureString write", 
       DEPLOY_NEON_API_KEY_PARAMETER,
       DEPLOY_CONFIG_PARAMETER,
       DEPLOY_ADMIN_PASSWORD_PARAMETER,
+      DEPLOY_CONFIG_PARAMETER,
+      DEPLOY_DEVELOPER_API_KEY_PARAMETER,
       DEPLOY_CONFIG_PARAMETER,
     ],
   );
@@ -1038,6 +1054,7 @@ test("completed setup menu updates only one visible field", async () => {
     vercelToken: 1,
     neonApiKey: 1,
     adminPassword: 1,
+    developerApiSettingsEncryptionKey: 1,
   });
 });
 
@@ -1068,7 +1085,7 @@ test("completed setup menu rotates only one selected secret", async () => {
   const prepared = JSON.parse(
     puts[0]?.Value ?? "{}",
   ) as StoredDeploymentSetupDraft;
-  assert.equal(prepared.schemaVersion, 2);
+  assert.equal(prepared.schemaVersion, 4);
   assert.equal(prepared.secretVersions.neonApiKey, 2);
   assert.equal(
     runner.parameters.get(DEPLOY_VERCEL_TOKEN_PARAMETER)?.Value,
@@ -1263,11 +1280,12 @@ test("rotating one secret updates only its version and config", async () => {
   const prepared = JSON.parse(
     puts[0]?.Value ?? "{}",
   ) as StoredDeploymentSetupDraft;
-  assert.equal(prepared.schemaVersion, 2);
+  assert.equal(prepared.schemaVersion, 4);
   assert.deepEqual(prepared.secretVersions, {
     vercelToken: 1,
     neonApiKey: 2,
     adminPassword: 1,
+    developerApiSettingsEncryptionKey: 1,
   });
   const storedConfig = JSON.parse(
     runner.parameters.get(DEPLOY_CONFIG_PARAMETER)?.Value ?? "{}",
@@ -1276,6 +1294,7 @@ test("rotating one secret updates only its version and config", async () => {
     vercelToken: 1,
     neonApiKey: 2,
     adminPassword: 1,
+    developerApiSettingsEncryptionKey: 1,
   });
   assert.equal(
     runner.parameters.get(DEPLOY_NEON_API_KEY_PARAMETER)?.Value,
@@ -1365,5 +1384,230 @@ test("reconfigure preserves all secret versions", async () => {
     vercelToken: 1,
     neonApiKey: 1,
     adminPassword: 1,
+    developerApiSettingsEncryptionKey: 1,
   });
+});
+
+function legacyParameters(schema: 1 | 2 = 1): Map<string, StoredParameter> {
+  const parameters = completeParameters();
+  parameters.delete(DEPLOY_DEVELOPER_API_KEY_PARAMETER);
+  const versions = { vercelToken: 1, neonApiKey: 1, adminPassword: 1 };
+  const legacy =
+    schema === 1
+      ? { ...createConfig(), schemaVersion: 1, secretVersions: versions }
+      : { ...createDraft(versions), schemaVersion: 2 };
+  parameters.set(DEPLOY_CONFIG_PARAMETER, {
+    Type: "String",
+    Value: JSON.stringify(legacy),
+    Version: 1,
+  });
+  return parameters;
+}
+
+const setupOptions = { profile: "splai-prd", reconfigure: false };
+
+test("legacy complete and incomplete setup preserve existing secrets and create the encryption key once", async () => {
+  for (const schema of [1, 2] as const) {
+    const runner = new AwsSetupRunner({
+      parameters: legacyParameters(schema),
+      hasKms: true,
+      aliasPresent: true,
+      rotationEnabled: true,
+      rotationPeriodInDays: 365,
+    });
+    const registry = new SecretRegistry();
+    const before = new Map(runner.parameters);
+    await runAwsSetup(
+      runner,
+      new SetupPrompter([`setup ${accountId}`]),
+      registry,
+      setupOptions,
+      providerFetch,
+    );
+    const key = runner.parameters.get(DEPLOY_DEVELOPER_API_KEY_PARAMETER)!;
+    assert.equal(Buffer.from(key.Value, "base64").length, 32);
+    assert.equal(key.Version, 1);
+    assert.equal(registry.redact(key.Value), "[REDACTED]");
+    const keyWrites = parameterPutInputs(runner).filter(
+      (p) => p.Name === DEPLOY_DEVELOPER_API_KEY_PARAMETER,
+    );
+    assert.equal(keyWrites.length, 1);
+    assert.equal(keyWrites[0].Overwrite, false);
+    assert.equal(keyWrites[0].KeyId, kmsKeyArn);
+    for (const name of [
+      DEPLOY_VERCEL_TOKEN_PARAMETER,
+      DEPLOY_NEON_API_KEY_PARAMETER,
+      DEPLOY_ADMIN_PASSWORD_PARAMETER,
+    ]) {
+      assert.deepEqual(runner.parameters.get(name), before.get(name));
+    }
+    assert.equal(
+      JSON.parse(runner.parameters.get(DEPLOY_CONFIG_PARAMETER)!.Value)
+        .schemaVersion,
+      3,
+    );
+    const count = parameterPutInputs(runner).length;
+    await runAwsSetup(
+      runner,
+      new SetupPrompter([""]),
+      registry,
+      setupOptions,
+      providerFetch,
+    );
+    assert.equal(parameterPutInputs(runner).length, count);
+    assert.deepEqual(
+      runner.parameters.get(DEPLOY_DEVELOPER_API_KEY_PARAMETER),
+      key,
+    );
+    assert.ok(
+      !JSON.stringify(
+        runner.calls.filter((c) => c.arguments_[1] !== "put-parameter"),
+      ).includes(key.Value),
+    );
+  }
+});
+
+test("setup resumes crashes before and after key creation without overwriting a saved key", async () => {
+  for (const crashAfterWrite of [false, true]) {
+    const runner = new AwsSetupRunner({
+      parameters: legacyParameters(),
+      hasKms: true,
+      aliasPresent: true,
+      rotationEnabled: true,
+      rotationPeriodInDays: 365,
+    });
+    const baseWriter = createTestParameterWriter(runner);
+    const writer: DeploymentParameterWriter = {
+      async put(input) {
+        if (input.Name === DEPLOY_DEVELOPER_API_KEY_PARAMETER) {
+          if (crashAfterWrite) await baseWriter.put(input, "test");
+          throw new Error("simulated interruption");
+        }
+        return baseWriter.put(input, "test");
+      },
+      destroy() {},
+    };
+    await assert.rejects(
+      runAwsSetupImplementation(
+        runner,
+        new SetupPrompter([`setup ${accountId}`]),
+        new SecretRegistry(),
+        setupOptions,
+        providerFetch,
+        writer,
+      ),
+      /simulated interruption/,
+    );
+    const saved = runner.parameters.get(DEPLOY_DEVELOPER_API_KEY_PARAMETER);
+    await runAwsSetup(
+      runner,
+      new SetupPrompter([`setup ${accountId}`]),
+      new SecretRegistry(),
+      setupOptions,
+      providerFetch,
+    );
+    const key = runner.parameters.get(DEPLOY_DEVELOPER_API_KEY_PARAMETER)!;
+    assert.equal(key.Version, 1);
+    if (saved) assert.deepEqual(key, saved);
+    assert.equal(
+      parameterPutInputs(runner).filter(
+        (p) => p.Name === DEPLOY_DEVELOPER_API_KEY_PARAMETER,
+      ).length,
+      1,
+    );
+  }
+});
+
+test("missing, invalid, orphaned or mismatched registered encryption keys never trigger writes", async () => {
+  for (const mode of [
+    "missing",
+    "invalid",
+    "version",
+    "kms",
+    "orphan",
+    "legacy-missing-secret",
+  ] as const) {
+    const parameters =
+      mode === "orphan" || mode === "legacy-missing-secret"
+        ? legacyParameters()
+        : completeParameters();
+    if (mode === "missing")
+      parameters.delete(DEPLOY_DEVELOPER_API_KEY_PARAMETER);
+    if (mode === "invalid")
+      parameters.get(DEPLOY_DEVELOPER_API_KEY_PARAMETER)!.Value =
+        "synthetic-invalid-key";
+    if (mode === "version")
+      parameters.get(DEPLOY_DEVELOPER_API_KEY_PARAMETER)!.Version = 2;
+    if (mode === "kms")
+      parameters.get(DEPLOY_DEVELOPER_API_KEY_PARAMETER)!.KeyId = "wrong-key";
+    if (mode === "orphan")
+      parameters.set(DEPLOY_DEVELOPER_API_KEY_PARAMETER, {
+        Type: "SecureString",
+        Value: Buffer.alloc(32).toString("base64"),
+        Version: 1,
+      });
+    if (mode === "legacy-missing-secret")
+      parameters.delete(DEPLOY_ADMIN_PASSWORD_PARAMETER);
+    const runner = new AwsSetupRunner({
+      parameters,
+      hasKms: true,
+      aliasPresent: true,
+      rotationEnabled: true,
+      rotationPeriodInDays: 365,
+    });
+    await assert.rejects(
+      runAwsSetup(
+        runner,
+        new SetupPrompter(),
+        new SecretRegistry(),
+        setupOptions,
+        providerFetch,
+      ),
+    );
+    assert.equal(parameterPutInputs(runner).length, 0, mode);
+  }
+});
+
+
+test("a registered key lost during another secret update is never regenerated", async () => {
+  const parameters = completeParameters();
+  parameters.delete(DEPLOY_DEVELOPER_API_KEY_PARAMETER);
+  parameters.set(DEPLOY_CONFIG_PARAMETER, { Type: "String", Value: JSON.stringify(createDraft(createConfig().secretVersions)), Version: 2 });
+  const runner = new AwsSetupRunner({ parameters, hasKms: true, aliasPresent: true, rotationEnabled: true, rotationPeriodInDays: 365 });
+  await assert.rejects(runAwsSetup(runner, new SetupPrompter(), new SecretRegistry(), setupOptions, providerFetch), /Restore the original key/);
+  assert.equal(parameterPutInputs(runner).length, 0);
+});
+
+test("concurrent key creation fails without overwriting the competing value", async () => {
+  const runner = new AwsSetupRunner({ parameters: legacyParameters(), hasKms: true, aliasPresent: true, rotationEnabled: true, rotationPeriodInDays: 365 });
+  const baseWriter = createTestParameterWriter(runner);
+  const competingValue = Buffer.alloc(32, 99).toString("base64");
+  const writer: DeploymentParameterWriter = {
+    async put(input) {
+      if (input.Name === DEPLOY_DEVELOPER_API_KEY_PARAMETER) {
+        assert.equal(input.Overwrite, false);
+        runner.parameters.set(input.Name, { Type: "SecureString", Value: competingValue, Version: 1 });
+        throw new Error("ParameterAlreadyExists");
+      }
+      return baseWriter.put(input, "test");
+    }, destroy() {},
+  };
+  await assert.rejects(runAwsSetupImplementation(runner, new SetupPrompter([`setup ${accountId}`]), new SecretRegistry(), setupOptions, providerFetch, writer), /ParameterAlreadyExists/);
+  assert.equal(runner.parameters.get(DEPLOY_DEVELOPER_API_KEY_PARAMETER)!.Value, competingValue);
+  assert.equal(JSON.parse(runner.parameters.get(DEPLOY_CONFIG_PARAMETER)!.Value).schemaVersion, 4);
+});
+
+
+test("malformed setup config never exposes its contents in an error", async () => {
+  const parameters = completeParameters();
+  const secret = "synthetic-config-fragment-secret";
+  parameters.get(DEPLOY_CONFIG_PARAMETER)!.Value = `{"secret":"${secret}"`;
+  const runner = new AwsSetupRunner({ parameters });
+  await assert.rejects(runAwsSetup(runner, new SetupPrompter(), new SecretRegistry(), setupOptions, providerFetch), (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.match(error.message, /invalid JSON/);
+    assert.ok(!error.message.includes(secret));
+    return true;
+  });
+  assert.equal(parameterPutInputs(runner).length, 0);
 });
