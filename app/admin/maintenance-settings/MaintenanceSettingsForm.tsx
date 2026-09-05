@@ -1,5 +1,7 @@
 "use client";
 
+import { AdminPageTitleHelp } from "@/app/components/admin/AdminPageTitleHelp";
+
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 
@@ -287,13 +289,14 @@ export function MaintenanceSettingsForm({
       <div data-admin-page-chrome className="space-y-4">
         <div
           data-admin-page-header
-          className="mx-auto flex max-w-5xl flex-wrap items-start justify-between gap-4"
+          className="ml-1 mr-0 flex max-w-5xl flex-wrap items-start justify-between gap-4"
         >
           <div className="max-w-3xl space-y-2">
-            <h1 className="text-2xl font-bold">{copy.title}</h1>
-            <p className="text-sm leading-6 text-fg-muted">
-              {copy.description}
-            </p>
+            <AdminPageTitleHelp
+              title={copy.title}
+              description={copy.description}
+              label={t.admin.pageDescriptionLabel.replace("{title}", copy.title)}
+            />
           </div>
           <span
             className={`inline-flex rounded-full border px-3 py-1 text-sm font-bold ${environmentBadgeClass(environment)}`}
@@ -304,7 +307,7 @@ export function MaintenanceSettingsForm({
         <AdminSectionNavigation />
       </div>
 
-      <div data-admin-page-body className="mx-auto mt-6 max-w-5xl space-y-6">
+      <div data-admin-page-body className="ml-1 mr-0 mt-6 max-w-5xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface-raised p-4 shadow-sm">
         <h2 className="font-bold">{copy.effectiveStateTitle}</h2>
         <p

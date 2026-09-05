@@ -145,6 +145,15 @@ test("the admin root renders the dashboard instead of redirecting away", () => {
   assert.doesNotMatch(page, /redirect\(/u);
 });
 
+test("PHONE-ALIGN-11: phone header and form align to first tab text without changing full-width navigation", () => {
+  const phone = source("../app/admin/phone-settings/PhoneSettingsForm.tsx");
+  const tabs = source("../app/admin/AdminSectionNavigation.tsx");
+  assert.match(phone, /data-admin-page-header\s+className="ml-1 mr-0 max-w-4xl/);
+  assert.match(phone, /data-admin-page-body className="ml-1 mr-0 mt-6 max-w-4xl/);
+  assert.doesNotMatch(phone, /mx-auto/);
+  assert.match(tabs, /px-1/);
+});
+
 test("every users and settings page places section navigation between header and body", () => {
   for (const file of [
     "../app/admin/users/UsersView.tsx",

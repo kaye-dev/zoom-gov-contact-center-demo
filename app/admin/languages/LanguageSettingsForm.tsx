@@ -1,5 +1,7 @@
 "use client";
 
+import { AdminPageTitleHelp } from "@/app/components/admin/AdminPageTitleHelp";
+
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
@@ -114,19 +116,18 @@ export function LanguageSettingsForm({
       <div data-admin-page-chrome className="space-y-4">
         <div
           data-admin-page-header
-          className="mx-auto max-w-3xl space-y-2"
+          className="ml-1 mr-0 max-w-3xl space-y-2"
         >
-          <h1 className="text-2xl font-bold">
-            {t.admin.languageManagement.title}
-          </h1>
-          <p className="text-sm leading-6 text-fg-muted">
-            {t.admin.languageManagement.description}
-          </p>
+          <AdminPageTitleHelp
+            title={t.admin.languageManagement.title}
+            description={t.admin.languageManagement.description}
+            label={t.admin.pageDescriptionLabel.replace("{title}", t.admin.languageManagement.title)}
+          />
         </div>
         <AdminSectionNavigation />
       </div>
 
-      <div data-admin-page-body className="mx-auto mt-6 max-w-3xl">
+      <div data-admin-page-body className="ml-1 mr-0 mt-6 max-w-3xl">
       <form
         onSubmit={submit}
         className="space-y-5 rounded-lg border border-line bg-surface-raised p-5 shadow-sm md:p-6"

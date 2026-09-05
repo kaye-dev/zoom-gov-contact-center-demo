@@ -214,7 +214,8 @@ test("role and user screens follow the compact prototype structure and single-ro
   const userDetails = source("../app/admin/users/[id]/UserDetailsView.tsx");
   const userDetailsPage = source("../app/admin/users/[id]/page.tsx");
 
-  assert.match(list, /text-2xl/);
+  assert.match(list, /<AdminPageTitleHelp/);
+  assert.match(source("../app/components/admin/AdminPageTitleHelp.tsx"), /text-2xl/);
   assert.match(details, /min-w-\[980px\]/);
   assert.match(details, /adminAttribute/);
   assert.match(details, /banned/);

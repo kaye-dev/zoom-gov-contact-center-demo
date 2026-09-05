@@ -1,5 +1,7 @@
 "use client";
 
+import { AdminPageTitleHelp } from "@/app/components/admin/AdminPageTitleHelp";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState, type FormEvent } from "react";
@@ -92,15 +94,14 @@ export function RolesView({
       <div data-admin-page-chrome className="space-y-4">
         <div
           data-admin-page-header
-          className="flex flex-col gap-4 sm:flex-row sm:items-start"
+          className="ml-1 mr-0 flex flex-col gap-4 sm:flex-row sm:items-start"
         >
           <div className="space-y-2">
-            <h1 className="text-2xl font-bold">
-              {total} {copy.roleCount}
-            </h1>
-            <p className="max-w-3xl text-sm leading-6 text-fg-muted">
-              {copy.listDescription}
-            </p>
+            <AdminPageTitleHelp
+              title={`${total} ${copy.roleCount}`}
+              description={copy.listDescription}
+              label={t.admin.pageDescriptionLabel.replace("{title}", `${total} ${copy.roleCount}`)}
+            />
           </div>
           <button
             type="button"
@@ -115,7 +116,7 @@ export function RolesView({
         <AdminSectionNavigation />
       </div>
 
-      <div data-admin-page-body className="mt-6 space-y-6">
+      <div data-admin-page-body className="ml-1 mr-0 mt-6 space-y-6">
       {!canCreate ? (
         <p
           id="roles-read-only-reason"
@@ -160,7 +161,7 @@ export function RolesView({
         </form>
       ) : null}
 
-      <div className="max-w-full overflow-x-auto rounded-lg border border-line">
+      <div className="relative max-w-full overflow-x-auto rounded-lg border border-line">
         <table className="w-full min-w-[880px] divide-y divide-line-subtle text-sm">
           <thead className="bg-surface-raised">
             <tr>

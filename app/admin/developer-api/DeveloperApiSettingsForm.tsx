@@ -1,5 +1,7 @@
 "use client";
 
+import { AdminPageTitleHelp } from "@/app/components/admin/AdminPageTitleHelp";
+
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
@@ -233,10 +235,13 @@ export function DeveloperApiSettingsForm({ initialSettings, canEdit }: Props) {
       <div data-admin-page-chrome className="space-y-4">
         <div
           data-admin-page-header
-          className="mx-auto max-w-5xl space-y-2"
+          className="ml-1 mr-0 max-w-5xl space-y-2"
         >
-          <h1 className="text-2xl font-bold">{copy.title}</h1>
-          <p className="text-sm leading-6 text-fg-muted">{copy.description}</p>
+          <AdminPageTitleHelp
+            title={copy.title}
+            description={copy.description}
+            label={t.admin.pageDescriptionLabel.replace("{title}", copy.title)}
+          />
         </div>
         <AdminSectionNavigation />
       </div>
@@ -244,7 +249,7 @@ export function DeveloperApiSettingsForm({ initialSettings, canEdit }: Props) {
       <div
         id="developer-api-form"
         data-admin-page-body
-        className="mx-auto mt-6 max-w-5xl space-y-6"
+        className="ml-1 mr-0 mt-6 max-w-5xl space-y-6"
       >
         <form
           id="server-to-server-oauth-form"

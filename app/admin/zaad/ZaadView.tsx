@@ -11,6 +11,7 @@ import {
 } from "react";
 
 import { ModalDialog } from "@/app/components/admin/ModalDialog";
+import { SearchInput } from "@/app/components/admin/SearchInput";
 import { Checkbox } from "@/app/components/Checkbox";
 import { Select } from "@/app/components/Select";
 import { useI18n } from "@/app/i18n/LanguageProvider";
@@ -29,6 +30,9 @@ import {
   ZAAD_LIMITS,
   ZAAD_VOICES,
 } from "@/lib/zaad/contracts";
+
+import { ZaadTitleHelp } from "./ZaadTitleHelp";
+import { createResidentSearch, formatResidentCount } from "./resident-search";
 
 export type ZaadViewKey =
   | "residents"
@@ -205,8 +209,18 @@ export function ZaadView({
   const [connection, setConnection] = useState(
     reviewConnection ?? (reviewMode ? "connected" : "checking"),
   );
-  const [residents, setResidents] =
-    useState<ResidentPayload>(syntheticResidents);
+  const [residents, setResidents] = useState<ResidentPayload>(
+    reviewMode && initialPageState !== "empty"
+      ? syntheticResidents
+      : emptyResidents,
+  );
+  const [residentsLoaded, setResidentsLoaded] = useState(
+    reviewMode && initialPageState !== "pending" && initialPageState !== "failure",
+  );
+  const [residentBusy, setResidentBusy] = useState(false);
+  const residentSearch = useRef<ReturnType<
+    typeof createResidentSearch<ResidentPayload>
+  > | null>(null);
   const [messages, setMessages] = useState<Message[]>(syntheticMessages);
   const [contactLists, setContactLists] = useState<ContactList[]>(
     syntheticContactLists,
@@ -214,7 +228,7 @@ export function ZaadView({
   const [campaigns, setCampaigns] = useState<Campaign[]>(syntheticCampaigns);
   const [setting, setSetting] = useState<RegistrationSetting>(syntheticSetting);
   const [selectedResidentId, setSelectedResidentId] = useState(
-    syntheticResidents.residents[0].id,
+    reviewMode ? syntheticResidents.residents[0].id : "",
   );
   const [selectedMessageId, setSelectedMessageId] = useState(
     reviewSurface === "message-form" && reviewDialogMode === "create"
@@ -233,7 +247,6 @@ export function ZaadView({
       ? syntheticCampaigns[1].id
       : syntheticCampaigns[0].id,
   );
-  const [residentCursor, setResidentCursor] = useState<string | null>(null);
   const [residentCursorHistory, setResidentCursorHistory] = useState<
     Array<string | null>
   >([]);
@@ -282,8 +295,8 @@ export function ZaadView({
     null;
 
   useEffect(() => {
-    if (state === "failure") focusStatus("zaad-page-error");
-  }, [errorCode, state]);
+    if (state === "failure" && view !== "residents") focusStatus("zaad-page-error");
+  }, [errorCode, state, view]);
 
   useEffect(() => {
     if (feedback) focusStatus("zaad-page-feedback");
@@ -294,6 +307,7 @@ export function ZaadView({
     const restoreViewFromHistory = () => {
       const url = new URL(window.location.href);
       if (url.pathname !== zaadPathname) return;
+      if (zaadViewFromUrl(url) !== "residents") residentSearch.current?.dispose();
       setState("pending");
       setErrorCode(null);
       setErrorDetails([]);
@@ -322,21 +336,38 @@ export function ZaadView({
   }, [reviewMode]);
 
   useEffect(() => {
+    if (reviewMode || view !== "residents") return;
+    const controller = createResidentSearch<ResidentPayload>({
+      request: (query, cursor) => {
+        const params = new URLSearchParams();
+        if (query) params.set("query", query);
+        if (cursor) params.set("cursor", cursor);
+        return requestJson<ResidentPayload>(`/api/admin/zaad/residents${params.size ? `?${params.toString()}` : ""}`);
+      },
+      onBusy: setResidentBusy,
+      onPending: () => { setState("pending"); setErrorCode(null); },
+      onResult: (body, page) => {
+        setResidents(body);
+        setResidentsLoaded(true);
+        setSelectedResidentId(body.residents[0]?.id ?? "");
+        setResidentCursorHistory(page.history);
+        setState(body.residents.length ? "ready" : "empty");
+      },
+      onError: (error) => {
+        setErrorCode(error instanceof ZaadUiError ? error.code : "ZAAD_UNKNOWN");
+        setState("failure");
+      },
+    });
+    residentSearch.current = controller;
+    void controller.start();
+    return () => { controller.dispose(); residentSearch.current = null; };
+  }, [reviewMode, view]);
+
+  useEffect(() => {
     if (reviewMode) return;
     let active = true;
     const load = async () => {
-      if (view === "residents") {
-        const body = await requestJson<ResidentPayload>(
-          "/api/admin/zaad/residents",
-        );
-        if (active) {
-          setResidents(body);
-          setSelectedResidentId(body.residents[0]?.id ?? "");
-          setResidentCursor(null);
-          setResidentCursorHistory([]);
-          setState(body.residents.length ? "ready" : "empty");
-        }
-      } else if (view === "messages") {
+      if (view === "messages") {
         const body = await requestJson<{ messages: Message[] }>(
           "/api/admin/zaad/messages",
         );
@@ -414,6 +445,7 @@ export function ZaadView({
 
   const changeView = (next: ZaadViewKey) => {
     if (next === view) return;
+    residentSearch.current?.dispose();
     setState("pending");
     setErrorCode(null);
     setErrorDetails([]);
@@ -426,9 +458,13 @@ export function ZaadView({
 
   const refresh = () => {
     if (reviewMode) return;
+    if (view === "residents") {
+      residentSearch.current?.refresh();
+      return;
+    }
     setState("pending");
     const current = view;
-    setView(current === "residents" ? "messages" : "residents");
+    setView("residents");
     queueMicrotask(() => setView(current));
   };
 
@@ -437,27 +473,6 @@ export function ZaadView({
     setErrorCode(null);
     setErrorDetails([]);
     setDialog(next);
-  };
-
-  const loadResidentPage = async (query: string, cursor: string | null) => {
-    setState("pending");
-    setErrorCode(null);
-    try {
-      const params = new URLSearchParams();
-      if (query.trim()) params.set("query", query.trim());
-      if (cursor) params.set("cursor", cursor);
-      const body = await requestJson<ResidentPayload>(
-        `/api/admin/zaad/residents${params.size ? `?${params.toString()}` : ""}`,
-      );
-      setResidents(body);
-      setSelectedResidentId(body.residents[0]?.id ?? "");
-      setState(body.residents.length ? "ready" : "empty");
-      return true;
-    } catch (cause) {
-      setErrorCode(cause instanceof ZaadUiError ? cause.code : "ZAAD_UNKNOWN");
-      setState("failure");
-      return false;
-    }
   };
 
   const loadContactListPage = async (token: string | null) => {
@@ -504,21 +519,18 @@ export function ZaadView({
     <div id="zaad-page" className="min-w-0" data-review-state={state}>
       <header
         id="zaad-content"
-        className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"
+        className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end"
       >
         <div className="max-w-4xl">
           <p className="text-sm font-semibold text-accent">{copy.eyebrow}</p>
-          <h1 className="mt-1 text-3xl font-bold text-fg">{copy.title}</h1>
-          <p className="mt-3 text-sm leading-7 text-fg-muted md:text-base">
-            {copy.description}
-          </p>
+          <ZaadTitleHelp title={copy.title} description={copy.description} label={copy.infoLabel} />
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex min-w-0 flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:flex-nowrap">
           <ConnectionBadge state={connection} copy={copy} />
           {canViewDeveloperApi ? (
             <Link
               href="/admin/developer-api"
-              className="min-h-11 rounded-md border border-line px-4 py-2.5 text-sm font-semibold text-accent transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="min-h-11 shrink-0 whitespace-nowrap rounded-md border border-line px-4 py-2.5 text-sm font-semibold text-accent transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               {copy.apiSettings}
             </Link>
@@ -527,7 +539,7 @@ export function ZaadView({
               role="link"
               aria-disabled="true"
               aria-describedby="zaad-developer-api-permission-reason"
-              className="min-h-11 cursor-not-allowed rounded-md border border-line px-4 py-2.5 text-sm font-semibold text-fg-muted opacity-60"
+              className="min-h-11 shrink-0 whitespace-nowrap cursor-not-allowed rounded-md border border-line px-4 py-2.5 text-sm font-semibold text-fg-muted opacity-60"
             >
               {copy.apiSettings}
             </span>
@@ -579,33 +591,15 @@ export function ZaadView({
         <ResidentsSection
           state={state}
           residents={residents}
+          loaded={residentsLoaded}
+          busy={residentBusy}
+          locale={locale}
           permissions={permissions}
           copy={copy}
-          onSearch={async (query) => {
-            if (reviewMode) return;
-            if (await loadResidentPage(query, null)) {
-              setResidentCursor(null);
-              setResidentCursorHistory([]);
-            }
-          }}
-          onPrevious={async (query) => {
-            const previousCursor = residentCursorHistory.at(-1) ?? null;
-            if (await loadResidentPage(query, previousCursor)) {
-              setResidentCursor(previousCursor);
-              setResidentCursorHistory((current) => current.slice(0, -1));
-            }
-          }}
-          onNext={async (query) => {
-            const nextCursor = residents.nextCursor;
-            if (!nextCursor) return;
-            if (await loadResidentPage(query, nextCursor)) {
-              setResidentCursorHistory((current) => [
-                ...current,
-                residentCursor,
-              ]);
-              setResidentCursor(nextCursor);
-            }
-          }}
+          onSearch={(query, composing) => residentSearch.current?.input(query, composing)}
+          onPrevious={() => residentSearch.current?.previous()}
+          onNext={() => residentSearch.current?.next(residents.nextCursor)}
+          onReload={() => residentSearch.current?.refresh()}
           canGoPrevious={residentCursorHistory.length > 0}
           onSelect={setSelectedResidentId}
           onCreate={() => openDialog("resident-create")}
@@ -620,18 +614,13 @@ export function ZaadView({
           onRetry={async (resident) => {
             if (!mutationGuard.begin()) return;
             try {
-              const { resident: updated } = await requestJson<{
+              await requestJson<{
                 resident: Resident;
               }>(`/api/admin/zaad/residents/${resident.id}/retry`, {
                 method: "POST",
                 body: JSON.stringify({ revision: resident.revision }),
               });
-              setResidents((current) => ({
-                ...current,
-                residents: current.residents.map((item) =>
-                  item.id === updated.id ? updated : item,
-                ),
-              }));
+              residentSearch.current?.refresh();
               setFeedback(copy.common.success);
             } catch (cause) {
               captureZaadError(cause, setErrorCode, setErrorDetails);
@@ -843,11 +832,15 @@ type OneTimeRequest = {
 function ResidentsSection({
   state,
   residents,
+  loaded,
+  busy,
+  locale,
   permissions,
   copy,
   onSearch,
   onPrevious,
   onNext,
+  onReload,
   canGoPrevious,
   onSelect,
   onCreate,
@@ -858,11 +851,15 @@ function ResidentsSection({
 }: {
   state: UiState;
   residents: ResidentPayload;
+  loaded: boolean;
+  busy: boolean;
+  locale: string;
   permissions: PermissionSet;
   copy: ZaadDictionary;
-  onSearch: (query: string) => void;
-  onPrevious: (query: string) => void;
-  onNext: (query: string) => void;
+  onSearch: (query: string, composing: boolean) => void;
+  onPrevious: () => void;
+  onNext: () => void;
+  onReload: () => void;
   canGoPrevious: boolean;
   onSelect: (id: string) => void;
   onCreate: () => void;
@@ -872,7 +869,9 @@ function ResidentsSection({
   onCsv: () => void;
 }) {
   const [query, setQuery] = useState("");
-  const pending = state === "pending";
+  const composing = useRef(false);
+  const pending = state === "pending" || busy;
+  const count = loaded ? formatResidentCount(copy.residents.count, residents.metrics.total, locale) : null;
   return (
     <section
       data-zaad-view="residents"
@@ -910,63 +909,50 @@ function ResidentsSection({
           </ActionButton>
         </div>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric label={copy.residents.total} value={residents.metrics.total} />
-        <Metric
-          label={copy.residents.consented}
-          value={residents.metrics.consented}
-        />
-        <Metric
-          label={copy.residents.synced}
-          value={residents.metrics.synced}
-        />
-        <Metric
-          label={copy.residents.needsAttention}
-          value={residents.metrics.needsAttention}
-          warning
-        />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-busy={pending}>
+        {loaded ? (
+          <>
+            <Metric label={copy.residents.total} value={residents.metrics.total} />
+            <Metric label={copy.residents.consented} value={residents.metrics.consented} />
+            <Metric label={copy.residents.synced} value={residents.metrics.synced} />
+            <Metric label={copy.residents.needsAttention} value={residents.metrics.needsAttention} warning />
+          </>
+        ) : (
+          [copy.residents.total, copy.residents.consented, copy.residents.synced, copy.residents.needsAttention].map((label) => (
+            <div key={label} className="rounded-lg border border-line bg-surface-raised p-5">
+              <p className="text-sm text-fg-muted">{label}</p>
+              <div aria-hidden="true" className={`mt-2 h-9 w-16 rounded bg-surface-hover ${pending ? "animate-pulse motion-reduce:animate-none" : ""}`} />
+            </div>
+          ))
+        )}
       </div>
-      <form
-        className="flex flex-col gap-3 sm:flex-row"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSearch(query);
+      <SearchInput
+        id="zaad-search"
+        label={copy.residents.searchPlaceholder}
+        value={query}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          onSearch(event.target.value, composing.current);
         }}
-      >
-        <label htmlFor="zaad-search" className="sr-only">
-          {copy.residents.searchPlaceholder}
-        </label>
-        <input
-          id="zaad-search"
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          disabled={pending}
-          placeholder={copy.residents.searchPlaceholder}
-          className={`${inputClassName} min-w-0 flex-1`}
-        />
-        <button
-          type="submit"
-          disabled={pending}
-          className={secondaryButtonClass}
-        >
-          {copy.common.search}
-        </button>
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => {
-            setQuery("");
-            onSearch("");
-          }}
-          className={secondaryButtonClass}
-        >
-          {copy.common.clear}
-        </button>
-      </form>
+        onCompositionStart={(event) => {
+          composing.current = true;
+          onSearch(event.currentTarget.value, true);
+        }}
+        onCompositionEnd={(event) => {
+          composing.current = false;
+          setQuery(event.currentTarget.value);
+          onSearch(event.currentTarget.value, false);
+        }}
+        placeholder={copy.residents.searchPlaceholder}
+        aria-controls="zaad-table-region"
+      />
+      <p role="status" aria-live="polite" className="sr-only">
+        {pending ? copy.common.loading : state === "failure" ? copy.common.failure : count === null ? "" : `${copy.residents.heading}${count}`}
+      </p>
       <section
         id="zaad-table-region"
         aria-labelledby="zaad-results-heading"
+        aria-busy={pending}
         className="space-y-3"
       >
         <div className="flex items-end justify-between">
@@ -974,21 +960,22 @@ function ResidentsSection({
             <h3
               id="zaad-results-heading"
               tabIndex={-1}
-              className="text-lg font-bold"
+              className="flex flex-wrap items-baseline gap-x-1 text-lg font-bold"
             >
               {copy.residents.heading}
+              {count !== null ? <span className="text-sm font-medium text-fg-muted whitespace-nowrap">{count}</span> : null}
             </h3>
-            <p className="text-xs text-fg-muted">{residents.metrics.total}</p>
           </div>
         </div>
-        {pending ? (
+        {state === "pending" ? (
           <PendingPanel copy={copy} />
+        ) : state === "failure" ? (
+          <div className="space-y-3 rounded-lg border border-line px-5 py-10 text-center text-sm text-fg-muted">
+            <p>{copy.common.failure}</p>
+            <ActionButton onClick={onReload} disabled={pending} variant="secondary">{copy.common.retry}</ActionButton>
+          </div>
         ) : state === "empty" || residents.residents.length === 0 ? (
           <EmptyPanel copy={copy} />
-        ) : state === "failure" ? (
-          <p className="rounded-lg border border-line px-5 py-10 text-center text-sm text-fg-muted">
-            {copy.common.failure}
-          </p>
         ) : (
           <div className="mt-3 overflow-x-auto rounded-lg border border-line">
             <table className="w-full min-w-[1050px] divide-y divide-line-subtle text-sm">
@@ -1060,7 +1047,7 @@ function ResidentsSection({
                           "ZAAD_ZOOM_RESULT_UNKNOWN" ? (
                           <ActionButton
                             onClick={() => onRetry(resident)}
-                            disabled={!permissions.update}
+                            disabled={pending || !permissions.update}
                             describedBy="zaad-permission-update-reason"
                             variant="secondary"
                             small
@@ -1070,7 +1057,7 @@ function ResidentsSection({
                         ) : null}
                         <ActionButton
                           onClick={() => onEdit(resident.id)}
-                          disabled={!permissions.update}
+                          disabled={pending || !permissions.update}
                           describedBy="zaad-permission-update-reason"
                           variant="secondary"
                           small
@@ -1079,7 +1066,7 @@ function ResidentsSection({
                         </ActionButton>
                         <ActionButton
                           onClick={() => onDelete(resident.id)}
-                          disabled={!permissions.delete}
+                          disabled={pending || !permissions.delete}
                           describedBy="zaad-permission-delete-reason"
                           variant="danger"
                           small
@@ -1099,7 +1086,7 @@ function ResidentsSection({
           className="flex justify-end gap-3"
         >
           <ActionButton
-            onClick={() => onPrevious(query)}
+            onClick={onPrevious}
             disabled={pending || !canGoPrevious}
             variant="secondary"
             small
@@ -1107,7 +1094,7 @@ function ResidentsSection({
             {copy.common.previous}
           </ActionButton>
           <ActionButton
-            onClick={() => onNext(query)}
+            onClick={onNext}
             disabled={pending || !residents.nextCursor}
             variant="secondary"
             small
@@ -3606,7 +3593,7 @@ function ConnectionBadge({
         : "border-amber-700/30 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100";
   return (
     <span
-      className={`inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold ${tone}`}
+      className={`inline-flex min-h-11 shrink-0 whitespace-nowrap items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold ${tone}`}
     >
       <span className="h-2 w-2 rounded-full bg-current" aria-hidden="true" />
       {label}

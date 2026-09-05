@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 
 import {
   isValidDisplayPhone,
@@ -22,6 +23,20 @@ const validPhoneSettings: PhoneSettings = {
     ko: null,
   },
 };
+
+test("PHONE-ALIGN-12: readable left-aligned width, responsive fields and save/access contracts", () => {
+  const form = readFileSync(new URL("../app/admin/phone-settings/PhoneSettingsForm.tsx", import.meta.url), "utf8");
+  assert.match(form, /ml-1 mr-0 mt-6 max-w-4xl/);
+  assert.match(form, /md:grid-cols-2/);
+  assert.match(form, /md:grid-cols-\[12rem_minmax\(0,1fr\)\]/);
+  assert.equal((form.match(/min-w-0 w-full rounded-md/g) ?? []).length, 3);
+  assert.match(form, /readOnly=\{!canEdit\}/);
+  assert.match(form, /disabled=\{isSubmitting \|\| !canEdit\}/);
+  assert.match(form, /if \(!canEdit\) return/);
+  assert.match(form, /method: "PUT"/); assert.match(form, /body: JSON.stringify\(settings\)/);
+  assert.match(form, /setSettings\(body.settings\)/);
+  assert.match(form, /setFeedback\(\{ kind: "error" \}\)/);
+});
 
 test("E.164 and representative display phone validation", () => {
   assert.equal(isValidE164("+81312345678"), true);

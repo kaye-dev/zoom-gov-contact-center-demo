@@ -19,6 +19,32 @@ function source(path: string) {
 
 const now = new Date("2026-08-30T03:00:00.000Z");
 
+test("RES-LAYOUT-09: natural 4/5/6 week calendar height alone determines the stretched side panel", () => {
+  const view = source("../app/admin/reservations/ReservationSystemView.tsx");
+  assert.match(view, /lg:items-stretch/);
+  assert.match(view, /min-h-0 min-w-0 lg:relative/);
+  assert.match(view, /flex min-h-0 flex-col overflow-hidden[^\"]*lg:absolute lg:inset-0/);
+  assert.doesNotMatch(view, /lg:sticky|ResizeObserver/);
+  assert.match(view, /Math.ceil\(\(leading \+ calendar.days.length\) \/ 7\) \* 7/);
+  for (const [month, rows] of [["2026-02", 4], ["2026-09", 5], ["2026-08", 6]] as const) {
+    const snapshot = buildReservationCalendarSnapshot({ service: "my-number-card", month, now: new Date(`${month}-01T03:00:00Z`) }, []);
+    const leading = new Date(`${month}-01T00:00:00Z`).getUTCDay();
+    assert.equal(Math.ceil((leading + snapshot.days.length) / 7), rows);
+  }
+});
+
+test("RES-LAYOUT-10: common bounded keyboard scroller resets by date/service, not dialog state", () => {
+  const view = source("../app/admin/reservations/ReservationSystemView.tsx");
+  assert.match(view, /key=\{`\$\{serviceKey\}:\$\{day.date\}`\}/);
+  assert.match(view, /id="selected-date-scroll-region"\s+role="region"\s+tabIndex=\{0\}\s+aria-labelledby="selected-date-heading"/);
+  assert.match(view, /max-h-\[60dvh\] min-h-0 flex-1 overflow-y-auto overscroll-contain/);
+  assert.match(view, /lg:max-h-none/);
+  const body = view.slice(view.indexOf('id="selected-date-scroll-region"'), view.indexOf("function ReservationDialog"));
+  for (const marker of ['method === "DATE"', "<ReservationList", 'id="slot-list"', 'id="no-slots-message"']) assert.ok(body.includes(marker));
+  assert.match(view, /<ModalDialog/);
+  assert.match(view, /onRequestClose=\{\(\) => setSelectedSlotStartMinute\(null\)\}/);
+});
+
 test("service catalog fixes the four date and time booking scenarios", () => {
   assert.deepEqual(RESERVATION_SERVICE_KEYS, [
     "my-number-card",

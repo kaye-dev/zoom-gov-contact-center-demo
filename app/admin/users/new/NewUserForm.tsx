@@ -114,7 +114,7 @@ export function NewUserForm({
       <div data-admin-page-chrome className="space-y-4">
         <div
           data-admin-page-header
-          className="mx-auto max-w-2xl space-y-2"
+          className="ml-1 mr-0 max-w-2xl space-y-2"
         >
           <h1 className="text-2xl font-bold">{t.admin.createUserTitle}</h1>
           <p className="text-sm leading-6 text-fg-muted">
@@ -124,7 +124,7 @@ export function NewUserForm({
         <AdminSectionNavigation />
       </div>
 
-      <div data-admin-page-body className="mx-auto mt-6 max-w-2xl space-y-6">
+      <div data-admin-page-body className="ml-1 mr-0 mt-6 max-w-2xl space-y-6">
       {createdUser ? (
         <div className="rounded-lg border border-accent/40 bg-surface-accent-subtle p-4 text-fg">
           <h2 className="text-lg font-bold">{t.admin.issuedPasswordTitle}</h2>

@@ -300,6 +300,7 @@ export type Dictionary = {
   };
   admin: {
     title: string;
+    pageDescriptionLabel: string;
     users: string;
     newUser: string;
     createUserAction: string;
@@ -1341,6 +1342,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     admin: {
       title: '管理画面',
+      pageDescriptionLabel: '{title}について',
       users: 'ユーザー管理',
       newUser: 'ユーザー作成',
       createUserAction: '作成',
@@ -2171,6 +2173,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     admin: {
       title: 'Admin',
+      pageDescriptionLabel: 'About {title}',
       users: 'User Management',
       newUser: 'Create User',
       createUserAction: 'Create',
@@ -2986,6 +2989,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     admin: {
       title: '管理页面',
+      pageDescriptionLabel: '关于{title}',
       users: '用户管理',
       newUser: '创建用户',
       createUserAction: '创建',
@@ -3753,6 +3757,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     admin: {
       title: '管理頁面',
+      pageDescriptionLabel: '關於{title}',
       users: '使用者管理',
       newUser: '建立使用者',
       createUserAction: '建立',
@@ -4522,6 +4527,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     admin: {
       title: '관리 화면',
+      pageDescriptionLabel: '{title} 정보',
       users: '사용자 관리',
       newUser: '사용자 생성',
       createUserAction: '생성',
