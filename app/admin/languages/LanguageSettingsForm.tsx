@@ -1,5 +1,8 @@
 "use client";
 
+import { settingsSectionClassName } from "@/app/components/admin/settings-form-styles";
+import { AdminPageTitleHelp } from "@/app/components/admin/AdminPageTitleHelp";
+
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
@@ -16,6 +19,7 @@ import {
 } from "@/lib/site-settings";
 
 import { useI18n } from "../../i18n/LanguageProvider";
+import { AdminSectionNavigation } from "../AdminSectionNavigation";
 
 type LanguageSettingsFormProps = {
   initialSettings: LanguageSettings;
@@ -109,19 +113,25 @@ export function LanguageSettingsForm({
   };
 
   return (
-    <section className="mx-auto max-w-3xl space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-bold">
-          {t.admin.languageManagement.title}
-        </h1>
-        <p className="text-sm leading-6 text-fg-muted">
-          {t.admin.languageManagement.description}
-        </p>
+    <section>
+      <div data-admin-page-chrome className="space-y-4">
+        <div
+          data-admin-page-header
+          className="ml-1 mr-0 max-w-3xl space-y-2"
+        >
+          <AdminPageTitleHelp
+            title={t.admin.languageManagement.title}
+            description={t.admin.languageManagement.description}
+            label={t.admin.pageDescriptionLabel.replace("{title}", t.admin.languageManagement.title)}
+          />
+        </div>
+        <AdminSectionNavigation />
       </div>
 
+      <div data-admin-page-body className="ml-1 mr-0 mt-6 max-w-3xl">
       <form
         onSubmit={submit}
-        className="space-y-5 rounded-lg border border-line bg-surface-raised p-5 shadow-sm md:p-6"
+        className={settingsSectionClassName}
       >
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-4">
           <h2 className="font-bold">
@@ -132,7 +142,7 @@ export function LanguageSettingsForm({
           </p>
         </div>
 
-        <ol className="space-y-3">
+        <ol className="space-y-0">
           {locales.map((setting, index) => (
             <LanguageRow
               key={setting.locale}
@@ -171,6 +181,7 @@ export function LanguageSettingsForm({
             : t.admin.settings.save}
         </button>
       </form>
+      </div>
     </section>
   );
 }
@@ -196,7 +207,7 @@ function LanguageRow({
   const isJapanese = setting.locale === DEFAULT_SITE_LOCALE;
 
   return (
-    <li className="flex flex-col gap-3 rounded-md border border-line p-4 sm:flex-row sm:items-center">
+    <li className="flex flex-col gap-3 border-b border-line-subtle py-4 sm:flex-row sm:items-center">
       <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 has-[:disabled]:cursor-not-allowed">
         <Checkbox
           checked={setting.enabled}

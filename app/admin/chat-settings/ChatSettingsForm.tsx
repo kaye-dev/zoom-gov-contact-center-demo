@@ -1,5 +1,9 @@
 "use client";
 
+import { settingsSectionClassName, settingsInputFocusClassName } from "@/app/components/admin/settings-form-styles";
+import { SettingsSaveScope } from "@/app/components/admin/SettingsSaveScope";
+import { AdminPageTitleHelp } from "@/app/components/admin/AdminPageTitleHelp";
+
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
@@ -14,6 +18,7 @@ import {
 } from "@/lib/site-settings";
 
 import { useI18n } from "../../i18n/LanguageProvider";
+import { AdminSettingsPanel, AdminSettingsTabs, validateSettingsTabs } from "../AdminSettingsTabs";
 
 type ChatSettingsFormProps = {
   initialSettings: ChatSettings;
@@ -31,6 +36,7 @@ export function ChatSettingsForm({
   const { t } = useI18n();
   const router = useRouter();
   const [settings, setSettings] = useState(initialSettings);
+  const [activeSection, setActiveSection] = useState("chat-method");
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const feedbackMessage = feedback
@@ -83,6 +89,7 @@ export function ChatSettingsForm({
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canEdit) return;
+    if (!validateSettingsTabs(event.currentTarget, setActiveSection)) return;
     setFeedback(null);
 
     if (
@@ -132,22 +139,38 @@ export function ChatSettingsForm({
   };
 
   return (
-    <section className="mx-auto max-w-5xl space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-bold">
-          {t.admin.chatManagement.title}
-        </h1>
-        <p className="text-sm leading-6 text-fg-muted">
-          {t.admin.chatManagement.description}
-        </p>
+    <section>
+      <div data-admin-page-chrome className="space-y-4">
+        <div
+          data-admin-page-header
+          className="ml-1 mr-0 max-w-5xl space-y-2"
+        >
+          <AdminPageTitleHelp
+            title={t.admin.chatManagement.title}
+            description={t.admin.chatManagement.description}
+            label={t.admin.pageDescriptionLabel.replace("{title}", t.admin.chatManagement.title)}
+          />
+        </div>
+        <AdminSettingsTabs
+          activeSection={activeSection}
+          onSelect={setActiveSection}
+          label={t.admin.chatManagement.title}
+          items={[
+            { key: "chat-method", label: t.admin.chatManagement.methodTab },
+            { key: "chat-campaign", label: t.admin.chatManagement.campaignTab },
+            { key: "chat-entry-id", label: t.admin.chatManagement.contactCenterEntryId.title },
+          ]}
+        />
       </div>
 
-      <form onSubmit={submit} className="space-y-6">
+      <div data-admin-page-body className="ml-1 mr-0 mt-6 max-w-5xl">
+      <form noValidate onSubmit={submit} className="space-y-6">
+        <AdminSettingsPanel section="chat-method" activeSection={activeSection}>
         <fieldset
-          className="space-y-4 rounded-lg border border-line bg-surface-raised p-5 shadow-sm md:p-6"
+          className={settingsSectionClassName}
           aria-describedby="chat-settings-mode-help"
         >
-          <legend className="px-2 text-lg font-bold">
+          <legend className="sr-only">
             {t.admin.chatManagement.activeModeTitle}
           </legend>
           <p
@@ -198,6 +221,8 @@ export function ChatSettingsForm({
           </div>
         </fieldset>
 
+        </AdminSettingsPanel>
+        <AdminSettingsPanel section="chat-campaign" activeSection={activeSection}>
         <ChatMethodFieldset
           title={t.admin.chatManagement.campaign.title}
           description={t.admin.chatManagement.campaign.description}
@@ -226,7 +251,7 @@ export function ChatSettingsForm({
               spellCheck={false}
               aria-describedby={`chat-settings-campaign-web-tag-help${feedback ? " chat-settings-feedback" : ""}`}
               placeholder={'<script src="https://…/web-sdk/chat-client.js" data-apikey="…" data-env="us01"></script>'}
-              className="w-full resize-y rounded-md border border-line bg-surface px-3 py-2 font-mono text-sm text-fg outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/30"
+              className={`w-full resize-y rounded-md border border-line bg-surface px-3 py-2 font-mono text-sm text-fg outline-none transition-colors ${settingsInputFocusClassName}`}
             />
             <p
               id="chat-settings-campaign-web-tag-help"
@@ -252,7 +277,7 @@ export function ChatSettingsForm({
               }
               rows={4}
               aria-describedby={`chat-settings-campaign-memo-help${feedback ? " chat-settings-feedback" : ""}`}
-              className="w-full resize-y rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/30"
+              className={`w-full resize-y rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg outline-none transition-colors ${settingsInputFocusClassName}`}
             />
             <p
               id="chat-settings-campaign-memo-help"
@@ -263,6 +288,8 @@ export function ChatSettingsForm({
           </div>
         </ChatMethodFieldset>
 
+        </AdminSettingsPanel>
+        <AdminSettingsPanel section="chat-entry-id" activeSection={activeSection}>
         <ChatMethodFieldset
           title={t.admin.chatManagement.contactCenterEntryId.title}
           description={
@@ -298,7 +325,7 @@ export function ChatSettingsForm({
               spellCheck={false}
               aria-describedby={`chat-settings-contact-center-entry-id-web-tag-help${feedback ? " chat-settings-feedback" : ""}`}
               placeholder={'<script src="https://…/web-sdk/chat-client.js" data-chat-entry-id="…" data-apikey="…" data-env="us01"></script>'}
-              className="w-full resize-y rounded-md border border-line bg-surface px-3 py-2 font-mono text-sm text-fg outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/30"
+              className={`w-full resize-y rounded-md border border-line bg-surface px-3 py-2 font-mono text-sm text-fg outline-none transition-colors ${settingsInputFocusClassName}`}
             />
             <p
               id="chat-settings-contact-center-entry-id-web-tag-help"
@@ -324,7 +351,7 @@ export function ChatSettingsForm({
               }
               rows={4}
               aria-describedby={`chat-settings-contact-center-entry-id-memo-help${feedback ? " chat-settings-feedback" : ""}`}
-              className="w-full resize-y rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/30"
+              className={`w-full resize-y rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg outline-none transition-colors ${settingsInputFocusClassName}`}
             />
             <p
               id="chat-settings-contact-center-entry-id-memo-help"
@@ -334,6 +361,8 @@ export function ChatSettingsForm({
             </p>
           </div>
         </ChatMethodFieldset>
+
+        </AdminSettingsPanel>
 
         {feedback ? (
           <p
@@ -350,7 +379,9 @@ export function ChatSettingsForm({
           </p>
         ) : null}
 
+        <SettingsSaveScope scope="page" id="chat-save-scope" />
         <button
+          aria-describedby="chat-save-scope"
           type="submit"
           disabled={isSubmitting || !canEdit}
           className="cursor-pointer rounded-md bg-primary px-5 py-2.5 font-semibold text-white transition-colors hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50"
@@ -360,6 +391,7 @@ export function ChatSettingsForm({
             : t.admin.settings.save}
         </button>
       </form>
+      </div>
     </section>
   );
 }
@@ -380,8 +412,8 @@ function ChatMethodFieldset({
   children: React.ReactNode;
 }) {
   return (
-    <fieldset className="space-y-5 rounded-lg border border-line bg-surface-raised p-5 shadow-sm md:p-6">
-      <legend className="px-2 text-lg font-bold">{title}</legend>
+    <fieldset className={settingsSectionClassName}>
+      <legend className="sr-only">{title}</legend>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="max-w-3xl text-sm leading-6 text-fg-muted">
           {description}

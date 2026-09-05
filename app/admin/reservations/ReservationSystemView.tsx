@@ -1,5 +1,7 @@
 "use client";
 
+import { AdminPageTitleHelp } from "@/app/components/admin/AdminPageTitleHelp";
+
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -116,8 +118,11 @@ export function ReservationSystemView({
     <section id="reservation-system-content" className="min-w-0 space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="max-w-3xl space-y-2">
-          <h1 className="text-2xl font-bold">{copy.title}</h1>
-          <p className="text-sm leading-6 text-fg-muted">{copy.description}</p>
+          <AdminPageTitleHelp
+            title={copy.title}
+            description={copy.description}
+            label={t.admin.pageDescriptionLabel.replace("{title}", copy.title)}
+          />
         </div>
         <div className="flex flex-wrap gap-3 sm:shrink-0">
           <Link
@@ -224,7 +229,7 @@ export function ReservationSystemView({
         </div>
       </div>
 
-      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] lg:items-start">
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] lg:items-stretch">
         <Calendar
           calendar={calendar}
           selectedDate={selectedDate}
@@ -237,15 +242,17 @@ export function ReservationSystemView({
             replaceUrl(calendar.service.key, calendar.month, date);
           }}
         />
-        <SelectedDatePanel
-          day={selectedDay}
-          serviceKey={calendar.service.key}
-          method={calendar.service.method}
-          locale={locale}
-          copy={copy}
-          selectedSlotStartMinute={selectedSlotStartMinute}
-          onSelectSlot={setSelectedSlotStartMinute}
-        />
+        <div className="min-h-0 min-w-0 lg:relative">
+          <SelectedDatePanel
+            day={selectedDay}
+            serviceKey={calendar.service.key}
+            method={calendar.service.method}
+            locale={locale}
+            copy={copy}
+            selectedSlotStartMinute={selectedSlotStartMinute}
+            onSelectSlot={setSelectedSlotStartMinute}
+          />
+        </div>
       </div>
       {selectedSlot && selectedDay ? (
         <ReservationDialog
@@ -320,16 +327,24 @@ function SelectedDatePanel({ day, serviceKey, method, locale, copy, selectedSlot
   if (!day) return null;
   const dateReservations = day.slots[0]?.reservations ?? [];
   return (
-    <aside id="selected-date-panel" aria-labelledby="selected-date-heading" className="rounded-lg border border-line bg-surface-raised p-4 shadow-sm md:p-5 lg:sticky lg:top-24">
-      <div className="space-y-1 border-b border-line-subtle pb-4">
+    <aside id="selected-date-panel" aria-labelledby="selected-date-heading" className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-line bg-surface-raised p-4 shadow-sm md:p-5 lg:absolute lg:inset-0">
+      <div className="shrink-0 space-y-1 border-b border-line-subtle pb-4">
         <p id="selected-service-name" className="text-sm font-semibold text-accent">{copy.services[serviceKey].name}</p>
         <h2 id="selected-date-heading" className="text-lg font-bold">{formatFullDate(day.date, locale)}</h2>
         <p id="selected-date-summary" className="text-sm text-fg-muted">{method === "DATE" ? copy.dateReservationSummary : copy.availableTimes}</p>
       </div>
+      <div
+        key={`${serviceKey}:${day.date}`}
+        id="selected-date-scroll-region"
+        role="region"
+        tabIndex={0}
+        aria-labelledby="selected-date-heading"
+        className="mt-4 max-h-[60dvh] min-h-0 flex-1 overflow-y-auto overscroll-contain p-0.5 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent lg:max-h-none"
+      >
       {method === "DATE" ? (
-        <ReservationList reservations={dateReservations} locale={locale} copy={copy} className="mt-4" />
+        <ReservationList reservations={dateReservations} locale={locale} copy={copy} className="" />
       ) : (
-        <div id="slot-list" className="mt-4 space-y-3" hidden={!day.bookable}>
+        <div id="slot-list" className="space-y-3" hidden={!day.bookable}>
           {day.slots.map((slot) => (
             <button
               key={slot.startMinute}
@@ -354,6 +369,7 @@ function SelectedDatePanel({ day, serviceKey, method, locale, copy, selectedSlot
         </div>
       )}
       <p id="no-slots-message" hidden={day.bookable} className="mt-4 rounded-md border border-line bg-surface px-4 py-5 text-center text-sm text-fg-muted">{copy.noSlots}</p>
+      </div>
     </aside>
   );
 }

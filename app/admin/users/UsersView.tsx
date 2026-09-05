@@ -11,10 +11,13 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { Pagination } from "@/app/components/admin/Pagination";
+import { SearchInput } from "@/app/components/admin/SearchInput";
 import { MoreHorizIcon } from "@/app/components/svg/MoreHorizIcon";
 import type { AdminUserErrorCode } from "@/lib/admin-users";
 
 import { useI18n } from "../../i18n/LanguageProvider";
+import { AdminSectionNavigation } from "../AdminSectionNavigation";
 import { formatAdminDateTime } from "../date-format";
 import { ConfirmationDialog } from "./ConfirmationDialog";
 
@@ -32,6 +35,7 @@ type UsersViewProps = {
   users: UserRow[];
   search: string;
   page: number;
+  total: number;
   totalPages: number;
   currentUserId: string;
   activeAdminCount: number;
@@ -51,6 +55,7 @@ export function UsersView({
   users,
   search,
   page,
+  total,
   totalPages,
   currentUserId,
   activeAdminCount,
@@ -66,6 +71,38 @@ export function UsersView({
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
+  const [queryState, setQueryState] = useState(() => ({
+    source: search,
+    value: search,
+  }));
+  const [isComposing, setIsComposing] = useState(false);
+  if (queryState.source !== search) {
+    setQueryState({
+      source: search,
+      value:
+        queryState.value === queryState.source || queryState.value === search
+          ? search
+          : queryState.value,
+    });
+  }
+  const query = queryState.value;
+  const normalizedQuery = query.trim();
+  const isFiltering = !isComposing && normalizedQuery !== search;
+
+  useEffect(() => {
+    if (isComposing || normalizedQuery === search) return;
+
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams(window.location.search);
+      params.delete("page");
+      if (normalizedQuery) params.set("search", normalizedQuery);
+      else params.delete("search");
+      const nextQuery = params.toString();
+      router.replace(nextQuery ? `/admin/users?${nextQuery}` : "/admin/users");
+    }, 200);
+
+    return () => window.clearTimeout(timer);
+  }, [isComposing, normalizedQuery, router, search]);
 
   const closeDialog = useCallback(() => {
     if (isSubmitting) return;
@@ -106,45 +143,70 @@ export function UsersView({
     : null;
 
   return (
-    <section className="space-y-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">{t.admin.userListTitle}</h1>
-          <p className="text-sm text-fg-muted">
-            {t.admin.page} {page} / {totalPages}
-          </p>
-        </div>
-        {canCreate ? (
-          <Link
-            href="/admin/users/new"
-            className="ml-auto rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-900"
+    <section>
+      <div data-admin-page-chrome className="space-y-4">
+        <div
+          data-admin-page-header
+          className="flex flex-wrap items-start gap-3"
+        >
+          <h1
+            id="users-heading"
+            className="whitespace-nowrap text-xl font-bold leading-7"
           >
-            {t.admin.newUser}
-          </Link>
-        ) : null}
+            {t.admin.userListTitle}
+          </h1>
+          {canCreate ? (
+            <Link
+              href="/admin/users/new"
+              className="ml-auto rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-900"
+            >
+              {t.admin.createUserAction}
+            </Link>
+          ) : null}
+        </div>
+        <AdminSectionNavigation />
       </div>
 
-      <form className="flex flex-col gap-3 sm:flex-row" action="/admin/users">
-        <input
-          name="search"
-          defaultValue={search}
-          placeholder={t.admin.searchPlaceholder}
-          className="min-w-0 flex-1 rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent"
-        />
-        <button
-          type="submit"
-          className="cursor-pointer rounded-md border border-line bg-surface-raised px-4 py-2 text-sm font-semibold transition-colors hover:bg-surface-hover"
+      <div data-admin-page-body className="mt-6 space-y-6">
+        <div role="search">
+          <SearchInput
+            id="admin-user-search"
+            name="search"
+            label={t.admin.searchPlaceholder}
+            placeholder={t.admin.searchPlaceholder}
+            value={query}
+            aria-describedby="admin-user-filter-status"
+            autoComplete="off"
+            onChange={(event) =>
+              setQueryState((current) => ({
+                ...current,
+                value: event.target.value,
+              }))
+            }
+            onCompositionStart={() => setIsComposing(true)}
+            onCompositionEnd={(event) => {
+              setQueryState((current) => ({
+                ...current,
+                value: event.currentTarget.value,
+              }));
+              setIsComposing(false);
+            }}
+          />
+        </div>
+        <p
+          id="admin-user-filter-status"
+          aria-live="polite"
+          aria-atomic="true"
+          className="sr-only"
         >
-          {t.admin.search}
-        </button>
-        <Link
-          href="/admin/users"
-          className="rounded-md border border-line px-4 py-2 text-center text-sm font-semibold transition-colors hover:bg-surface-hover"
-        >
-          {t.admin.clear}
-        </Link>
-      </form>
+          {t.admin.userListTitle}: {total}
+        </p>
 
+        <div
+          data-admin-user-results
+          aria-busy={isFiltering}
+          className="space-y-6"
+        >
       <div className="overflow-x-auto rounded-lg border border-line">
         <table className="w-full min-w-[960px] divide-y divide-line-subtle text-sm">
           <thead className="bg-surface-raised">
@@ -227,30 +289,22 @@ export function UsersView({
         ) : null}
       </div>
 
-      <div className="flex items-center justify-between">
-        {page > 1 ? (
-          <Link
-            href={previousHref}
-            className="rounded-md border border-line px-4 py-2 text-sm font-semibold transition-colors hover:bg-surface-hover"
-          >
-            {t.admin.previous}
-          </Link>
-        ) : (
-          <span />
-        )}
-        {page < totalPages ? (
-          <Link
-            href={nextHref}
-            className="rounded-md border border-line px-4 py-2 text-sm font-semibold transition-colors hover:bg-surface-hover"
-          >
-            {t.admin.next}
-          </Link>
-        ) : (
-          <span />
-        )}
-      </div>
+        {totalPages > 1 ? (
+          <div id="admin-user-pagination">
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              previousHref={previousHref}
+              nextHref={nextHref}
+              ariaLabel={t.admin.paginationLabel}
+              previousLabel={t.admin.previous}
+              nextLabel={t.admin.next}
+            />
+          </div>
+        ) : null}
+        </div>
 
-      {pendingAction && confirmation ? (
+        {pendingAction && confirmation ? (
         <ConfirmationDialog
           title={confirmation.title}
           description={confirmation.description}
@@ -272,7 +326,8 @@ export function UsersView({
             <dd className="break-all text-fg-muted">{pendingAction.user.email}</dd>
           </dl>
         </ConfirmationDialog>
-      ) : null}
+        ) : null}
+      </div>
     </section>
   );
 }

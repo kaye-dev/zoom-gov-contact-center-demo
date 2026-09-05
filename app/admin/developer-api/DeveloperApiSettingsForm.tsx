@@ -1,5 +1,9 @@
 "use client";
 
+import { settingsSectionClassName, settingsInputFocusClassName } from "@/app/components/admin/settings-form-styles";
+import { SettingsSaveScope } from "@/app/components/admin/SettingsSaveScope";
+import { AdminPageTitleHelp } from "@/app/components/admin/AdminPageTitleHelp";
+
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
@@ -14,6 +18,7 @@ import {
 } from "@/lib/developer-api-settings";
 
 import { useI18n } from "../../i18n/LanguageProvider";
+import { DeveloperApiSectionTabs } from "./DeveloperApiSectionTabs";
 
 type Props = { initialSettings: DeveloperApiSettingsSnapshot; canEdit: boolean };
 type Section = DeveloperApiSettingsUpdate["section"];
@@ -48,6 +53,7 @@ function secretRevealState(state: SecretState) {
 export function DeveloperApiSettingsForm({ initialSettings, canEdit }: Props) {
   const { t } = useI18n();
   const router = useRouter();
+  const [activeSection, setActiveSection] = useState<Section>("server-to-server-oauth");
   const [settings, setSettings] = useState(initialSettings);
   const [clientSecret, setClientSecret] = useState<SecretState>(MASKED_SECRET);
   const [secretToken, setSecretToken] = useState<SecretState>(MASKED_SECRET);
@@ -55,7 +61,7 @@ export function DeveloperApiSettingsForm({ initialSettings, canEdit }: Props) {
   const [submitting, setSubmitting] = useState<Partial<Record<Section, boolean>>>({});
   const copy = t.admin.developerApiManagement;
   const inputClass =
-    "w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/30";
+    `w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors ${settingsInputFocusClassName}`;
 
   const clearFeedback = (section: Section) => {
     setFeedback((current) => ({ ...current, [section]: undefined }));
@@ -228,13 +234,33 @@ export function DeveloperApiSettingsForm({ initialSettings, canEdit }: Props) {
   };
 
   return (
-    <section id="developer-api-content" className="mx-auto max-w-5xl space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-bold">{copy.title}</h1>
-        <p className="text-sm leading-6 text-fg-muted">{copy.description}</p>
+    <section id="developer-api-content">
+      <div data-admin-page-chrome className="space-y-4">
+        <div
+          data-admin-page-header
+          className="ml-1 mr-0 max-w-5xl space-y-2"
+        >
+          <AdminPageTitleHelp
+            title={copy.title}
+            description={copy.description}
+            label={t.admin.pageDescriptionLabel.replace("{title}", copy.title)}
+          />
+        </div>
+        <DeveloperApiSectionTabs
+          activeSection={activeSection}
+          onSelect={setActiveSection}
+          label={copy.title}
+          oauthLabel={copy.oauthTitle}
+          webhookLabel={copy.webhookTitle}
+        />
       </div>
 
-      <div id="developer-api-form" className="space-y-6">
+      <div
+        id="developer-api-form"
+        data-admin-page-body
+        className="ml-1 mr-0 mt-6 max-w-5xl space-y-6"
+      >
+        <div id="server-to-server-oauth-panel" role="tabpanel" aria-labelledby="server-to-server-oauth-tab" tabIndex={0} hidden={activeSection !== "server-to-server-oauth"}>
         <form
           id="server-to-server-oauth-form"
           onSubmit={submit("server-to-server-oauth")}
@@ -242,9 +268,9 @@ export function DeveloperApiSettingsForm({ initialSettings, canEdit }: Props) {
         >
           <fieldset
             id="server-to-server-oauth"
-            className="space-y-5 rounded-lg border border-line bg-surface-raised p-5 shadow-sm md:p-6"
+            className={settingsSectionClassName}
           >
-            <legend className="px-2 text-lg font-bold">{copy.oauthTitle}</legend>
+            <legend className="sr-only">{copy.oauthTitle}</legend>
             <p className="text-sm leading-6 text-fg-muted">{copy.oauthDescription}</p>
             <div id="oauth-fields" className="max-w-xl space-y-5">
               <label id="account-id-field" className="block space-y-2">
@@ -304,7 +330,7 @@ export function DeveloperApiSettingsForm({ initialSettings, canEdit }: Props) {
                     Boolean(submitting["server-to-server-oauth"]) ||
                     (!canEdit && !settings.clientSecretConfigured)
                   }
-                  className="placeholder:text-fg-muted focus:ring-2 focus:ring-accent/30"
+                  className={`placeholder:text-fg-muted ${settingsInputFocusClassName}`}
                 />
               </div>
             </div>
@@ -323,6 +349,8 @@ export function DeveloperApiSettingsForm({ initialSettings, canEdit }: Props) {
           />
         </form>
 
+        </div>
+        <div id="webhook-only-app-panel" role="tabpanel" aria-labelledby="webhook-only-app-tab" tabIndex={0} hidden={activeSection !== "webhook-only-app"}>
         <form
           id="webhook-only-app-form"
           onSubmit={submit("webhook-only-app")}
@@ -330,9 +358,9 @@ export function DeveloperApiSettingsForm({ initialSettings, canEdit }: Props) {
         >
           <fieldset
             id="webhook-only-app"
-            className="space-y-5 rounded-lg border border-line bg-surface-raised p-5 shadow-sm md:p-6"
+            className={settingsSectionClassName}
           >
-            <legend className="px-2 text-lg font-bold">{copy.webhookTitle}</legend>
+            <legend className="sr-only">{copy.webhookTitle}</legend>
             <p className="text-sm leading-6 text-fg-muted">{copy.webhookDescription}</p>
             <div id="secret-token-field" className="max-w-xl space-y-2">
               <PasswordInput
@@ -361,7 +389,7 @@ export function DeveloperApiSettingsForm({ initialSettings, canEdit }: Props) {
                   Boolean(submitting["webhook-only-app"]) ||
                   (!canEdit && !settings.secretTokenConfigured)
                 }
-                className="placeholder:text-fg-muted focus:ring-2 focus:ring-accent/30"
+                className={`placeholder:text-fg-muted ${settingsInputFocusClassName}`}
               />
             </div>
           </fieldset>
@@ -378,6 +406,7 @@ export function DeveloperApiSettingsForm({ initialSettings, canEdit }: Props) {
             savingLabel={t.admin.settings.saving}
           />
         </form>
+        </div>
       </div>
     </section>
   );
@@ -423,7 +452,10 @@ function SaveButton({
   savingLabel: string;
 }) {
   return (
+    <>
+    <SettingsSaveScope scope="section" id={`${id}-scope`} />
     <button
+      aria-describedby={`${id}-scope`}
       id={id}
       type="submit"
       disabled={disabled}
@@ -431,5 +463,6 @@ function SaveButton({
     >
       {isSubmitting ? savingLabel : saveLabel}
     </button>
+    </>
   );
 }

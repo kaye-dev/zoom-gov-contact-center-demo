@@ -1,5 +1,7 @@
 "use client";
 
+import { AdminPageTitleHelp } from "@/app/components/admin/AdminPageTitleHelp";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState, type FormEvent } from "react";
@@ -9,10 +11,11 @@ import {
   getAdminRoleDisplayDescription,
   getAdminRoleDisplayName,
 } from "@/app/components/admin/role-display";
-import { DeleteIcon } from "@/app/components/svg/DeleteIcon";
-import { EditSquareIcon } from "@/app/components/svg/EditSquareIcon";
+import { TableRowActions } from "@/app/components/admin/TableRowActions";
+import { captureRowActionFocus } from "@/app/components/admin/table-row-actions";
 import { useI18n } from "@/app/i18n/LanguageProvider";
 
+import { AdminSectionNavigation } from "../AdminSectionNavigation";
 import { ConfirmationDialog } from "../users/ConfirmationDialog";
 
 type RoleSummary = {
@@ -50,13 +53,17 @@ export function RolesView({
   const { t } = useI18n();
   const copy = t.admin.accessControl;
   const router = useRouter();
+  const [openRowId, setOpenRowId] = useState<string | null>(null);
+  const returnRowFocus = useRef<((removed?: boolean) => void) | null>(null);
+  const deletingRef = useRef(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [roleToDelete, setRoleToDelete] = useState<RoleSummary | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const removeRole = async () => {
-    if (!roleToDelete || roleToDelete.systemKey) return;
+    if (!roleToDelete || roleToDelete.systemKey || !canDelete || roleToDelete.memberCount > 0 || deletingRef.current) return;
+    deletingRef.current = true;
     setIsDeleting(true);
     setDeleteError(null);
     try {
@@ -75,6 +82,7 @@ export function RolesView({
         return;
       }
       setRoleToDelete(null);
+      returnRowFocus.current?.(true);
       if (roles.length === 1 && page > 1) {
         router.push(buildRoleListHref(search, page - 1, pageSize));
       }
@@ -82,32 +90,39 @@ export function RolesView({
     } catch {
       setDeleteError(copy.genericError);
     } finally {
+      deletingRef.current = false;
       setIsDeleting(false);
     }
   };
 
   return (
-    <section className="min-w-0 space-y-6 overflow-x-hidden">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-        <div className="space-y-2">
-          <h1 className="text-2xl font-bold">
-            {total} {copy.roleCount}
-          </h1>
-          <p className="max-w-3xl text-sm leading-6 text-fg-muted">
-            {copy.listDescription}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setIsCreateOpen(true)}
-          disabled={!canCreate}
-          aria-describedby={!canCreate ? 'roles-read-only-reason' : undefined}
-          className="cursor-pointer rounded-md bg-primary px-4 py-2 text-center text-sm font-semibold text-white transition-colors hover:bg-primary-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50 sm:ml-auto"
+    <section data-row-action-region className="min-w-0">
+      <div data-admin-page-chrome className="space-y-4">
+        <div
+          data-admin-page-header
+          className="ml-1 mr-0 flex flex-col gap-4 sm:flex-row sm:items-start"
         >
-          + {copy.addRole}
-        </button>
+          <div data-row-action-heading tabIndex={-1} className="space-y-2">
+            <AdminPageTitleHelp
+              title={`${total} ${copy.roleCount}`}
+              description={copy.listDescription}
+              label={t.admin.pageDescriptionLabel.replace("{title}", `${total} ${copy.roleCount}`)}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsCreateOpen(true)}
+            disabled={!canCreate}
+            aria-describedby={!canCreate ? 'roles-read-only-reason' : undefined}
+            className="cursor-pointer rounded-md bg-primary px-4 py-2 text-center text-sm font-semibold text-white transition-colors hover:bg-primary-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50 sm:ml-auto"
+          >
+            + {copy.addRole}
+          </button>
+        </div>
+        <AdminSectionNavigation />
       </div>
 
+      <div data-admin-page-body className="ml-1 mr-0 mt-6 space-y-6">
       {!canCreate ? (
         <p
           id="roles-read-only-reason"
@@ -152,7 +167,7 @@ export function RolesView({
         </form>
       ) : null}
 
-      <div className="max-w-full overflow-x-auto rounded-lg border border-line">
+      <div className="relative max-w-full overflow-x-auto rounded-lg border border-line">
         <table className="w-full min-w-[880px] divide-y divide-line-subtle text-sm">
           <thead className="bg-surface-raised">
             <tr>
@@ -225,44 +240,23 @@ export function RolesView({
                     {role.systemKey ? (
                       <span aria-label={copy.readOnlyRoleAction}>—</span>
                     ) : (
-                      <div className="inline-flex items-center gap-1">
-                        {canUpdate ? (
-                          <Link
-                            href={`/admin/roles/${encodeURIComponent(role.id)}`}
-                            aria-label={`${copy.edit}: ${displayName}`}
-                            className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-surface-hover hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                          >
-                            <EditSquareIcon className="h-5 w-5" />
-                          </Link>
-                        ) : (
-                          <button
-                            type="button"
-                            disabled
-                            className="inline-flex min-h-10 min-w-10 cursor-not-allowed items-center justify-center rounded-md text-fg-muted opacity-45"
-                          >
-                            <EditSquareIcon className="h-5 w-5" />
-                            <span className="sr-only">
-                              {copy.edit}: {displayName}. {copy.readOnlyRoleAction}
-                            </span>
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDeleteError(null);
-                            setRoleToDelete(role);
-                          }}
-                          disabled={deleteDisabledReason !== null || isDeleting}
-                          title={deleteDisabledReason ?? undefined}
-                          className="inline-flex min-h-10 min-w-10 cursor-pointer items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-surface-hover hover:text-red-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-45 dark:hover:text-red-300"
-                        >
-                          <DeleteIcon className="h-5 w-5" />
-                          <span className="sr-only">
-                            {copy.deleteRole}: {displayName}
-                            {deleteDisabledReason ? `. ${deleteDisabledReason}` : ""}
-                          </span>
-                        </button>
-                      </div>
+                      <TableRowActions
+                        label={`${t.admin.userManagement.actionsFor}: ${displayName}`}
+                        open={openRowId === role.id}
+                        onOpenChange={(open) => setOpenRowId(open ? role.id : null)}
+                        items={[
+                          { id: "edit", label: copy.edit, href: `/admin/roles/${encodeURIComponent(role.id)}`,
+                            disabled: !canUpdate, disabledReason: !canUpdate ? copy.readOnlyRoleAction : undefined },
+                          { id: "delete", label: copy.deleteRole, tone: "danger",
+                            disabled: deleteDisabledReason !== null || isDeleting,
+                            disabledReason: deleteDisabledReason ?? (isDeleting ? t.admin.settings.saving : undefined),
+                            onSelect: (trigger) => {
+                              returnRowFocus.current = captureRowActionFocus(trigger);
+                              setDeleteError(null);
+                              setRoleToDelete(role);
+                            } },
+                        ]}
+                      />
                     )}
                   </td>
                 </tr>
@@ -335,6 +329,7 @@ export function RolesView({
           onConfirm={() => void removeRole()}
         />
       ) : null}
+      </div>
     </section>
   );
 }

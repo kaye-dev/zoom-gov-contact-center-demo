@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createElement } from "react";
+import { readFileSync } from "node:fs";
+import { renderAdmin } from "./admin-ui-render";
+import { PasswordResetRequestsView } from "../app/admin/password-reset-requests/PasswordResetRequestsView";
 
 import type { PrismaClient } from "../lib/generated/prisma/client";
 import {
@@ -7,6 +11,25 @@ import {
   PASSWORD_RESET_GLOBAL_WINDOW_LIMIT,
   PASSWORD_RESET_TOTAL_LIMIT,
 } from "../lib/server/password-reset-requests";
+
+test("ROW-RESET: only authorized pending rows expose a two-action menu", () => {
+  for (const canUpdate of [true, false]) {
+    const html = renderAdmin(createElement(PasswordResetRequestsView, {
+      canUpdate, requests: (["PENDING", "APPROVED", "REJECTED", "CONSUMED"] as const).map((status) => ({
+        id: status, email: "sample@example.invalid", status, requestedAt: "2026-09-01T00:00:00Z", reviewedAt: null, user: null,
+      })),
+    }), "/admin/password-reset-requests");
+    const body = html.match(/<tbody[^>]*>([\s\S]*?)<\/tbody>/)?.[1] ?? "";
+    assert.equal((body.match(/aria-haspopup="menu"/g) ?? []).length, canUpdate ? 1 : 0);
+    assert.match(html, /min-w-\[880px\]/);
+    assert.match(html, /data-row-action-heading="true" tabindex="-1"/);
+  }
+  const view = readFileSync(new URL("../app/admin/password-reset-requests/PasswordResetRequestsView.tsx", import.meta.url), "utf8");
+  assert.match(view, /reviewingRef.current.begin\(request.id\)/);
+  assert.match(view, /reviewingRef.current.end\(request.id, success\)/);
+  assert.match(view, /body\?\.temporaryPassword/);
+  assert.match(view, /catch \{\s*setError\(t.auth.error\)/);
+});
 
 type FakeOptions = {
   duplicate?: boolean;

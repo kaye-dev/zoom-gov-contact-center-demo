@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+
 import { canAdminAccess } from "@/lib/admin-access/authorization";
 import { requireAdminAccess } from "@/lib/server/admin-access/server";
 import { getSessionUser } from "@/lib/server/auth/helpers";
@@ -55,6 +57,11 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
       }),
     ]),
   );
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  if (page > totalPages) {
+    redirect(getCanonicalUsersHref(search, totalPages));
+  }
 
   return (
     <UsersView
@@ -64,7 +71,8 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
       }))}
       search={search}
       page={page}
-      totalPages={Math.max(1, Math.ceil(total / PAGE_SIZE))}
+      total={total}
+      totalPages={totalPages}
       currentUserId={getSessionUser(session)!.id}
       activeAdminCount={activeAdminCount}
       canCreate={canAdminAccess(actor, "users", "CREATE")}
@@ -76,4 +84,12 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
 
 function readSearchParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+}
+
+function getCanonicalUsersHref(search: string, page: number) {
+  const params = new URLSearchParams();
+  if (search) params.set("search", search);
+  if (page > 1) params.set("page", String(page));
+  const query = params.toString();
+  return query ? `/admin/users?${query}` : "/admin/users";
 }

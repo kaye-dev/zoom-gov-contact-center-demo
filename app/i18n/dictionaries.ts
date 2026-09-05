@@ -300,8 +300,10 @@ export type Dictionary = {
   };
   admin: {
     title: string;
+    pageDescriptionLabel: string;
     users: string;
     newUser: string;
+    createUserAction: string;
     passwordResets: string;
     phoneSettings: string;
     chatSettings: string;
@@ -311,6 +313,21 @@ export type Dictionary = {
     reservations: string;
     zaad: ZaadDictionary;
     settingsMenu: string;
+    navigation: {
+      dashboard: string;
+      usersSection: string;
+      settingsSection: string;
+      usersSectionNavigation: string;
+      settingsSectionNavigation: string;
+      backToSite: string;
+      openMenu: string;
+      closeMenu: string;
+      collapseSidebar: string;
+      expandSidebar: string;
+      accountMenuLabel: string;
+      openAccountMenu: string;
+      closeAccountMenu: string;
+    };
     userListTitle: string;
     searchPlaceholder: string;
     search: string;
@@ -335,6 +352,7 @@ export type Dictionary = {
     noUsers: string;
     noResetRequests: string;
     page: string;
+    paginationLabel: string;
     previous: string;
     next: string;
     issuedPasswordTitle: string;
@@ -488,6 +506,8 @@ export type Dictionary = {
       saving: string;
       saved: string;
       saveError: string;
+      pageSaveScope: string;
+      sectionSaveScope: string;
       errors: Record<SettingsErrorCode, string>;
     };
     phoneManagement: {
@@ -520,6 +540,8 @@ export type Dictionary = {
     chatManagement: {
       title: string;
       description: string;
+      methodTab: string;
+      campaignTab: string;
       activeModeTitle: string;
       activeModeDescription: string;
       active: string;
@@ -1324,8 +1346,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     admin: {
       title: '管理画面',
+      pageDescriptionLabel: '{title}について',
       users: 'ユーザー管理',
       newUser: 'ユーザー作成',
+      createUserAction: '作成',
       passwordResets: '再設定申請',
       phoneSettings: '電話管理',
       chatSettings: 'AIチャット管理',
@@ -1334,6 +1358,21 @@ export const dictionaries: Record<Locale, Dictionary> = {
       developerApi: 'Developer API',
       reservations: '予約システム',
       settingsMenu: '設定',
+      navigation: {
+        dashboard: 'ダッシュボード',
+        usersSection: 'ユーザー',
+        settingsSection: '設定',
+        usersSectionNavigation: 'ユーザー管理セクション',
+        settingsSectionNavigation: '設定管理セクション',
+        backToSite: '公開サイトへ戻る',
+        openMenu: 'ナビゲーションを開く',
+        closeMenu: 'ナビゲーションを閉じる',
+        collapseSidebar: 'サイドナビゲーションを折りたたむ',
+        expandSidebar: 'サイドナビゲーションを展開する',
+        accountMenuLabel: 'アカウント操作',
+        openAccountMenu: '{name}のアカウントメニューを開く',
+        closeAccountMenu: '{name}のアカウントメニューを閉じる',
+      },
       reservationManagement: reservationManagementCopy.ja,
       zaad: zaadDictionaries.ja,
       userListTitle: 'ユーザー管理',
@@ -1361,6 +1400,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       noUsers: '該当するユーザーはいません。',
       noResetRequests: 'パスワード再設定申請はありません。',
       page: 'ページ',
+      paginationLabel: 'ユーザー一覧のページ',
       previous: '前へ',
       next: '次へ',
       issuedPasswordTitle: '仮パスワードを発行しました',
@@ -1576,6 +1616,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
         saving: '保存中…',
         saved: '設定を保存しました。',
         saveError: '設定を保存できませんでした。',
+        pageSaveScope: 'このページのすべてのタブの設定を保存します。',
+        sectionSaveScope: 'このセクションの設定を保存します。',
         errors: {
           AUTHENTICATION_REQUIRED: 'ログインが必要です。',
           ADMINISTRATOR_REQUIRED: '管理者権限が必要です。',
@@ -1622,9 +1664,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       developerApiManagement: {
         title: 'Developer API',
         description: '外部連携に使用する認証情報とWebhookのSecret Tokenを設定します。',
-        oauthTitle: 'Server-To-Server OAuth',
+        oauthTitle: 'Server To Server OAuth',
         oauthDescription: 'Zoom API接続に使用する認証情報を設定します。',
-        webhookTitle: 'Webhook only app',
+        webhookTitle: 'Webhook Only app',
         webhookDescription: 'Webhookの検証に使用するSecret Tokenを設定します。',
         accountId: 'Account ID',
         clientId: 'Client ID',
@@ -1646,6 +1688,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
         title: 'AIチャット管理',
         description:
           '公開サイトで利用するZoomチャット方式と、それぞれのWeb Tagを設定します。非選択側の設定も保存されます。',
+        methodTab: '利用方式',
+        campaignTab: 'キャンペーン',
         activeModeTitle: '公開サイトで利用する方式',
         activeModeDescription:
           '利用する方式を一つ選択してください。方式を切り替えても、CampaignとEntry IDの入力値は保持されます。',
@@ -2137,8 +2181,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     admin: {
       title: 'Admin',
+      pageDescriptionLabel: 'About {title}',
       users: 'User Management',
       newUser: 'Create User',
+      createUserAction: 'Create',
       passwordResets: 'Reset Requests',
       phoneSettings: 'Phone Management',
       chatSettings: 'AI Chat Management',
@@ -2147,6 +2193,21 @@ export const dictionaries: Record<Locale, Dictionary> = {
       developerApi: 'Developer API',
       reservations: 'Reservation system',
       settingsMenu: 'Settings',
+      navigation: {
+        dashboard: 'Dashboard',
+        usersSection: 'Users',
+        settingsSection: 'Settings',
+        usersSectionNavigation: 'User management sections',
+        settingsSectionNavigation: 'Settings sections',
+        backToSite: 'Back to public site',
+        openMenu: 'Open navigation',
+        closeMenu: 'Close navigation',
+        collapseSidebar: 'Collapse sidebar',
+        expandSidebar: 'Expand sidebar',
+        accountMenuLabel: 'Account actions',
+        openAccountMenu: 'Open account menu for {name}',
+        closeAccountMenu: 'Close account menu for {name}',
+      },
       reservationManagement: reservationManagementCopy.en,
       zaad: zaadDictionaries.en,
       userListTitle: 'User Management',
@@ -2174,6 +2235,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       noUsers: 'No matching users.',
       noResetRequests: 'No password reset requests.',
       page: 'Page',
+      paginationLabel: 'User list pages',
       previous: 'Previous',
       next: 'Next',
       issuedPasswordTitle: 'Temporary Password Issued',
@@ -2391,6 +2453,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
         saving: 'Saving…',
         saved: 'Settings saved.',
         saveError: 'Unable to save settings.',
+        pageSaveScope: 'Saves settings from all tabs on this page.',
+        sectionSaveScope: 'Saves settings in this section.',
         errors: {
           AUTHENTICATION_REQUIRED: 'Please sign in.',
           ADMINISTRATOR_REQUIRED: 'Administrator access is required.',
@@ -2437,9 +2501,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       developerApiManagement: {
         title: 'Developer API',
         description: 'Configure credentials and the Webhook Secret Token used by external integrations.',
-        oauthTitle: 'Server-To-Server OAuth',
+        oauthTitle: 'Server To Server OAuth',
         oauthDescription: 'Configure credentials used to connect to the Zoom API.',
-        webhookTitle: 'Webhook only app',
+        webhookTitle: 'Webhook Only app',
         webhookDescription: 'Configure the Secret Token used to verify webhooks.',
         accountId: 'Account ID',
         clientId: 'Client ID',
@@ -2461,6 +2525,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
         title: 'AI Chat Management',
         description:
           'Choose the Zoom chat method used on the public site and configure both Web Tags. Settings for the inactive method are also retained.',
+        methodTab: 'Method',
+        campaignTab: 'Campaign',
         activeModeTitle: 'Method used on the public site',
         activeModeDescription:
           'Select one method. Switching methods does not erase the saved Campaign or Entry ID values.',
@@ -2935,8 +3001,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     admin: {
       title: '管理页面',
+      pageDescriptionLabel: '关于{title}',
       users: '用户管理',
       newUser: '创建用户',
+      createUserAction: '创建',
       passwordResets: '重置申请',
       phoneSettings: '电话管理',
       chatSettings: 'AI聊天管理',
@@ -2945,6 +3013,21 @@ export const dictionaries: Record<Locale, Dictionary> = {
       developerApi: 'Developer API',
       reservations: '预约系统',
       settingsMenu: '设置',
+      navigation: {
+        dashboard: '仪表板',
+        usersSection: '用户',
+        settingsSection: '设置',
+        usersSectionNavigation: '用户管理分区',
+        settingsSectionNavigation: '设置管理分区',
+        backToSite: '返回公开网站',
+        openMenu: '打开导航',
+        closeMenu: '关闭导航',
+        collapseSidebar: '收起侧边导航',
+        expandSidebar: '展开侧边导航',
+        accountMenuLabel: '帐户操作',
+        openAccountMenu: '打开{name}的帐户菜单',
+        closeAccountMenu: '关闭{name}的帐户菜单',
+      },
       reservationManagement: reservationManagementCopy['zh-Hans'],
       zaad: zaadDictionaries['zh-Hans'],
       userListTitle: '用户管理',
@@ -2971,6 +3054,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       noUsers: '没有符合条件的用户。',
       noResetRequests: '没有密码重置申请。',
       page: '页面',
+      paginationLabel: '用户列表分页',
       previous: '上一页',
       next: '下一页',
       issuedPasswordTitle: '已发放临时密码',
@@ -3153,6 +3237,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
         saving: '正在保存…',
         saved: '设置已保存。',
         saveError: '无法保存设置。',
+        pageSaveScope: '保存此页面所有选项卡的设置。',
+        sectionSaveScope: '保存此部分的设置。',
         errors: {
           AUTHENTICATION_REQUIRED: '请先登录。',
           ADMINISTRATOR_REQUIRED: '需要管理员权限。',
@@ -3195,9 +3281,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       developerApiManagement: {
         title: 'Developer API',
         description: '设置外部集成使用的凭据和 Webhook Secret Token。',
-        oauthTitle: 'Server-To-Server OAuth',
+        oauthTitle: 'Server To Server OAuth',
         oauthDescription: '设置连接 Zoom API 时使用的凭据。',
-        webhookTitle: 'Webhook only app',
+        webhookTitle: 'Webhook Only app',
         webhookDescription: '设置验证 Webhook 时使用的 Secret Token。',
         accountId: 'Account ID', clientId: 'Client ID', clientSecret: 'Client Secret', secretToken: 'Secret Token',
         errors: {
@@ -3216,6 +3302,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
         title: 'AI聊天管理',
         description:
           '设置公开网站使用的Zoom聊天方式以及两种方式各自的Web Tag。未选中方式的设置也会保留。',
+        methodTab: '使用方式',
+        campaignTab: '活动',
         activeModeTitle: '公开网站使用的方式',
         activeModeDescription:
           '请选择一种方式。切换方式不会清除已保存的Campaign或Entry ID内容。',
@@ -3685,8 +3773,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     admin: {
       title: '管理頁面',
+      pageDescriptionLabel: '關於{title}',
       users: '使用者管理',
       newUser: '建立使用者',
+      createUserAction: '建立',
       passwordResets: '重設申請',
       phoneSettings: '電話管理',
       chatSettings: 'AI聊天管理',
@@ -3695,6 +3785,21 @@ export const dictionaries: Record<Locale, Dictionary> = {
       developerApi: 'Developer API',
       reservations: '預約系統',
       settingsMenu: '設定',
+      navigation: {
+        dashboard: '儀表板',
+        usersSection: '使用者',
+        settingsSection: '設定',
+        usersSectionNavigation: '使用者管理分區',
+        settingsSectionNavigation: '設定管理分區',
+        backToSite: '返回公開網站',
+        openMenu: '開啟導覽',
+        closeMenu: '關閉導覽',
+        collapseSidebar: '收合側邊導覽',
+        expandSidebar: '展開側邊導覽',
+        accountMenuLabel: '帳戶操作',
+        openAccountMenu: '開啟{name}的帳戶選單',
+        closeAccountMenu: '關閉{name}的帳戶選單',
+      },
       reservationManagement: reservationManagementCopy['zh-Hant'],
       zaad: zaadDictionaries['zh-Hant'],
       userListTitle: '使用者管理',
@@ -3721,6 +3826,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       noUsers: '沒有符合條件的使用者。',
       noResetRequests: '沒有密碼重設申請。',
       page: '頁面',
+      paginationLabel: '使用者列表分頁',
       previous: '上一頁',
       next: '下一頁',
       issuedPasswordTitle: '已發放臨時密碼',
@@ -3904,6 +4010,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
         saving: '正在儲存…',
         saved: '設定已儲存。',
         saveError: '無法儲存設定。',
+        pageSaveScope: '儲存此頁面所有分頁的設定。',
+        sectionSaveScope: '儲存此區段的設定。',
         errors: {
           AUTHENTICATION_REQUIRED: '請先登入。',
           ADMINISTRATOR_REQUIRED: '需要管理員權限。',
@@ -3946,9 +4054,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       developerApiManagement: {
         title: 'Developer API',
         description: '設定外部整合使用的認證資訊與 Webhook Secret Token。',
-        oauthTitle: 'Server-To-Server OAuth',
+        oauthTitle: 'Server To Server OAuth',
         oauthDescription: '設定連線至 Zoom API 時使用的認證資訊。',
-        webhookTitle: 'Webhook only app',
+        webhookTitle: 'Webhook Only app',
         webhookDescription: '設定驗證 Webhook 時使用的 Secret Token。',
         accountId: 'Account ID', clientId: 'Client ID', clientSecret: 'Client Secret', secretToken: 'Secret Token',
         errors: {
@@ -3967,6 +4075,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
         title: 'AI聊天管理',
         description:
           '設定公開網站使用的Zoom聊天方式以及兩種方式各自的Web Tag。未選取方式的設定也會保留。',
+        methodTab: '使用方式',
+        campaignTab: '活動',
         activeModeTitle: '公開網站使用的方式',
         activeModeDescription:
           '請選擇一種方式。切換方式不會清除已儲存的Campaign或Entry ID內容。',
@@ -4437,8 +4547,10 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     admin: {
       title: '관리 화면',
+      pageDescriptionLabel: '{title} 정보',
       users: '사용자 관리',
       newUser: '사용자 생성',
+      createUserAction: '생성',
       passwordResets: '재설정 신청',
       phoneSettings: '전화 관리',
       chatSettings: 'AI 채팅 관리',
@@ -4447,6 +4559,21 @@ export const dictionaries: Record<Locale, Dictionary> = {
       developerApi: 'Developer API',
       reservations: '예약 시스템',
       settingsMenu: '설정',
+      navigation: {
+        dashboard: '대시보드',
+        usersSection: '사용자',
+        settingsSection: '설정',
+        usersSectionNavigation: '사용자 관리 섹션',
+        settingsSectionNavigation: '설정 관리 섹션',
+        backToSite: '공개 사이트로 돌아가기',
+        openMenu: '탐색 열기',
+        closeMenu: '탐색 닫기',
+        collapseSidebar: '사이드 탐색 접기',
+        expandSidebar: '사이드 탐색 펼치기',
+        accountMenuLabel: '계정 작업',
+        openAccountMenu: '{name} 계정 메뉴 열기',
+        closeAccountMenu: '{name} 계정 메뉴 닫기',
+      },
       reservationManagement: reservationManagementCopy.ko,
       zaad: zaadDictionaries.ko,
       userListTitle: '사용자 관리',
@@ -4473,6 +4600,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       noUsers: '해당 사용자가 없습니다.',
       noResetRequests: '비밀번호 재설정 신청이 없습니다.',
       page: '페이지',
+      paginationLabel: '사용자 목록 페이지',
       previous: '이전',
       next: '다음',
       issuedPasswordTitle: '임시 비밀번호를 발급했습니다',
@@ -4661,6 +4789,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
         saving: '저장 중…',
         saved: '설정을 저장했습니다.',
         saveError: '설정을 저장할 수 없습니다.',
+        pageSaveScope: '이 페이지의 모든 탭 설정을 저장합니다.',
+        sectionSaveScope: '이 섹션의 설정을 저장합니다.',
         errors: {
           AUTHENTICATION_REQUIRED: '로그인이 필요합니다.',
           ADMINISTRATOR_REQUIRED: '관리자 권한이 필요합니다.',
@@ -4707,9 +4837,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       developerApiManagement: {
         title: 'Developer API',
         description: '외부 연동에 사용할 인증 정보와 Webhook Secret Token을 설정합니다.',
-        oauthTitle: 'Server-To-Server OAuth',
+        oauthTitle: 'Server To Server OAuth',
         oauthDescription: 'Zoom API 연결에 사용할 인증 정보를 설정합니다.',
-        webhookTitle: 'Webhook only app',
+        webhookTitle: 'Webhook Only app',
         webhookDescription: 'Webhook 검증에 사용할 Secret Token을 설정합니다.',
         accountId: 'Account ID', clientId: 'Client ID', clientSecret: 'Client Secret', secretToken: 'Secret Token',
         errors: {
@@ -4728,6 +4858,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
         title: 'AI 채팅 관리',
         description:
           '공개 사이트에서 사용할 Zoom 채팅 방식과 각 방식의 Web Tag를 설정합니다. 선택하지 않은 방식의 설정도 유지됩니다.',
+        methodTab: '사용 방식',
+        campaignTab: '캠페인',
         activeModeTitle: '공개 사이트에서 사용할 방식',
         activeModeDescription:
           '한 가지 방식을 선택하세요. 방식을 전환해도 저장된 Campaign 및 Entry ID 값은 삭제되지 않습니다.',

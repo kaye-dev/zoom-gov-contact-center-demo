@@ -10,6 +10,7 @@ export type ZaadDictionary = {
   navLabel: string;
   eyebrow: string;
   title: string;
+  infoLabel: string;
   description: string;
   apiSettings: string;
   apiSettingsPermission: string;
@@ -43,6 +44,7 @@ export type ZaadDictionary = {
     close: string;
   };
   residents: {
+    count: string;
     heading: string;
     description: string;
     register: string;
@@ -237,6 +239,7 @@ export const zaadDictionaries: Record<
     navLabel: "ZAAD",
     eyebrow: "Zoom Agentless Auto Dialer",
     title: "ZAAD",
+    infoLabel: "ZAADについて",
     description:
       "防災行政無線の登録住民、TTS発信メッセージ、Zoom Contact Centerの連絡先リスト、定型キャンペーンと単発キャンペーンを管理します。",
     apiSettings: "Developer API設定",
@@ -280,6 +283,7 @@ export const zaadDictionaries: Record<
     },
     residents: {
       heading: "防災行政無線の登録住民",
+      count: "（{count}人）",
       description:
         "登録情報の確認、編集、削除と、画面・CSVからの新規登録ができます。",
       register: "住民を登録",
@@ -496,6 +500,7 @@ export const zaadDictionaries: Record<
     navLabel: "ZAAD",
     eyebrow: "Zoom Agentless Auto Dialer",
     title: "ZAAD",
+    infoLabel: "About ZAAD",
     description:
       "Manage disaster radio residents, TTS outbound messages, Zoom Contact Center contact lists, recurring campaigns, and one-time campaigns.",
     apiSettings: "Developer API settings",
@@ -539,6 +544,7 @@ export const zaadDictionaries: Record<
     },
     residents: {
       heading: "Disaster radio residents",
+      count: "({count} residents)",
       description:
         "Review, edit, delete, or add residents individually or by CSV.",
       register: "Register resident",
@@ -756,6 +762,7 @@ export const zaadDictionaries: Record<
     navLabel: "ZAAD",
     eyebrow: "Zoom Agentless Auto Dialer",
     title: "ZAAD",
+    infoLabel: "关于ZAAD",
     description:
       "管理防灾行政无线登记居民、TTS外呼消息、Zoom Contact Center联系人列表、定期活动和单次活动。",
     apiSettings: "Developer API设置",
@@ -799,6 +806,7 @@ export const zaadDictionaries: Record<
     },
     residents: {
       heading: "防灾行政无线登记居民",
+      count: "（{count}人）",
       description: "可查看、编辑、删除登记信息，并通过画面或CSV新增居民。",
       register: "登记居民",
       csv: "CSV批量登记",
@@ -996,6 +1004,7 @@ export const zaadDictionaries: Record<
     navLabel: "ZAAD",
     eyebrow: "Zoom Agentless Auto Dialer",
     title: "ZAAD",
+    infoLabel: "關於ZAAD",
     description:
       "管理防災行政無線登記居民、TTS外撥訊息、Zoom Contact Center聯絡人清單、定期活動與單次活動。",
     apiSettings: "Developer API設定",
@@ -1039,6 +1048,7 @@ export const zaadDictionaries: Record<
     },
     residents: {
       heading: "防災行政無線登記居民",
+      count: "（{count}人）",
       description: "可查看、編輯、刪除登記資訊，並從畫面或CSV新增居民。",
       register: "登記居民",
       csv: "CSV批次登記",
@@ -1238,6 +1248,7 @@ export const zaadDictionaries: Record<
     navLabel: "ZAAD",
     eyebrow: "Zoom Agentless Auto Dialer",
     title: "ZAAD",
+    infoLabel: "ZAAD 정보",
     description:
       "방재 행정 무선 등록 주민, TTS 발신 메시지, Zoom Contact Center 연락처 목록, 정기 캠페인과 단발 캠페인을 관리합니다.",
     apiSettings: "Developer API 설정",
@@ -1281,6 +1292,7 @@ export const zaadDictionaries: Record<
     },
     residents: {
       heading: "방재 행정 무선 등록 주민",
+      count: "({count}명)",
       description:
         "등록 정보를 확인·편집·삭제하고 화면 또는 CSV로 새 주민을 등록할 수 있습니다.",
       register: "주민 등록",

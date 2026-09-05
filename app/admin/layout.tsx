@@ -2,15 +2,17 @@ import type { ReactNode } from "react";
 
 import { canAdminAccess } from "@/lib/admin-access/authorization";
 import { getCurrentAdminAccessActor } from "@/lib/server/admin-access/server";
+import { getSessionUser } from "@/lib/server/auth/helpers";
 
-import { AdminShell, type AdminNavigationItemKey } from "./AdminShell";
+import { AdminShell } from "./AdminShell";
+import type { AdminNavigationItemKey } from "./admin-navigation";
 
 export default async function AdminLayout({
   children,
 }: {
   children: ReactNode;
 }) {
-  const { actor } = await getCurrentAdminAccessActor("/admin");
+  const { actor, session } = await getCurrentAdminAccessActor("/admin");
   const visibleItems: AdminNavigationItemKey[] = [];
   if (canAdminAccess(actor, "users", "VIEW")) visibleItems.push("users");
   if (canAdminAccess(actor, "users", "CREATE")) visibleItems.push("new-user");
@@ -27,7 +29,10 @@ export default async function AdminLayout({
   if (canAdminAccess(actor, "zaad", "VIEW")) visibleItems.push("zaad");
 
   return (
-    <AdminShell visibleItems={visibleItems}>
+    <AdminShell
+      visibleItems={visibleItems}
+      currentUserName={getSessionUser(session)!.name}
+    >
       {children}
     </AdminShell>
   );

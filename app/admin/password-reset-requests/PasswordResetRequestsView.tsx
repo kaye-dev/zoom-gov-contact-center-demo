@@ -1,10 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { TableRowActions } from "@/app/components/admin/TableRowActions";
+import { captureRowActionFocus, createRowActionSubmissionGuard } from "@/app/components/admin/table-row-actions";
 
 import { formatAdminDateTime } from "../date-format";
 import { useI18n } from "../../i18n/LanguageProvider";
+import { AdminSectionNavigation } from "../AdminSectionNavigation";
 
 type ResetStatus = "PENDING" | "APPROVED" | "REJECTED" | "CONSUMED";
 
@@ -40,47 +43,65 @@ export function PasswordResetRequestsView({
   );
   const [error, setError] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [openRowId, setOpenRowId] = useState<string | null>(null);
+  const reviewingRef = useRef(createRowActionSubmissionGuard());
 
-  const review = async (request: ResetRequest, action: "approve" | "reject") => {
-    setError(null);
-    setIssuedPassword(null);
-    setPendingId(request.id);
+  const review = async (request: ResetRequest, action: "approve" | "reject", trigger: HTMLButtonElement) => {
+    if (!canUpdate || request.status !== "PENDING" || !reviewingRef.current.begin(request.id)) return;
+    let success = false;
+    const restoreFocus = captureRowActionFocus(trigger);
+    try {
+      setError(null);
+      setIssuedPassword(null);
+      setPendingId(request.id);
 
-    const response = await fetch(
-      `/api/admin/password-reset-requests/${request.id}/${action}`,
-      {
-        method: "POST",
-      },
-    );
+      const response = await fetch(
+        `/api/admin/password-reset-requests/${request.id}/${action}`,
+        {
+          method: "POST",
+        },
+      );
 
-    setPendingId(null);
+      const body = (await response.json().catch(() => null)) as
+        | { temporaryPassword?: string; error?: string }
+        | null;
 
-    const body = (await response.json().catch(() => null)) as
-      | { temporaryPassword?: string; error?: string }
-      | null;
+      if (!response.ok) {
+        setError(body?.error ?? t.auth.error);
+        return;
+      }
 
-    if (!response.ok) {
-      setError(body?.error ?? t.auth.error);
-      return;
+      if (action === "approve" && body?.temporaryPassword) {
+        setIssuedPassword({
+          email: request.user?.email ?? request.email,
+          temporaryPassword: body.temporaryPassword,
+        });
+      }
+
+      router.refresh();
+      success = true;
+      restoreFocus(true);
+    } catch {
+      setError(t.auth.error);
+    } finally {
+      reviewingRef.current.end(request.id, success);
+      setPendingId((current) => current === request.id ? null : current);
     }
-
-    if (action === "approve" && body?.temporaryPassword) {
-      setIssuedPassword({
-        email: request.user?.email ?? request.email,
-        temporaryPassword: body.temporaryPassword,
-      });
-    }
-
-    router.refresh();
   };
 
   return (
-    <section className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">{t.admin.passwordResets}</h1>
-        <p className="text-sm text-fg-muted">{t.auth.forgotPasswordDescription}</p>
+    <section data-row-action-region className="min-w-0">
+      <div data-admin-page-chrome className="space-y-4">
+        <div data-admin-page-header>
+          <h1 data-row-action-heading tabIndex={-1} className="text-2xl font-bold">{t.admin.passwordResets}</h1>
+          <p className="text-sm text-fg-muted">
+            {t.auth.forgotPasswordDescription}
+          </p>
+        </div>
+        <AdminSectionNavigation />
       </div>
 
+      <div data-admin-page-body className="mt-6 space-y-6">
       {issuedPassword ? (
         <div className="rounded-lg border border-accent/40 bg-surface-accent-subtle p-4 text-fg">
           <h2 className="text-lg font-bold">{t.admin.issuedPasswordTitle}</h2>
@@ -107,7 +128,7 @@ export function PasswordResetRequestsView({
       ) : null}
 
       <div className="overflow-x-auto rounded-lg border border-line">
-        <table className="min-w-full divide-y divide-line-subtle text-sm">
+        <table className="w-full min-w-[880px] divide-y divide-line-subtle text-sm">
           <thead className="bg-surface-raised">
             <tr>
               <th className="px-4 py-3 text-left font-semibold">
@@ -125,44 +146,37 @@ export function PasswordResetRequestsView({
               <th className="px-4 py-3 text-left font-semibold">
                 {t.admin.reviewedAt}
               </th>
-              <th className="px-4 py-3 text-left font-semibold" />
+              <th className="px-4 py-3 text-center font-semibold">{t.admin.userManagement.settings}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line-subtle">
             {requests.map((request) => (
               <tr key={request.id}>
-                <td className="px-4 py-3">{request.email}</td>
-                <td className="px-4 py-3">{request.user?.name ?? "-"}</td>
-                <td className="px-4 py-3">{getStatusLabel(request.status, t)}</td>
-                <td className="px-4 py-3">
+                <td className="whitespace-nowrap px-4 py-3">{request.email}</td>
+                <td className="whitespace-nowrap px-4 py-3">{request.user?.name ?? "-"}</td>
+                <td className="whitespace-nowrap px-4 py-3">{getStatusLabel(request.status, t)}</td>
+                <td className="whitespace-nowrap px-4 py-3">
                   {formatAdminDateTime(request.requestedAt, locale)}
                 </td>
-                <td className="px-4 py-3">
+                <td className="whitespace-nowrap px-4 py-3">
                   {request.reviewedAt
                     ? formatAdminDateTime(request.reviewedAt, locale)
                     : "-"}
                 </td>
-                <td className="px-4 py-3">
-                  {request.status === "PENDING" && canUpdate ? (
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => review(request, "approve")}
-                        disabled={pendingId === request.id}
-                        className="cursor-pointer rounded-md bg-primary px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {t.admin.approve}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => review(request, "reject")}
-                        disabled={pendingId === request.id}
-                        className="cursor-pointer rounded-md border border-line px-3 py-2 text-xs font-semibold transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {t.admin.reject}
-                      </button>
-                    </div>
-                  ) : null}
+                <td className="px-4 py-3 text-center">
+                  <TableRowActions
+                    label={`${t.admin.userManagement.actionsFor}: ${request.user?.name ?? request.email}`}
+                    open={openRowId === request.id}
+                    onOpenChange={(open) => setOpenRowId(open ? request.id : null)}
+                    items={request.status === "PENDING" && canUpdate ? [
+                      { id: "approve", label: t.admin.approve, disabled: pendingId === request.id,
+                        disabledReason: pendingId === request.id ? t.admin.settings.saving : undefined,
+                        onSelect: (trigger) => void review(request, "approve", trigger) },
+                      { id: "reject", label: t.admin.reject, disabled: pendingId === request.id,
+                        disabledReason: pendingId === request.id ? t.admin.settings.saving : undefined,
+                        onSelect: (trigger) => void review(request, "reject", trigger) },
+                    ] : []}
+                  />
                 </td>
               </tr>
             ))}
@@ -173,6 +187,7 @@ export function PasswordResetRequestsView({
             {t.admin.noResetRequests}
           </p>
         ) : null}
+      </div>
       </div>
     </section>
   );

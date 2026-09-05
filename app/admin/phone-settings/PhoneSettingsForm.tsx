@@ -1,5 +1,9 @@
 "use client";
 
+import { settingsSectionClassName, settingsInputFocusClassName } from "@/app/components/admin/settings-form-styles";
+import { SettingsSaveScope } from "@/app/components/admin/SettingsSaveScope";
+import { AdminPageTitleHelp } from "@/app/components/admin/AdminPageTitleHelp";
+
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
@@ -13,6 +17,7 @@ import {
 } from "@/lib/site-settings";
 
 import { useI18n } from "../../i18n/LanguageProvider";
+import { AdminSettingsPanel, AdminSettingsTabs, validateSettingsTabs } from "../AdminSettingsTabs";
 
 type PhoneSettingsFormProps = {
   initialSettings: PhoneSettings;
@@ -32,6 +37,7 @@ export function PhoneSettingsForm({
   const { t } = useI18n();
   const router = useRouter();
   const [settings, setSettings] = useState(initialSettings);
+  const [activeSection, setActiveSection] = useState("representative-phone");
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const feedbackMessage = feedback
@@ -70,6 +76,7 @@ export function PhoneSettingsForm({
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canEdit) return;
+    if (!validateSettingsTabs(event.currentTarget, setActiveSection)) return;
     setFeedback(null);
     setIsSubmitting(true);
 
@@ -105,19 +112,34 @@ export function PhoneSettingsForm({
   };
 
   return (
-    <section className="mx-auto max-w-5xl space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-bold">
-          {t.admin.phoneManagement.title}
-        </h1>
-        <p className="text-sm leading-6 text-fg-muted">
-          {t.admin.phoneManagement.description}
-        </p>
+    <section>
+      <div data-admin-page-chrome className="space-y-4">
+        <div
+          data-admin-page-header
+          className="ml-1 mr-0 max-w-4xl space-y-2"
+        >
+          <AdminPageTitleHelp
+            title={t.admin.phoneManagement.title}
+            description={t.admin.phoneManagement.description}
+            label={t.admin.pageDescriptionLabel.replace("{title}", t.admin.phoneManagement.title)}
+          />
+        </div>
+        <AdminSettingsTabs
+          activeSection={activeSection}
+          onSelect={setActiveSection}
+          label={t.admin.phoneManagement.title}
+          items={[
+            { key: "representative-phone", label: t.admin.phoneManagement.representativeTitle },
+            { key: "ai-phone", label: t.admin.phoneManagement.aiPhoneTitle },
+          ]}
+        />
       </div>
 
-      <form onSubmit={submit} className="space-y-6">
-        <fieldset className="space-y-5 rounded-lg border border-line bg-surface-raised p-5 shadow-sm md:p-6">
-          <legend className="px-2 text-lg font-bold">
+      <div data-admin-page-body className="ml-1 mr-0 mt-6 max-w-4xl">
+      <form noValidate onSubmit={submit} className="space-y-6">
+        <AdminSettingsPanel section="representative-phone" activeSection={activeSection}>
+        <fieldset className={settingsSectionClassName}>
+          <legend className="sr-only">
             {t.admin.phoneManagement.representativeTitle}
           </legend>
           <p className="text-sm leading-6 text-fg-muted">
@@ -143,7 +165,7 @@ export function PhoneSettingsForm({
                 inputMode="tel"
                 maxLength={50}
                 aria-describedby="representative-phone-display-help"
-                className="w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/30"
+                className={`min-w-0 w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors ${settingsInputFocusClassName}`}
               />
               <p
                 id="representative-phone-display-help"
@@ -173,7 +195,7 @@ export function PhoneSettingsForm({
                 pattern="\+[1-9]\d{7,14}"
                 placeholder="+81312345678"
                 aria-describedby="representative-phone-e164-help"
-                className="w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/30"
+                className={`min-w-0 w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors ${settingsInputFocusClassName}`}
               />
               <p
                 id="representative-phone-e164-help"
@@ -185,8 +207,10 @@ export function PhoneSettingsForm({
           </div>
         </fieldset>
 
-        <fieldset className="space-y-5 rounded-lg border border-line bg-surface-raised p-5 shadow-sm md:p-6">
-          <legend className="px-2 text-lg font-bold">
+        </AdminSettingsPanel>
+        <AdminSettingsPanel section="ai-phone" activeSection={activeSection}>
+        <fieldset className={settingsSectionClassName}>
+          <legend className="sr-only">
             {t.admin.phoneManagement.aiPhoneTitle}
           </legend>
           <p className="text-sm leading-6 text-fg-muted">
@@ -218,13 +242,15 @@ export function PhoneSettingsForm({
                     inputMode="tel"
                     pattern="\+[1-9]\d{7,14}"
                     placeholder="+81312345678"
-                    className="w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/30"
+                    className={`min-w-0 w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors ${settingsInputFocusClassName}`}
                   />
                 </div>
               </LocaleSettingRow>
             ))}
           </div>
         </fieldset>
+
+        </AdminSettingsPanel>
 
         {feedback ? (
           <p
@@ -240,7 +266,9 @@ export function PhoneSettingsForm({
           </p>
         ) : null}
 
+        <SettingsSaveScope scope="page" id="phone-save-scope" />
         <button
+          aria-describedby="phone-save-scope"
           type="submit"
           disabled={isSubmitting || !canEdit}
           className="cursor-pointer rounded-md bg-primary px-5 py-2.5 font-semibold text-white transition-colors hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50"
@@ -250,6 +278,7 @@ export function PhoneSettingsForm({
             : t.admin.settings.save}
         </button>
       </form>
+      </div>
     </section>
   );
 }
@@ -266,7 +295,7 @@ function LocaleSettingRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid gap-3 rounded-md border border-line p-4 md:grid-cols-[12rem_1fr] md:items-start">
+    <div className="grid min-w-0 gap-3 border-b border-line-subtle py-4 md:grid-cols-[12rem_minmax(0,1fr)] md:items-start">
       <div className="flex flex-wrap items-center gap-2 pt-1">
         <span className="font-semibold">{localeNames[locale]}</span>
         {!enabled ? (

@@ -1,5 +1,6 @@
 "use client";
 
+import { settingsInputFocusClassName } from "@/app/components/admin/settings-form-styles";
 import { useState } from "react";
 
 import { getAdminRoleDisplayName } from "@/app/components/admin/role-display";
@@ -7,6 +8,7 @@ import { Select } from "@/app/components/Select";
 
 import { ContentCopyIcon } from "../../../components/svg/ContentCopyIcon";
 import { useI18n } from "../../../i18n/LanguageProvider";
+import { AdminSectionNavigation } from "../../AdminSectionNavigation";
 
 type CreatedUser = {
   email: string;
@@ -109,14 +111,21 @@ export function NewUserForm({
   };
 
   return (
-    <section className="mx-auto max-w-2xl space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-bold">{t.admin.createUserTitle}</h1>
-        <p className="text-sm leading-6 text-fg-muted">
-          {t.admin.createUserDescription}
-        </p>
+    <section>
+      <div data-admin-page-chrome className="space-y-4">
+        <div
+          data-admin-page-header
+          className="ml-1 mr-0 max-w-2xl space-y-2"
+        >
+          <h1 className="text-2xl font-bold">{t.admin.createUserTitle}</h1>
+          <p className="text-sm leading-6 text-fg-muted">
+            {t.admin.createUserDescription}
+          </p>
+        </div>
+        <AdminSectionNavigation />
       </div>
 
+      <div data-admin-page-body className="ml-1 mr-0 mt-6 max-w-2xl space-y-6">
       {createdUser ? (
         <div className="rounded-lg border border-accent/40 bg-surface-accent-subtle p-4 text-fg">
           <h2 className="text-lg font-bold">{t.admin.issuedPasswordTitle}</h2>
@@ -174,7 +183,7 @@ export function NewUserForm({
 
       <form
         action={submit}
-        className="space-y-4 rounded-lg border border-line bg-surface-raised p-6 shadow-sm"
+        className="min-w-0 space-y-6"
       >
         <label className="block space-y-2">
           <span className="text-sm font-semibold">{t.auth.name}</span>
@@ -182,7 +191,7 @@ export function NewUserForm({
             name="name"
             required
             autoComplete="name"
-            className="w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent"
+            className={`w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors ${settingsInputFocusClassName}`}
           />
         </label>
         <label className="block space-y-2">
@@ -192,7 +201,7 @@ export function NewUserForm({
             type="email"
             required
             autoComplete="email"
-            className="w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent"
+            className={`w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors ${settingsInputFocusClassName}`}
           />
         </label>
         <label className="block space-y-2">
@@ -247,6 +256,7 @@ export function NewUserForm({
           {t.admin.createUser}
         </button>
       </form>
+      </div>
     </section>
   );
 }

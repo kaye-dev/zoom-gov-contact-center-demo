@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { createElement, type ComponentType, type PropsWithChildren } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { ZaadView, buildResidentRowActions } from "../app/admin/zaad/ZaadView";
+import { activateRowAction } from "../app/components/admin/table-row-actions";
+import { LanguageProvider } from "../app/i18n/LanguageProvider";
 
 import {
   getZaadCsvFieldLabel,
@@ -23,6 +28,86 @@ const modalSource = readFileSync(
   new URL("../app/components/admin/ModalDialog.tsx", import.meta.url),
   "utf8",
 );
+
+test("ROW-ZAAD: retry eligibility, disabled count, row identity and revision are retained", () => {
+  const resident = {
+    id: "resident", name: "Resident", email: "sample@example.invalid", phone: "+81312345678", consentStatus: "CONSENTED", source: "ADMIN",
+    revision: 7, contactList: null, syncStatus: "FAILED", syncErrorCode: "FAILED", createdAt: "2026-09-01", updatedAt: "2026-09-01",
+  };
+  const calls: unknown[] = [];
+  const callbacks = {
+    onEdit: (id: string, trigger: HTMLButtonElement) => { calls.push(["edit", id, trigger]); },
+    onDelete: (id: string, trigger: HTMLButtonElement) => { calls.push(["delete", id, trigger]); },
+    onRetry: (row: Parameters<typeof buildResidentRowActions>[0]["resident"]) => { calls.push(row); },
+  };
+  const trigger = {} as HTMLButtonElement;
+  for (const pending of [false, true]) for (const allowed of [false, true]) {
+    const actions = buildResidentRowActions({ resident, pending, permissions: { create: allowed, update: allowed, delete: allowed }, copy: zaadDictionaries.ja, ...callbacks });
+    assert.deepEqual(actions.map(item => item.id), ["retry", "edit", "delete"]);
+    assert.ok(actions.every(item => item.disabled === (pending || !allowed)));
+    for (const action of actions) activateRowAction(action.disabled, () => action.onSelect?.(trigger));
+    if (pending || !allowed) assert.ok(actions.every(item => item.disabledReason));
+  }
+  assert.deepEqual(calls, [resident, ["edit", resident.id, trigger], ["delete", resident.id, trigger]]);
+  for (const row of [{ ...resident, syncStatus: "SYNCED" }, { ...resident, syncErrorCode: "ZAAD_ZOOM_RESULT_UNKNOWN" }]) {
+    const actions = buildResidentRowActions({ resident: row, pending: false, permissions: { create: true, update: true, delete: true }, copy: zaadDictionaries.ja, ...callbacks });
+    assert.deepEqual(actions.map(item => item.id), ["edit", "delete"]);
+  }
+});
+
+function renderResidents(reviewState?: string, canViewDeveloperApi = true) {
+  const Provider = LanguageProvider as ComponentType<PropsWithChildren<{ availableLocales: readonly ["ja"] }>>;
+  return renderToStaticMarkup(createElement(Provider, { availableLocales: ["ja"] },
+    createElement(ZaadView, {
+      initialView: "residents", reviewState, canViewDeveloperApi,
+      permissions: { create: false, update: false, delete: false },
+    }),
+  ));
+}
+
+test("ZAAD-HELP-01 / ZAAD-HEADER-04/05: title help and responsive API action column", () => {
+  const html = renderResidents("ready", false);
+  assert.match(html, /role="tooltip" class="sr-only"/);
+  assert.match(html, /aria-label="ZAADについて"/);
+  assert.match(html, /lg:grid-cols-\[minmax\(0,1fr\)_auto\]/);
+  assert.match(html, /flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:flex-nowrap/);
+  assert.match(html, /aria-describedby="zaad-developer-api-permission-reason"/);
+  const header = viewSource.slice(viewSource.indexOf("<header"), viewSource.indexOf("</header>"));
+  assert.equal((header.match(/shrink-0 whitespace-nowrap/g) ?? []).length, 2);
+  assert.match(header, /<ZaadTitleHelp title=\{copy.title\} description=\{copy.description\}/);
+  assert.doesNotMatch(header, /<p[^>]*>\s*\{copy.description\}/);
+});
+
+test("SEARCH-07 / COUNT-08: initial data is unknown; confirmed zero is inline; search remains editable", () => {
+  for (const state of [undefined, "pending", "failure"]) {
+    const html = renderResidents(state);
+    const heading = html.match(/<h3 id="zaad-results-heading"[^>]*>([\s\S]*?)<\/h3>/)?.[1];
+    assert.ok(heading); assert.doesNotMatch(heading, /<span/);
+    assert.doesNotMatch(html, /type="search"[^>]*disabled/);
+    if (state === undefined) assert.doesNotMatch(html, /住民サンプル|resident_fixture/);
+  }
+  const empty = renderResidents("empty");
+  assert.match(empty, /id="zaad-results-heading"[^>]*>防災行政無線の登録住民<span class="text-sm font-medium text-fg-muted whitespace-nowrap">（0人）<\/span>/);
+  const section = viewSource.slice(viewSource.indexOf("function ResidentsSection"), viewSource.indexOf("function MessagesSection"));
+  assert.match(section, /<SearchInput/);
+  assert.doesNotMatch(section, /copy.common.search|copy.common.clear|<form|type="submit"/);
+  assert.match(section, /onCompositionStart/); assert.match(section, /onCompositionEnd/);
+  assert.match(section, /aria-busy=\{pending\}/); assert.match(section, /aria-live="polite"/);
+  assert.match(viewSource, /state === "failure" && view !== "residents"/);
+  assert.ok(section.indexOf('state === "failure" ?') < section.indexOf('state === "empty" ||'));
+});
+
+test("ACCESS-13: disabled resident mutations and pagination keep server contracts and API access reasons", () => {
+  const html = renderResidents("ready", false);
+  assert.match(html, /aria-disabled="true"/);
+  assert.match(html, /disabled=""[^>]*>CSV/);
+  const section = viewSource.slice(viewSource.indexOf("function ResidentsSection"), viewSource.indexOf("function MessagesSection"));
+  assert.match(section, /disabled=\{pending \|\| !permissions.create\}/);
+  assert.match(section, /disabled: pending \|\| !permissions.update/);
+  assert.match(section, /disabled: pending \|\| !permissions.delete/);
+  assert.match(viewSource, /params.set\("query", query\)/); assert.match(viewSource, /params.set\("cursor", cursor\)/);
+  assert.match(viewSource, /controller.dispose\(\)/);
+});
 
 test("ZAAD section navigation uses the approved order and Japanese terminology", () => {
   const orderSource = viewSource.match(
