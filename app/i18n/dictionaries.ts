@@ -506,6 +506,8 @@ export type Dictionary = {
       saving: string;
       saved: string;
       saveError: string;
+      pageSaveScope: string;
+      sectionSaveScope: string;
       errors: Record<SettingsErrorCode, string>;
     };
     phoneManagement: {
@@ -538,6 +540,8 @@ export type Dictionary = {
     chatManagement: {
       title: string;
       description: string;
+      methodTab: string;
+      campaignTab: string;
       activeModeTitle: string;
       activeModeDescription: string;
       active: string;
@@ -1612,6 +1616,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
         saving: '保存中…',
         saved: '設定を保存しました。',
         saveError: '設定を保存できませんでした。',
+        pageSaveScope: 'このページのすべてのタブの設定を保存します。',
+        sectionSaveScope: 'このセクションの設定を保存します。',
         errors: {
           AUTHENTICATION_REQUIRED: 'ログインが必要です。',
           ADMINISTRATOR_REQUIRED: '管理者権限が必要です。',
@@ -1658,9 +1664,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       developerApiManagement: {
         title: 'Developer API',
         description: '外部連携に使用する認証情報とWebhookのSecret Tokenを設定します。',
-        oauthTitle: 'Server-To-Server OAuth',
+        oauthTitle: 'Server To Server OAuth',
         oauthDescription: 'Zoom API接続に使用する認証情報を設定します。',
-        webhookTitle: 'Webhook only app',
+        webhookTitle: 'Webhook Only app',
         webhookDescription: 'Webhookの検証に使用するSecret Tokenを設定します。',
         accountId: 'Account ID',
         clientId: 'Client ID',
@@ -1682,6 +1688,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
         title: 'AIチャット管理',
         description:
           '公開サイトで利用するZoomチャット方式と、それぞれのWeb Tagを設定します。非選択側の設定も保存されます。',
+        methodTab: '利用方式',
+        campaignTab: 'キャンペーン',
         activeModeTitle: '公開サイトで利用する方式',
         activeModeDescription:
           '利用する方式を一つ選択してください。方式を切り替えても、CampaignとEntry IDの入力値は保持されます。',
@@ -2445,6 +2453,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
         saving: 'Saving…',
         saved: 'Settings saved.',
         saveError: 'Unable to save settings.',
+        pageSaveScope: 'Saves settings from all tabs on this page.',
+        sectionSaveScope: 'Saves settings in this section.',
         errors: {
           AUTHENTICATION_REQUIRED: 'Please sign in.',
           ADMINISTRATOR_REQUIRED: 'Administrator access is required.',
@@ -2491,9 +2501,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       developerApiManagement: {
         title: 'Developer API',
         description: 'Configure credentials and the Webhook Secret Token used by external integrations.',
-        oauthTitle: 'Server-To-Server OAuth',
+        oauthTitle: 'Server To Server OAuth',
         oauthDescription: 'Configure credentials used to connect to the Zoom API.',
-        webhookTitle: 'Webhook only app',
+        webhookTitle: 'Webhook Only app',
         webhookDescription: 'Configure the Secret Token used to verify webhooks.',
         accountId: 'Account ID',
         clientId: 'Client ID',
@@ -2515,6 +2525,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
         title: 'AI Chat Management',
         description:
           'Choose the Zoom chat method used on the public site and configure both Web Tags. Settings for the inactive method are also retained.',
+        methodTab: 'Method',
+        campaignTab: 'Campaign',
         activeModeTitle: 'Method used on the public site',
         activeModeDescription:
           'Select one method. Switching methods does not erase the saved Campaign or Entry ID values.',
@@ -3225,6 +3237,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
         saving: '正在保存…',
         saved: '设置已保存。',
         saveError: '无法保存设置。',
+        pageSaveScope: '保存此页面所有选项卡的设置。',
+        sectionSaveScope: '保存此部分的设置。',
         errors: {
           AUTHENTICATION_REQUIRED: '请先登录。',
           ADMINISTRATOR_REQUIRED: '需要管理员权限。',
@@ -3267,9 +3281,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       developerApiManagement: {
         title: 'Developer API',
         description: '设置外部集成使用的凭据和 Webhook Secret Token。',
-        oauthTitle: 'Server-To-Server OAuth',
+        oauthTitle: 'Server To Server OAuth',
         oauthDescription: '设置连接 Zoom API 时使用的凭据。',
-        webhookTitle: 'Webhook only app',
+        webhookTitle: 'Webhook Only app',
         webhookDescription: '设置验证 Webhook 时使用的 Secret Token。',
         accountId: 'Account ID', clientId: 'Client ID', clientSecret: 'Client Secret', secretToken: 'Secret Token',
         errors: {
@@ -3288,6 +3302,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
         title: 'AI聊天管理',
         description:
           '设置公开网站使用的Zoom聊天方式以及两种方式各自的Web Tag。未选中方式的设置也会保留。',
+        methodTab: '使用方式',
+        campaignTab: '活动',
         activeModeTitle: '公开网站使用的方式',
         activeModeDescription:
           '请选择一种方式。切换方式不会清除已保存的Campaign或Entry ID内容。',
@@ -3994,6 +4010,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
         saving: '正在儲存…',
         saved: '設定已儲存。',
         saveError: '無法儲存設定。',
+        pageSaveScope: '儲存此頁面所有分頁的設定。',
+        sectionSaveScope: '儲存此區段的設定。',
         errors: {
           AUTHENTICATION_REQUIRED: '請先登入。',
           ADMINISTRATOR_REQUIRED: '需要管理員權限。',
@@ -4036,9 +4054,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       developerApiManagement: {
         title: 'Developer API',
         description: '設定外部整合使用的認證資訊與 Webhook Secret Token。',
-        oauthTitle: 'Server-To-Server OAuth',
+        oauthTitle: 'Server To Server OAuth',
         oauthDescription: '設定連線至 Zoom API 時使用的認證資訊。',
-        webhookTitle: 'Webhook only app',
+        webhookTitle: 'Webhook Only app',
         webhookDescription: '設定驗證 Webhook 時使用的 Secret Token。',
         accountId: 'Account ID', clientId: 'Client ID', clientSecret: 'Client Secret', secretToken: 'Secret Token',
         errors: {
@@ -4057,6 +4075,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
         title: 'AI聊天管理',
         description:
           '設定公開網站使用的Zoom聊天方式以及兩種方式各自的Web Tag。未選取方式的設定也會保留。',
+        methodTab: '使用方式',
+        campaignTab: '活動',
         activeModeTitle: '公開網站使用的方式',
         activeModeDescription:
           '請選擇一種方式。切換方式不會清除已儲存的Campaign或Entry ID內容。',
@@ -4769,6 +4789,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
         saving: '저장 중…',
         saved: '설정을 저장했습니다.',
         saveError: '설정을 저장할 수 없습니다.',
+        pageSaveScope: '이 페이지의 모든 탭 설정을 저장합니다.',
+        sectionSaveScope: '이 섹션의 설정을 저장합니다.',
         errors: {
           AUTHENTICATION_REQUIRED: '로그인이 필요합니다.',
           ADMINISTRATOR_REQUIRED: '관리자 권한이 필요합니다.',
@@ -4815,9 +4837,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       developerApiManagement: {
         title: 'Developer API',
         description: '외부 연동에 사용할 인증 정보와 Webhook Secret Token을 설정합니다.',
-        oauthTitle: 'Server-To-Server OAuth',
+        oauthTitle: 'Server To Server OAuth',
         oauthDescription: 'Zoom API 연결에 사용할 인증 정보를 설정합니다.',
-        webhookTitle: 'Webhook only app',
+        webhookTitle: 'Webhook Only app',
         webhookDescription: 'Webhook 검증에 사용할 Secret Token을 설정합니다.',
         accountId: 'Account ID', clientId: 'Client ID', clientSecret: 'Client Secret', secretToken: 'Secret Token',
         errors: {
@@ -4836,6 +4858,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
         title: 'AI 채팅 관리',
         description:
           '공개 사이트에서 사용할 Zoom 채팅 방식과 각 방식의 Web Tag를 설정합니다. 선택하지 않은 방식의 설정도 유지됩니다.',
+        methodTab: '사용 방식',
+        campaignTab: '캠페인',
         activeModeTitle: '공개 사이트에서 사용할 방식',
         activeModeDescription:
           '한 가지 방식을 선택하세요. 방식을 전환해도 저장된 Campaign 및 Entry ID 값은 삭제되지 않습니다.',

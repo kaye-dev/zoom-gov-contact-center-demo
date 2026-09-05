@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { createElement } from "react";
+import { renderAdmin } from "./admin-ui-render";
+import { RolesView } from "../app/admin/roles/RolesView";
 
 import { dictionaries, locales } from "../app/i18n/dictionaries";
 import { ADMIN_RESOURCE_CATALOG } from "../lib/admin-access/catalog";
@@ -14,6 +17,28 @@ import { parseAdminRoleDirectoryInput } from "../lib/server/admin-access/queries
 function source(path: string) {
   return readFileSync(new URL(path, import.meta.url), "utf8");
 }
+
+test("ROW-ROLE: custom roles keep a menu with disabled actions; system roles have none", () => {
+  for (const allowed of [true, false]) {
+    const html = renderAdmin(createElement(RolesView, {
+      roles: [
+        { id: "system", name: "System", description: null, systemKey: "FULL_ACCESS", revision: 1, memberCount: 1 },
+        { id: "custom", name: "Custom", description: null, systemKey: null, revision: 2, memberCount: 0 },
+        { id: "assigned", name: "Assigned", description: null, systemKey: null, revision: 3, memberCount: 2 },
+      ], total: 3, page: 1, totalPages: 1, pageSize: 20, search: "",
+      canCreate: allowed, canUpdate: allowed, canDelete: allowed, canViewMembers: allowed,
+    }), "/admin/roles");
+    const body = html.match(/<tbody[^>]*>([\s\S]*?)<\/tbody>/)?.[1] ?? "";
+    assert.equal((body.match(/aria-haspopup="menu"/g) ?? []).length, 2);
+    assert.match(html, /data-row-action-heading="true" tabindex="-1"/);
+  }
+  const view = source("../app/admin/roles/RolesView.tsx");
+  assert.match(view, /disabled: !canUpdate/);
+  assert.match(view, /memberCount > 0/);
+  assert.match(view, /expectedRevision: roleToDelete.revision/);
+  assert.match(view, /deletingRef.current/);
+  assert.match(view, /<ConfirmationDialog/);
+});
 
 test("every locale has the complete access-control catalog and action copy", () => {
   for (const locale of locales) {
@@ -160,10 +185,10 @@ test('role UI creates metadata first and renders the prototype permission contro
   assert.match(details, /roleIds: \[\]/);
   assert.doesNotMatch(details, /candidate\.assignedRoleIds\.filter/);
   assert.match(list, /<ConfirmationDialog/);
-  assert.match(list, /<DeleteIcon/);
+  assert.match(list, /<TableRowActions/);
   assert.match(list, /min-w-\[880px\]/);
   assert.match(list, /w-\[24%\]/);
-  assert.match(list, /min-h-10 min-w-10/);
+  assert.match(source("../app/components/admin/TableRowActions.tsx"), /min-h-10 min-w-10/);
   assert.match(list, /flex flex-col-reverse gap-3 pt-2 sm:flex-row/);
   assert.match(list, /h-32 min-h-24 max-h-32/);
   assert.match(modal, /max-h-\[calc\(100dvh-2rem\)\]/);

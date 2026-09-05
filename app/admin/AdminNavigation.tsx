@@ -9,6 +9,10 @@ import {
 } from "react";
 
 import { CalendarMonthIcon } from "@/app/components/svg/CalendarMonthIcon";
+import { CodeIcon } from "@/app/components/svg/CodeIcon";
+import { PhoneIcon } from "@/app/components/svg/PhoneIcon";
+import { ChatIcon } from "@/app/components/svg/ChatIcon";
+import { ShieldIcon } from "@/app/components/svg/ShieldIcon";
 import { ChevronLeftIcon } from "@/app/components/svg/ChevronLeftIcon";
 import { DashboardIcon } from "@/app/components/svg/DashboardIcon";
 import { GroupIcon } from "@/app/components/svg/GroupIcon";
@@ -41,7 +45,11 @@ const primaryIcons: Record<
 > = {
   dashboard: DashboardIcon,
   users: GroupIcon,
+  "phone-settings": PhoneIcon,
+  "chat-settings": ChatIcon,
   settings: SettingsIcon,
+  roles: ShieldIcon,
+  "developer-api": CodeIcon,
   reservations: CalendarMonthIcon,
   zaad: SmartToyIcon,
 };

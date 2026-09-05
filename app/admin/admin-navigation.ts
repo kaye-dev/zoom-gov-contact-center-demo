@@ -16,7 +16,11 @@ export type AdminNavigationItemKey =
 export type AdminPrimaryNavigationKey =
   | "dashboard"
   | "users"
+  | "phone-settings"
+  | "chat-settings"
   | "settings"
+  | "roles"
+  | "developer-api"
   | "reservations"
   | "zaad";
 
@@ -51,13 +55,9 @@ const userPaths: Record<Extract<AdminNavigationItemKey, "users" | "new-user" | "
   "password-reset-requests": "/admin/password-reset-requests",
 };
 
-const settingsPaths: Record<Extract<AdminNavigationItemKey, "phone-settings" | "chat-settings" | "language-settings" | "maintenance-settings" | "roles" | "developer-api">, string> = {
-  "phone-settings": "/admin/phone-settings",
-  "chat-settings": "/admin/chat-settings",
+const settingsPaths: Record<Extract<AdminNavigationItemKey, "language-settings" | "maintenance-settings">, string> = {
   "language-settings": "/admin/languages",
   "maintenance-settings": "/admin/maintenance-settings",
-  roles: "/admin/roles",
-  "developer-api": "/admin/developer-api",
 };
 
 export function buildAdminNavigation(
@@ -78,16 +78,6 @@ export function buildAdminNavigation(
   );
   const settings = ([
     {
-      key: "phone-settings",
-      href: settingsPaths["phone-settings"],
-      label: t.admin.phoneSettings,
-    },
-    {
-      key: "chat-settings",
-      href: settingsPaths["chat-settings"],
-      label: t.admin.chatSettings,
-    },
-    {
       key: "language-settings",
       href: settingsPaths["language-settings"],
       label: t.admin.languageSettings,
@@ -96,16 +86,6 @@ export function buildAdminNavigation(
       key: "maintenance-settings",
       href: settingsPaths["maintenance-settings"],
       label: t.admin.maintenanceSettings,
-    },
-    {
-      key: "roles",
-      href: settingsPaths.roles,
-      label: t.admin.accessControl.rolesNav,
-    },
-    {
-      key: "developer-api",
-      href: settingsPaths["developer-api"],
-      label: t.admin.developerApi,
     },
   ] satisfies AdminSectionNavigationItem[]).filter((item) =>
     visible.has(item.key),
@@ -118,20 +98,7 @@ export function buildAdminNavigation(
       label: t.admin.navigation.dashboard,
     },
   ];
-  if (users[0]) {
-    primaryItems.push({
-      key: "users",
-      href: users[0].href,
-      label: t.admin.navigation.usersSection,
-    });
-  }
-  if (settings[0]) {
-    primaryItems.push({
-      key: "settings",
-      href: settings[0].href,
-      label: t.admin.navigation.settingsSection,
-    });
-  }
+  // Daily operations first, followed by access administration and configuration.
   if (visible.has("reservations")) {
     primaryItems.push({
       key: "reservations",
@@ -144,6 +111,32 @@ export function buildAdminNavigation(
       key: "zaad",
       href: "/admin/zaad",
       label: t.admin.zaad.navLabel,
+    });
+  }
+  if (users[0]) {
+    primaryItems.push({
+      key: "users",
+      href: users[0].href,
+      label: t.admin.navigation.usersSection,
+    });
+  }
+  if (visible.has("roles")) {
+    primaryItems.push({ key: "roles", href: "/admin/roles", label: t.admin.accessControl.rolesNav });
+  }
+  if (visible.has("phone-settings")) {
+    primaryItems.push({ key: "phone-settings", href: "/admin/phone-settings", label: t.admin.phoneSettings });
+  }
+  if (visible.has("chat-settings")) {
+    primaryItems.push({ key: "chat-settings", href: "/admin/chat-settings", label: t.admin.chatSettings });
+  }
+  if (visible.has("developer-api")) {
+    primaryItems.push({ key: "developer-api", href: "/admin/developer-api", label: t.admin.developerApi });
+  }
+  if (settings[0]) {
+    primaryItems.push({
+      key: "settings",
+      href: settings[0].href,
+      label: t.admin.navigation.settingsSection,
     });
   }
 
@@ -183,12 +176,17 @@ export function resolveAdminNavigationState(
       sectionItemKey: "users",
     };
   }
-  if (pathname.startsWith(settingsPaths.roles)) {
-    return {
-      primaryKey: "settings",
-      sectionKey: "settings",
-      sectionItemKey: "roles",
-    };
+  if (pathname === "/admin/roles" || pathname.startsWith("/admin/roles/")) {
+    return { primaryKey: "roles", sectionKey: null, sectionItemKey: null };
+  }
+  if (pathname === "/admin/developer-api") {
+    return { primaryKey: "developer-api", sectionKey: null, sectionItemKey: null };
+  }
+  if (pathname === "/admin/phone-settings") {
+    return { primaryKey: "phone-settings", sectionKey: null, sectionItemKey: null };
+  }
+  if (pathname === "/admin/chat-settings") {
+    return { primaryKey: "chat-settings", sectionKey: null, sectionItemKey: null };
   }
   const setting = Object.entries(settingsPaths).find(([, href]) => pathname === href);
   if (setting) {

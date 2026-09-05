@@ -12,6 +12,8 @@ import {
 
 import { ModalDialog } from "@/app/components/admin/ModalDialog";
 import { SearchInput } from "@/app/components/admin/SearchInput";
+import { TableRowActions, type TableRowAction } from "@/app/components/admin/TableRowActions";
+import { captureRowActionFocus } from "@/app/components/admin/table-row-actions";
 import { Checkbox } from "@/app/components/Checkbox";
 import { Select } from "@/app/components/Select";
 import { useI18n } from "@/app/i18n/LanguageProvider";
@@ -197,6 +199,7 @@ export function ZaadView({
       ? reviewState
       : "pending";
   const [view, setView] = useState(initialView);
+  const returnResidentFocus = useRef<((removed?: boolean) => void) | null>(null);
   const [state, setState] = useState<UiState>(initialPageState);
   const [dialog, setDialog] = useState<DialogKey | null>(
     dialogFromReviewSurface(reviewSurface),
@@ -603,11 +606,13 @@ export function ZaadView({
           canGoPrevious={residentCursorHistory.length > 0}
           onSelect={setSelectedResidentId}
           onCreate={() => openDialog("resident-create")}
-          onEdit={(id) => {
+          onEdit={(id, trigger) => {
+            returnResidentFocus.current = captureRowActionFocus(trigger);
             setSelectedResidentId(id);
             openDialog("resident-edit");
           }}
-          onDelete={(id) => {
+          onDelete={(id, trigger) => {
+            returnResidentFocus.current = captureRowActionFocus(trigger);
             setSelectedResidentId(id);
             openDialog("resident-delete");
           }}
@@ -798,6 +803,9 @@ export function ZaadView({
         reviewMode={reviewMode}
         reviewDialogMode={reviewDialogMode}
         onMutation={(message) => {
+          if (dialog === "resident-delete" || dialog === "resident-edit") {
+            returnResidentFocus.current?.(dialog === "resident-delete");
+          }
           setFeedback(message);
           setDialog(null);
           refresh();
@@ -863,18 +871,21 @@ function ResidentsSection({
   canGoPrevious: boolean;
   onSelect: (id: string) => void;
   onCreate: () => void;
-  onEdit: (id: string) => void;
-  onDelete: (id: string) => void;
+  onEdit: (id: string, trigger: HTMLButtonElement) => void;
+  onDelete: (id: string, trigger: HTMLButtonElement) => void;
   onRetry: (resident: Resident) => void;
   onCsv: () => void;
 }) {
   const [query, setQuery] = useState("");
+  const { t } = useI18n();
+  const [openRowId, setOpenRowId] = useState<string | null>(null);
   const composing = useRef(false);
   const pending = state === "pending" || busy;
   const count = loaded ? formatResidentCount(copy.residents.count, residents.metrics.total, locale) : null;
   return (
     <section
       data-zaad-view="residents"
+      data-row-action-region
       className="mt-6 space-y-6"
       aria-labelledby="zaad-residents-heading"
     >
@@ -959,6 +970,7 @@ function ResidentsSection({
           <div>
             <h3
               id="zaad-results-heading"
+              data-row-action-heading
               tabIndex={-1}
               className="flex flex-wrap items-baseline gap-x-1 text-lg font-bold"
             >
@@ -1041,38 +1053,13 @@ function ResidentsSection({
                       {formatDate(resident.createdAt)}
                     </td>
                     <td className="px-4 py-4">
-                      <div className="flex justify-end gap-2">
-                        {resident.syncStatus === "FAILED" &&
-                        resident.syncErrorCode !==
-                          "ZAAD_ZOOM_RESULT_UNKNOWN" ? (
-                          <ActionButton
-                            onClick={() => onRetry(resident)}
-                            disabled={pending || !permissions.update}
-                            describedBy="zaad-permission-update-reason"
-                            variant="secondary"
-                            small
-                          >
-                            {copy.common.retry}
-                          </ActionButton>
-                        ) : null}
-                        <ActionButton
-                          onClick={() => onEdit(resident.id)}
-                          disabled={pending || !permissions.update}
-                          describedBy="zaad-permission-update-reason"
-                          variant="secondary"
-                          small
-                        >
-                          {copy.common.edit}
-                        </ActionButton>
-                        <ActionButton
-                          onClick={() => onDelete(resident.id)}
-                          disabled={pending || !permissions.delete}
-                          describedBy="zaad-permission-delete-reason"
-                          variant="danger"
-                          small
-                        >
-                          {copy.common.delete}
-                        </ActionButton>
+                      <div className="flex justify-end">
+                        <TableRowActions
+                          label={`${t.admin.userManagement.actionsFor}: ${resident.name}`}
+                          open={openRowId === resident.id}
+                          onOpenChange={(open) => setOpenRowId(open ? resident.id : null)}
+                          items={buildResidentRowActions({ resident, permissions, pending, copy, onEdit, onDelete, onRetry })}
+                        />
                       </div>
                     </td>
                   </tr>
@@ -1105,6 +1092,36 @@ function ResidentsSection({
       </section>
     </section>
   );
+}
+
+export function buildResidentRowActions({ resident, permissions, pending, copy, onEdit, onDelete, onRetry }: {
+  resident: Resident;
+  permissions: PermissionSet;
+  pending: boolean;
+  copy: ZaadDictionary;
+  onEdit: (id: string, trigger: HTMLButtonElement) => void;
+  onDelete: (id: string, trigger: HTMLButtonElement) => void;
+  onRetry: (resident: Resident) => void;
+}): TableRowAction[] {
+  return [
+    ...(resident.syncStatus === "FAILED" && resident.syncErrorCode !== "ZAAD_ZOOM_RESULT_UNKNOWN" ? [{
+      id: "retry", label: copy.common.retry,
+      disabled: pending || !permissions.update,
+      disabledReason: pending ? copy.common.loading : !permissions.update ? copy.errors.permission : undefined,
+      describedBy: !permissions.update ? "zaad-permission-update-reason" : undefined,
+      onSelect: () => onRetry(resident),
+    }] : []),
+    { id: "edit", label: copy.common.edit,
+      disabled: pending || !permissions.update,
+      disabledReason: pending ? copy.common.loading : !permissions.update ? copy.errors.permission : undefined,
+      describedBy: !permissions.update ? "zaad-permission-update-reason" : undefined,
+      onSelect: (trigger) => onEdit(resident.id, trigger) },
+    { id: "delete", label: copy.common.delete, tone: "danger",
+      disabled: pending || !permissions.delete,
+      disabledReason: pending ? copy.common.loading : !permissions.delete ? copy.errors.permission : undefined,
+      describedBy: !permissions.delete ? "zaad-permission-delete-reason" : undefined,
+      onSelect: (trigger) => onDelete(resident.id, trigger) },
+  ];
 }
 
 function MessagesSection({

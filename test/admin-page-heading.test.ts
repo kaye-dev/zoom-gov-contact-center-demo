@@ -30,8 +30,9 @@ for (const [id, path, maxWidth, description] of pages) {
       assert.ok(!classes.includes("w-full"));
       if (maxWidth) assert.ok(classes.includes(maxWidth));
     }
-    assert.ok(text.indexOf("data-admin-page-header") < text.indexOf("<AdminSectionNavigation"));
-    assert.ok(text.indexOf("<AdminSectionNavigation") < text.indexOf("data-admin-page-body"));
+    const navigation = id === "DEV" ? "<DeveloperApiSectionTabs" : ["PHONE", "CHAT"].includes(id) ? "<AdminSettingsTabs" : "<AdminSectionNavigation";
+    assert.ok(text.indexOf("data-admin-page-header") < text.indexOf(navigation));
+    assert.ok(text.indexOf(navigation) < text.indexOf("data-admin-page-body"));
     if (id === "USER") {
       assert.match(text, /<p[^>]*>\s*\{t.admin.createUserDescription\}\s*<\/p>/);
       assert.doesNotMatch(text, /AdminPageTitleHelp/);

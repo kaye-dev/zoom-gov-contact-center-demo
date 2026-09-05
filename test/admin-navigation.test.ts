@@ -34,10 +34,14 @@ test("full-access navigation model exposes flat primary and ordered section link
     model.primaryItems.map(({ key, href }) => ({ key, href })),
     [
       { key: "dashboard", href: "/admin" },
-      { key: "users", href: "/admin/users" },
-      { key: "settings", href: "/admin/phone-settings" },
       { key: "reservations", href: "/admin/reservations" },
       { key: "zaad", href: "/admin/zaad" },
+      { key: "users", href: "/admin/users" },
+      { key: "roles", href: "/admin/roles" },
+      { key: "phone-settings", href: "/admin/phone-settings" },
+      { key: "chat-settings", href: "/admin/chat-settings" },
+      { key: "developer-api", href: "/admin/developer-api" },
+      { key: "settings", href: "/admin/languages" },
     ],
   );
   assert.deepEqual(
@@ -54,15 +58,11 @@ test("full-access navigation model exposes flat primary and ordered section link
   assert.deepEqual(
     model.sections.settings?.map(({ key, href }) => ({ key, href })),
     [
-      { key: "phone-settings", href: "/admin/phone-settings" },
-      { key: "chat-settings", href: "/admin/chat-settings" },
       { key: "language-settings", href: "/admin/languages" },
       {
         key: "maintenance-settings",
         href: "/admin/maintenance-settings",
       },
-      { key: "roles", href: "/admin/roles" },
-      { key: "developer-api", href: "/admin/developer-api" },
     ],
   );
 });
@@ -77,15 +77,16 @@ test("navigation model filters permissions and chooses the first allowed section
     model.primaryItems.map(({ key, href }) => ({ key, href })),
     [
       { key: "dashboard", href: "/admin" },
-      { key: "users", href: "/admin/users/new" },
-      { key: "settings", href: "/admin/developer-api" },
       { key: "reservations", href: "/admin/reservations" },
+      { key: "users", href: "/admin/users/new" },
+      { key: "developer-api", href: "/admin/developer-api" },
     ],
   );
   assert.deepEqual(model.sections.users?.map(({ key }) => key), ["new-user"]);
-  assert.deepEqual(model.sections.settings?.map(({ key }) => key), [
-    "developer-api",
-  ]);
+  assert.equal(model.sections.settings, undefined);
+  const rolesOnly = buildAdminNavigation(["roles"], dictionaries.ja);
+  assert.deepEqual(rolesOnly.primaryItems.map(({ key }) => key), ["dashboard", "roles"]);
+  assert.deepEqual(rolesOnly.sections, {});
 
   const standalone = buildAdminNavigation(["zaad"], dictionaries.ja);
   assert.deepEqual(standalone.primaryItems.map(({ key }) => key), [
@@ -108,8 +109,8 @@ test("route matcher selects at most one primary and section destination", () => 
       "users",
       "password-reset-requests",
     ],
-    ["/admin/phone-settings", "settings", "settings", "phone-settings"],
-    ["/admin/chat-settings", "settings", "settings", "chat-settings"],
+    ["/admin/phone-settings", "phone-settings", null, null],
+    ["/admin/chat-settings", "chat-settings", null, null],
     ["/admin/languages", "settings", "settings", "language-settings"],
     [
       "/admin/maintenance-settings",
@@ -117,9 +118,10 @@ test("route matcher selects at most one primary and section destination", () => 
       "settings",
       "maintenance-settings",
     ],
-    ["/admin/roles", "settings", "settings", "roles"],
-    ["/admin/roles/role-1", "settings", "settings", "roles"],
-    ["/admin/developer-api", "settings", "settings", "developer-api"],
+    ["/admin/roles", "roles", null, null],
+    ["/admin/roles/role-1", "roles", null, null],
+    ["/admin/roles/role-1/members", "roles", null, null],
+    ["/admin/developer-api", "developer-api", null, null],
     ["/admin/reservations/bookings", "reservations", null, null],
     ["/admin/zaad", "zaad", null, null],
   ] as const;
@@ -161,13 +163,10 @@ test("every users and settings page places section navigation between header and
     "../app/admin/users/[id]/UserDetailsView.tsx",
     "../app/admin/users/[id]/access/UserAccessView.tsx",
     "../app/admin/password-reset-requests/PasswordResetRequestsView.tsx",
-    "../app/admin/phone-settings/PhoneSettingsForm.tsx",
-    "../app/admin/chat-settings/ChatSettingsForm.tsx",
     "../app/admin/languages/LanguageSettingsForm.tsx",
     "../app/admin/maintenance-settings/MaintenanceSettingsForm.tsx",
     "../app/admin/roles/RolesView.tsx",
     "../app/admin/roles/[id]/RoleDetailsView.tsx",
-    "../app/admin/developer-api/DeveloperApiSettingsForm.tsx",
   ]) {
     const view = source(file);
     const header = view.indexOf("data-admin-page-header");

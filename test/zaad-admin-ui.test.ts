@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createElement, type ComponentType, type PropsWithChildren } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ZaadView } from "../app/admin/zaad/ZaadView";
+import { ZaadView, buildResidentRowActions } from "../app/admin/zaad/ZaadView";
+import { activateRowAction } from "../app/components/admin/table-row-actions";
 import { LanguageProvider } from "../app/i18n/LanguageProvider";
 
 import {
@@ -27,6 +28,32 @@ const modalSource = readFileSync(
   new URL("../app/components/admin/ModalDialog.tsx", import.meta.url),
   "utf8",
 );
+
+test("ROW-ZAAD: retry eligibility, disabled count, row identity and revision are retained", () => {
+  const resident = {
+    id: "resident", name: "Resident", email: "sample@example.invalid", phone: "+81312345678", consentStatus: "CONSENTED", source: "ADMIN",
+    revision: 7, contactList: null, syncStatus: "FAILED", syncErrorCode: "FAILED", createdAt: "2026-09-01", updatedAt: "2026-09-01",
+  };
+  const calls: unknown[] = [];
+  const callbacks = {
+    onEdit: (id: string, trigger: HTMLButtonElement) => { calls.push(["edit", id, trigger]); },
+    onDelete: (id: string, trigger: HTMLButtonElement) => { calls.push(["delete", id, trigger]); },
+    onRetry: (row: Parameters<typeof buildResidentRowActions>[0]["resident"]) => { calls.push(row); },
+  };
+  const trigger = {} as HTMLButtonElement;
+  for (const pending of [false, true]) for (const allowed of [false, true]) {
+    const actions = buildResidentRowActions({ resident, pending, permissions: { create: allowed, update: allowed, delete: allowed }, copy: zaadDictionaries.ja, ...callbacks });
+    assert.deepEqual(actions.map(item => item.id), ["retry", "edit", "delete"]);
+    assert.ok(actions.every(item => item.disabled === (pending || !allowed)));
+    for (const action of actions) activateRowAction(action.disabled, () => action.onSelect?.(trigger));
+    if (pending || !allowed) assert.ok(actions.every(item => item.disabledReason));
+  }
+  assert.deepEqual(calls, [resident, ["edit", resident.id, trigger], ["delete", resident.id, trigger]]);
+  for (const row of [{ ...resident, syncStatus: "SYNCED" }, { ...resident, syncErrorCode: "ZAAD_ZOOM_RESULT_UNKNOWN" }]) {
+    const actions = buildResidentRowActions({ resident: row, pending: false, permissions: { create: true, update: true, delete: true }, copy: zaadDictionaries.ja, ...callbacks });
+    assert.deepEqual(actions.map(item => item.id), ["edit", "delete"]);
+  }
+});
 
 function renderResidents(reviewState?: string, canViewDeveloperApi = true) {
   const Provider = LanguageProvider as ComponentType<PropsWithChildren<{ availableLocales: readonly ["ja"] }>>;
@@ -76,8 +103,8 @@ test("ACCESS-13: disabled resident mutations and pagination keep server contract
   assert.match(html, /disabled=""[^>]*>CSV/);
   const section = viewSource.slice(viewSource.indexOf("function ResidentsSection"), viewSource.indexOf("function MessagesSection"));
   assert.match(section, /disabled=\{pending \|\| !permissions.create\}/);
-  assert.match(section, /disabled=\{pending \|\| !permissions.update\}/);
-  assert.match(section, /disabled=\{pending \|\| !permissions.delete\}/);
+  assert.match(section, /disabled: pending \|\| !permissions.update/);
+  assert.match(section, /disabled: pending \|\| !permissions.delete/);
   assert.match(viewSource, /params.set\("query", query\)/); assert.match(viewSource, /params.set\("cursor", cursor\)/);
   assert.match(viewSource, /controller.dispose\(\)/);
 });

@@ -1,5 +1,6 @@
 "use client";
 
+import { settingsInputFocusClassName } from "@/app/components/admin/settings-form-styles";
 import { useState } from "react";
 
 import { getAdminRoleDisplayName } from "@/app/components/admin/role-display";
@@ -182,7 +183,7 @@ export function NewUserForm({
 
       <form
         action={submit}
-        className="space-y-4 rounded-lg border border-line bg-surface-raised p-6 shadow-sm"
+        className="min-w-0 space-y-6"
       >
         <label className="block space-y-2">
           <span className="text-sm font-semibold">{t.auth.name}</span>
@@ -190,7 +191,7 @@ export function NewUserForm({
             name="name"
             required
             autoComplete="name"
-            className="w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent"
+            className={`w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors ${settingsInputFocusClassName}`}
           />
         </label>
         <label className="block space-y-2">
@@ -200,7 +201,7 @@ export function NewUserForm({
             type="email"
             required
             autoComplete="email"
-            className="w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent"
+            className={`w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors ${settingsInputFocusClassName}`}
           />
         </label>
         <label className="block space-y-2">

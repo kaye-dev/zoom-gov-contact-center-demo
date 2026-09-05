@@ -1,5 +1,6 @@
 "use client";
 
+import { settingsSectionClassName, settingsInputFocusClassName } from "@/app/components/admin/settings-form-styles";
 import { AdminPageTitleHelp } from "@/app/components/admin/AdminPageTitleHelp";
 
 import { useRouter } from "next/navigation";
@@ -308,7 +309,7 @@ export function MaintenanceSettingsForm({
       </div>
 
       <div data-admin-page-body className="ml-1 mr-0 mt-6 max-w-5xl space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface-raised p-4 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line-subtle pb-4">
         <h2 className="font-bold">{copy.effectiveStateTitle}</h2>
         <p
           role="status"
@@ -335,9 +336,9 @@ export function MaintenanceSettingsForm({
         <fieldset
           disabled={!canEdit || isSubmitting}
           aria-describedby="maintenance-mode-description"
-          className="space-y-4 rounded-lg border border-line bg-surface-raised p-5 shadow-sm disabled:opacity-70 md:p-6"
+          className={`${settingsSectionClassName} disabled:opacity-70`}
         >
-          <legend className="px-2 text-lg font-bold">{copy.modeTitle}</legend>
+          <legend className="mb-4 text-lg font-bold">{copy.modeTitle}</legend>
           <p
             id="maintenance-mode-description"
             className="text-sm leading-6 text-fg-muted"
@@ -394,9 +395,9 @@ export function MaintenanceSettingsForm({
         <fieldset
           disabled={!canEdit || isSubmitting || mode !== "SCHEDULED"}
           aria-describedby="maintenance-schedule-description maintenance-time-zone-note"
-          className="space-y-5 rounded-lg border border-line bg-surface-raised p-5 shadow-sm disabled:opacity-70 md:p-6"
+          className={`${settingsSectionClassName} disabled:opacity-70`}
         >
-          <legend className="px-2 text-lg font-bold">
+          <legend className="mb-4 text-lg font-bold">
             {copy.scheduleTitle}
           </legend>
           <p
@@ -430,7 +431,7 @@ export function MaintenanceSettingsForm({
                     ? " maintenance-settings-feedback"
                     : ""
                 }`}
-                className="w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/30 disabled:cursor-not-allowed"
+                className={`w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors ${settingsInputFocusClassName} disabled:cursor-not-allowed`}
               />
             </div>
             <div className="space-y-2">
@@ -457,7 +458,7 @@ export function MaintenanceSettingsForm({
                     ? " maintenance-settings-feedback"
                     : ""
                 }`}
-                className="w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/30 disabled:cursor-not-allowed"
+                className={`w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors ${settingsInputFocusClassName} disabled:cursor-not-allowed`}
               />
             </div>
           </div>

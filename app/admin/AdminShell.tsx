@@ -291,7 +291,7 @@ export function AdminShell({
               <span
                 data-sidebar-label
                 aria-hidden={!isSidebarExpanded}
-                className={`self-start overflow-hidden whitespace-nowrap text-lg font-bold leading-7 transition-[max-width,max-height,opacity,transform] duration-200 ease-out motion-reduce:transition-none ${
+                className={`overflow-hidden whitespace-nowrap text-lg font-bold leading-7 transition-[max-width,max-height,opacity,transform] duration-200 ease-out motion-reduce:transition-none ${
                   isSidebarExpanded ? "max-h-9" : "max-h-0"
                 } ${sidebarLabelClassName}`}
               >

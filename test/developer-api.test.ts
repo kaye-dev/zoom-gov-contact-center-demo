@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+
+import { DeveloperApiSectionTabs, type DeveloperApiSection } from "../app/admin/developer-api/DeveloperApiSectionTabs";
+import { AdminSettingsTabs } from "../app/admin/AdminSettingsTabs";
 
 import { dictionaries, locales } from "../app/i18n/dictionaries";
 import {
@@ -11,6 +16,57 @@ import {
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 
+test("Developer API tabs select one accessible panel and support keyboard navigation", () => {
+  const copy = dictionaries.ja.admin.developerApiManagement;
+  let selected: DeveloperApiSection = "server-to-server-oauth";
+  let focused = "";
+  let prevented = false;
+  const previousDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: {
+    getElementById: (id: string) => ({ focus: () => { focused = id; } }),
+  } });
+  try {
+    const props = {
+      activeSection: selected,
+      onSelect: (section: DeveloperApiSection) => { selected = section; },
+      label: copy.title, oauthLabel: copy.oauthTitle, webhookLabel: copy.webhookTitle,
+    };
+    const tabs = AdminSettingsTabs(DeveloperApiSectionTabs(props).props).props.children.props.children;
+    tabs[1].props.onClick();
+    assert.equal(selected, "webhook-only-app");
+    for (const [index, key, expected] of [
+      [0, "ArrowRight", "webhook-only-app"],
+      [0, "ArrowLeft", "webhook-only-app"],
+      [1, "ArrowRight", "server-to-server-oauth"],
+      [1, "Home", "server-to-server-oauth"],
+      [0, "End", "webhook-only-app"],
+    ] as const) {
+      prevented = false;
+      tabs[index].props.onKeyDown({ key, preventDefault: () => { prevented = true; } });
+      assert.equal(selected, expected);
+      assert.equal(focused, `${expected}-tab`);
+      assert.equal(prevented, true);
+    }
+    prevented = false;
+    tabs[0].props.onKeyDown({ key: "Tab", preventDefault: () => { prevented = true; } });
+    assert.equal(prevented, false);
+    for (const activeSection of ["server-to-server-oauth", "webhook-only-app"] as const) {
+      const html = renderToStaticMarkup(createElement(DeveloperApiSectionTabs, { ...props, activeSection }));
+      assert.equal((html.match(/role="tab"/g) ?? []).length, 2);
+      assert.equal((html.match(/aria-selected="true"/g) ?? []).length, 1);
+      assert.match(html, new RegExp(`id="${activeSection}-tab"[^>]*aria-selected="true"[^>]*aria-controls="${activeSection}-panel"[^>]*tabindex="0"`));
+    }
+  } finally {
+    if (previousDocument) Object.defineProperty(globalThis, "document", previousDocument);
+    else Reflect.deleteProperty(globalThis, "document");
+  }
+  const form = read("../app/admin/developer-api/DeveloperApiSettingsForm.tsx");
+  for (const section of ["server-to-server-oauth", "webhook-only-app"]) {
+    assert.ok(form.includes(`id="${section}-panel" role="tabpanel" aria-labelledby="${section}-tab" tabIndex={0} hidden={activeSection !== "${section}"}`));
+    assert.ok(form.includes(`onSubmit={submit("${section}")}`));
+  }
+});
+
 test("Developer API navigation and page use the approved route and sections", () => {
   const navigation = read("../app/admin/admin-navigation.ts");
   const page = read("../app/admin/developer-api/page.tsx");
@@ -18,9 +74,8 @@ test("Developer API navigation and page use the approved route and sections", ()
   const route = read("../app/api/[[...route]]/route.ts");
   assert.match(
     navigation,
-    /key: "developer-api",\s*href: settingsPaths\["developer-api"\]/u,
+    /key: "developer-api",\s*href: "\/admin\/developer-api"/u,
   );
-  assert.match(navigation, /"developer-api": "\/admin\/developer-api"/u);
   assert.match(page, /requireAdminAccess\(\s*"developer-api",\s*"VIEW"/u);
   assert.match(
     route,
@@ -66,7 +121,9 @@ test("Developer API navigation and page use the approved route and sections", ()
   assert.equal(form.match(/disabled=\{!canEdit \|\| Boolean\(submitting\[/gu)?.length, 2);
   assert.match(form, /id="server-to-server-oauth-feedback"/u);
   assert.match(form, /id="webhook-only-app-feedback"/u);
-  assert.doesNotMatch(form, /client-secret-help|secret-token-help|aria-describedby/u);
+  assert.doesNotMatch(form, /client-secret-help|secret-token-help/u);
+  assert.match(form, /SettingsSaveScope scope="section"/u);
+  assert.match(form, /aria-describedby=\{`\$\{id\}-scope`\}/u);
 });
 
 test("Developer API reveal parser accepts one supported field only", () => {
