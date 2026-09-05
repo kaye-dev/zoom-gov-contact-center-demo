@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import type { StoredDeploymentConfig } from "../lib/aws-config";
+import { validateDatabaseUrls } from "../lib/validation";
 import { loadNeonConnectionContext } from "../lib/neon-api";
 import {
   createMigrationPlan,
@@ -29,6 +30,10 @@ import {
   readExpectedPreviousDeploymentId,
   runCanonicalDeploymentBoundSmoke,
   setVercelEnvironment,
+  syncProductionEnvironment,
+  assertAllowedProductionEnvironment,
+  assertExactProductionEnvironment,
+  type VerifiedDeploymentTarget,
   shouldRequireLocalMigrationApproval,
   validateCanonicalDeploymentResult,
   validateProductionDeploymentEvidence,
@@ -46,7 +51,7 @@ const neonConfig = {
 } as const;
 
 const storedConfig: StoredDeploymentConfig = {
-  schemaVersion: 1,
+  schemaVersion: 3,
   policyVersion: "demo-v1",
   aws: { accountId: "123456789012", region: "ap-northeast-1" },
   vercel: {
@@ -68,10 +73,18 @@ const storedConfig: StoredDeploymentConfig = {
   admin: { email: "admin@example.test" },
   kmsKeyArn:
     "arn:aws:kms:ap-northeast-1:123456789012:key/11111111-2222-3333-4444-555555555555",
-  secretVersions: { vercelToken: 1, neonApiKey: 2, adminPassword: 3 },
+  secretVersions: {
+    vercelToken: 1,
+    neonApiKey: 2,
+    adminPassword: 3,
+    developerApiSettingsEncryptionKey: 1,
+  },
 };
 
-function neonResponse(url: URL, ownerName: string = neonConfig.roleName): unknown {
+function neonResponse(
+  url: URL,
+  ownerName: string = neonConfig.roleName,
+): unknown {
   const projectPrefix = `/api/v2/projects/${neonConfig.projectId}`;
   if (url.pathname === projectPrefix) {
     return {
@@ -137,7 +150,10 @@ function neonResponse(url: URL, ownerName: string = neonConfig.roleName): unknow
     const pooled = url.searchParams.get("pooled") === "true";
     assert.equal(url.searchParams.get("branch_id"), neonConfig.branchId);
     assert.equal(url.searchParams.get("endpoint_id"), "ep-production");
-    assert.equal(url.searchParams.get("database_name"), neonConfig.databaseName);
+    assert.equal(
+      url.searchParams.get("database_name"),
+      neonConfig.databaseName,
+    );
     assert.equal(url.searchParams.get("role_name"), neonConfig.roleName);
     return {
       uri: `postgresql://${neonConfig.roleName}:p%40ss@ep-production${pooled ? "-pooler" : ""}.ap-southeast-1.aws.neon.tech/${neonConfig.databaseName}?sslmode=require&channel_binding=require`,
@@ -155,16 +171,15 @@ test("DBTLS-05: dynamic Neon URIを正規化してpooledだけをVercelへ同期
   ): Promise<Response> => {
     const url = new URL(String(input));
     urls.push(url);
-    assert.equal(new Headers(init?.headers).get("authorization"), `Bearer ${token}`);
+    assert.equal(
+      new Headers(init?.headers).get("authorization"),
+      `Bearer ${token}`,
+    );
     assert.equal(url.href.includes(token), false);
     return Response.json(neonResponse(url));
   };
 
-  const context = await loadNeonConnectionContext(
-    neonConfig,
-    token,
-    request,
-  );
+  const context = await loadNeonConnectionContext(neonConfig, token, request);
   assert.equal(context.organizationId, "org-production");
   assert.equal(context.database.endpointId, "ep-production");
   assert.match(context.database.pooledHost, /-pooler\./u);
@@ -206,7 +221,10 @@ test("DBTLS-05: dynamic Neon URIを正規化してpooledだけをVercelへ同期
     false,
   );
   assert.equal(calls[0]?.arguments_.includes("DATABASE_URL_UNPOOLED"), false);
-  assert.equal(urls.filter((url) => url.pathname.endsWith("connection_uri")).length, 2);
+  assert.equal(
+    urls.filter((url) => url.pathname.endsWith("connection_uri")).length,
+    2,
+  );
 });
 
 test("DBTLS-07: 正規化後もURLとpasswordをlog、argv、fileへ露出しない", async () => {
@@ -483,7 +501,12 @@ test("Production deploy arguments directly assign domains and carry immutable me
     commitSha,
     "123456789",
   );
-  assert.deepEqual(arguments_.slice(0, 4), ["deploy", "--prod", "--yes", "--json"]);
+  assert.deepEqual(arguments_.slice(0, 4), [
+    "deploy",
+    "--prod",
+    "--yes",
+    "--json",
+  ]);
   assert.equal(arguments_.includes("--skip-domain"), false);
   assert.equal(arguments_.includes("promote"), false);
   assert.ok(arguments_.includes(`deployCommitSha=${commitSha}`));
@@ -564,6 +587,7 @@ test("target fingerprint canonicalizes the complete non-secret stored config", (
   const reordered: StoredDeploymentConfig = {
     secretVersions: {
       adminPassword: 3,
+      developerApiSettingsEncryptionKey: 1,
       neonApiKey: 2,
       vercelToken: 1,
     },
@@ -889,8 +913,14 @@ test("Production environment audit follows pagination and rejects a forbidden se
     /outside the reviewed allowlist/u,
   );
   assert.equal(requests.length, 2);
-  assert.equal(new URL(requests[0]!, "https://api.vercel.test").searchParams.has("until"), false);
-  assert.equal(new URL(requests[1]!, "https://api.vercel.test").searchParams.get("until"), "200");
+  assert.equal(
+    new URL(requests[0]!, "https://api.vercel.test").searchParams.has("until"),
+    false,
+  );
+  assert.equal(
+    new URL(requests[1]!, "https://api.vercel.test").searchParams.get("until"),
+    "200",
+  );
 });
 
 test("Production environment audit accepts the complete hidden-count response variant", () => {
@@ -908,6 +938,12 @@ test("Production environment audit accepts the complete hidden-count response va
           stderr: "",
           stdout: JSON.stringify({
             envs: [
+              {
+                id: "env_devkey",
+                key: "DEVELOPER_API_SETTINGS_ENCRYPTION_KEY",
+                type: "sensitive",
+                target: ["production"],
+              },
               {
                 key: "DATABASE_URL",
                 type: "sensitive",
@@ -1056,4 +1092,124 @@ test("Production environment audit rejects a pagination cycle", () => {
     /did not make forward progress/u,
   );
   assert.equal(requestCount, 2);
+});
+
+test("encryption key version participates in the target fingerprint and is removed from build environments", () => {
+  assert.notEqual(
+    createDeploymentTargetFingerprint(storedConfig),
+    createDeploymentTargetFingerprint({
+      ...storedConfig,
+      secretVersions: {
+        ...storedConfig.secretVersions,
+        developerApiSettingsEncryptionKey: 2,
+      },
+    }),
+  );
+  const environment = createSecretFreeBuildEnvironment({
+    NODE_ENV: "test",
+    DEVELOPER_API_SETTINGS_ENCRYPTION_KEY: "synthetic-key",
+    PATH: "/bin",
+  });
+  assert.equal(environment.DEVELOPER_API_SETTINGS_ENCRYPTION_KEY, undefined);
+  assert.equal(environment.PATH, "/bin");
+});
+
+test("encryption key synchronization requires Production Sensitive and stops on failure", () => {
+  const key = Buffer.alloc(32, 19).toString("base64");
+  for (const failSync of [false, true]) {
+    const envs = new Map([
+      ["DATABASE_URL", "sensitive"],
+      ["BETTER_AUTH_SECRET", "sensitive"],
+      ["BETTER_AUTH_URL", "encrypted"],
+      ["BETTER_AUTH_TRUSTED_ORIGINS", "encrypted"],
+      ["BETTER_AUTH_TRUST_PROXY_HEADERS", "encrypted"],
+      ["APP_CANONICAL_ORIGIN", "encrypted"],
+    ]);
+    const payload = () =>
+      JSON.stringify({
+        pagination: { count: envs.size, next: null, prev: null },
+        envs: [...envs].map(([key, type]) => ({
+          key,
+          type,
+          target: ["production"],
+        })),
+      });
+    assert.doesNotThrow(() =>
+      assertAllowedProductionEnvironment(
+        parseProductionEnvironmentAudit(payload()),
+      ),
+    );
+    assert.throws(
+      () =>
+        assertExactProductionEnvironment(
+          parseProductionEnvironmentAudit(payload()),
+        ),
+      /missing/,
+    );
+    let keyWrites = 0;
+    const runner: CommandRunner = {
+      run(command, args, options) {
+        assert.equal(command, "vercel");
+        assert.ok(!JSON.stringify(args).includes(key));
+        assert.ok(!JSON.stringify(options?.env).includes(key));
+        if (args[0] === "api")
+          return {
+            status: 0,
+            stderr: "",
+            stdout: args[1].startsWith("/v1/env?")
+              ? JSON.stringify({ data: [], pagination: { count: 0 } })
+              : payload(),
+          };
+        assert.equal(args[0], "env");
+        assert.equal(args[1], "add");
+        if (args[2] === "DEVELOPER_API_SETTINGS_ENCRYPTION_KEY") {
+          keyWrites++;
+          assert.equal(args[3], "production");
+          assert.ok(args.includes("--sensitive"));
+          assert.equal(options?.input, `${key}\n`);
+          if (failSync)
+            return {
+              status: 1,
+              stdout: "",
+              stderr: "simulated provider failure",
+            };
+          envs.set(args[2], "sensitive");
+        }
+        return { status: 0, stderr: "", stdout: "" };
+      },
+    };
+    const target: VerifiedDeploymentTarget = {
+      link: { orgId: "team_abc123", projectId: "prj_abc123" },
+      canonicalUrl: new URL("https://example.test"),
+      projectName: "test",
+      database: validateDatabaseUrls(
+        "postgresql://app_owner:synthetic@ep-safe-pooler.ap-southeast-1.aws.neon.tech/app?sslmode=require",
+        "postgresql://app_owner:synthetic@ep-safe.ap-southeast-1.aws.neon.tech/app?sslmode=require",
+      ),
+      adminCredentials: { email: "admin@example.test", password: "synthetic" },
+      developerApiSettingsEncryptionKey: key,
+      targetFingerprint: "test",
+      vercelEnvironment: { NODE_ENV: "test" },
+    };
+    if (failSync)
+      assert.throws(
+        () => syncProductionEnvironment(runner, target),
+        /Vercel env update/,
+      );
+    else {
+      syncProductionEnvironment(runner, target);
+      assertExactProductionEnvironment(
+        parseProductionEnvironmentAudit(payload()),
+      );
+    }
+    assert.equal(keyWrites, 1);
+    envs.set("DEVELOPER_API_SETTINGS_ENCRYPTION_KEY", "encrypted");
+    assert.throws(
+      () =>
+        assertAllowedProductionEnvironment(
+          parseProductionEnvironmentAudit(payload()),
+        ),
+      /Sensitive/,
+    );
+  }
 });

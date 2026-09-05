@@ -767,6 +767,7 @@ test("Production environment preflight repeats exact project and shared audits",
       return success(
         JSON.stringify({
           envs: [
+            { key: "DEVELOPER_API_SETTINGS_ENCRYPTION_KEY", type: "sensitive", target: ["production"] },
             { key: "DATABASE_URL", type: "sensitive", target: ["production"] },
             {
               key: "BETTER_AUTH_SECRET",
@@ -794,7 +795,7 @@ test("Production environment preflight repeats exact project and shared audits",
               target: ["production"],
             },
           ],
-          pagination: { count: 6, next: null, prev: null },
+          pagination: { count: 7, next: null, prev: null },
         }),
       );
     }

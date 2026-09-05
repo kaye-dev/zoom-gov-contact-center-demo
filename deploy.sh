@@ -12,6 +12,7 @@ DEPLOY_CONFIG_PARAMETER="/zoom-gov-contact-center-demo/production/deploy/config"
 DEPLOY_VERCEL_TOKEN_PARAMETER="/zoom-gov-contact-center-demo/production/deploy/vercel-token"
 DEPLOY_NEON_API_KEY_PARAMETER="/zoom-gov-contact-center-demo/production/deploy/neon-api-key"
 DEPLOY_ADMIN_PASSWORD_PARAMETER="/zoom-gov-contact-center-demo/production/deploy/admin-password"
+DEPLOY_DEVELOPER_API_KEY_PARAMETER="/zoom-gov-contact-center-demo/production/deploy/developer-api-settings-encryption-key"
 DEPLOY_CONTEXT_COMPLETION_MARKER="ZOOM_DEPLOY_SSM_CONTEXT_COMPLETE_V1"
 DEPLOY_PRIVATE_OUTPUT_ENTRYPOINT='chmod 700 /deploy-output && exec "$@"'
 DEPLOY_MINIMUM_DOCKER_MEMORY_BYTES=4000000000
@@ -668,9 +669,17 @@ stream_ssm_context() {
       "${DEPLOY_VERCEL_TOKEN_PARAMETER}" \
       "${DEPLOY_NEON_API_KEY_PARAMETER}" \
       "${DEPLOY_ADMIN_PASSWORD_PARAMETER}" \
+      "${DEPLOY_DEVELOPER_API_KEY_PARAMETER}" \
       --with-decryption \
       --output json \
       --no-cli-pager 2>/dev/null; then
+    printf '\n%s\n' 'ZOOM_DEPLOY_KEY_METADATA_V1'
+    if ! run_aws_helper ssm describe-parameters \
+      --parameter-filters "Key=Name,Option=Equals,Values=${DEPLOY_DEVELOPER_API_KEY_PARAMETER}" \
+      --max-results 10 --output json --no-cli-pager 2>/dev/null; then
+      echo "SSM encryption key metadata inspection failed." >&2
+      return 1
+    fi
     printf '\n%s\n' "${DEPLOY_CONTEXT_COMPLETION_MARKER}"
     return
   fi

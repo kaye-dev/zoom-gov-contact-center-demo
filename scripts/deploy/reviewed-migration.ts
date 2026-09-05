@@ -84,6 +84,7 @@ export async function runReviewedMigrationWorkflow(
     loaded.secrets.vercelToken,
     loaded.secrets.neonApiKey,
     loaded.secrets.adminPassword,
+    loaded.secrets.developerApiSettingsEncryptionKey,
   );
 
   const expectedTargetFingerprint =

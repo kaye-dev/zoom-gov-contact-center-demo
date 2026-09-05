@@ -1394,13 +1394,17 @@ test("SSM stream emits its completion marker only after the AWS helper succeeds"
     assert.equal(success.status, 0, success.stderr);
     assert.equal(
       success.stdout,
-      `{\"ok\":true}\n${DEPLOY_CONTEXT_COMPLETION_MARKER}\n`,
+      `{\"ok\":true}\nZOOM_DEPLOY_KEY_METADATA_V1\n{\"ok\":true}\n${DEPLOY_CONTEXT_COMPLETION_MARKER}\n`,
     );
 
     const failure = runFixture(
       root,
       `run_aws_helper() { printf '{\"secret\":\"${syntheticSecret}\"}'; return 255; }\nstream_ssm_context`,
     );
+    const metadataFailure = runFixture(root,
+      'run_aws_helper() { if [[ "$2" == "describe-parameters" ]]; then return 255; fi; printf "{}"; }\nstream_ssm_context');
+    assert.notEqual(metadataFailure.status, 0);
+    assert.ok(!metadataFailure.stdout.includes(DEPLOY_CONTEXT_COMPLETION_MARKER));
     assert.notEqual(failure.status, 0);
     assert.ok(!failure.stdout.includes(DEPLOY_CONTEXT_COMPLETION_MARKER));
     assert.ok(!failure.stderr.includes(syntheticSecret));

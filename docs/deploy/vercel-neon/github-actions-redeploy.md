@@ -8,7 +8,7 @@
 - GitHub Environmentsの`production-deploy`と`production-migration`が`main`だけを許可している。
 - `production-migration`にrequired reviewerが設定されている。
 - 実行中の別Production deployがない。並行起動したrunは同じconcurrency groupで直列化され、進行中のrunはcancelされない。
-- AWS IAM Role、KMS key、4件のParameter Store設定を変更した場合は、先に権限テストをやり直している。
+- AWS IAM Role、KMS key、5件のParameter Store設定を変更した場合は、先に権限テストをやり直している。
 
 `Deploy runner npm test`はrequired status checkのcontext名です。PRと`main` pushのexact SHAからdeploy runnerをbuildし、同じイメージ内で`npm test`、`npm run typecheck`をnetworkなしで実行し、外部通信不能な隔離PostgreSQL 17へ全migrationを再生する`npm run test:migration-schema:db`でmigration/schema parityを検証します。隔離DBはsynthetic credentialだけを使い、host portとvolumeを公開せず、所有するcontainerとnetworkを削除します。その後、秘密情報やhost mountを渡さない短命containerから`npm audit --omit=dev`を公式npm registryに対して実行します。AWS OIDC、SSM、Vercel、Neon、GitHub Environmentやsecretは使わず、このcheckの成功・失敗だけではProduction変更なしです。失敗した場合はProduction workflowやAWS SSO再認証へ進まず、Docker build、イメージ内test、typecheck、migration/schema不一致、依存関係、lockfileを修正した新しいPR SHAでcheckを成功させます。
 
@@ -28,7 +28,7 @@ branch protectionの`required_status_checks`が`null`または必要なcheckを�
 1. `main`の`GITHUB_SHA`をcheckoutし、ref、40桁SHA、実際の`HEAD`が一致することを検証する。
 2. `git archive "$GITHUB_SHA"`をprivate temporary build contextへ展開し、その中の`Dockerfile.deploy`からSHA付きdeploy runner imageをbuildする。
 3. Docker buildが完了してからGitHub OIDCで短期AWS credentialを取得する。
-4. hostのAWS CLIだけでSTS accountを照合し、4件のexact parameterを`GetParameters --with-decryption`で一括取得する。
+4. hostのAWS CLIだけでSTS accountを照合し、5件のexact parameterを`GetParameters --with-decryption`で一括取得し、Developer API暗号鍵のexact Name filterで`DescribeParameters`を実行する。型・tier・KMS key ARN・versionを照合する。
 5. SSM JSONと成功markerをpipeでdeploy runnerのstdinへ渡し、phaseを実行する。
 
 Node.js、npm、Vercel CLI、repositoryのTypeScript / lifecycle scriptはhostで実行しません。`npm ci`とVercel CLI installを含むDocker buildはOIDC取得前なので、package lifecycleへAWS credentialが露出しません。Vercelへuploadされるtreeもworking directoryの可変状態ではなく、buildした`GITHUB_SHA`のarchiveです。
@@ -90,3 +90,5 @@ pending migrationがあるrunは`production-migration` Environmentの承認待�
 workflowの`Re-run failed jobs`は、外部変更を伴うjobを再実行することがあります。状態不明のまま再実行しません。failure logに従って、Vercel deployment、Neon migration、canonical応答を確認します。認証だけが故障した場合やDB停止時は[メンテナンスモード緊急解除](maintenance-recovery.md)を参照してください。
 
 DB migrationはVercel rollbackでは戻りません。canonical smoke失敗後も自動DB rollbackは行いません。
+
+Developer API暗号鍵の初期導入・移行・復旧条件は[専用手順](developer-api-encryption-key.md)を参照してください。

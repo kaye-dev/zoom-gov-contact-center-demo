@@ -126,6 +126,7 @@ test("phase containers receive only the marked SSM stdin and non-secret metadata
     "DEPLOY_VERCEL_TOKEN_PARAMETER",
     "DEPLOY_NEON_API_KEY_PARAMETER",
     "DEPLOY_ADMIN_PASSWORD_PARAMETER",
+    "DEPLOY_DEVELOPER_API_KEY_PARAMETER",
   ]) {
     const reference = `"${"${"}${parameter}}"`;
     assert.equal(
@@ -182,4 +183,17 @@ test("canonical smoke still runs when the optional migration job is skipped", ()
     /if: >-\n\s+\$\{\{\n\s+always\(\) &&\n\s+needs\.validate_and_plan\.result == 'success' &&\n\s+needs\.production_deploy\.result == 'success'\n\s+\}\}/u,
   );
   assert.doesNotMatch(smoke, /needs\.production_migration/u);
+});
+
+test("each phase verifies encryption key metadata before publishing the completion marker", () => {
+  for (const name of jobNames) {
+    const block = jobBlock(name);
+    const metadata = block.indexOf("aws ssm describe-parameters");
+    assert.ok(metadata > block.indexOf("aws ssm get-parameters"));
+    assert.ok(metadata < block.indexOf("ZOOM_DEPLOY_SSM_CONTEXT_COMPLETE_V1"));
+    assert.match(
+      block.slice(metadata),
+      /Key=Name,Option=Equals,Values=\$\{DEPLOY_DEVELOPER_API_KEY_PARAMETER\}/u,
+    );
+  }
 });

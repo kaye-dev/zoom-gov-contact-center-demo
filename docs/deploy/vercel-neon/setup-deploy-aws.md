@@ -14,10 +14,11 @@
 | `/zoom-gov-contact-center-demo/production/deploy/vercel-token`   | `SecureString` | Vercel API token                                                                       |
 | `/zoom-gov-contact-center-demo/production/deploy/neon-api-key`   | `SecureString` | Neon API key                                                                           |
 | `/zoom-gov-contact-center-demo/production/deploy/admin-password` | `SecureString` | Production管理者password                                                               |
+| `/zoom-gov-contact-center-demo/production/deploy/developer-api-settings-encryption-key` | `SecureString` | Developer API設定の永続暗号鍵（初回のみ自動生成） |
 
-3件の`SecureString`は専用のcustomer managed KMS key `alias/zoom-gov-contact-center-demo-production-deploy`を使います。Parameterはこの4件だけで、setup再開用のparameterを追加しません。
+4件の`SecureString`は専用のcustomer managed KMS key `alias/zoom-gov-contact-center-demo-production-deploy`を使います。Parameterはこの5件だけで、setup再開用のparameterを追加しません。
 
-初回setupの途中では、`config`に検証済みの非秘密項目と各`SecureString`の予定versionを進捗として保存します。token、API key、passwordそのものは`config`へ保存しません。すべての入力とprovider検証が完了すると、同じ`config`を次の完了済みschemaで上書きします。`config`は手動編集しません。
+初回setupの途中では、`config`に検証済みの非秘密項目と各`SecureString`の予定versionを進捗として保存します。token、API key、passwordそのものは`config`へ保存しません。すべての入力とprovider検証が完了すると、同じ`config`を次の完了済みschema version 3で上書きします。途中設定はversion 4です。旧version 1／2の移行は[Developer API暗号鍵の導入手順](developer-api-encryption-key.md)を参照してください。`config`は手動編集しません。
 
 ```text
 schemaVersion, policyVersion
@@ -26,7 +27,7 @@ vercel.orgId (Vercel team ID), projectId, projectName, canonicalOrigin, expected
 neon.projectId, projectName, branchId, databaseName, roleName, regionId, expectedPlan
 admin.email
 kmsKeyArn
-secretVersions.vercelToken, neonApiKey, adminPassword
+secretVersions.vercelToken, neonApiKey, adminPassword, developerApiSettingsEncryptionKey
 ```
 
 Neonのpooled / direct connection stringは保存しません。deployの各phaseがNeon APIから対象branch / database / roleの値を取得し、host、pooling、TLS、project対応を検証してprocess内だけで使用します。
@@ -35,7 +36,7 @@ Neonのpooled / direct connection stringは保存しません。deployの各phas
 
 - Docker EngineまたはDocker Desktopが起動している。
 - 対象AWS accountのIAM Identity Center profileが`~/.aws/config`にある。
-- profileで対象accountへloginでき、`ap-northeast-1`のKMS key / aliasと上記4 parameterを作成・更新・検証できる。
+- profileで対象accountへloginでき、`ap-northeast-1`のKMS key / aliasと上記5 parameterを作成・更新・検証できる。
 - Vercel project、Production domain、ProductionのSensitive `BETTER_AUTH_SECRET`、Neon project / primary read-write branch / database / roleが作成済みである。
 - Vercel token、Neon API key、管理者passwordをpassword managerから取得できる。
 
@@ -62,7 +63,7 @@ ssm:GetParameters, ssm:DescribeParameters, ssm:PutParameter
 ssm:AddTagsToResource
 ```
 
-組織のSCP、permission boundary、KMS key policyも同じ操作を許可する必要があります。通常deploy用identityは[AWS IAM / OIDC設定](aws-iam-oidc.md)にある4件のreadと3件のexact decryptへ縮小します。
+組織のSCP、permission boundary、KMS key policyも同じ操作を許可する必要があります。通常deploy用identityは[AWS IAM / OIDC設定](aws-iam-oidc.md)にある5件のreadと4件のexact decryptと鍵metadata用の`ssm:DescribeParameters`へ縮小します。
 
 ## 2. provider側を確認する
 
@@ -87,7 +88,7 @@ Vercel tokenをGitHub Secrets、`.env`、shell変数へ複製しません。初�
 
 connection stringを事前にコピーする必要はありません。setupとdeployがAPIから取得します。NeonのVercel Integrationは使用しません。[Neon API key](https://neon.com/docs/manage/api-keys)も参照してください。
 
-`setup-deploy-aws.sh`が変更するAWS resourceは専用KMS key / aliasと上記4 parameterだけです。Vercel / Neonのproject、domain、branch、database、role、`BETTER_AUTH_SECRET`、管理者userは作成しません。provider Dashboardで準備した既存resourceをAPIで選択・検証して保存します。
+`setup-deploy-aws.sh`が変更するAWS resourceは専用KMS key / aliasと上記5 parameterだけです。Vercel / Neonのproject、domain、branch、database、role、`BETTER_AUTH_SECRET`、管理者userは作成しません。provider Dashboardで準備した既存resourceをAPIで選択・検証して保存します。
 
 ## 3. 初回setupを実行する
 
@@ -101,13 +102,15 @@ profileを省略した場合は、`.env`の`DEPLOY_AWS_PROFILE`を使用しま�
 
 setupはprofile解決直後にSTS認証を確認し、SSO sessionの失効を検出すると再loginするか1回だけ確認します。承認した場合はdevice authorizationと再STS確認に成功してから、元のsetupを続行します。拒否、login失敗、再STS失敗ではdeploy runner imageをbuildせず停止します。非対話実行、SSO以外のprofile、AccessDeniedや通信障害ではlogin確認を出さず、認証エラーとして停止します。
 
-setupは4件のparameterを確認し、次の3状態のいずれかとして開始します。
+setupは5件のparameterを確認し、次の3状態のいずれかとして開始します。
 
 | 状態     | 起動後の動作                                                                              |
 | -------- | ----------------------------------------------------------------------------------------- |
 | 設定なし | 初期設定を開始することを表示し、AWS accountの書き込み確認後に先頭項目から入力する         |
 | 設定途中 | 保存済みの設定状況を一覧表示し、AWS accountの書き込み確認後に最初の未完了項目から再開する |
 | 設定完了 | 現在値を含む設定一覧を表示し、検証だけを行うか、更新する1項目を選択する                   |
+
+旧schema version 1／2は移行対象として設定途中のフローへ進みます。正常な保存済み項目は再入力せず、Developer API暗号鍵だけを補って新形式を保存します。
 
 設定途中の一覧では、非秘密項目は項目名、`保存済み` / `未設定`、保存済みの値を表示します。秘密項目は値を表示せず、`保存済み` / `未設定` / `再入力が必要`とSSM versionだけを表示します。`再入力が必要`は、予定versionを`config`へ保存済みですが、秘密値自体は保存されておらず、対応する`SecureString`への書き込みを完了するために再入力が必要な状態です。予定versionと実versionを照合してから書き込みを再開します。
 
@@ -125,7 +128,7 @@ setupは4件のparameterを確認し、次の3状態のいずれかとして開�
 
 setupはSTSでAWS accountを確認し、表示された12桁accountが正しい場合だけ`setup <AWS_ACCOUNT_ID>`と入力して書き込みを許可します。確認を拒否した場合はparameterを変更せず停止します。設定完了時に`0`または空入力を選んだ場合は書き込みを行わないため、この確認を表示せず検証だけを行います。
 
-承認後は次を順に入力します。各非秘密項目は形式検証に成功した時点で`config`の途中状態へ保存されます。Vercel tokenとNeon API keyは確認入力とprovider API検証に成功した時点、管理者passwordは確認入力に成功した時点で、対応する`SecureString`へ保存されます。
+承認後は次を順に入力します。各非秘密項目は形式検証に成功した時点で`config`の途中状態へ保存されます。Vercel tokenとNeon API keyは確認入力とprovider API検証に成功した時点、管理者passwordは確認入力に成功した時点で、対応する`SecureString`へ保存されます。Developer API暗号鍵は入力せず、この後に初回だけ自動生成して保存します。
 
 1. Vercel team ID (`team_...`)、project ID、project name、canonical Production origin。
 2. Neon project ID、project name、primary branch ID、database name、role name。
@@ -227,16 +230,18 @@ rotationは対象`SecureString`を新versionへ更新し、同じ操作で`confi
 
 ## 6. GitHub Actionsを設定する
 
-ローカルsetupと同じ4 parameterをActionsから読む場合は、[フォーク先のGitHub Actions初回設定](github-actions-setup.md)を上から実施します。GitHubには長期AWS credentialやprovider secretsを保存せず、Environmentのexact OIDC subjectで許可したRoleから短期credentialを取得します。
+ローカルsetupと同じ5 parameterをActionsから読む場合は、[フォーク先のGitHub Actions初回設定](github-actions-setup.md)を上から実施します。GitHubには長期AWS credentialやprovider secretsを保存せず、Environmentのexact OIDC subjectで許可したRoleから短期credentialを取得します。
 
 ## セキュリティ、料金、制約
 
-- Standard parameterは追加料金なし、1 parameter最大4 KB、1 account / Regionあたり10,000件です。この用途は4件だけなのでStandardを使用します。[Parameter Store tier](https://docs.aws.amazon.com/systems-manager/latest/userguide/parameter-store-advanced-parameters.html)
-- Standard throughputの既定上限は`GetParameter`、`GetParameters`、`GetParametersByPath`合計40 transaction/秒です。deployは4件を一括取得するため、通常この上限を引き上げません。[Parameter Store throughput](https://docs.aws.amazon.com/general/latest/gr/ssm.html)
+- Standard parameterは追加料金なし、1 parameter最大4 KB、1 account / Regionあたり10,000件です。この用途は5件だけなのでStandardを使用します。[Parameter Store tier](https://docs.aws.amazon.com/systems-manager/latest/userguide/parameter-store-advanced-parameters.html)
+- Standard throughputの既定上限は`GetParameter`、`GetParameters`、`GetParametersByPath`合計40 transaction/秒です。deployは5件を一括取得するため、通常この上限を引き上げません。[Parameter Store throughput](https://docs.aws.amazon.com/general/latest/gr/ssm.html)
 - Advanced parameterは1件あたり月額0.05 USD、API interaction 10,000件あたり0.05 USDです。この用途ではAdvancedもhigher throughputも有効にしません。[Systems Manager pricing](https://aws.amazon.com/systems-manager/pricing/)
 - customer managed KMS keyは1 keyあたり月額1 USDです。全Region合計で月20,000 requestのfree tierがあり、対称鍵の対象requestは超過10,000件あたり0.03 USDです。最初と2回目のrotation後はkey materialごとに月額1 USDが加算され、追加は2回目で上限になります。このsetupは365日rotationを有効にするため、実額は設定時点の[AWS KMS pricing](https://aws.amazon.com/kms/pricing/)で確認します。
 - Parameter Storeには自動secret rotationがありません。定期自動rotationやmanaged secret lifecycleが必要なら[AWS Secrets Managerとの比較](https://docs.aws.amazon.com/systems-manager/latest/userguide/parameter-store-about-examples.html)を再評価します。
 - すべて`ap-northeast-1`に固定します。別Regionに同名parameterを作ってもdeployは読みません。
 - `SecureString`の秘密値はcustomer managed keyで暗号化します。default AWS managed keyは、この用途のparameter単位の復号境界に使用しません。[SecureStringとKMS](https://docs.aws.amazon.com/systems-manager/latest/userguide/secure-string-parameter-kms-encryption.html)
 
-入力中断や一時的なAWS / provider APIエラーでsetupが停止した場合は、原因を解消して同じcommandを再実行します。保存済みの途中状態から安全に再開できない整合性エラーでは、KMS alias、4 parameterのtype / version、`config.secretVersions`を値なしで確認します。削除、parameterの手動上書き、keyの無効化を自動復旧として実行しません。
+入力中断や一時的なAWS / provider APIエラーでsetupが停止した場合は、原因を解消して同じcommandを再実行します。保存済みの途中状態から安全に再開できない整合性エラーでは、KMS alias、5 parameterのtype / version、`config.secretVersions`を値なしで確認します。削除、parameterの手動上書き、keyの無効化を自動復旧として実行しません。
+
+Developer API暗号鍵の初期導入・移行・復旧条件は[専用手順](developer-api-encryption-key.md)を参照してください。

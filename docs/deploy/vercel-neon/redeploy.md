@@ -32,7 +32,7 @@ git status --short
 
 明示的な`y`または`yes`を入力すると、endpointと稼働container 0件を再確認してからexact profileを通常stop/startします。再起動後にprofile、socket、構成メモリ、Dockerメモリを再検証できた場合だけ、再帰実行せず同じ`deploy.sh`のAWS認証以降へ進みます。稼働containerあり、非対話、拒否、Colima以外のengine、Docker endpoint override、所有権不一致では、自動停止や設定変更を行いません。
 
-`deploy.sh`は固定versionのdeploy runner imageを使い、Parameter Storeの4件を値を表示せずに取得します。`config`が初回setupまたはcredential更新の途中状態なら、同じprofileで`./setup-deploy-aws.sh`を再実行するよう案内し、Production関連処理を始めず停止します。完了済みの場合は保存されたVercel / Neon対象をAPIで再確認し、Neonからpooled / direct connection stringを取得します。Neon APIが返すraw URIは手編集せず、runnerが`sslmode=require`または`sslmode=verify-full`を検証してmemory上で`sslmode=verify-full`へ正規化します。正規化済みdirect URIはmigrationとDB検証のprocess内だけで使い、pooled URIだけをVercel Productionの`DATABASE_URL`へ同期して、次の順に処理します。
+`deploy.sh`は固定versionのdeploy runner imageを使い、Parameter Storeの5件を値を表示せずに取得します。`config`が初回setupまたはcredential更新の途中状態なら、同じprofileで`./setup-deploy-aws.sh`を再実行するよう案内し、Production関連処理を始めず停止します。完了済みの場合は保存されたVercel / Neon対象をAPIで再確認し、Neonからpooled / direct connection stringを取得します。Neon APIが返すraw URIは手編集せず、runnerが`sslmode=require`または`sslmode=verify-full`を検証してmemory上で`sslmode=verify-full`へ正規化します。正規化済みdirect URIはmigrationとDB検証のprocess内だけで使い、database URLはpooled URIだけをVercel Productionの`DATABASE_URL`へ同期し、AWSのDeveloper API暗号鍵もProductionのSensitive環境変数へ同期して、次の順に処理します。
 
 1. Gitのbranch / commit / clean worktree、AWS account、provider plan、project、domain、region、DB endpointを検証する。
 2. test、lint、typecheck、runtime audit、Production buildを実行する。
@@ -120,3 +120,5 @@ migration applyが成功した後のverifyでschema driftを検出した場合�
 4. 修正SHAの`Deploy runner npm test`に含まれる隔離DBのmigration/schema parityと他のCI checkが成功し、`main`へ反映されたことを直接確認してから、新しいdeployを開始する。
 
 DB migrationはVercelのrollbackでは戻りません。認証だけが故障した場合やDB停止時は[メンテナンスモード緊急解除](maintenance-recovery.md)を参照してください。
+
+Developer API暗号鍵の初期導入・移行・復旧条件は[専用手順](developer-api-encryption-key.md)を参照してください。

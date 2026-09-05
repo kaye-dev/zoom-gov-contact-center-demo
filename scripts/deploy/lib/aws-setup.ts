@@ -1,5 +1,8 @@
+import { randomBytes } from "node:crypto";
 import {
   DEPLOY_ADMIN_PASSWORD_PARAMETER,
+  DEPLOY_DEVELOPER_API_KEY_PARAMETER,
+  assertDeploymentEncryptionKey,
   DEPLOY_CONFIG_PARAMETER,
   DEPLOY_KMS_ALIAS,
   DEPLOY_NEON_API_KEY_PARAMETER,
@@ -30,7 +33,9 @@ import {
 } from "./process";
 
 export type RotatableDeploymentSecret =
-  "vercel-token" | "neon-api-key" | "admin-password";
+  | "vercel-token"
+  | "neon-api-key"
+  | "admin-password";
 
 export type AwsSetupOptions = {
   profile: string;
@@ -159,7 +164,38 @@ export async function runAwsSetup(
     existingSecrets.vercelToken,
     existingSecrets.neonApiKey,
     existingSecrets.adminPassword,
+    existingSecrets.developerApiSettingsEncryptionKey,
   );
+
+  if (existingSecrets.developerApiSettingsEncryptionKey !== undefined) {
+    assertDeploymentEncryptionKey(
+      existingSecrets.developerApiSettingsEncryptionKey,
+    );
+    const versions =
+      existingState?.state === "complete"
+        ? existingState.config.secretVersions
+        : existingState?.draft.secretVersions;
+    if (
+      versions?.developerApiSettingsEncryptionKey !==
+      snapshot.get(DEPLOY_DEVELOPER_API_KEY_PARAMETER)?.version
+    ) {
+      throw new InvalidDeploymentConfigurationError(
+        "Developer API encryption key exists without matching setup metadata. No key was overwritten.",
+      );
+    }
+  }
+
+  if (
+    existingState?.state === "incomplete" &&
+    existingState.draft.secretVersions.developerApiSettingsEncryptionKey !==
+      undefined &&
+    existingSecrets.developerApiSettingsEncryptionKey === undefined &&
+    !existingState.draft.developerApiKeyCreationPending
+  ) {
+    throw new InvalidDeploymentConfigurationError(
+      "Registered Developer API encryption key is missing. Restore the original key; do not regenerate it.",
+    );
+  }
 
   const kms = inspectConfiguredKmsKey(
     runner,
@@ -173,7 +209,8 @@ export async function runAwsSetup(
     existingState === undefined &&
     (existingSecrets.vercelToken !== undefined ||
       existingSecrets.neonApiKey !== undefined ||
-      existingSecrets.adminPassword !== undefined)
+      existingSecrets.adminPassword !== undefined ||
+      existingSecrets.developerApiSettingsEncryptionKey !== undefined)
   ) {
     throw new InvalidDeploymentConfigurationError(
       "SecureString deployment parameters exist without a setup draft or final config. No key was created; reconcile the existing parameters manually.",
@@ -310,6 +347,7 @@ async function runCompletedSetup(
     desiredSecrets.vercelToken,
     desiredSecrets.neonApiKey,
     desiredSecrets.adminPassword,
+    desiredSecrets.developerApiSettingsEncryptionKey,
   );
 
   const nonSecretInput = buildNonSecretSetupInput(accountId, values);
@@ -371,6 +409,8 @@ async function runCompletedSetup(
   }
 
   const versions = {
+    developerApiSettingsEncryptionKey:
+      existingConfig.secretVersions.developerApiSettingsEncryptionKey,
     vercelToken: await putSecretIfNeeded(
       parameterWriter,
       snapshot,
@@ -479,6 +519,7 @@ async function runProgressiveSetup(
     vercelToken: 1,
     neonApiKey: 1,
     adminPassword: 1,
+    developerApiSettingsEncryptionKey: 1,
   });
   const desiredSecrets: Partial<DeploymentSecrets> = {};
   const versions: Partial<StoredDeploymentConfig["secretVersions"]> = {};
@@ -531,6 +572,16 @@ async function runProgressiveSetup(
   draft = admin.draft;
   desiredSecrets.adminPassword = admin.value;
   versions.adminPassword = admin.version;
+
+  const encryption = await ensureDeveloperApiKey(
+    parameterWriter,
+    secrets,
+    snapshot,
+    draft,
+  );
+  draft = encryption.draft;
+  desiredSecrets.developerApiSettingsEncryptionKey = encryption.value;
+  versions.developerApiSettingsEncryptionKey = encryption.version;
 
   const completeSecrets = requireCompleteDeploymentSecrets(desiredSecrets);
   const finalVersions = requireCompleteSecretVersions(versions);
@@ -700,7 +751,23 @@ function readExistingSetupState(
   if (parameter.type !== "String") {
     throw new Error(`${DEPLOY_CONFIG_PARAMETER} must have type String.`);
   }
-  return parseStoredDeploymentSetupState(parameter.value);
+  const state = parseStoredDeploymentSetupState(parameter.value);
+  const raw = JSON.parse(parameter.value) as { schemaVersion?: number };
+  if (raw.schemaVersion === 1) {
+    const legacy = parseStoredDeploymentConfig(parameter.value, true);
+    for (const [name, version] of [
+      [DEPLOY_VERCEL_TOKEN_PARAMETER, legacy.secretVersions.vercelToken],
+      [DEPLOY_NEON_API_KEY_PARAMETER, legacy.secretVersions.neonApiKey],
+      [DEPLOY_ADMIN_PASSWORD_PARAMETER, legacy.secretVersions.adminPassword],
+    ] as const) {
+      if (snapshot.get(name)?.version !== version) {
+        throw new InvalidDeploymentConfigurationError(
+          "Legacy deployment secret is missing or has a mismatched version. Restore it before upgrading setup.",
+        );
+      }
+    }
+  }
+  return state;
 }
 
 function readExistingSecrets(
@@ -720,6 +787,7 @@ function readExistingSecrets(
     vercelToken: read(DEPLOY_VERCEL_TOKEN_PARAMETER),
     neonApiKey: read(DEPLOY_NEON_API_KEY_PARAMETER),
     adminPassword: read(DEPLOY_ADMIN_PASSWORD_PARAMETER),
+    developerApiSettingsEncryptionKey: read(DEPLOY_DEVELOPER_API_KEY_PARAMETER),
   };
 }
 
@@ -729,13 +797,17 @@ function requireCompleteDeploymentSecrets(
   if (
     secrets.vercelToken === undefined ||
     secrets.neonApiKey === undefined ||
-    secrets.adminPassword === undefined
+    secrets.adminPassword === undefined ||
+    secrets.developerApiSettingsEncryptionKey === undefined
   ) {
     throw new InvalidDeploymentConfigurationError(
       "The complete deployment snapshot did not contain all secrets.",
     );
   }
+  assertDeploymentEncryptionKey(secrets.developerApiSettingsEncryptionKey);
   return {
+    developerApiSettingsEncryptionKey:
+      secrets.developerApiSettingsEncryptionKey,
     vercelToken: secrets.vercelToken,
     neonApiKey: secrets.neonApiKey,
     adminPassword: secrets.adminPassword,
@@ -750,6 +822,10 @@ function assertSnapshotSecretVersions(
     [DEPLOY_VERCEL_TOKEN_PARAMETER, config.secretVersions.vercelToken],
     [DEPLOY_NEON_API_KEY_PARAMETER, config.secretVersions.neonApiKey],
     [DEPLOY_ADMIN_PASSWORD_PARAMETER, config.secretVersions.adminPassword],
+    [
+      DEPLOY_DEVELOPER_API_KEY_PARAMETER,
+      config.secretVersions.developerApiSettingsEncryptionKey,
+    ],
   ] as const;
   for (const [name, expectedVersion] of checks) {
     if (snapshot.get(name)?.version !== expectedVersion) {
@@ -833,6 +909,7 @@ function formatCompletedSetupMenu(config: StoredDeploymentConfig): string {
     `  12. Neon API key: 設定済み (SSM version ${config.secretVersions.neonApiKey})`,
     `  13. Administrator password: 設定済み (SSM version ${config.secretVersions.adminPassword})`,
     "",
+    `Developer API encryption key: 保存済み・変更不可 (SSM version ${config.secretVersions.developerApiSettingsEncryptionKey})`,
     "更新する設定番号を選択してください。",
     "  0. 変更せず検証のみ",
     "選択 [0]: ",
@@ -875,6 +952,12 @@ function formatProgressiveSetupStatus(
         break;
     }
   }
+  const encryptionKey = snapshot.get(DEPLOY_DEVELOPER_API_KEY_PARAMETER);
+  lines.push(
+    encryptionKey
+      ? `  [保存済み] Developer API encryption key: 値は非表示 (SSM version ${encryptionKey.version})`
+      : "  [未設定] Developer API encryption key: 初回のみ自動生成",
+  );
   lines.push("", "未完了の項目から設定を再開します。");
   return lines.join("\n");
 }
@@ -985,7 +1068,7 @@ function buildNonSecretSetupInput(
     return value;
   };
   return {
-    schemaVersion: 1,
+    schemaVersion: 3,
     policyVersion: "demo-v1",
     aws: { accountId, region: DEPLOY_REGION },
     vercel: {
@@ -1148,7 +1231,7 @@ function createSetupDraft(
   secretVersions: Partial<StoredDeploymentConfig["secretVersions"]> = {},
 ): StoredDeploymentSetupDraft {
   return {
-    schemaVersion: 2,
+    schemaVersion: 4,
     policyVersion: "demo-v1",
     setupState: "incomplete",
     aws: { accountId, region: DEPLOY_REGION },
@@ -1174,6 +1257,10 @@ function requireCompleteSecretVersions(
   versions: Partial<StoredDeploymentConfig["secretVersions"]>,
 ): StoredDeploymentConfig["secretVersions"] {
   return {
+    developerApiSettingsEncryptionKey: requireProgressVersion(
+      versions.developerApiSettingsEncryptionKey,
+      "Developer API encryption key",
+    ),
     vercelToken: requireProgressVersion(
       versions.vercelToken,
       "Vercel access token",
@@ -1827,4 +1914,70 @@ function throwAwsFailure(result: CommandResult, description: string): never {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Create once; a completed config is checked before this resumable setup path. */
+async function ensureDeveloperApiKey(
+  writer: DeploymentParameterWriter,
+  secrets: SecretRegistry,
+  snapshot: SetupSnapshot,
+  draft: StoredDeploymentSetupDraft,
+): Promise<{
+  draft: StoredDeploymentSetupDraft;
+  value: string;
+  version: number;
+}> {
+  const actual = snapshot.get(DEPLOY_DEVELOPER_API_KEY_PARAMETER);
+  const expected = draft.secretVersions.developerApiSettingsEncryptionKey;
+  if (actual !== undefined) {
+    if (actual.type !== "SecureString" || actual.version !== expected) {
+      throw new InvalidDeploymentConfigurationError(
+        "Developer API encryption key exists without matching setup metadata. No key was overwritten.",
+      );
+    }
+    assertDeploymentEncryptionKey(actual.value);
+    secrets.add(actual.value);
+    return { draft, value: actual.value, version: actual.version };
+  }
+  if (
+    expected !== undefined &&
+    (expected !== 1 || !draft.developerApiKeyCreationPending)
+  ) {
+    throw new InvalidDeploymentConfigurationError(
+      "Registered Developer API encryption key is missing. Restore the original key; do not regenerate it.",
+    );
+  }
+  if (expected === undefined) {
+    draft = {
+      ...draft,
+      developerApiKeyCreationPending: true,
+      secretVersions: {
+        ...draft.secretVersions,
+        developerApiSettingsEncryptionKey: 1,
+      },
+    };
+    await writeSetupDraft(writer, draft, true);
+  }
+  const value = randomBytes(32).toString("base64");
+  secrets.add(value);
+  const version = await writer.put(
+    {
+      Name: DEPLOY_DEVELOPER_API_KEY_PARAMETER,
+      Description:
+        "Persistent encryption key for Production Developer API settings. Do not rotate without re-encrypting stored data.",
+      Type: "SecureString",
+      Value: value,
+      KeyId: draft.kmsKeyArn,
+      Tier: "Standard",
+      Overwrite: false,
+      Tags: PARAMETER_TAGS,
+    },
+    "Developer API encryption key creation",
+  );
+  if (version !== 1)
+    throw new InvalidDeploymentConfigurationError(
+      "Developer API encryption key was created at an unexpected version.",
+    );
+  console.log("Setup item saved: Developer API encryption key.");
+  return { draft, value, version };
 }
