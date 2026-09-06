@@ -12,6 +12,7 @@ import {
   connectDatabaseWithRetry,
   createDatabaseContext,
 } from "@/lib/server/prisma";
+import { TENANTS, listTenantProductionOrigins } from "@/lib/tenants";
 
 const LOCAL_BASE_URL = "http://localhost:3000";
 const LOCAL_SECRET = "local-development-secret-change-me";
@@ -130,8 +131,11 @@ function resolveBaseURL(
     env.BETTER_AUTH_URL,
     "BETTER_AUTH_URL",
   );
+  // One deployment serves every industry demo domain, so each registered
+  // tenant hostname must be an accepted base URL host.
   const allowedHosts = unique([
     new URL(canonicalOrigin).host,
+    ...TENANTS.map((tenant) => tenant.productionHost),
     ...readVercelHosts(env),
   ]);
 
@@ -161,17 +165,27 @@ function getTrustedOrigins(env: NodeJS.ProcessEnv) {
     readRequiredProductionOrigin(origin, "BETTER_AUTH_TRUSTED_ORIGINS"),
   );
 
+  // One deployment serves every industry demo domain, so the trusted origins
+  // must be exactly BETTER_AUTH_URL plus every registered tenant origin: no
+  // fewer (a tenant domain could not authenticate) and no more (an unexpected
+  // origin would be trusted).
+  const expectedOrigins = unique([
+    canonicalOrigin,
+    ...listTenantProductionOrigins(),
+  ]);
+
   if (
-    configuredOrigins.length !== 1 ||
-    configuredOrigins[0] !== canonicalOrigin
+    configuredOrigins.length !== expectedOrigins.length ||
+    new Set(configuredOrigins).size !== configuredOrigins.length ||
+    !expectedOrigins.every((origin) => configuredOrigins.includes(origin))
   ) {
     throw new Error(
-      "BETTER_AUTH_TRUSTED_ORIGINS must contain only BETTER_AUTH_URL in production.",
+      "BETTER_AUTH_TRUSTED_ORIGINS must contain exactly BETTER_AUTH_URL and the registered tenant origins in production.",
     );
   }
 
   return unique([
-    canonicalOrigin,
+    ...expectedOrigins,
     ...readVercelHosts(env).map((host) => `https://${host}`),
   ]);
 }

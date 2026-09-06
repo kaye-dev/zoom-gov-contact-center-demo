@@ -7,10 +7,15 @@ import {
   MAINTENANCE_REWRITE_HEADER,
   MAINTENANCE_REWRITE_HEADER_VALUE,
 } from "@/lib/maintenance-request";
+import { getRequestTenant } from "@/lib/server/tenant";
 
-export const metadata: Metadata = {
-  title: "Web サイト メンテナンス中 | 未来市",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const tenant = await getRequestTenant();
+
+  return {
+    title: `Web サイト メンテナンス中 | ${tenant.metadata.shortName}`,
+  };
+}
 
 export default async function MaintenanceUnavailablePage() {
   const requestHeaders = await headers();

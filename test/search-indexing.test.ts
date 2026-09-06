@@ -4,9 +4,8 @@ import test from "node:test";
 import { NextRequest } from "next/server";
 
 import { lifeCategories, newsArticles } from "../app/content/site-content";
-import robots from "../app/robots";
-import sitemap from "../app/sitemap";
 import { proxy } from "../proxy";
+import { TENANTS } from "../lib/tenants";
 import {
   getFaqCategoryStaticParams,
   getFaqDepartmentStaticParams,
@@ -17,6 +16,7 @@ import {
   NOINDEX_ROBOTS_METADATA,
   X_ROBOTS_TAG_VALUE,
   buildPublicSitemap,
+  buildRobotsForHost,
   buildSitemapPath,
   listPublicSitemapPaths,
   resolveCanonicalOrigin,
@@ -150,30 +150,35 @@ test("Proxy-owned redirects retain noindex and nofollow", async () => {
 });
 
 test("robots allows crawling so crawlers can read noindex and names the canonical sitemap", () => {
-  const previousOrigin = process.env.APP_CANONICAL_ORIGIN;
-  const previousVercel = process.env.VERCEL;
-  process.env.APP_CANONICAL_ORIGIN = "https://city.example.jp";
-  delete process.env.VERCEL;
-  try {
-    assert.deepEqual(robots(), {
+  const env = { APP_CANONICAL_ORIGIN: "https://city.example.jp" };
+
+  // An unregistered host keeps the configured canonical origin.
+  assert.deepEqual(buildRobotsForHost("preview.vercel.app", env), {
+    rules: {
+      userAgent: "*",
+      allow: "/",
+    },
+    sitemap: "https://city.example.jp/sitemap.xml",
+  });
+
+  // Each registered tenant domain advertises its own sitemap.
+  for (const tenant of TENANTS) {
+    assert.deepEqual(buildRobotsForHost(tenant.productionHost, env), {
       rules: {
         userAgent: "*",
         allow: "/",
       },
-      sitemap: "https://city.example.jp/sitemap.xml",
+      sitemap: `https://${tenant.productionHost}/sitemap.xml`,
     });
-  } finally {
-    if (previousOrigin === undefined) {
-      delete process.env.APP_CANONICAL_ORIGIN;
-    } else {
-      process.env.APP_CANONICAL_ORIGIN = previousOrigin;
-    }
-    if (previousVercel === undefined) {
-      delete process.env.VERCEL;
-    } else {
-      process.env.VERCEL = previousVercel;
-    }
   }
+});
+
+test("the robots route resolves the canonical origin from the request host", () => {
+  const robotsSource = readFileSync(
+    new URL("../app/robots.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(robotsSource, /buildRobotsForHost\(\(await headers\(\)\)\.get\("host"\)\)/);
 });
 
 test("sitemap contains the complete stable set of 276 canonical public HTML URLs", async () => {
@@ -232,29 +237,35 @@ test("sitemap contains the complete stable set of 276 canonical public HTML URLs
   assert.ok(entries.every(({ url }) => new URL(url).origin === "https://city.example.jp"));
 });
 
-test("the sitemap metadata route uses APP_CANONICAL_ORIGIN", async () => {
-  const previousOrigin = process.env.APP_CANONICAL_ORIGIN;
-  const previousVercel = process.env.VERCEL;
-  process.env.APP_CANONICAL_ORIGIN = "https://city.example.jp";
-  delete process.env.VERCEL;
-  try {
-    const entries = await sitemap();
+test("the sitemap uses APP_CANONICAL_ORIGIN for unregistered hosts and the tenant origin otherwise", async () => {
+  const env = { APP_CANONICAL_ORIGIN: "https://city.example.jp" };
+
+  const fallbackEntries = await buildPublicSitemap(env, "preview.vercel.app");
+  assert.equal(fallbackEntries.length, 276);
+  assert.ok(
+    fallbackEntries.every(({ url }) =>
+      url.startsWith("https://city.example.jp/"),
+    ),
+  );
+
+  for (const tenant of TENANTS) {
+    const entries = await buildPublicSitemap(env, tenant.productionHost);
     assert.equal(entries.length, 276);
     assert.ok(
       entries.every(({ url }) =>
-        url.startsWith("https://city.example.jp/"),
+        url.startsWith(`https://${tenant.productionHost}/`),
       ),
     );
-  } finally {
-    if (previousOrigin === undefined) {
-      delete process.env.APP_CANONICAL_ORIGIN;
-    } else {
-      process.env.APP_CANONICAL_ORIGIN = previousOrigin;
-    }
-    if (previousVercel === undefined) {
-      delete process.env.VERCEL;
-    } else {
-      process.env.VERCEL = previousVercel;
-    }
   }
+});
+
+test("the sitemap route resolves the canonical origin from the request host", () => {
+  const sitemapSource = readFileSync(
+    new URL("../app/sitemap.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    sitemapSource,
+    /buildPublicSitemap\(process\.env, \(await headers\(\)\)\.get\("host"\)\)/,
+  );
 });

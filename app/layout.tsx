@@ -7,6 +7,7 @@ import {
 } from "@/lib/maintenance-request";
 import { NOINDEX_ROBOTS_METADATA } from "@/lib/search-indexing";
 import { getLanguageSettings } from "@/lib/server/site-settings";
+import { getRequestTenant } from "@/lib/server/tenant";
 import {
   DEFAULT_SITE_LOCALE,
   SITE_LOCALES,
@@ -16,12 +17,15 @@ import "./globals.css";
 import { ThemeSync } from "./components/ThemeSync";
 import { LanguageProvider } from "./i18n/LanguageProvider";
 
-export const metadata: Metadata = {
-  title: "未来市公式ウェブサイト",
-  description:
-    "未来市の公式ウェブサイトです。くらしの手続き、子育て・教育、防災、ごみ・リサイクル、施設案内などの行政情報をご案内します。お困りのことは AI やお電話でご相談いただけます。",
-  robots: NOINDEX_ROBOTS_METADATA,
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const tenant = await getRequestTenant();
+
+  return {
+    title: tenant.metadata.title,
+    description: tenant.metadata.description,
+    robots: NOINDEX_ROBOTS_METADATA,
+  };
+}
 
 export default async function RootLayout({
   children,

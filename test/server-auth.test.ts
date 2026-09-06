@@ -3,6 +3,7 @@ import test from "node:test";
 
 import type { PrismaClient } from "../lib/generated/prisma/client";
 import { createAuth } from "../lib/auth";
+import { TENANTS } from "../lib/tenants";
 
 const fakePrisma = {} as PrismaClient;
 const productionSecret = "kShZ6X3N1bW9qP4vR8tY2uI5oA7sD0fG";
@@ -59,13 +60,19 @@ test("production auth rejects local secret and URL fallbacks", () => {
   );
 });
 
-test("production auth trusts only exact canonical and Vercel hosts", () => {
+test("production auth trusts every tenant domain plus exact canonical and Vercel hosts", () => {
+  const tenantOrigins = TENANTS.map(
+    (tenant) => `https://${tenant.productionHost}`,
+  );
   const auth = createAuth(fakePrisma, {
     env: {
       NODE_ENV: "production",
       BETTER_AUTH_SECRET: productionSecret,
       BETTER_AUTH_URL: "https://city.example.jp",
-      BETTER_AUTH_TRUSTED_ORIGINS: "https://city.example.jp",
+      BETTER_AUTH_TRUSTED_ORIGINS: [
+        "https://city.example.jp",
+        ...tenantOrigins,
+      ].join(","),
       BETTER_AUTH_TRUST_PROXY_HEADERS: "true",
       VERCEL_URL: "zoom-gov-demo-git-sha.vercel.app",
       VERCEL_PROJECT_PRODUCTION_URL: "zoom-gov-demo.vercel.app",
@@ -75,6 +82,7 @@ test("production auth trusts only exact canonical and Vercel hosts", () => {
   assert.deepEqual(auth.options.baseURL, {
     allowedHosts: [
       "city.example.jp",
+      ...TENANTS.map((tenant) => tenant.productionHost),
       "zoom-gov-demo-git-sha.vercel.app",
       "zoom-gov-demo.vercel.app",
     ],
@@ -82,6 +90,7 @@ test("production auth trusts only exact canonical and Vercel hosts", () => {
   });
   assert.deepEqual(auth.options.trustedOrigins, [
     "https://city.example.jp",
+    ...tenantOrigins,
     "https://zoom-gov-demo-git-sha.vercel.app",
     "https://zoom-gov-demo.vercel.app",
   ]);
@@ -117,11 +126,26 @@ test("production auth rejects wildcard and non-origin configuration", () => {
       createAuth(fakePrisma, {
         env: {
           ...baseEnvironment,
-          BETTER_AUTH_TRUSTED_ORIGINS:
-            "https://city.example.jp,https://other.example.jp",
+          BETTER_AUTH_TRUSTED_ORIGINS: [
+            "https://city.example.jp",
+            ...TENANTS.map((tenant) => `https://${tenant.productionHost}`),
+            "https://other.example.jp",
+          ].join(","),
         },
       }),
-    /must contain only BETTER_AUTH_URL/,
+    /must contain exactly BETTER_AUTH_URL and the registered tenant origins/,
+  );
+  // Omitting a registered tenant origin must fail too: that domain would be
+  // served by this deployment but could not authenticate.
+  assert.throws(
+    () =>
+      createAuth(fakePrisma, {
+        env: {
+          ...baseEnvironment,
+          BETTER_AUTH_TRUSTED_ORIGINS: "https://city.example.jp",
+        },
+      }),
+    /must contain exactly BETTER_AUTH_URL and the registered tenant origins/,
   );
   assert.throws(
     () =>

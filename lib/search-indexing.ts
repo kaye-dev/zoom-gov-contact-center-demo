@@ -1,3 +1,6 @@
+import { normalizeRequestHostname } from "./hostname";
+import { findTenantByProductionHostname } from "./tenants";
+
 export const NOINDEX_ROBOTS_METADATA = {
   index: false,
   follow: false,
@@ -92,6 +95,44 @@ export function resolveCanonicalOrigin(
   return url.origin;
 }
 
+/**
+ * Resolves the canonical origin for one request. Each registered tenant domain
+ * is served by this same deployment and must advertise its own origin in
+ * robots.txt and sitemap.xml. Unregistered hosts (Vercel deployment URLs,
+ * tunnels, local development) keep the previous `APP_CANONICAL_ORIGIN`
+ * behavior.
+ */
+export function resolveRequestCanonicalOrigin(
+  host: string | null | undefined,
+  env: CanonicalOriginEnvironment = process.env,
+): string {
+  const hostname = normalizeRequestHostname(host);
+  const tenant =
+    hostname === null ? null : findTenantByProductionHostname(hostname);
+
+  if (tenant !== null) {
+    return `https://${tenant.productionHost}`;
+  }
+
+  return resolveCanonicalOrigin(env);
+}
+
+/** Builds the robots.txt payload for one request host. */
+export function buildRobotsForHost(
+  host: string | null | undefined,
+  env: CanonicalOriginEnvironment = process.env,
+): { rules: { userAgent: string; allow: string }; sitemap: string } {
+  const canonicalOrigin = resolveRequestCanonicalOrigin(host, env);
+
+  return {
+    rules: {
+      userAgent: "*",
+      allow: "/",
+    },
+    sitemap: `${canonicalOrigin}/sitemap.xml`,
+  };
+}
+
 const FIXED_PUBLIC_PATHS = [
   "/",
   "/life",
@@ -175,8 +216,9 @@ export async function listPublicSitemapPaths(): Promise<string[]> {
 
 export async function buildPublicSitemap(
   env: CanonicalOriginEnvironment = process.env,
+  host?: string | null,
 ): Promise<Array<{ url: string }>> {
-  const canonicalOrigin = resolveCanonicalOrigin(env);
+  const canonicalOrigin = resolveRequestCanonicalOrigin(host, env);
   const paths = await listPublicSitemapPaths();
   const entries = paths.map((path) => ({
     url: new URL(path, canonicalOrigin).href,
