@@ -154,15 +154,20 @@ dev_compose_colima_format_gib() {
 }
 
 dev_compose_colima_target_memory_gib() {
-  local memory_bytes="$1"
+  local configured_memory_bytes="$1"
+  local docker_memory_bytes="$2"
+  local target_memory_bytes="${configured_memory_bytes}"
 
-  if (( memory_bytes < DEV_COMPOSE_COLIMA_MIN_MEMORY_BYTES )); then
-    print -r -- "${DEV_COMPOSE_COLIMA_MIN_MEMORY_GIB}"
-  elif (( memory_bytes % 1073741824 == 0 )); then
-    print -r -- "$(( memory_bytes / 1073741824 ))"
-  else
-    dev_compose_colima_format_gib "${memory_bytes}"
+  # Docker reports the VM's usable MemTotal, which is lower than Colima's
+  # configured memory because the guest kernel reserves memory at boot. Add
+  # the currently observed shortfall and round up so a restart can satisfy
+  # the effective Docker-memory recommendation instead of repeating a 6 GiB
+  # restart that can never pass its own verification.
+  if (( docker_memory_bytes < DEV_COMPOSE_COLIMA_MIN_MEMORY_BYTES )); then
+    target_memory_bytes=$(( configured_memory_bytes + DEV_COMPOSE_COLIMA_MIN_MEMORY_BYTES - docker_memory_bytes ))
   fi
+  (( target_memory_bytes >= DEV_COMPOSE_COLIMA_MIN_MEMORY_BYTES )) || target_memory_bytes="${DEV_COMPOSE_COLIMA_MIN_MEMORY_BYTES}"
+  print -r -- "$(( (target_memory_bytes + 1073741824 - 1) / 1073741824 ))"
 }
 
 dev_compose_colima_is_recommended() {
@@ -303,12 +308,12 @@ dev_compose_colima_preflight() {
   initial_context="${DEV_COMPOSE_COLIMA_CONTEXT_NAME}"
   initial_profile="${DEV_COMPOSE_COLIMA_PROFILE_NAME}"
   initial_endpoint="${DEV_COMPOSE_COLIMA_DOCKER_ENDPOINT}"
-  target_memory_gib="$(dev_compose_colima_target_memory_gib "${DEV_COMPOSE_COLIMA_CONFIGURED_MEMORY_BYTES}")"
+  target_memory_gib="$(dev_compose_colima_target_memory_gib "${DEV_COMPOSE_COLIMA_CONFIGURED_MEMORY_BYTES}" "${docker_memory_bytes}")"
   target_cpus=$(( DEV_COMPOSE_COLIMA_CONFIGURED_CPUS > DEV_COMPOSE_COLIMA_MIN_CPUS ? DEV_COMPOSE_COLIMA_CONFIGURED_CPUS : DEV_COMPOSE_COLIMA_MIN_CPUS ))
 
   print -u2 "Colima profile '${initial_profile}' is below the development recommendation."
   print -u2 "  Docker memory: $(dev_compose_colima_format_gib "${docker_memory_bytes}") GiB; configured: $(dev_compose_colima_format_gib "${DEV_COMPOSE_COLIMA_CONFIGURED_MEMORY_BYTES}") GiB / ${DEV_COMPOSE_COLIMA_CONFIGURED_CPUS} CPUs."
-  print -u2 "  Recommended: ${target_memory_gib} GiB / ${target_cpus} CPUs."
+  print -u2 "  Minimum effective Docker memory: ${DEV_COMPOSE_COLIMA_MIN_MEMORY_GIB} GiB / ${DEV_COMPOSE_COLIMA_MIN_CPUS} CPUs; requested Colima configuration: ${target_memory_gib} GiB / ${target_cpus} CPUs."
   if ! dev_compose_colima_prompt_confirmation "Colima profile '${initial_profile}' を再構成して開発サーバーを起動しますか? [y/N] "; then
     print -u2 "An interactive terminal is required to change or bypass insufficient Colima resources."
     return 1
