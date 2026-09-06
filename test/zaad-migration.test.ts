@@ -114,14 +114,15 @@ test("ZMI-02: 適用済みZAAD migrationのSQLとmanifest hashを維持する", 
   );
   assert.equal(
     manifest.migrations.findIndex(({ name }) => name === migrationName),
-    manifest.migrations.length - 4,
+    manifest.migrations.length - 5,
   );
   assert.deepEqual(
-    manifest.migrations.slice(-3).map(({ name }) => name),
+    manifest.migrations.slice(-4).map(({ name }) => name),
     [
       "20260901160000_add_reservation_caller_ani_binding",
       "20260906120000_add_site_key_tenant_scope",
       "20260906150000_drop_zaad_site_key_default",
+      "20260906180000_drop_reservation_api_key_site_key_default",
     ],
   );
   assert.match(reviewed, new RegExp(migrationName, "u"));

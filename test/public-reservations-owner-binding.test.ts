@@ -166,7 +166,7 @@ test("reservation update and delete fail closed when owner-bound row is absent",
     return [];
   });
   await assert.rejects(
-    updatePublicReservation(updatePrisma, {
+    updatePublicReservation(updatePrisma, DEFAULT_TENANT_KEY, {
       apiKeyId: "api_key_owner_binding",
       callerAniDigest,
       id: "booking_owner_binding_1",
@@ -176,9 +176,11 @@ test("reservation update and delete fail closed when owner-bound row is absent",
     }),
     (error) => error instanceof ReservationApiOperationError && error.code === "NOT_FOUND",
   );
+  assert.match(updateQueries[0]!.text, /"siteKey" =/u);
   assert.match(updateQueries[0]!.text, /"callerAniDigest" =/u);
   assert.deepEqual(updateQueries[0]!.values, [
     "booking_owner_binding_1",
+    DEFAULT_TENANT_KEY,
     "api_key_owner_binding",
     callerAniDigest,
   ]);
@@ -188,15 +190,17 @@ test("reservation update and delete fail closed when owner-bound row is absent",
     deleteQueries.push(snapshotSql(query));
     return [];
   });
-  assert.equal(await deletePublicReservation(deletePrisma, {
+  assert.equal(await deletePublicReservation(deletePrisma, DEFAULT_TENANT_KEY, {
     apiKeyId: "api_key_owner_binding",
     callerAniDigest,
     id: "booking_owner_binding_1",
     expectedRevision: 1,
   }), false);
+  assert.match(deleteQueries[0]!.text, /"siteKey" =/u);
   assert.match(deleteQueries[0]!.text, /"callerAniDigest" =/u);
   assert.deepEqual(deleteQueries[0]!.values, [
     "booking_owner_binding_1",
+    DEFAULT_TENANT_KEY,
     "api_key_owner_binding",
     callerAniDigest,
   ]);

@@ -22,6 +22,7 @@ import {
 } from "../../lib/server/reservation-api-request-logs";
 import { getReservationApiPeriod } from "../../lib/server/reservation-api-usage";
 import { withPrisma } from "../../lib/server/prisma";
+import { DEFAULT_TENANT_KEY } from "../../lib/tenants";
 import { withIsolatedPostgresDatabase } from "../helpers/isolated-postgres";
 
 const AUTH_SECRET = "runtime-reservation-api-test-secret-000000000";
@@ -756,12 +757,14 @@ test("authenticated reservation API outcomes create bounded request logs without
       const directory = await withPrisma(async (prisma) => {
         const first = await listReservationApiRequestLogs(
           prisma,
+          DEFAULT_TENANT_KEY,
           { query: "Pagination Fixture" },
           paginationNow,
         );
         assert.ok(first.nextCursor);
         const second = await listReservationApiRequestLogs(
           prisma,
+          DEFAULT_TENANT_KEY,
           {
             query: "Pagination Fixture",
             cursor: first.nextCursor
@@ -772,16 +775,19 @@ test("authenticated reservation API outcomes create bounded request logs without
         );
         const filtered = await listReservationApiRequestLogs(
           prisma,
+          DEFAULT_TENANT_KEY,
           { query: "PKEY••••LOGS", method: "POST", result: "client-error" },
           paginationNow,
         );
         const byId = await listReservationApiRequestLogs(
           prisma,
+          DEFAULT_TENANT_KEY,
           { query: "pagination-log-051" },
           paginationNow,
         );
         const byPreview = await listReservationApiRequestLogs(
           prisma,
+          DEFAULT_TENANT_KEY,
           { query: "PKEY••••LOGS" },
           paginationNow,
         );

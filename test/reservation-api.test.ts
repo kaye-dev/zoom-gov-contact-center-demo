@@ -32,6 +32,7 @@ import {
   reservationApiRequestLogCutoff,
 } from "../lib/server/reservation-api-request-logs";
 import { getReservationApiPeriod } from "../lib/server/reservation-api-usage";
+import { DEFAULT_TENANT_KEY } from "../lib/tenants";
 
 test("reservation API permissions and strict issue payload are exact", () => {
   assert.deepEqual(RESERVATION_API_PERMISSIONS, ["LIST", "READ", "CREATE", "UPDATE", "DELETE"]);
@@ -250,12 +251,15 @@ test("reservation API log DTOs expose only allowlisted operational fields", asyn
     headers: { "x-internal": "header-must-not-escape" },
     stack: "stack-must-not-escape",
   };
+  const captured: { listWhere?: unknown; detailWhere?: unknown } = {};
   const prisma = {
     reservationApiRequestLog: {
-      async findMany() {
+      async findMany(input: { where: unknown }) {
+        captured.listWhere = input.where;
         return [databaseRow];
       },
-      async findFirst() {
+      async findFirst(input: { where: unknown }) {
+        captured.detailWhere = input.where;
         return databaseRow;
       },
     },
@@ -263,14 +267,18 @@ test("reservation API log DTOs expose only allowlisted operational fields", asyn
 
   const listed = await listReservationApiRequestLogs(
     prisma,
+    DEFAULT_TENANT_KEY,
     {},
     new Date("2026-08-30T08:00:00.000Z"),
   );
   const detail = await getReservationApiRequestLog(
     prisma,
+    DEFAULT_TENANT_KEY,
     databaseRow.id,
     new Date("2026-08-30T08:00:00.000Z"),
   );
+  assert.match(JSON.stringify(captured.listWhere), /"siteKey":"lg"/u);
+  assert.match(JSON.stringify(captured.detailWhere), /"siteKey":"lg"/u);
   assert.deepEqual(Object.keys(listed.logs[0]!).sort(), [
     "apiKeyName", "apiKeyPreview", "durationMs", "errorCode", "id", "method",
     "path", "permission", "requestedAt", "statusCode",

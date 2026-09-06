@@ -3,10 +3,12 @@ import { requireAdminAccess } from "@/lib/server/admin-access/server";
 import { listReservationApiKeys } from "@/lib/server/reservation-api-keys";
 import { getReservationApiUsageSnapshot } from "@/lib/server/reservation-api-usage";
 import { withPrisma } from "@/lib/server/prisma";
+import { getRequestTenant } from "@/lib/server/tenant";
 
 import { ReservationApiKeysView } from "./ReservationApiKeysView";
 
 export default async function ReservationApiKeysPage() {
+  const tenant = await getRequestTenant();
   const { actor } = await requireAdminAccess(
     "reservations",
     "VIEW",
@@ -14,8 +16,8 @@ export default async function ReservationApiKeysPage() {
   );
   const initial = await withPrisma(async (prisma) => {
     const [apiKeys, usageLimit] = await Promise.all([
-      listReservationApiKeys(prisma),
-      getReservationApiUsageSnapshot(prisma),
+      listReservationApiKeys(prisma, tenant.key),
+      getReservationApiUsageSnapshot(prisma, tenant.key),
     ]);
     return { apiKeys, usageLimit };
   });

@@ -356,10 +356,7 @@ model ReservationBooking {
 
 model ReservationApiKey {
   id              String    @id @default(cuid())
-  // NOTE: 発行処理がある lib/server/reservation-api-keys.ts は本変更時に編集できず、
-  // siteKey を明示できなかったため既定値で補っている。2つ目のテナントを追加する前に、
-  // 発行時へ明示的な siteKey 指定を入れて既定値を外すこと。
-  siteKey         String    @default("lg")
+  siteKey         String
   publicId        String    @unique
   name            String
   secretHash      String    @unique
