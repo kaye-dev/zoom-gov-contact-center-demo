@@ -147,6 +147,19 @@ const FIXED_PUBLIC_PATHS = [
   "/news",
 ] as const;
 
+/** 大学テナント専用の公開情報アーキテクチャ。自治体の /life は混在させない。 */
+const UNIVERSITY_PUBLIC_PATHS = [
+  "/",
+  "/admissions",
+  "/academics",
+  "/campus-life",
+  "/scholarships",
+  "/careers",
+  "/faq",
+  "/news",
+  "/consultation",
+] as const;
+
 /** feature flagが立っているテナントだけが公開する固定パス。 */
 const FEATURE_PUBLIC_PATHS = {
   disasterRadio: "/life/emergency-safety-disaster/disaster-prevention-radio",
@@ -180,14 +193,25 @@ export function buildSitemapPath(...segments: string[]): string {
 export async function listPublicSitemapPaths(
   tenantKey: TenantKey = DEFAULT_TENANT_KEY,
 ): Promise<string[]> {
-  const [siteContent, faqContent, docs] = await Promise.all([
+  const tenant = getTenant(tenantKey);
+  const docs = await import("../app/docs/_lib/docs");
+  const docsPaths = (await docs.listDocSlugs()).map((slug) =>
+    buildSitemapPath("docs", ...slug),
+  );
+
+  if (tenant.features.universityPortal) {
+    return [...new Set([...UNIVERSITY_PUBLIC_PATHS, ...docsPaths])].sort(
+      (left, right) => left.localeCompare(right, "en"),
+    );
+  }
+
+  const [siteContent, faqContent] = await Promise.all([
     import("../app/content/site-content"),
     import("./faq-content"),
-    import("../app/docs/_lib/docs"),
   ]);
 
   const lifeCategories = siteContent.getLifeCategories(tenantKey);
-  const featurePaths = getTenant(tenantKey).features.disasterRadio
+  const featurePaths = tenant.features.disasterRadio
     ? [FEATURE_PUBLIC_PATHS.disasterRadio]
     : [];
 
@@ -215,10 +239,6 @@ export async function listPublicSitemapPaths(
         faq,
       ),
   );
-  const docsPaths = (await docs.listDocSlugs()).map(
-    (slug) => buildSitemapPath("docs", ...slug),
-  );
-
   return [
     ...new Set([
       ...FIXED_PUBLIC_PATHS,

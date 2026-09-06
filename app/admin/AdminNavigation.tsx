@@ -47,6 +47,7 @@ const primaryIcons: Record<
   users: GroupIcon,
   "phone-settings": PhoneIcon,
   "chat-settings": ChatIcon,
+  "online-consultation-settings": ChatIcon,
   settings: SettingsIcon,
   roles: ShieldIcon,
   "developer-api": CodeIcon,

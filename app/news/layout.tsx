@@ -1,7 +1,13 @@
-import type { ReactNode } from 'react';
+import type { ReactNode } from "react";
 
-import { PublicInformationLayout } from '../components/PublicInformationLayout';
+import { getRequestTenant } from "@/lib/server/tenant";
+import { PublicInformationLayout } from "../components/PublicInformationLayout";
 
-export default function NewsLayout({ children }: { children: ReactNode }) {
+export default async function NewsLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  if ((await getRequestTenant()).features.universityPortal) return children;
   return <PublicInformationLayout>{children}</PublicInformationLayout>;
 }

@@ -134,7 +134,10 @@ test("Reservation API key siteKey default removal is reviewed exactly", () => {
     readFileSync(new URL("../scripts/deploy/migrations.manifest.json", import.meta.url), "utf8"),
   ) as { migrations: Array<{ name: string; sha256: string; classification: string }> };
   assert.deepEqual(
-    manifest.migrations.at(-1),
+    manifest.migrations.find(
+      ({ name }) =>
+        name === "20260906180000_drop_reservation_api_key_site_key_default",
+    ),
     {
       name: "20260906180000_drop_reservation_api_key_site_key_default",
       sha256,

@@ -22,6 +22,11 @@ const defaultTrustedOrigins = [
   "http://localhost:3001",
   "http://localhost:3002",
   "http://localhost:3003",
+  ...TENANTS.flatMap((tenant) =>
+    [3000, 3001, 3002, 3003].map(
+      (port) => `http://${tenant.devHostLabel}.localhost:${port}`,
+    ),
+  ),
 ];
 
 type CreateAuthOptions = {
@@ -150,9 +155,7 @@ function getTrustedOrigins(env: NodeJS.ProcessEnv) {
     const configuredOrigins = readCommaSeparated(
       env.BETTER_AUTH_TRUSTED_ORIGINS,
     );
-    return configuredOrigins.length > 0
-      ? configuredOrigins
-      : defaultTrustedOrigins;
+    return unique([...defaultTrustedOrigins, ...configuredOrigins]);
   }
 
   const canonicalOrigin = readRequiredProductionOrigin(

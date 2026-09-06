@@ -256,13 +256,31 @@ test("the sitemap uses APP_CANONICAL_ORIGIN for unregistered hosts and the tenan
 
   for (const tenant of TENANTS) {
     const entries = await buildPublicSitemap(env, tenant.productionHost);
-    assert.equal(entries.length, 276);
+    const expectedPaths = await listPublicSitemapPaths(tenant.key);
+    assert.equal(entries.length, expectedPaths.length);
     assert.ok(
       entries.every(({ url }) =>
         url.startsWith(`https://${tenant.productionHost}/`),
       ),
     );
   }
+});
+
+test("the university sitemap exposes university routes without civic life routes", async () => {
+  const paths = await listPublicSitemapPaths("univ");
+  for (const path of [
+    "/admissions",
+    "/academics",
+    "/campus-life",
+    "/scholarships",
+    "/careers",
+    "/faq",
+    "/news",
+    "/consultation",
+  ]) {
+    assert.ok(paths.includes(path), path);
+  }
+  assert.ok(paths.every((path) => !path.startsWith("/life")));
 });
 
 test("the sitemap route resolves the canonical origin from the request host", () => {

@@ -415,6 +415,10 @@ test("reviewed migration manifest exactly classifies the current SHA-verified ch
         name: "20260906180000_drop_reservation_api_key_site_key_default",
         classification: "destructive-reviewed",
       },
+      {
+        name: "20260906190000_add_univ_online_consultation_settings",
+        classification: "destructive-reviewed",
+      },
     ],
   );
 });

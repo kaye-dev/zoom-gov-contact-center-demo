@@ -176,7 +176,10 @@ test("Reservation API key management and admin pages require a tenant key", () =
   assert.match(usageSource, /updateMany\(\{\s*where: \{ id: input\.keyId, siteKey: tenantKey/u);
 
   const apiSource = sourceFile("../app/api/[[...route]]/route.ts");
-  assert.match(apiSource, /authenticateReservationApiRequest\(c\.get\("prisma"\), c\.get\("tenantKey"\),/u);
+  assert.match(
+    apiSource,
+    /authenticateReservationApiRequest\(\s*c\.get\("prisma"\),\s*c\.get\("tenantKey"\),/u,
+  );
   for (const relativePath of [
     "../app/admin/reservations/api-keys/page.tsx",
     "../app/admin/reservations/api-keys/logs/page.tsx",
