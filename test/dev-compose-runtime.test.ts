@@ -471,7 +471,7 @@ test("RT-13: Colima resource preflight verifies recommended resources without mu
   assert.doesNotMatch(readFileSync(dockerLog, "utf8"), /compose/u);
 });
 
-test("RT-13: approved low-resource Colima profile is persistently resized and reverified", (context) => {
+test("RT-13: Colima guest reservation is rounded up before persistent resize and revalidation", (context) => {
   const fixture = createRuntimeFixture("local");
   const state = join(fixture.root, "resized");
   const colimaLog = join(fixture.root, "colima.log");
@@ -481,7 +481,7 @@ test("RT-13: approved low-resource Colima profile is persistently resized and re
     [
       'if [ "$1" = "info" ]; then',
       '  if [ "$2" = "--format" ]; then',
-      `    if [ -e '${state}' ]; then printf "6442450944\\n"; else printf "2147483648\\n"; fi`,
+      `    if [ -e '${state}' ]; then printf "6442450944\\n"; else printf "6197448704\\n"; fi`,
       "  fi",
       "  exit 0",
       "fi",
@@ -496,7 +496,7 @@ test("RT-13: approved low-resource Colima profile is persistently resized and re
     [
       `printf '%s\\n' "$*" >> '${colimaLog}'`,
       'if [ "$1" = "status" ]; then',
-      `  if [ -e '${state}' ]; then printf '%s\\n' '{\"runtime\":\"docker\",\"docker_socket\":\"unix:///tmp/colima.sock\",\"cpu\":4,\"memory\":6442450944}'; else printf '%s\\n' '{\"runtime\":\"docker\",\"docker_socket\":\"unix:///tmp/colima.sock\",\"cpu\":2,\"memory\":2147483648}'; fi`,
+      `  if [ -e '${state}' ]; then printf '%s\\n' '{\"runtime\":\"docker\",\"docker_socket\":\"unix:///tmp/colima.sock\",\"cpu\":4,\"memory\":7516192768}'; else printf '%s\\n' '{\"runtime\":\"docker\",\"docker_socket\":\"unix:///tmp/colima.sock\",\"cpu\":4,\"memory\":6442450944}'; fi`,
       "  exit 0",
       "fi",
       `if [ "$1" = "start" ]; then : > '${state}'; exit 0; fi`,
@@ -513,7 +513,7 @@ test("RT-13: approved low-resource Colima profile is persistently resized and re
   assert.match(result.stdout, /restarted and resources were verified/u);
   assert.match(
     readFileSync(colimaLog, "utf8"),
-    /stop default\nstart default --memory 6 --cpus 4 --save-config\n/u,
+    /stop default\nstart default --memory 7 --cpus 4 --save-config\n/u,
   );
 });
 
