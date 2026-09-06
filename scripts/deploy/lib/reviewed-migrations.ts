@@ -116,6 +116,13 @@ const EXACT_POST_REVIEWED_CHAIN = [
     sha256: "6b0e8dddafe51832e8128bb8a5b422e6a2c5e1bcfc04ef7d6d5ede96e695b2d5",
     classification: "destructive-reviewed",
   },
+  {
+    // ZAAD／防災無線の配線が済み、テナント指定漏れを吸収する既定値が不要になった。
+    // DROP DEFAULT は分類器が destructive として扱う。
+    name: "20260906150000_drop_zaad_site_key_default",
+    sha256: "ccd52ad88b964a37c6d6d0a9e18f7dbb2dfd542b554e8ca3a3a844f7ba437be9",
+    classification: "destructive-reviewed",
+  },
 ] as const satisfies readonly ExactBatchMigration[];
 
 export type ReviewedMigrationBatchPlan = {

@@ -15,7 +15,7 @@ import { ZaadZoomClient, ZaadZoomError } from "./zoom-client";
 
 // NOTE: ZAAD はテナント引数の配線を次段へ送っているため、既定テナントを直接参照する。
 // features.zaad が lg 限定である前提に依存する。
-import { DEFAULT_TENANT_KEY } from "@/lib/tenants";
+import type { TenantKey } from "@/lib/tenants";
 
 export class ZaadResourceError extends Error {
   constructor(
@@ -28,9 +28,9 @@ export class ZaadResourceError extends Error {
   }
 }
 
-export async function getZaadConnection(prisma: PrismaClient) {
+export async function getZaadConnection(prisma: PrismaClient, tenantKey: TenantKey) {
   try {
-    const client = await ZaadZoomClient.fromDatabase(prisma);
+    const client = await ZaadZoomClient.fromDatabase(prisma, tenantKey);
     return { state: await client.probe() };
   } catch (error) {
     if (error instanceof ZaadZoomError && error.code === ZAAD_ERROR_CODES.zoomNotConfigured) {
@@ -40,26 +40,28 @@ export async function getZaadConnection(prisma: PrismaClient) {
   }
 }
 
-export async function listZaadMessages(prisma: PrismaClient) {
+export async function listZaadMessages(prisma: PrismaClient, tenantKey: TenantKey) {
   const messages = await prisma.zaadOutboundMessage.findMany({
+    where: { siteKey: tenantKey },
     orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
     take: 100,
   });
   return { messages: messages.map(messageListDto) };
 }
 
-export async function getZaadMessage(prisma: PrismaClient, id: string) {
-  const message = await prisma.zaadOutboundMessage.findUnique({ where: { id } });
+export async function getZaadMessage(prisma: PrismaClient, tenantKey: TenantKey, id: string) {
+  const message = await prisma.zaadOutboundMessage.findFirst({ where: { id, siteKey: tenantKey } });
   if (!message) throw new ZaadResourceError(ZAAD_ERROR_CODES.messageNotFound, 404);
   return messageDto(message);
 }
 
-export async function createZaadMessage(prisma: PrismaClient, actorUserId: string, payload: unknown) {
+export async function createZaadMessage(prisma: PrismaClient, tenantKey: TenantKey, actorUserId: string, payload: unknown) {
   const parsed = parseZaadMessageInput(payload);
   if (!parsed.ok) throw new ZaadResourceError(parsed.code, 400);
   const row = await prisma.$transaction(async (transaction) => {
     const created = await transaction.zaadOutboundMessage.create({
       data: {
+        siteKey: tenantKey,
         name: parsed.value.name,
         body: parsed.value.body,
         languageCode: parsed.value.languageCode,
@@ -68,7 +70,7 @@ export async function createZaadMessage(prisma: PrismaClient, actorUserId: strin
         updatedByUserId: actorUserId,
       },
     });
-    await writeZaadAudit(transaction, {
+    await writeZaadAudit(transaction, tenantKey, {
       actorUserId,
       resourceKind: "message",
       targetId: created.id,
@@ -78,16 +80,18 @@ export async function createZaadMessage(prisma: PrismaClient, actorUserId: strin
     });
     return created;
   });
-  await syncMessageBestEffort(prisma, row.id);
-  return messageDto(await prisma.zaadOutboundMessage.findUniqueOrThrow({ where: { id: row.id } }));
+  await syncMessageBestEffort(prisma, tenantKey, row.id);
+  return messageDto(await prisma.zaadOutboundMessage.findFirstOrThrow({
+      where: { id: row.id, siteKey: tenantKey },
+    }));
 }
 
-export async function updateZaadMessage(prisma: PrismaClient, actorUserId: string, id: string, payload: unknown) {
+export async function updateZaadMessage(prisma: PrismaClient, tenantKey: TenantKey, actorUserId: string, id: string, payload: unknown) {
   const parsed = parseZaadMessageInput(payload, true);
   if (!parsed.ok) {
-    const current = await prisma.zaadOutboundMessage.findUnique({ where: { id } });
+    const current = await prisma.zaadOutboundMessage.findFirst({ where: { id, siteKey: tenantKey } });
     if (current && countZaadTextCharacters(current.body) > ZAAD_LIMITS.messageBody && payloadKeepsOversizedMessageBody(payload)) {
-      await writeZaadAudit(prisma, {
+      await writeZaadAudit(prisma, tenantKey, {
         actorUserId,
         resourceKind: "message",
         targetId: id,
@@ -101,7 +105,7 @@ export async function updateZaadMessage(prisma: PrismaClient, actorUserId: strin
     throw new ZaadResourceError(parsed.code, 400);
   }
   const updated = await prisma.$transaction(async (transaction) => {
-    const current = await transaction.zaadOutboundMessage.findUnique({ where: { id } });
+    const current = await transaction.zaadOutboundMessage.findFirst({ where: { id, siteKey: tenantKey } });
     const createResultUnknown = current !== null
       && current.revision === parsed.value.revision
       && isUnreconciledTtsCreate(current);
@@ -120,10 +124,10 @@ export async function updateZaadMessage(prisma: PrismaClient, actorUserId: strin
       },
     });
     if (result.count !== 1) {
-      const exists = await transaction.zaadOutboundMessage.findUnique({ where: { id }, select: { id: true } });
+      const exists = await transaction.zaadOutboundMessage.findFirst({ where: { id, siteKey: tenantKey }, select: { id: true } });
       throw new ZaadResourceError(exists ? ZAAD_ERROR_CODES.messageConflict : ZAAD_ERROR_CODES.messageNotFound, exists ? 409 : 404);
     }
-    await writeZaadAudit(transaction, {
+    await writeZaadAudit(transaction, tenantKey, {
       actorUserId,
       resourceKind: "message",
       targetId: id,
@@ -131,16 +135,16 @@ export async function updateZaadMessage(prisma: PrismaClient, actorUserId: strin
       result: "SUCCESS",
       changedFieldNames: ["name", "body", "languageCode", "voiceId"],
     });
-    return transaction.zaadOutboundMessage.findUniqueOrThrow({ where: { id } });
+    return transaction.zaadOutboundMessage.findFirstOrThrow({ where: { id, siteKey: tenantKey } });
   });
-  if (!isUnreconciledTtsCreate(updated)) await syncMessageBestEffort(prisma, updated.id);
-  return messageDto(await prisma.zaadOutboundMessage.findUniqueOrThrow({ where: { id } }));
+  if (!isUnreconciledTtsCreate(updated)) await syncMessageBestEffort(prisma, tenantKey, updated.id);
+  return messageDto(await prisma.zaadOutboundMessage.findFirstOrThrow({ where: { id, siteKey: tenantKey } }));
 }
 
-export async function retryZaadMessage(prisma: PrismaClient, actorUserId: string, id: string, revision: number) {
-  const current = await prisma.zaadOutboundMessage.findUnique({ where: { id } });
+export async function retryZaadMessage(prisma: PrismaClient, tenantKey: TenantKey, actorUserId: string, id: string, revision: number) {
+  const current = await prisma.zaadOutboundMessage.findFirst({ where: { id, siteKey: tenantKey } });
   if (current?.revision === revision && countZaadTextCharacters(current.body) > ZAAD_LIMITS.messageBody) {
-    await writeZaadAudit(prisma, {
+    await writeZaadAudit(prisma, tenantKey, {
       actorUserId,
       resourceKind: "message",
       targetId: id,
@@ -152,7 +156,7 @@ export async function retryZaadMessage(prisma: PrismaClient, actorUserId: string
     throw new ZaadResourceError(ZAAD_ERROR_CODES.messageBodyRequiresShortening, 409);
   }
   if (current?.revision === revision && isUnreconciledTtsCreate(current)) {
-    await writeZaadAudit(prisma, {
+    await writeZaadAudit(prisma, tenantKey, {
       actorUserId,
       resourceKind: "message",
       targetId: id,
@@ -168,9 +172,9 @@ export async function retryZaadMessage(prisma: PrismaClient, actorUserId: string
     data: { syncStatus: "PENDING", syncErrorCode: null, revision: { increment: 1 }, updatedByUserId: actorUserId },
   });
   if (result.count !== 1) {
-    const exists = await prisma.zaadOutboundMessage.findUnique({ where: { id }, select: { id: true } });
+    const exists = await prisma.zaadOutboundMessage.findFirst({ where: { id, siteKey: tenantKey }, select: { id: true } });
     const code = exists ? ZAAD_ERROR_CODES.messageConflict : ZAAD_ERROR_CODES.messageNotFound;
-    await writeZaadAudit(prisma, {
+    await writeZaadAudit(prisma, tenantKey, {
       actorUserId,
       resourceKind: "message",
       targetId: id,
@@ -181,8 +185,8 @@ export async function retryZaadMessage(prisma: PrismaClient, actorUserId: string
     });
     throw new ZaadResourceError(code, exists ? 409 : 404);
   }
-  const outcome = await syncMessageBestEffort(prisma, id);
-  await writeZaadAudit(prisma, {
+  const outcome = await syncMessageBestEffort(prisma, tenantKey, id);
+  await writeZaadAudit(prisma, tenantKey, {
     actorUserId,
     resourceKind: "message",
     targetId: id,
@@ -191,18 +195,18 @@ export async function retryZaadMessage(prisma: PrismaClient, actorUserId: string
     changedFieldNames: ["syncStatus"],
     stableErrorCode: outcome.success ? null : outcome.code,
   });
-  return messageDto(await prisma.zaadOutboundMessage.findUniqueOrThrow({ where: { id } }));
+  return messageDto(await prisma.zaadOutboundMessage.findFirstOrThrow({ where: { id, siteKey: tenantKey } }));
 }
 
-export async function deleteZaadMessage(prisma: PrismaClient, actorUserId: string, id: string, revision: number) {
-  const row = await prisma.zaadOutboundMessage.findUnique({ where: { id } });
+export async function deleteZaadMessage(prisma: PrismaClient, tenantKey: TenantKey, actorUserId: string, id: string, revision: number) {
+  const row = await prisma.zaadOutboundMessage.findFirst({ where: { id, siteKey: tenantKey } });
   if (!row) return { deleted: true as const };
   if (row.revision !== revision) throw new ZaadResourceError(ZAAD_ERROR_CODES.messageConflict, 409);
   const inUse = row.zoomAssetId
-    ? await prisma.zaadOneTimeDispatch.count({ where: { zoomAssetId: row.zoomAssetId } })
+    ? await prisma.zaadOneTimeDispatch.count({ where: { siteKey: tenantKey, zoomAssetId: row.zoomAssetId } })
     : 0;
   if (inUse > 0) {
-    await writeZaadAudit(prisma, {
+    await writeZaadAudit(prisma, tenantKey, {
       actorUserId,
       resourceKind: "message",
       targetId: id,
@@ -215,13 +219,13 @@ export async function deleteZaadMessage(prisma: PrismaClient, actorUserId: strin
   }
   if (row.zoomAssetId) {
     try {
-      await callZoom(prisma, (client) => client.deleteTtsAsset(row.zoomAssetId!));
+      await callZoom(prisma, tenantKey, (client) => client.deleteTtsAsset(row.zoomAssetId!));
     } catch (error) {
       const mapped = mapResourceError(error);
       const normalized = mapped.code === ZAAD_ERROR_CODES.zoomInUse
         ? new ZaadResourceError(ZAAD_ERROR_CODES.messageInUse, 409)
         : mapped;
-      await writeZaadAudit(prisma, {
+      await writeZaadAudit(prisma, tenantKey, {
         actorUserId,
         resourceKind: "message",
         targetId: id,
@@ -234,9 +238,9 @@ export async function deleteZaadMessage(prisma: PrismaClient, actorUserId: strin
     }
   }
   await prisma.$transaction(async (transaction) => {
-    const deleted = await transaction.zaadOutboundMessage.deleteMany({ where: { id, revision } });
+    const deleted = await transaction.zaadOutboundMessage.deleteMany({ where: { siteKey: tenantKey, id, revision } });
     if (deleted.count !== 1) throw new ZaadResourceError(ZAAD_ERROR_CODES.messageConflict, 409);
-    await writeZaadAudit(transaction, {
+    await writeZaadAudit(transaction, tenantKey, {
       actorUserId,
       resourceKind: "message",
       targetId: id,
@@ -248,18 +252,18 @@ export async function deleteZaadMessage(prisma: PrismaClient, actorUserId: strin
   return { deleted: true as const };
 }
 
-export async function listZaadContactLists(prisma: PrismaClient, nextPageToken?: string) {
-  return callZoom(prisma, (client) => client.listContactLists({ pageSize: 25, nextPageToken }));
+export async function listZaadContactLists(prisma: PrismaClient, tenantKey: TenantKey, nextPageToken?: string) {
+  return callZoom(prisma, tenantKey, (client) => client.listContactLists({ pageSize: 25, nextPageToken }));
 }
 
-export async function getZaadContactList(prisma: PrismaClient, id: string) {
-  return callZoom(prisma, (client) => client.getContactList(id));
+export async function getZaadContactList(prisma: PrismaClient, tenantKey: TenantKey, id: string) {
+  return callZoom(prisma, tenantKey, (client) => client.getContactList(id));
 }
 
-export async function createZaadContactList(prisma: PrismaClient, actorUserId: string, payload: unknown) {
+export async function createZaadContactList(prisma: PrismaClient, tenantKey: TenantKey, actorUserId: string, payload: unknown) {
   const parsed = parseZaadContactListInput(payload);
   if (!parsed.ok) {
-    await writeZaadAudit(prisma, {
+    await writeZaadAudit(prisma, tenantKey, {
       actorUserId,
       resourceKind: "contact-list",
       targetId: "create",
@@ -271,9 +275,9 @@ export async function createZaadContactList(prisma: PrismaClient, actorUserId: s
   }
   let list;
   try {
-    list = await callZoom(prisma, (client) => client.createContactList(parsed.value));
+    list = await callZoom(prisma, tenantKey, (client) => client.createContactList(parsed.value));
   } catch (error) {
-    throw await auditExternalFailure(prisma, {
+    throw await auditExternalFailure(prisma, tenantKey, {
       actorUserId,
       resourceKind: "contact-list",
       targetId: "create",
@@ -281,7 +285,7 @@ export async function createZaadContactList(prisma: PrismaClient, actorUserId: s
       changedFieldNames: ["name", "description", "type"],
     }, error);
   }
-  await writeZaadAudit(prisma, {
+  await writeZaadAudit(prisma, tenantKey, {
     actorUserId,
     resourceKind: "contact-list",
     targetId: list.id,
@@ -292,10 +296,10 @@ export async function createZaadContactList(prisma: PrismaClient, actorUserId: s
   return list;
 }
 
-export async function updateZaadContactList(prisma: PrismaClient, actorUserId: string, id: string, payload: unknown) {
+export async function updateZaadContactList(prisma: PrismaClient, tenantKey: TenantKey, actorUserId: string, id: string, payload: unknown) {
   const parsed = parseZaadContactListInput(payload, true);
   if (!parsed.ok) {
-    await writeZaadAudit(prisma, {
+    await writeZaadAudit(prisma, tenantKey, {
       actorUserId,
       resourceKind: "contact-list",
       targetId: id,
@@ -307,9 +311,9 @@ export async function updateZaadContactList(prisma: PrismaClient, actorUserId: s
   }
   let current;
   try {
-    current = await callZoom(prisma, (client) => client.getContactList(id));
+    current = await callZoom(prisma, tenantKey, (client) => client.getContactList(id));
   } catch (error) {
-    throw await auditExternalFailure(prisma, {
+    throw await auditExternalFailure(prisma, tenantKey, {
       actorUserId,
       resourceKind: "contact-list",
       targetId: id,
@@ -318,7 +322,7 @@ export async function updateZaadContactList(prisma: PrismaClient, actorUserId: s
     }, error);
   }
   if (current.revision !== parsed.value.revision) {
-    await writeZaadAudit(prisma, {
+    await writeZaadAudit(prisma, tenantKey, {
       actorUserId,
       resourceKind: "contact-list",
       targetId: id,
@@ -331,9 +335,9 @@ export async function updateZaadContactList(prisma: PrismaClient, actorUserId: s
   }
   let list;
   try {
-    list = await callZoom(prisma, (client) => client.updateContactList(id, parsed.value));
+    list = await callZoom(prisma, tenantKey, (client) => client.updateContactList(id, parsed.value));
   } catch (error) {
-    throw await auditExternalFailure(prisma, {
+    throw await auditExternalFailure(prisma, tenantKey, {
       actorUserId,
       resourceKind: "contact-list",
       targetId: id,
@@ -341,7 +345,7 @@ export async function updateZaadContactList(prisma: PrismaClient, actorUserId: s
       changedFieldNames: ["name", "description"],
     }, error);
   }
-  await writeZaadAudit(prisma, {
+  await writeZaadAudit(prisma, tenantKey, {
     actorUserId,
     resourceKind: "contact-list",
     targetId: id,
@@ -352,15 +356,15 @@ export async function updateZaadContactList(prisma: PrismaClient, actorUserId: s
   return list;
 }
 
-export async function deleteZaadContactList(prisma: PrismaClient, actorUserId: string, id: string) {
+export async function deleteZaadContactList(prisma: PrismaClient, tenantKey: TenantKey, actorUserId: string, id: string) {
   const [settingReferences, residentReferences, dispatchReferences, sourceReferences] = await Promise.all([
     prisma.zaadRegistrationSetting.count({ where: { contactListId: id } }),
-    prisma.disasterRadioSubscription.count({ where: { zoomContactListId: id } }),
-    prisma.zaadOneTimeDispatch.count({ where: { zoomContactListId: id } }),
+    prisma.disasterRadioSubscription.count({ where: { siteKey: tenantKey, zoomContactListId: id } }),
+    prisma.zaadOneTimeDispatch.count({ where: { siteKey: tenantKey, zoomContactListId: id } }),
     prisma.zaadOneTimeDispatchSourceList.count({ where: { contactListId: id } }),
   ]);
   if (settingReferences + residentReferences + dispatchReferences + sourceReferences > 0) {
-    await writeZaadAudit(prisma, {
+    await writeZaadAudit(prisma, tenantKey, {
       actorUserId,
       resourceKind: "contact-list",
       targetId: id,
@@ -372,9 +376,9 @@ export async function deleteZaadContactList(prisma: PrismaClient, actorUserId: s
     throw new ZaadResourceError(ZAAD_ERROR_CODES.contactListConflict, 409);
   }
   try {
-    await callZoom(prisma, (client) => client.deleteContactList(id));
+    await callZoom(prisma, tenantKey, (client) => client.deleteContactList(id));
   } catch (error) {
-    throw await auditExternalFailure(prisma, {
+    throw await auditExternalFailure(prisma, tenantKey, {
       actorUserId,
       resourceKind: "contact-list",
       targetId: id,
@@ -382,7 +386,7 @@ export async function deleteZaadContactList(prisma: PrismaClient, actorUserId: s
       changedFieldNames: ["record"],
     }, error);
   }
-  await writeZaadAudit(prisma, {
+  await writeZaadAudit(prisma, tenantKey, {
     actorUserId,
     resourceKind: "contact-list",
     targetId: id,
@@ -393,17 +397,17 @@ export async function deleteZaadContactList(prisma: PrismaClient, actorUserId: s
   return { deleted: true as const };
 }
 
-export async function getZaadRegistrationSetting(prisma: PrismaClient) {
+export async function getZaadRegistrationSetting(prisma: PrismaClient, tenantKey: TenantKey) {
   const setting = await prisma.zaadRegistrationSetting.findUniqueOrThrow({
-    where: { siteKey: DEFAULT_TENANT_KEY },
+    where: { siteKey: tenantKey },
   });
   return settingDto(setting);
 }
 
-export async function updateZaadRegistrationSetting(prisma: PrismaClient, actorUserId: string, payload: unknown) {
+export async function updateZaadRegistrationSetting(prisma: PrismaClient, tenantKey: TenantKey, actorUserId: string, payload: unknown) {
   const parsed = parseZaadRegistrationSettingInput(payload);
   if (!parsed.ok) {
-    await writeZaadAudit(prisma, {
+    await writeZaadAudit(prisma, tenantKey, {
       actorUserId,
       resourceKind: "registration-setting",
       targetId: "singleton",
@@ -417,9 +421,9 @@ export async function updateZaadRegistrationSetting(prisma: PrismaClient, actorU
   if (parsed.value.contactListId) {
     let list;
     try {
-      list = await callZoom(prisma, (client) => client.getContactList(parsed.value.contactListId!));
+      list = await callZoom(prisma, tenantKey, (client) => client.getContactList(parsed.value.contactListId!));
     } catch (error) {
-      throw await auditExternalFailure(prisma, {
+      throw await auditExternalFailure(prisma, tenantKey, {
         actorUserId,
         resourceKind: "registration-setting",
         targetId: "singleton",
@@ -431,7 +435,7 @@ export async function updateZaadRegistrationSetting(prisma: PrismaClient, actorU
   }
   const setting = await prisma.$transaction(async (transaction) => {
     const result = await transaction.zaadRegistrationSetting.updateMany({
-      where: { siteKey: DEFAULT_TENANT_KEY, revision: parsed.value.revision },
+      where: { siteKey: tenantKey, revision: parsed.value.revision },
       data: {
         contactListId: parsed.value.contactListId,
         contactListNameSnapshot: contactListName,
@@ -440,7 +444,7 @@ export async function updateZaadRegistrationSetting(prisma: PrismaClient, actorU
       },
     });
     if (result.count !== 1) throw new ZaadResourceError(ZAAD_ERROR_CODES.registrationSettingConflict, 409);
-    await writeZaadAudit(transaction, {
+    await writeZaadAudit(transaction, tenantKey, {
       actorUserId,
       resourceKind: "registration-setting",
       targetId: "singleton",
@@ -448,23 +452,23 @@ export async function updateZaadRegistrationSetting(prisma: PrismaClient, actorU
       result: "SUCCESS",
       changedFieldNames: ["contactListId"],
     });
-    return transaction.zaadRegistrationSetting.findUniqueOrThrow({ where: { siteKey: DEFAULT_TENANT_KEY } });
+    return transaction.zaadRegistrationSetting.findUniqueOrThrow({ where: { siteKey: tenantKey } });
   });
   return settingDto(setting);
 }
 
-export async function listZaadCampaigns(prisma: PrismaClient, nextPageToken?: string) {
-  return callZoom(prisma, (client) => client.listCampaigns({ pageSize: 25, nextPageToken }));
+export async function listZaadCampaigns(prisma: PrismaClient, tenantKey: TenantKey, nextPageToken?: string) {
+  return callZoom(prisma, tenantKey, (client) => client.listCampaigns({ pageSize: 25, nextPageToken }));
 }
 
-export async function getZaadCampaign(prisma: PrismaClient, id: string) {
-  return callZoom(prisma, (client) => client.getCampaign(id));
+export async function getZaadCampaign(prisma: PrismaClient, tenantKey: TenantKey, id: string) {
+  return callZoom(prisma, tenantKey, (client) => client.getCampaign(id));
 }
 
-export async function updateZaadCampaignStatus(prisma: PrismaClient, actorUserId: string, id: string, payload: unknown) {
+export async function updateZaadCampaignStatus(prisma: PrismaClient, tenantKey: TenantKey, actorUserId: string, id: string, payload: unknown) {
   const parsed = parseZaadCampaignStatusInput(payload);
   if (!parsed.ok) {
-    await writeZaadAudit(prisma, {
+    await writeZaadAudit(prisma, tenantKey, {
       actorUserId,
       resourceKind: "campaign",
       targetId: id,
@@ -478,19 +482,20 @@ export async function updateZaadCampaignStatus(prisma: PrismaClient, actorUserId
   const action = campaignAction(parsed.value.status);
   let client;
   try {
-    client = await getClient(prisma);
+    client = await getClient(prisma, tenantKey);
   } catch (error) {
-    throw await auditCampaignFailure(prisma, actorUserId, id, action, parsed.value.status, null, error);
+    throw await auditCampaignFailure(prisma, tenantKey, actorUserId, id, action, parsed.value.status, null, error);
   }
   let current;
   try {
     current = await callClient(() => client.getCampaign(id));
   } catch (error) {
-    throw await auditCampaignFailure(prisma, actorUserId, id, action, parsed.value.status, null, error);
+    throw await auditCampaignFailure(prisma, tenantKey, actorUserId, id, action, parsed.value.status, null, error);
   }
   if (current.dialingMethod !== "agentless") {
     await auditCampaignRejection(
       prisma,
+      tenantKey,
       actorUserId,
       id,
       action,
@@ -503,6 +508,7 @@ export async function updateZaadCampaignStatus(prisma: PrismaClient, actorUserId
   if (current.status !== parsed.value.expectedStatus) {
     await auditCampaignRejection(
       prisma,
+      tenantKey,
       actorUserId,
       id,
       action,
@@ -513,7 +519,7 @@ export async function updateZaadCampaignStatus(prisma: PrismaClient, actorUserId
     throw new ZaadResourceError(ZAAD_ERROR_CODES.campaignStatusConflict, 409);
   }
   if (current.status === parsed.value.status) {
-    await writeZaadAudit(prisma, {
+    await writeZaadAudit(prisma, tenantKey, {
       actorUserId,
       resourceKind: "campaign",
       targetId: id,
@@ -530,6 +536,7 @@ export async function updateZaadCampaignStatus(prisma: PrismaClient, actorUserId
   if (!valid) {
     await auditCampaignRejection(
       prisma,
+      tenantKey,
       actorUserId,
       id,
       action,
@@ -546,6 +553,7 @@ export async function updateZaadCampaignStatus(prisma: PrismaClient, actorUserId
     if (!mapped.resultUnknown) {
       throw await auditCampaignFailure(
         prisma,
+        tenantKey,
         actorUserId,
         id,
         action,
@@ -559,14 +567,14 @@ export async function updateZaadCampaignStatus(prisma: PrismaClient, actorUserId
   try {
     readback = await callClient(() => client.getCampaign(id));
   } catch {
-    await auditCampaignUnknown(prisma, actorUserId, id, action, current.status, parsed.value.status);
+    await auditCampaignUnknown(prisma, tenantKey, actorUserId, id, action, current.status, parsed.value.status);
     throw new ZaadResourceError(ZAAD_ERROR_CODES.campaignStatusUnknown, 502, true);
   }
   if (readback.status !== parsed.value.status) {
-    await auditCampaignUnknown(prisma, actorUserId, id, action, current.status, parsed.value.status);
+    await auditCampaignUnknown(prisma, tenantKey, actorUserId, id, action, current.status, parsed.value.status);
     throw new ZaadResourceError(ZAAD_ERROR_CODES.campaignStatusUnknown, 502, true);
   }
-  await writeZaadAudit(prisma, {
+  await writeZaadAudit(prisma, tenantKey, {
     actorUserId,
     resourceKind: "campaign",
     targetId: id,
@@ -579,8 +587,12 @@ export async function updateZaadCampaignStatus(prisma: PrismaClient, actorUserId
   return readback;
 }
 
-async function syncMessageBestEffort(prisma: PrismaClient, id: string) {
-  const row = await prisma.zaadOutboundMessage.findUnique({ where: { id } });
+async function syncMessageBestEffort(
+  prisma: PrismaClient,
+  tenantKey: TenantKey,
+  id: string,
+) {
+  const row = await prisma.zaadOutboundMessage.findFirst({ where: { id, siteKey: tenantKey } });
   if (!row) {
     return { success: false as const, code: ZAAD_ERROR_CODES.messageNotFound, resultUnknown: false };
   }
@@ -594,7 +606,7 @@ async function syncMessageBestEffort(prisma: PrismaClient, id: string) {
     if (Boolean(row.zoomAssetId) !== Boolean(row.zoomAssetItemId)) {
       throw new ZaadZoomError(ZAAD_ERROR_CODES.zoomInvalidResponse, 502);
     }
-    const client = await ZaadZoomClient.fromDatabase(prisma);
+    const client = await ZaadZoomClient.fromDatabase(prisma, tenantKey);
     const input = {
       name: row.name,
       body: row.body,
@@ -631,16 +643,20 @@ async function syncMessageBestEffort(prisma: PrismaClient, id: string) {
   }
 }
 
-async function getClient(prisma: PrismaClient) {
+async function getClient(prisma: PrismaClient, tenantKey: TenantKey) {
   try {
-    return await ZaadZoomClient.fromDatabase(prisma);
+    return await ZaadZoomClient.fromDatabase(prisma, tenantKey);
   } catch (error) {
     throw mapResourceError(error);
   }
 }
 
-async function callZoom<T>(prisma: PrismaClient, run: (client: ZaadZoomClient) => Promise<T>) {
-  const client = await getClient(prisma);
+async function callZoom<T>(
+  prisma: PrismaClient,
+  tenantKey: TenantKey,
+  run: (client: ZaadZoomClient) => Promise<T>,
+) {
+  const client = await getClient(prisma, tenantKey);
   return callClient(() => run(client));
 }
 
@@ -671,11 +687,12 @@ type ExternalAuditInput = Pick<
 
 async function auditExternalFailure(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   input: ExternalAuditInput,
   error: unknown,
 ) {
   const mapped = mapResourceError(error);
-  await writeZaadAudit(prisma, {
+  await writeZaadAudit(prisma, tenantKey, {
     ...input,
     result: mapped.resultUnknown ? "RESULT_UNKNOWN" : "FAILED",
     stableErrorCode: mapped.code,
@@ -689,6 +706,7 @@ function campaignAction(status: "running" | "paused") {
 
 async function auditCampaignRejection(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   actorUserId: string,
   id: string,
   action: string,
@@ -696,7 +714,7 @@ async function auditCampaignRejection(
   toStatus: string,
   stableErrorCode: string,
 ) {
-  await writeZaadAudit(prisma, {
+  await writeZaadAudit(prisma, tenantKey, {
     actorUserId,
     resourceKind: "campaign",
     targetId: id,
@@ -711,6 +729,7 @@ async function auditCampaignRejection(
 
 async function auditCampaignFailure(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   actorUserId: string,
   id: string,
   action: string,
@@ -720,10 +739,10 @@ async function auditCampaignFailure(
 ) {
   const mapped = mapResourceError(error);
   if (mapped.resultUnknown) {
-    await auditCampaignUnknown(prisma, actorUserId, id, action, currentStatus, desiredStatus);
+    await auditCampaignUnknown(prisma, tenantKey, actorUserId, id, action, currentStatus, desiredStatus);
     return new ZaadResourceError(ZAAD_ERROR_CODES.campaignStatusUnknown, 502, true);
   }
-  await writeZaadAudit(prisma, {
+  await writeZaadAudit(prisma, tenantKey, {
     actorUserId,
     resourceKind: "campaign",
     targetId: id,
@@ -739,13 +758,14 @@ async function auditCampaignFailure(
 
 async function auditCampaignUnknown(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   actorUserId: string,
   id: string,
   action: string,
   fromStatus: string | null,
   toStatus: string,
 ) {
-  await writeZaadAudit(prisma, {
+  await writeZaadAudit(prisma, tenantKey, {
     actorUserId,
     resourceKind: "campaign",
     targetId: id,

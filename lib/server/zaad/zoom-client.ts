@@ -11,7 +11,7 @@ import {
 
 // NOTE: ZAAD はテナント引数の配線を次段へ送っているため、既定テナントを直接参照する。
 // features.zaad が lg 限定である前提に依存する。
-import { DEFAULT_TENANT_KEY } from "@/lib/tenants";
+import type { TenantKey } from "@/lib/tenants";
 
 const DEFAULT_API_BASE = "https://api.zoom.us/v2";
 const DEFAULT_TOKEN_URL = "https://zoom.us/oauth/token";
@@ -193,6 +193,7 @@ export class ZaadZoomClient {
 
   static async fromDatabase(
     prisma: PrismaClient,
+    tenantKey: TenantKey,
     options: {
       fetchImpl?: FetchLike;
       apiBase?: string;
@@ -201,7 +202,7 @@ export class ZaadZoomClient {
     } = {},
   ) {
     const row = await prisma.siteDeveloperApiSetting.findUnique({
-      where: { siteKey: DEFAULT_TENANT_KEY },
+      where: { siteKey: tenantKey },
       select: {
         accountId: true,
         clientId: true,

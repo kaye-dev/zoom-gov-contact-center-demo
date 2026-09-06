@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 
 import type { Prisma, PrismaClient } from "@/lib/generated/prisma/client";
+import type { TenantKey } from "@/lib/tenants";
 
 export type ZaadAuditInput = {
   actorUserId: string | null;
@@ -18,9 +19,14 @@ export type ZaadAuditInput = {
 
 type AuditClient = PrismaClient | Prisma.TransactionClient;
 
-export async function writeZaadAudit(prisma: AuditClient, input: ZaadAuditInput) {
+export async function writeZaadAudit(
+  prisma: AuditClient,
+  tenantKey: TenantKey,
+  input: ZaadAuditInput,
+) {
   await prisma.zaadAdminAudit.create({
     data: {
+      siteKey: tenantKey,
       actorUserId: input.actorUserId,
       resourceKind: input.resourceKind,
       targetRef: opaqueTargetRef(input.resourceKind, input.targetId),

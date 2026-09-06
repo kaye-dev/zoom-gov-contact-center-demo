@@ -17,6 +17,7 @@ import {
   type ZoomCampaignDto,
   type ZoomOneTimeCampaignProfile,
 } from "./zoom-client";
+import type { TenantKey } from "@/lib/tenants";
 
 const PREFLIGHT_TTL_SECONDS = 5 * 60;
 
@@ -68,11 +69,11 @@ type SignedPreflight = {
   expiresAt: number;
 };
 
-export async function preflightZaadOneTime(prisma: PrismaClient, payload: unknown) {
+export async function preflightZaadOneTime(prisma: PrismaClient, tenantKey: TenantKey, payload: unknown) {
   const parsed = parseZaadOneTimeInput(payload);
   if (!parsed.ok) throw new ZaadOneTimeError(parsed.code, 400);
   const input = parsed.value as ZaadOneTimeInput;
-  const snapshot = await resolveSnapshot(prisma, input);
+  const snapshot = await resolveSnapshot(prisma, tenantKey, input);
   const expiresAt = Math.floor(Date.now() / 1_000) + PREFLIGHT_TTL_SECONDS;
   const signed: SignedPreflight = {
     version: 2,
@@ -105,11 +106,11 @@ export async function preflightZaadOneTime(prisma: PrismaClient, payload: unknow
   };
 }
 
-export async function prepareZaadOneTime(prisma: PrismaClient, actorUserId: string, payload: unknown) {
+export async function prepareZaadOneTime(prisma: PrismaClient, tenantKey: TenantKey, actorUserId: string, payload: unknown) {
   const parsed = parseZaadOneTimeInput(payload, true);
   if (!parsed.ok) {
     const operationKey = operationKeyForAudit(payload);
-    if (operationKey) await auditPrepareRejection(prisma, actorUserId, operationKey, parsed.code);
+    if (operationKey) await auditPrepareRejection(prisma, tenantKey, actorUserId, operationKey, parsed.code);
     throw new ZaadOneTimeError(parsed.code, 400);
   }
   const input = parsed.value as ZaadOneTimePrepareInput;
@@ -119,26 +120,26 @@ export async function prepareZaadOneTime(prisma: PrismaClient, actorUserId: stri
     signed.operationKeyDigest !== protectedDigest("operation-key", input.operationKey) ||
     signed.requestDigest !== requestDigest(input)
   ) {
-    throw await prepareRejectionError(prisma, actorUserId, input.operationKey, ZAAD_ERROR_CODES.oneTimeSnapshotStale);
+    throw await prepareRejectionError(prisma, tenantKey, actorUserId, input.operationKey, ZAAD_ERROR_CODES.oneTimeSnapshotStale);
   }
 
-  const existing = await findDispatchByOperationKey(prisma, input.operationKey);
+  const existing = await findDispatchByOperationKey(prisma, tenantKey, input.operationKey);
   if (existing) {
     if (existing.createdByUserId !== actorUserId || !dispatchMatchesInput(existing, input)) {
-      throw await prepareRejectionError(prisma, actorUserId, input.operationKey, ZAAD_ERROR_CODES.oneTimeSnapshotStale);
+      throw await prepareRejectionError(prisma, tenantKey, actorUserId, input.operationKey, ZAAD_ERROR_CODES.oneTimeSnapshotStale);
     }
     return dispatchDto(existing);
   }
   if (signed.expiresAt <= Math.floor(Date.now() / 1_000)) {
-    throw await prepareRejectionError(prisma, actorUserId, input.operationKey, ZAAD_ERROR_CODES.oneTimeSnapshotExpired);
+    throw await prepareRejectionError(prisma, tenantKey, actorUserId, input.operationKey, ZAAD_ERROR_CODES.oneTimeSnapshotExpired);
   }
 
   let snapshot: ResolvedSnapshot;
   try {
-    snapshot = await resolveSnapshot(prisma, input, actorUserId);
+    snapshot = await resolveSnapshot(prisma, tenantKey, input, actorUserId);
   } catch (error) {
     if (error instanceof ZaadOneTimeError && error.code === ZAAD_ERROR_CODES.oneTimeSnapshotStale) {
-      await auditPrepareRejection(prisma, actorUserId, input.operationKey, error.code);
+      await auditPrepareRejection(prisma, tenantKey, actorUserId, input.operationKey, error.code);
     }
     throw error;
   }
@@ -148,7 +149,7 @@ export async function prepareZaadOneTime(prisma: PrismaClient, actorUserId: stri
     signed.recipientCount !== snapshot.recipients.length ||
     signed.duplicateCount !== snapshot.duplicateCount
   ) {
-    throw await prepareRejectionError(prisma, actorUserId, input.operationKey, ZAAD_ERROR_CODES.oneTimeSnapshotStale);
+    throw await prepareRejectionError(prisma, tenantKey, actorUserId, input.operationKey, ZAAD_ERROR_CODES.oneTimeSnapshotStale);
   }
 
   let created: DispatchRow;
@@ -156,6 +157,7 @@ export async function prepareZaadOneTime(prisma: PrismaClient, actorUserId: stri
     created = await prisma.$transaction(async (transaction) => {
       const dispatch = await transaction.zaadOneTimeDispatch.create({
         data: {
+          siteKey: tenantKey,
           operationKey: input.operationKey,
           name: input.name,
           body: input.body,
@@ -181,7 +183,7 @@ export async function prepareZaadOneTime(prisma: PrismaClient, actorUserId: stri
           },
         },
       });
-      await writeZaadAudit(transaction, {
+      await writeZaadAudit(transaction, tenantKey, {
         actorUserId,
         resourceKind: "one-time-dispatch",
         targetId: dispatch.id,
@@ -193,15 +195,15 @@ export async function prepareZaadOneTime(prisma: PrismaClient, actorUserId: stri
     });
   } catch (error) {
     if (!isUniqueConflict(error)) throw error;
-    const concurrent = await findDispatchByOperationKey(prisma, input.operationKey);
+    const concurrent = await findDispatchByOperationKey(prisma, tenantKey, input.operationKey);
     if (!concurrent || concurrent.createdByUserId !== actorUserId || !dispatchMatchesInput(concurrent, input)) {
-      throw await prepareRejectionError(prisma, actorUserId, input.operationKey, ZAAD_ERROR_CODES.oneTimeSnapshotStale);
+      throw await prepareRejectionError(prisma, tenantKey, actorUserId, input.operationKey, ZAAD_ERROR_CODES.oneTimeSnapshotStale);
     }
     return dispatchDto(concurrent);
   }
 
   try {
-    const client = await ZaadZoomClient.fromDatabase(prisma);
+    const client = await ZaadZoomClient.fromDatabase(prisma, tenantKey);
     client.assertOneTimePreparationWritesEnabled();
     const resourceNames = oneTimeResourceNames(created.id, created.createdAt);
 
@@ -335,7 +337,7 @@ export async function prepareZaadOneTime(prisma: PrismaClient, actorUserId: stri
             revision: { increment: 1 },
           },
         });
-        await writeZaadAudit(transaction, {
+        await writeZaadAudit(transaction, tenantKey, {
           actorUserId,
           resourceKind: "one-time-dispatch",
           targetId: created.id,
@@ -362,7 +364,7 @@ export async function prepareZaadOneTime(prisma: PrismaClient, actorUserId: stri
           revision: { increment: 1 },
         },
       });
-      await writeZaadAudit(transaction, {
+      await writeZaadAudit(transaction, tenantKey, {
         actorUserId,
         resourceKind: "one-time-dispatch",
         targetId: created.id,
@@ -381,28 +383,30 @@ export async function prepareZaadOneTime(prisma: PrismaClient, actorUserId: stri
   }
 }
 
-export async function listZaadOneTimeDispatches(prisma: PrismaClient) {
+export async function listZaadOneTimeDispatches(prisma: PrismaClient, tenantKey: TenantKey) {
   const dispatches = await prisma.zaadOneTimeDispatch.findMany({
+    where: { siteKey: tenantKey },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: 100,
   });
   return { dispatches: dispatches.map(dispatchDto) };
 }
 
-export async function getZaadOneTimeDispatch(prisma: PrismaClient, id: string) {
-  const dispatch = await prisma.zaadOneTimeDispatch.findUnique({ where: { id } });
+export async function getZaadOneTimeDispatch(prisma: PrismaClient, tenantKey: TenantKey, id: string) {
+  const dispatch = await prisma.zaadOneTimeDispatch.findFirst({ where: { id, siteKey: tenantKey } });
   if (!dispatch) throw new ZaadOneTimeError(ZAAD_ERROR_CODES.zoomNotFound, 404);
   return dispatchDto(dispatch);
 }
 
 async function resolveSnapshot(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   input: ZaadOneTimeInput,
   actorUserId: string | null = null,
 ): Promise<ResolvedSnapshot> {
   let client: ZaadZoomClient;
   try {
-    client = await ZaadZoomClient.fromDatabase(prisma);
+    client = await ZaadZoomClient.fromDatabase(prisma, tenantKey);
   } catch (error) {
     throw mapOneTimeError(error);
   }
@@ -428,7 +432,7 @@ async function resolveSnapshot(
       }
     } catch (error) {
       const mapped = mapOneTimeError(error);
-      await writeZaadAudit(prisma, {
+      await writeZaadAudit(prisma, tenantKey, {
         actorUserId,
         resourceKind: "contact-list",
         targetId: contactListId,
@@ -503,9 +507,13 @@ function recipientDigest(recipients: RecipientSnapshot[]) {
   return protectedDigest("recipients", recipients.map(({ phone, displayName }) => ({ phone, displayName })));
 }
 
-async function findDispatchByOperationKey(prisma: PrismaClient, operationKey: string) {
-  return prisma.zaadOneTimeDispatch.findUnique({
-    where: { operationKey },
+async function findDispatchByOperationKey(
+  prisma: PrismaClient,
+  tenantKey: TenantKey,
+  operationKey: string,
+) {
+  return prisma.zaadOneTimeDispatch.findFirst({
+    where: { operationKey, siteKey: tenantKey },
     include: {
       sourceLists: { orderBy: { selectedOrder: "asc" } },
       residents: { orderBy: { selectedOrder: "asc" } },
@@ -657,21 +665,23 @@ function preflightKey() {
 
 async function prepareRejectionError(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   actorUserId: string,
   operationKey: string,
   code: typeof ZAAD_ERROR_CODES.oneTimeSnapshotStale | typeof ZAAD_ERROR_CODES.oneTimeSnapshotExpired,
 ): Promise<ZaadOneTimeError> {
-  await auditPrepareRejection(prisma, actorUserId, operationKey, code);
+  await auditPrepareRejection(prisma, tenantKey, actorUserId, operationKey, code);
   return new ZaadOneTimeError(code, 409);
 }
 
 async function auditPrepareRejection(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   actorUserId: string,
   operationKey: string,
   code: string,
 ) {
-  await writeZaadAudit(prisma, {
+  await writeZaadAudit(prisma, tenantKey, {
     actorUserId,
     resourceKind: "one-time-dispatch",
     targetId: operationKey,

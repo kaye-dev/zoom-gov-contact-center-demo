@@ -21,6 +21,7 @@ import {
   type ZoomContactListDto,
 } from "../lib/server/zaad/zoom-client";
 import { ZAAD_ERROR_CODES } from "../lib/zaad/contracts";
+import { DEFAULT_TENANT_KEY } from "../lib/tenants";
 
 type AuditRecord = {
   actorUserId: string | null;
@@ -96,9 +97,19 @@ function prismaFixture(options: { messageInUse?: boolean } = {}) {
         messageDeleted = true;
         return { count: 1 };
       },
-      findUnique: async ({ where }: { where: { id: string } }) => !messageDeleted && where.id === message.id ? message : null,
-      findUniqueOrThrow: async ({ where }: { where: { id: string } }) => {
-        if (messageDeleted || where.id !== message.id) throw new Error("not found");
+      // テナント境界の導入で、id 指定の参照も siteKey を伴う findFirst になった。
+      findFirst: async ({ where }: { where: { id: string; siteKey: string } }) =>
+        !messageDeleted && where.id === message.id && where.siteKey === DEFAULT_TENANT_KEY
+          ? message
+          : null,
+      findFirstOrThrow: async ({ where }: { where: { id: string; siteKey: string } }) => {
+        if (
+          messageDeleted ||
+          where.id !== message.id ||
+          where.siteKey !== DEFAULT_TENANT_KEY
+        ) {
+          throw new Error("not found");
+        }
         return message;
       },
     },
@@ -191,7 +202,7 @@ test("contact-list CREATE audits a known Zoom failure without request values", a
   });
 
   await assert.rejects(
-    createZaadContactList(prisma, "actor-user", {
+    createZaadContactList(prisma, DEFAULT_TENANT_KEY, "actor-user", {
       name: "PRIVATE LIST NAME",
       description: "PRIVATE LIST DESCRIPTION",
     }),
@@ -216,7 +227,7 @@ test("contact-list UPDATE maps an uncertain Zoom write to result-unknown audit",
   });
 
   await assert.rejects(
-    updateZaadContactList(prisma, "actor-user", "contact-list-raw-id", {
+    updateZaadContactList(prisma, DEFAULT_TENANT_KEY, "actor-user", "contact-list-raw-id", {
       name: "PRIVATE UPDATED NAME",
       description: "PRIVATE UPDATED DESCRIPTION",
       revision: "revision-1",
@@ -242,7 +253,7 @@ test("contact-list UPDATE rejects a stale safe-snapshot revision before the Zoom
   });
 
   await assert.rejects(
-    updateZaadContactList(prisma, "actor-user", "contact-list-raw-id", {
+    updateZaadContactList(prisma, DEFAULT_TENANT_KEY, "actor-user", "contact-list-raw-id", {
       name: "PRIVATE UPDATED NAME",
       description: "PRIVATE UPDATED DESCRIPTION",
       revision: "sha256:stale-safe-snapshot",
@@ -265,7 +276,7 @@ test("contact-list DELETE audits an explicit Zoom rejection", async (t) => {
   });
 
   await assert.rejects(
-    deleteZaadContactList(prisma, "actor-user", "contact-list-raw-id"),
+    deleteZaadContactList(prisma, DEFAULT_TENANT_KEY, "actor-user", "contact-list-raw-id"),
     (error) => assertResourceError(error, ZAAD_ERROR_CODES.zoomInUse),
   );
 
@@ -284,7 +295,7 @@ test("contact-list DELETE preserves Zoom 404 as a stable not-found failure", asy
   });
 
   await assert.rejects(
-    deleteZaadContactList(prisma, "actor-user", "contact-list-raw-id"),
+    deleteZaadContactList(prisma, DEFAULT_TENANT_KEY, "actor-user", "contact-list-raw-id"),
     (error) => assertResourceError(error, ZAAD_ERROR_CODES.zoomNotFound),
   );
 
@@ -303,7 +314,7 @@ test("registration-setting audits a Zoom list lookup failure and never stores th
   });
 
   await assert.rejects(
-    updateZaadRegistrationSetting(prisma, "actor-user", {
+    updateZaadRegistrationSetting(prisma, DEFAULT_TENANT_KEY, "actor-user", {
       contactListId: "contact-list-raw-id",
       revision: 1,
     }),
@@ -321,7 +332,7 @@ test("campaign status rejects non-Agentless campaigns with a PII-safe audit", as
   stubZoom(t, { getCampaign: async () => campaign({ dialingMethod: "preview" }) });
 
   await assert.rejects(
-    updateZaadCampaignStatus(prisma, "actor-user", "campaign-raw-id", {
+    updateZaadCampaignStatus(prisma, DEFAULT_TENANT_KEY, "actor-user", "campaign-raw-id", {
       status: "running",
       expectedStatus: "ready",
     }),
@@ -354,7 +365,7 @@ test("campaign status audits a known Zoom PATCH failure", async (t) => {
   });
 
   await assert.rejects(
-    updateZaadCampaignStatus(prisma, "actor-user", "campaign-raw-id", {
+    updateZaadCampaignStatus(prisma, DEFAULT_TENANT_KEY, "actor-user", "campaign-raw-id", {
       status: "running",
       expectedStatus: "ready",
     }),
@@ -381,7 +392,7 @@ test("campaign status uses readback after an uncertain PATCH and audits unresolv
   });
 
   await assert.rejects(
-    updateZaadCampaignStatus(prisma, "actor-user", "campaign-raw-id", {
+    updateZaadCampaignStatus(prisma, DEFAULT_TENANT_KEY, "actor-user", "campaign-raw-id", {
       status: "running",
       expectedStatus: "ready",
     }),
@@ -402,7 +413,7 @@ test("message sync retry records result-unknown with a distinct stable code", as
     },
   });
 
-  const result = await retryZaadMessage(prisma, "actor-user", message.id, message.revision);
+  const result = await retryZaadMessage(prisma, DEFAULT_TENANT_KEY, "actor-user", message.id, message.revision);
 
   assert.equal(result.syncStatus, "SYNC_FAILED");
   assert.equal(result.syncErrorCode, ZAAD_ERROR_CODES.zoomResultUnknown);
@@ -423,10 +434,10 @@ test("legacy messages over 500 characters remain readable but cannot sync until 
     },
   });
 
-  const detail = await getZaadMessage(prisma, message.id);
+  const detail = await getZaadMessage(prisma, DEFAULT_TENANT_KEY, message.id);
   assert.equal(detail.body.length, 501);
   await assert.rejects(
-    retryZaadMessage(prisma, "actor-user", message.id, message.revision),
+    retryZaadMessage(prisma, DEFAULT_TENANT_KEY, "actor-user", message.id, message.revision),
     (error) => assertResourceError(error, ZAAD_ERROR_CODES.messageBodyRequiresShortening),
   );
 
@@ -452,7 +463,7 @@ test("legacy message updates reject an oversized body and allow a 500-character 
   });
 
   await assert.rejects(
-    updateZaadMessage(prisma, "actor-user", message.id, {
+    updateZaadMessage(prisma, DEFAULT_TENANT_KEY, "actor-user", message.id, {
       name: "metadata-only edit",
       body: message.body,
       languageCode: "ja-JP",
@@ -463,7 +474,7 @@ test("legacy message updates reject an oversized body and allow a 500-character 
   );
   assert.equal(message.revision, 3);
 
-  const shortened = await updateZaadMessage(prisma, "actor-user", message.id, {
+  const shortened = await updateZaadMessage(prisma, DEFAULT_TENANT_KEY, "actor-user", message.id, {
     name: "shortened message",
     body: "あ".repeat(500),
     languageCode: "ja-JP",
@@ -484,7 +495,7 @@ test("message deletion reports the message-specific in-use code before Zoom or l
   message.zoomAssetId = "asset-existing";
 
   await assert.rejects(
-    deleteZaadMessage(prisma, "actor-user", message.id, message.revision),
+    deleteZaadMessage(prisma, DEFAULT_TENANT_KEY, "actor-user", message.id, message.revision),
     (error) => assertResourceError(error, ZAAD_ERROR_CODES.messageInUse),
   );
 
@@ -505,7 +516,7 @@ test("message sync never retries an unreconciled TTS create result", async (t) =
   });
 
   await assert.rejects(
-    retryZaadMessage(prisma, "actor-user", message.id, message.revision),
+    retryZaadMessage(prisma, DEFAULT_TENANT_KEY, "actor-user", message.id, message.revision),
     (error) => assertResourceError(error, ZAAD_ERROR_CODES.zoomResultUnknown, true),
   );
 
@@ -532,7 +543,7 @@ test("message edit preserves the manual-reconciliation boundary after an unknown
     },
   });
 
-  const result = await updateZaadMessage(prisma, "actor-user", message.id, {
+  const result = await updateZaadMessage(prisma, DEFAULT_TENANT_KEY, "actor-user", message.id, {
     name: "updated synthetic message",
     body: "updated synthetic body",
     languageCode: "ja-JP",
@@ -562,7 +573,7 @@ test("message sync persists SYNCED and both Zoom asset IDs after a confirmed TTS
     },
   });
 
-  const result = await retryZaadMessage(prisma, "actor-user", message.id, message.revision);
+  const result = await retryZaadMessage(prisma, DEFAULT_TENANT_KEY, "actor-user", message.id, message.revision);
 
   assert.equal(result.syncStatus, "SYNCED");
   assert.equal(result.syncErrorCode, null);
@@ -591,7 +602,7 @@ test("message sync updates an existing Zoom TTS asset instead of creating a repl
     },
   });
 
-  const result = await retryZaadMessage(prisma, "actor-user", message.id, message.revision);
+  const result = await retryZaadMessage(prisma, DEFAULT_TENANT_KEY, "actor-user", message.id, message.revision);
 
   assert.equal(creates, 0);
   assert.equal(result.syncStatus, "SYNCED");
@@ -610,7 +621,7 @@ test("message deletion removes the exact Zoom asset before the local record", as
     },
   });
 
-  assert.deepEqual(await deleteZaadMessage(prisma, "actor-user", message.id, message.revision), { deleted: true });
+  assert.deepEqual(await deleteZaadMessage(prisma, DEFAULT_TENANT_KEY, "actor-user", message.id, message.revision), { deleted: true });
 
   assert.deepEqual(events, ["zoom-delete", "local-delete"]);
   assert.equal(isMessageDeleted(), true);
@@ -631,7 +642,7 @@ test("message deletion preserves the local record when the Zoom delete is uncert
   });
 
   await assert.rejects(
-    deleteZaadMessage(prisma, "actor-user", message.id, message.revision),
+    deleteZaadMessage(prisma, DEFAULT_TENANT_KEY, "actor-user", message.id, message.revision),
     (error) => assertResourceError(error, ZAAD_ERROR_CODES.zoomResultUnknown, true),
   );
 

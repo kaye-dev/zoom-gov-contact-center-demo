@@ -482,10 +482,7 @@ model ReservationApiMonthlyUsage {
 
 model DisasterRadioSubscription {
   id                          String                          @id @default(cuid())
-  // NOTE: ZAAD／防災無線はテナント引数の配線を次段へ送っており、既定値で補っている。
-  // features.zaad が lg 限定である前提に依存する。他テナントで有効化する前に、
-  // 呼び出し経路へ tenantKey を通してこの既定値を外すこと。
-  siteKey                     String                          @default("lg")
+  siteKey                     String
   name                        String
   normalizedEmail             String
   normalizedPhone             String
@@ -529,10 +526,7 @@ model ZaadRegistrationSetting {
 
 model ZaadOutboundMessage {
   id              String                @id @default(cuid())
-  // NOTE: ZAAD／防災無線はテナント引数の配線を次段へ送っており、既定値で補っている。
-  // features.zaad が lg 限定である前提に依存する。他テナントで有効化する前に、
-  // 呼び出し経路へ tenantKey を通してこの既定値を外すこと。
-  siteKey         String                @default("lg")
+  siteKey         String
   name            String
   body            String
   languageCode    String                @default("ja-JP")
@@ -557,10 +551,7 @@ model ZaadOutboundMessage {
 
 model ZaadOneTimeDispatch {
   id                    String                   @id @default(cuid())
-  // NOTE: ZAAD／防災無線はテナント引数の配線を次段へ送っており、既定値で補っている。
-  // features.zaad が lg 限定である前提に依存する。他テナントで有効化する前に、
-  // 呼び出し経路へ tenantKey を通してこの既定値を外すこと。
-  siteKey               String                   @default("lg")
+  siteKey               String
   operationKey          String                   @unique
   name                  String
   body                  String
@@ -620,10 +611,7 @@ model ZaadOneTimeDispatchResident {
 
 model ZaadAdminAudit {
   id                 String   @id @default(cuid())
-  // NOTE: ZAAD／防災無線はテナント引数の配線を次段へ送っており、既定値で補っている。
-  // features.zaad が lg 限定である前提に依存する。他テナントで有効化する前に、
-  // 呼び出し経路へ tenantKey を通してこの既定値を外すこと。
-  siteKey            String   @default("lg")
+  siteKey            String
   actorUserId        String?
   resourceKind       String
   targetRef          String

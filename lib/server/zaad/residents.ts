@@ -20,7 +20,7 @@ import {
 
 // NOTE: ZAAD はテナント引数の配線を次段へ送っているため、既定テナントを直接参照する。
 // features.zaad が lg 限定である前提に依存する。
-import { DEFAULT_TENANT_KEY } from "@/lib/tenants";
+import type { TenantKey } from "@/lib/tenants";
 
 const PAGE_SIZE = 25;
 const ZOOM_CONTACT_BATCH_MAX_ITEMS = 100;
@@ -69,12 +69,12 @@ export class ZaadResidentError extends Error {
   }
 }
 
-export async function registerPublicDisasterRadioResident(prisma: PrismaClient, payload: unknown) {
+export async function registerPublicDisasterRadioResident(prisma: PrismaClient, tenantKey: TenantKey, payload: unknown) {
   const parsed = parsePublicDisasterRadioRegistration(payload);
   if (!parsed.ok) throw new ZaadResidentError(ZAAD_ERROR_CODES.invalidRequest, 400, parsed.errors);
-  const created = await createResidentLocal(prisma, parsed.value, "PUBLIC_FORM", null);
+  const created = await createResidentLocal(prisma, tenantKey, parsed.value, "PUBLIC_FORM", null);
   if (created) {
-    await syncResidentBestEffort(prisma, created.id, {
+    await syncResidentBestEffort(prisma, tenantKey, created.id, {
       actorUserId: null,
       action: "SYNC_CREATE",
     });
@@ -84,6 +84,7 @@ export async function registerPublicDisasterRadioResident(prisma: PrismaClient, 
 
 export async function listZaadResidents(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   input: { query?: string; cursor?: string },
 ) {
   const query = (input.query ?? "").trim().normalize("NFKC").slice(0, 100);
@@ -107,9 +108,9 @@ export async function listZaadResidents(
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     }),
     prisma.disasterRadioSubscription.count({ where }),
-    prisma.disasterRadioSubscription.count({ where: { ...where, consentStatus: "CONSENTED" } }),
-    prisma.disasterRadioSubscription.count({ where: { ...where, syncStatus: "SYNCED" } }),
-    prisma.disasterRadioSubscription.count({ where: { ...where, syncStatus: "FAILED" } }),
+    prisma.disasterRadioSubscription.count({ where: { siteKey: tenantKey, ...where, consentStatus: "CONSENTED" } }),
+    prisma.disasterRadioSubscription.count({ where: { siteKey: tenantKey, ...where, syncStatus: "SYNCED" } }),
+    prisma.disasterRadioSubscription.count({ where: { siteKey: tenantKey, ...where, syncStatus: "FAILED" } }),
   ]);
   const hasMore = rows.length > PAGE_SIZE;
   const page = hasMore ? rows.slice(0, PAGE_SIZE) : rows;
@@ -120,37 +121,40 @@ export async function listZaadResidents(
   };
 }
 
-export async function createZaadResident(prisma: PrismaClient, actorUserId: string, payload: unknown) {
+export async function createZaadResident(prisma: PrismaClient, tenantKey: TenantKey, actorUserId: string, payload: unknown) {
   if (!isRecord(payload) || Object.keys(payload).sort().join(",") !== "consentStatus,email,name,phone") {
     throw new ZaadResidentError(ZAAD_ERROR_CODES.invalidRequest, 400);
   }
   const parsed = parseDisasterRadioResident(payload);
   if (!parsed.ok) throw new ZaadResidentError(ZAAD_ERROR_CODES.invalidRequest, 400, parsed.errors);
-  const created = await createResidentLocal(prisma, parsed.value, "ADMIN_FORM", actorUserId);
+  const created = await createResidentLocal(prisma, tenantKey, parsed.value, "ADMIN_FORM", actorUserId);
   if (!created) throw new ZaadResidentError(ZAAD_ERROR_CODES.residentConflict, 409);
-  await syncResidentBestEffort(prisma, created.id, {
+  await syncResidentBestEffort(prisma, tenantKey, created.id, {
     actorUserId,
     action: "SYNC_CREATE",
   });
-  const resident = await prisma.disasterRadioSubscription.findUniqueOrThrow({ where: { id: created.id } });
+  const resident = await prisma.disasterRadioSubscription.findFirstOrThrow({
+    where: { id: created.id, siteKey: tenantKey },
+  });
   return toResidentDto(resident);
 }
 
-export async function importZaadResidents(prisma: PrismaClient, actorUserId: string, bytes: Uint8Array) {
+export async function importZaadResidents(prisma: PrismaClient, tenantKey: TenantKey, actorUserId: string, bytes: Uint8Array) {
   const parsed = parseZaadResidentCsv(bytes);
   if (!parsed.ok) throw new ZaadResidentError(ZAAD_ERROR_CODES.invalidCsv, 400, parsed.errors);
   const now = new Date();
   const result = await prisma.$transaction(async (transaction) => {
-    const setting = await getRegistrationSetting(transaction);
+    const setting = await getRegistrationSetting(transaction, tenantKey);
     const candidates = parsed.rows.map((row) => ({
       id: randomUUID(),
+      siteKey: tenantKey,
       ...residentCreateData(row, "ADMIN_CSV" as const, actorUserId, setting, now),
     }));
     const inserted = await transaction.disasterRadioSubscription.createMany({
       data: candidates,
       skipDuplicates: true,
     });
-    await writeZaadAudit(transaction, {
+    await writeZaadAudit(transaction, tenantKey, {
       actorUserId,
       resourceKind: "resident",
       targetId: `csv:${randomUUID()}`,
@@ -173,7 +177,7 @@ export async function importZaadResidents(prisma: PrismaClient, actorUserId: str
       zoomContactId: true,
     },
   });
-  await syncImportedResidentsBestEffort(prisma, actorUserId, createdRows);
+  await syncImportedResidentsBestEffort(prisma, tenantKey, actorUserId, createdRows);
   return {
     totalRows: parsed.totalRows,
     createdCount: result.insertedCount,
@@ -183,6 +187,7 @@ export async function importZaadResidents(prisma: PrismaClient, actorUserId: str
 
 export async function updateZaadResident(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   actorUserId: string,
   id: string,
   payload: unknown,
@@ -199,16 +204,16 @@ export async function updateZaadResident(
   if (!parsed.ok || Object.keys(payload).sort().join(",") !== "consentStatus,email,name,phone,revision") {
     throw new ZaadResidentError(ZAAD_ERROR_CODES.invalidRequest, 400, parsed.ok ? undefined : parsed.errors);
   }
-  const current = await prisma.disasterRadioSubscription.findUnique({ where: { id } });
+  const current = await prisma.disasterRadioSubscription.findFirst({ where: { id, siteKey: tenantKey } });
   if (!current) throw new ZaadResidentError(ZAAD_ERROR_CODES.residentNotFound, 404);
   if (current.revision !== payload.revision) throw new ZaadResidentError(ZAAD_ERROR_CODES.residentConflict, 409);
 
   const withdrawingConsent = current.consentStatus === "CONSENTED" && parsed.value.consentStatus === "NOT_CONSENTED";
   const claimedRevision = withdrawingConsent
-    ? await claimRemoteResidentDeletion(prisma, actorUserId, current, "UPDATE")
+    ? await claimRemoteResidentDeletion(prisma, tenantKey, actorUserId, current, "UPDATE")
     : current.revision;
   if (withdrawingConsent && claimedRevision !== current.revision) {
-    await deleteRemoteResidentContact(prisma, actorUserId, { ...current, revision: claimedRevision }, "UPDATE");
+    await deleteRemoteResidentContact(prisma, tenantKey, actorUserId, { ...current, revision: claimedRevision }, "UPDATE");
   }
 
   const becomingConsented = current.consentStatus === "NOT_CONSENTED" && parsed.value.consentStatus === "CONSENTED";
@@ -216,7 +221,7 @@ export async function updateZaadResident(
   let updated;
   try {
     updated = await prisma.$transaction(async (transaction) => {
-      const setting = becomingConsented ? await getRegistrationSetting(transaction) : null;
+      const setting = becomingConsented ? await getRegistrationSetting(transaction, tenantKey) : null;
       const result = await transaction.disasterRadioSubscription.updateMany({
         where: { id, revision: claimedRevision },
         data: {
@@ -250,7 +255,7 @@ export async function updateZaadResident(
         },
       });
       if (result.count !== 1) throw new ZaadResidentError(ZAAD_ERROR_CODES.residentConflict, 409);
-      await writeZaadAudit(transaction, {
+      await writeZaadAudit(transaction, tenantKey, {
         actorUserId,
         resourceKind: "resident",
         targetId: id,
@@ -260,7 +265,7 @@ export async function updateZaadResident(
         fromConsentStatus: current.consentStatus,
         toConsentStatus: parsed.value.consentStatus,
       });
-      return transaction.disasterRadioSubscription.findUniqueOrThrow({ where: { id } });
+      return transaction.disasterRadioSubscription.findFirstOrThrow({ where: { id, siteKey: tenantKey } });
     });
   } catch (error) {
     const mapped = isUniqueConflict(error)
@@ -269,6 +274,7 @@ export async function updateZaadResident(
     if (withdrawingConsent && claimedRevision !== current.revision) {
       await recordResidentSyncOutcome(
         prisma,
+        tenantKey,
         { ...current, revision: claimedRevision },
         {
           success: false,
@@ -283,18 +289,18 @@ export async function updateZaadResident(
     throw error;
   }
   if (updated.consentStatus === "CONSENTED") {
-    await syncResidentBestEffort(prisma, id, {
+    await syncResidentBestEffort(prisma, tenantKey, id, {
       actorUserId,
       action: "SYNC_UPDATE",
     });
   }
-  return toResidentDto(await prisma.disasterRadioSubscription.findUniqueOrThrow({ where: { id } }));
+  return toResidentDto(await prisma.disasterRadioSubscription.findFirstOrThrow({ where: { id, siteKey: tenantKey } }));
 }
 
-export async function deleteZaadResident(prisma: PrismaClient, actorUserId: string, id: string, revision: number) {
-  const current = await prisma.disasterRadioSubscription.findUnique({ where: { id } });
+export async function deleteZaadResident(prisma: PrismaClient, tenantKey: TenantKey, actorUserId: string, id: string, revision: number) {
+  const current = await prisma.disasterRadioSubscription.findFirst({ where: { id, siteKey: tenantKey } });
   if (!current) {
-    await writeZaadAudit(prisma, {
+    await writeZaadAudit(prisma, tenantKey, {
       actorUserId,
       resourceKind: "resident",
       targetId: id,
@@ -307,15 +313,15 @@ export async function deleteZaadResident(prisma: PrismaClient, actorUserId: stri
     return { deleted: true as const };
   }
   if (current.revision !== revision) throw new ZaadResidentError(ZAAD_ERROR_CODES.residentConflict, 409);
-  const claimedRevision = await claimRemoteResidentDeletion(prisma, actorUserId, current, "DELETE");
+  const claimedRevision = await claimRemoteResidentDeletion(prisma, tenantKey, actorUserId, current, "DELETE");
   if (claimedRevision !== current.revision) {
-    await deleteRemoteResidentContact(prisma, actorUserId, { ...current, revision: claimedRevision }, "DELETE");
+    await deleteRemoteResidentContact(prisma, tenantKey, actorUserId, { ...current, revision: claimedRevision }, "DELETE");
   }
   try {
     await prisma.$transaction(async (transaction) => {
-      const deleted = await transaction.disasterRadioSubscription.deleteMany({ where: { id, revision: claimedRevision } });
+      const deleted = await transaction.disasterRadioSubscription.deleteMany({ where: { siteKey: tenantKey, id, revision: claimedRevision } });
       if (deleted.count !== 1) throw new ZaadResidentError(ZAAD_ERROR_CODES.residentConflict, 409);
-      await writeZaadAudit(transaction, {
+      await writeZaadAudit(transaction, tenantKey, {
         actorUserId,
         resourceKind: "resident",
         targetId: id,
@@ -330,6 +336,7 @@ export async function deleteZaadResident(prisma: PrismaClient, actorUserId: stri
     if (claimedRevision !== current.revision) {
       await recordResidentSyncOutcome(
         prisma,
+        tenantKey,
         { ...current, revision: claimedRevision },
         {
           success: false,
@@ -345,8 +352,8 @@ export async function deleteZaadResident(prisma: PrismaClient, actorUserId: stri
   return { deleted: true as const };
 }
 
-export async function retryZaadResidentSync(prisma: PrismaClient, actorUserId: string, id: string, revision: number) {
-  const resident = await prisma.disasterRadioSubscription.findUnique({ where: { id } });
+export async function retryZaadResidentSync(prisma: PrismaClient, tenantKey: TenantKey, actorUserId: string, id: string, revision: number) {
+  const resident = await prisma.disasterRadioSubscription.findFirst({ where: { id, siteKey: tenantKey } });
   if (!resident) throw new ZaadResidentError(ZAAD_ERROR_CODES.residentNotFound, 404);
   if (resident.revision !== revision) throw new ZaadResidentError(ZAAD_ERROR_CODES.residentConflict, 409);
   if (resident.consentStatus !== "CONSENTED" || !resident.zoomContactListId) {
@@ -366,6 +373,7 @@ export async function retryZaadResidentSync(prisma: PrismaClient, actorUserId: s
   }
   const pending = await prisma.disasterRadioSubscription.updateMany({
     where: {
+      siteKey: tenantKey,
       id,
       revision,
       consentStatus: "CONSENTED",
@@ -379,15 +387,16 @@ export async function retryZaadResidentSync(prisma: PrismaClient, actorUserId: s
     },
   });
   if (pending.count !== 1) throw new ZaadResidentError(ZAAD_ERROR_CODES.residentConflict, 409);
-  await syncResidentBestEffort(prisma, id, {
+  await syncResidentBestEffort(prisma, tenantKey, id, {
     actorUserId,
     action: "SYNC_RETRY",
   });
-  return toResidentDto(await prisma.disasterRadioSubscription.findUniqueOrThrow({ where: { id } }));
+  return toResidentDto(await prisma.disasterRadioSubscription.findFirstOrThrow({ where: { id, siteKey: tenantKey } }));
 }
 
 async function createResidentLocal(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   resident: ParsedDisasterRadioResident,
   source: "PUBLIC_FORM" | "ADMIN_FORM",
   actorUserId: string | null,
@@ -395,12 +404,16 @@ async function createResidentLocal(
   const id = randomUUID();
   try {
     return await prisma.$transaction(async (transaction) => {
-      const setting = await getRegistrationSetting(transaction);
+      const setting = await getRegistrationSetting(transaction, tenantKey);
       const row = await transaction.disasterRadioSubscription.create({
-        data: { id, ...residentCreateData(resident, source, actorUserId, setting, new Date()) },
+        data: {
+          id,
+          siteKey: tenantKey,
+          ...residentCreateData(resident, source, actorUserId, setting, new Date()),
+        },
         select: { id: true },
       });
-      await writeZaadAudit(transaction, {
+      await writeZaadAudit(transaction, tenantKey, {
         actorUserId,
         resourceKind: "resident",
         targetId: id,
@@ -459,24 +472,28 @@ function syncSnapshot(setting: { contactListId: string | null; contactListNameSn
   };
 }
 
-async function getRegistrationSetting(prisma: Pick<PrismaClient, "zaadRegistrationSetting">) {
+async function getRegistrationSetting(
+  prisma: Pick<PrismaClient, "zaadRegistrationSetting">,
+  tenantKey: TenantKey,
+) {
   return prisma.zaadRegistrationSetting.findUniqueOrThrow({
-    where: { siteKey: DEFAULT_TENANT_KEY },
+    where: { siteKey: tenantKey },
     select: { contactListId: true, contactListNameSnapshot: true },
   });
 }
 
 async function syncResidentBestEffort(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   id: string,
   audit: ResidentSyncAuditContext,
 ) {
-  const resident = await prisma.disasterRadioSubscription.findUnique({ where: { id } });
+  const resident = await prisma.disasterRadioSubscription.findFirst({ where: { id, siteKey: tenantKey } });
   if (!resident || resident.consentStatus !== "CONSENTED" || !resident.zoomContactListId) {
     return { success: true as const };
   }
   try {
-    const client = await ZaadZoomClient.fromDatabase(prisma);
+    const client = await ZaadZoomClient.fromDatabase(prisma, tenantKey);
     const contactId = resident.zoomContactId;
     if (contactId) {
       await client.updateContact(resident.zoomContactListId, contactId, {
@@ -492,6 +509,7 @@ async function syncResidentBestEffort(
       });
       const linked = await prisma.disasterRadioSubscription.updateMany({
         where: {
+          siteKey: tenantKey,
           id,
           revision: resident.revision,
           consentStatus: "CONSENTED",
@@ -510,6 +528,7 @@ async function syncResidentBestEffort(
         }
         return recordResidentSyncOutcome(
           prisma,
+          tenantKey,
           resident,
           cleanupConfirmed
             ? { success: false, code: ZAAD_ERROR_CODES.residentConflict, resultUnknown: false }
@@ -518,14 +537,15 @@ async function syncResidentBestEffort(
         );
       }
     }
-    return recordResidentSyncOutcome(prisma, resident, { success: true }, audit);
+    return recordResidentSyncOutcome(prisma, tenantKey, resident, { success: true }, audit);
   } catch (error) {
-    return recordResidentSyncOutcome(prisma, resident, zoomFailureOutcome(error), audit);
+    return recordResidentSyncOutcome(prisma, tenantKey, resident, zoomFailureOutcome(error), audit);
   }
 }
 
 async function syncImportedResidentsBestEffort(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   actorUserId: string,
   rows: ResidentSyncSnapshot[],
 ) {
@@ -540,12 +560,13 @@ async function syncImportedResidentsBestEffort(
 
   let client: ZaadZoomClient;
   try {
-    client = await ZaadZoomClient.fromDatabase(prisma);
+    client = await ZaadZoomClient.fromDatabase(prisma, tenantKey);
   } catch (error) {
     const outcome = zoomFailureOutcome(error);
     for (const group of groups.values()) {
       await recordResidentSyncOutcomes(
         prisma,
+        tenantKey,
         group.map((resident) => ({ resident, outcome })),
         { actorUserId, action: "SYNC_BATCH_CREATE" },
       );
@@ -561,6 +582,7 @@ async function syncImportedResidentsBestEffort(
       const outcome = zoomFailureOutcome(error);
       await recordResidentSyncOutcomes(
         prisma,
+        tenantKey,
         group.map((resident) => ({ resident, outcome })),
         { actorUserId, action: "SYNC_BATCH_CREATE" },
       );
@@ -635,6 +657,7 @@ async function syncImportedResidentsBestEffort(
 
     await recordResidentSyncOutcomes(
       prisma,
+      tenantKey,
       group.map((resident) => ({
         resident,
         outcome: outcomes.get(resident.id) ?? {
@@ -667,25 +690,27 @@ function zoomFailureOutcome(error: unknown): ResidentSyncFailure {
 
 async function recordResidentSyncOutcome(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   resident: ResidentSyncSnapshot,
   outcome: ResidentSyncOutcome,
   audit: ResidentSyncAuditContext,
 ) {
-  const [effective] = await recordResidentSyncOutcomes(prisma, [{ resident, outcome }], audit);
+  const [effective] = await recordResidentSyncOutcomes(prisma, tenantKey, [{ resident, outcome }], audit);
   return effective;
 }
 
 async function recordResidentSyncOutcomes(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   entries: Array<{ resident: ResidentSyncSnapshot; outcome: ResidentSyncOutcome }>,
   audit: ResidentSyncAuditContext,
 ) {
   return prisma.$transaction(async (transaction) => {
     const effectiveOutcomes: ResidentSyncOutcome[] = [];
     for (const { resident, outcome } of entries) {
-      const effective = await applyResidentSyncOutcome(transaction, resident, outcome);
+      const effective = await applyResidentSyncOutcome(transaction, tenantKey, resident, outcome);
       effectiveOutcomes.push(effective);
-      await writeZaadAudit(transaction, {
+      await writeZaadAudit(transaction, tenantKey, {
         actorUserId: audit.actorUserId,
         resourceKind: "resident",
         targetId: resident.id,
@@ -703,11 +728,13 @@ async function recordResidentSyncOutcomes(
 
 async function applyResidentSyncOutcome(
   transaction: Prisma.TransactionClient,
+  tenantKey: TenantKey,
   resident: ResidentSyncSnapshot,
   outcome: ResidentSyncOutcome,
 ): Promise<ResidentSyncOutcome> {
   const updated = await transaction.disasterRadioSubscription.updateMany({
     where: {
+      siteKey: tenantKey,
       id: resident.id,
       revision: resident.revision,
       consentStatus: "CONSENTED",
@@ -739,6 +766,7 @@ async function applyResidentSyncOutcome(
     : outcome;
   const reconciled = await transaction.disasterRadioSubscription.updateMany({
     where: {
+      siteKey: tenantKey,
       id: resident.id,
       consentStatus: "CONSENTED",
       zoomContactListId: resident.zoomContactListId,
@@ -754,6 +782,7 @@ async function applyResidentSyncOutcome(
   if (reconciled.count === 0 && conflict.clearContactId) {
     await transaction.disasterRadioSubscription.updateMany({
       where: {
+        siteKey: tenantKey,
         id: resident.id,
         consentStatus: "CONSENTED",
         zoomContactListId: resident.zoomContactListId,
@@ -770,6 +799,7 @@ async function applyResidentSyncOutcome(
 
 async function claimRemoteResidentDeletion(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   actorUserId: string,
   resident: ResidentSyncSnapshot,
   action: "UPDATE" | "DELETE",
@@ -780,6 +810,7 @@ async function claimRemoteResidentDeletion(
     await prisma.$transaction(async (transaction) => {
       const claimed = await transaction.disasterRadioSubscription.updateMany({
         where: {
+          siteKey: tenantKey,
           id: resident.id,
           revision: resident.revision,
           consentStatus: "CONSENTED",
@@ -794,7 +825,7 @@ async function claimRemoteResidentDeletion(
         },
       });
       if (claimed.count !== 1) throw new ZaadResidentError(ZAAD_ERROR_CODES.residentConflict, 409);
-      await writeZaadAudit(transaction, {
+      await writeZaadAudit(transaction, tenantKey, {
         actorUserId,
         resourceKind: "resident",
         targetId: resident.id,
@@ -805,7 +836,7 @@ async function claimRemoteResidentDeletion(
     });
   } catch (error) {
     if (!(error instanceof ZaadResidentError) || error.code !== ZAAD_ERROR_CODES.residentConflict) throw error;
-    await writeZaadAudit(prisma, {
+    await writeZaadAudit(prisma, tenantKey, {
       actorUserId,
       resourceKind: "resident",
       targetId: resident.id,
@@ -821,18 +852,19 @@ async function claimRemoteResidentDeletion(
 
 async function deleteRemoteResidentContact(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   actorUserId: string,
   resident: ResidentSyncSnapshot,
   action: "UPDATE" | "DELETE",
 ) {
   if (!resident.zoomContactListId || !resident.zoomContactId) return;
   try {
-    const client = await ZaadZoomClient.fromDatabase(prisma);
+    const client = await ZaadZoomClient.fromDatabase(prisma, tenantKey);
     await client.deleteContact(resident.zoomContactListId, resident.zoomContactId);
   } catch (error) {
     if (error instanceof ZaadZoomError && error.code === ZAAD_ERROR_CODES.zoomNotFound) return;
     const outcome = zoomFailureOutcome(error);
-    await recordResidentSyncOutcome(prisma, resident, outcome, { actorUserId, action });
+    await recordResidentSyncOutcome(prisma, tenantKey, resident, outcome, { actorUserId, action });
     if (error instanceof ZaadZoomError) {
       throw new ZaadResidentError(outcome.code, error.httpStatus);
     }

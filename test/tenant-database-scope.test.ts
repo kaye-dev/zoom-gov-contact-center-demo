@@ -113,25 +113,34 @@ test("only the local-government tenant enables the resident-facing subsystems", 
   assert.equal(getTenant("lg").features.disasterRadio, true);
 });
 
-test("the deferred siteKey defaults stay documented in the schema", () => {
-  // 既定値は「暗黙に lg へ入る」ため、必ず理由のコメントとセットで残す。
+test("tenant-scoped models do not silently default to one tenant", () => {
+  // 既定値があるとテナント指定漏れが暗黙に lg へ入る。配線が済んだモデルには残さない。
   for (const model of [
-    "ReservationApiKey",
     "DisasterRadioSubscription",
     "ZaadOutboundMessage",
     "ZaadOneTimeDispatch",
     "ZaadAdminAudit",
   ]) {
-    const body = readModel(model);
-    assert.match(
-      body,
-      /siteKey[^\n]*@default\("lg"\)/u,
-      `${model} still relies on the deferred default`,
-    );
-    assert.match(
-      body,
-      /\/\/ NOTE:[\s\S]*既定値/u,
-      `${model} must explain why the default is still there`,
+    assert.doesNotMatch(
+      readModel(model),
+      /siteKey[^\n]*@default/u,
+      `${model} must require an explicit tenant`,
     );
   }
+});
+
+test("the one remaining siteKey default stays documented", () => {
+  // ReservationApiKey だけは発行処理へテナントを渡せておらず既定値に依存している。
+  // 理由のコメントとセットで残し、解消時にこのテストも消す。
+  const body = readModel("ReservationApiKey");
+  assert.match(
+    body,
+    /siteKey[^\n]*@default\("lg"\)/u,
+    "ReservationApiKey still relies on the deferred default",
+  );
+  assert.match(
+    body,
+    /\/\/ NOTE:[\s\S]*既定値/u,
+    "the remaining default must explain why it is still there",
+  );
 });
