@@ -1,6 +1,6 @@
 # UI parity runner contract
 
-Use this reference when authoring UI plans or when release, CI, scheduled, or user-explicit parity verification is independently requested. Normal `$implement` uses only the static preflight and approval boundary; it never starts the Browser lifecycle or writes final parity evidence. Normal `$review` does not require parity evidence and reads it only when the review scope explicitly includes an existing run. `ui-contract.json` version 1 is the complete UI acceptance contract. Current Browser-enabled plans use `parity-spec.json` version 3 and optional final `implementation-parity.json` schema version 4. Older profiles and evidence remain read-only compatibility inputs.
+Use this reference when authoring UI plans, running normal UI `$implement` final coverage, reviewing that evidence, or performing release, CI, scheduled, or user-explicit parity verification. Normal UI `$implement` starts with static preflight and approval, then runs the Browser lifecycle only after implementation and static checks are complete. Normal UI `$review` requires current final parity evidence. `ui-contract.json` version 1 is the complete UI acceptance contract. Current Browser-enabled plans use `parity-spec.json` version 3 and final `implementation-parity.json` schema version 4. Older profiles and evidence remain read-only compatibility inputs.
 
 ## Contract, profile, and coverage
 
@@ -59,7 +59,7 @@ The adapter performs exactly one navigation for each row/surface, captures the i
 
 The ignored workspace is `.codex/parity-runs/<run-id>/`. Directories are `0700`; files are `0600`; all paths are repository-contained, non-symlink, exclusively created, and read back. The immutable manifest fixes selection, row order, batch size, byte limit, runtime/source/profile digests, and artifact policy.
 
-In an independently requested parity task, prepare only after approval, static checks, and external runtime ownership/health readback. Do not run this lifecycle as part of normal `$implement`:
+For normal UI `$implement` or an independently requested parity task, prepare only after approval, implementation, static checks, final diff review, and external runtime ownership/health readback:
 
 Local uses `http://localhost:3000`; worktrees use the ownership-verified allocated port in `3100-3899`. Obtain owner, process/container, mount, health, and `PRODUCTION_URL` from one completed `./dev-compose.sh ensure`; do not wrap it in status polling, fixed sleep, or follow-log commands. Matching CLI arguments do not prove ownership.
 

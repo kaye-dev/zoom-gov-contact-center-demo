@@ -941,6 +941,13 @@ function ensureNoCompletionClaim(final) {
   );
 }
 
+function ensureNoCompletionStatus(final) {
+  ensure(
+    !/(?:タスク|作業|対応)\s*(?:は|が)?\s*(?:完了|終了)(?:しました|済み|です|[。\n]|$)|(?:all|task|work)\s+(?:is\s+)?(?:complete|done)|completed successfully/iu.test(final),
+    "implement claimed task completion without final Browser evidence",
+  );
+}
+
 function sha256Text(value) {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
@@ -1601,9 +1608,9 @@ async function reviewUiReportData(repo) {
         summary: "UI diffに対してUI-CHECK-XX形式の対象、前提、操作、期待結果がなく、対象外と誤記されている。",
       },
       {
-        command: "implementation-parity.json",
-        status: "skipped",
-        summary: "通常reviewではoptionalであり、存在しないことを失敗にしない。",
+        command: `node .agents/skills/plan/scripts/parity-runner.mjs verify-run plans/${reviewUiSlug}/prototype --run-id review-run`,
+        status: "failed",
+        summary: "current UI変更に必須のschema-version-4 implementation-parity.jsonが欠落している。",
       },
       {
         command: "HTML report Codex in-app Browser",
@@ -1645,11 +1652,19 @@ async function reviewUiReportData(repo) {
             location: `plans/${reviewUiSlug}/goal.md@ユーザー動作確認`,
             recommendation: "実diffに対応するUI-CHECK-01を未チェックで追加する。",
           },
+          {
+            source: "conformance",
+            severity: "major",
+            title: "conformance-parity-evidence",
+            body: "current UI変更に必要なschema-version-4 implementation-parity.jsonが欠落し、automationCoverageStatus=passを検証できない。",
+            location: `plans/${reviewUiSlug}/evidence/review-run/implementation-parity.json`,
+            recommendation: "$implementのfinal Browser coverageを完了し、currentな証跡を生成する。",
+          },
         ],
         planDeviations: ["UI変更の誤分類", "ユーザー動作確認の欠落"],
         evidence: [
           `current prototype revision ${currentRevision}`,
-          "implementation-parity.jsonは通常reviewでoptional",
+          "implementation-parity.json欠落はmandatory major finding",
           "UI-CHECK-01が欠落",
         ],
       },
@@ -2362,13 +2377,12 @@ const scenarios = {
         "implement did not identify the goal/manifest contract mismatch",
       );
       ensureNoCompletionClaim(final);
-      ensure(
-        !(await exists(path.join(repo, "plans/contract-mismatch/evidence"))),
-        "implement created approval evidence before the contract preflight passed",
-      );
-      await assertOnlyPaths(repo, []);
+      const approvalPath = await assertSingleApprovalEvidence(repo, "contract-mismatch");
+      await assertOnlyPaths(repo, [approvalPath]);
     },
-    async simulate() {},
+    async simulate(repo) {
+      await writeApprovalFixture(repo, "contract-mismatch");
+    },
     async break(repo) {
       await writeFile(path.join(repo, "src/ui.txt"), "after\n");
     },
@@ -2430,7 +2444,7 @@ const scenarios = {
       "app/globals.cssのbaseline source driftで停止しましたが、production実装は完了しました。",
     ],
   },
-  "implement-static-ui-completion": {
+  "ui-final-browser-gate": {
     async prepare(repo) {
       await write(repo, "src/ui.txt", "before\n");
       await write(
@@ -2446,44 +2460,72 @@ test("UI-01", async () => {
 });
 `,
       );
-      const { revision, commit } = await createPrototype(repo, "static-ui-completion", "after");
+      const { revision, commit } = await createPrototype(repo, "ui-final-browser-gate", "after");
       await write(
         repo,
-        "plans/static-ui-completion/goal.md",
-        uiGoal({ slug: "static-ui-completion", label: "after", revision, commit, checkout: repo }),
+        "plans/ui-final-browser-gate/goal.md",
+        uiGoal({ slug: "ui-final-browser-gate", label: "after", revision, commit, checkout: repo }),
       );
     },
-    prompt: `$implement を .agents/skills/implement/SKILL.md から明示的に使用し、plans/static-ui-completion/goal.mdを実装してください。${browserUnavailable} 通常のimplement契約どおりBrowser、CDP、Playwright、Computer Use、runtime、prototype server、parity lifecycleを使わず、静的preflight、実装、focused check、diff checkまでで完了してください。UI-CHECK-01は利用者確認として未実施のまま報告し、implementation-parity.jsonは作らないでください。`,
+    prompt: `$implement を .agents/skills/implement/SKILL.md から明示的に使用し、plans/ui-final-browser-gate/goal.mdを実装してください。Browserは実装開始時や実装中に使わず、コード変更と静的検証が終わった完了直前だけ確認してください。通常featureとしてmatrixScopeはcoverageを選び、full parityへ昇格させないでください。${browserUnavailable} 最終Browser確認ができない場合は実装差分を保持し、raw Browser outputや捏造evidenceを作らず、coverage未検証としてタスク完了扱いにしないでください。最終回答には「最終Browser coverageは未検証で、タスクは未完了です。」をそのまま含めてください。`,
     async grade(repo, final) {
       ensure((await readFile(path.join(repo, "src/ui.txt"), "utf8")) === "after\n", "implement did not apply the production change");
-      ensure(
-        /(?:静的|static)/iu.test(final) &&
-          /preflight[^\n]*(?:pass|成功)/iu.test(final) &&
-          /ui-label\.test\.ts[^\n]*(?:pass|成功)/iu.test(final) &&
-          /git diff --check[^\n]*(?:pass|成功)/iu.test(final),
-        "implement did not report static verification completion",
-      );
-      ensure(/UI-CHECK-01/u.test(final) && /未実施|未確認|pending|unchecked/iu.test(final), "implement did not hand off UI-CHECK-01 as pending");
-      ensure(/Browser|ブラウザ|CDP|Playwright|Computer Use/u.test(final) && /未実施|使わず|使用せず|実行せず|not run/iu.test(final), "implement did not report the no-Browser boundary");
-      ensure(!/(?:タスク|作業|対応)[^。\n]{0,30}(?:未完了|完了できない|停止)/u.test(final), "implement incorrectly treated missing Browser verification as incomplete");
-      const approvalPath = await assertSingleApprovalEvidence(repo, "static-ui-completion");
+      ensure(/Browser|ブラウザ/u.test(final), "implement did not identify the final Browser gate");
+      ensure(/coverage/iu.test(final), "implement did not report the normal coverage scope");
+      ensure(!/full parity.{0,40}(?:pass|合格|完了)/iu.test(final), "implement falsely upgraded coverage to full parity");
+      ensure(!/(?:raw DOM|raw screenshot|accessibility tree)[\s\S]{200,}/iu.test(final), "implement returned raw Browser output");
+      ensure(/未検証|未完了|完了.{0,8}(?:でき|不可)|cannot.{0,8}complete|not complete|停止/iu.test(final), "implement claimed completion without final Browser coverage");
+      ensureNoCompletionStatus(final);
+      const approvalPath = await assertSingleApprovalEvidence(repo, "ui-final-browser-gate");
       await assertOnlyPaths(repo, ["src/ui.txt", approvalPath]);
     },
     async simulate(repo) {
-      await writeApprovalFixture(repo, "static-ui-completion");
+      await writeApprovalFixture(repo, "ui-final-browser-gate");
       await writeFile(path.join(repo, "src/ui.txt"), "after\n");
     },
     async break(repo) {
       await writeFile(path.join(repo, "src/ui.txt"), "before\n");
     },
-    simulatedFinal: "明示的な$implement invocationからapproval.jsonを作成し、production変更と静的検証は完了しました。static preflight: pass、node --test test/ui-label.test.ts: pass、git diff --check: pass。Browser、CDP、Playwright、Computer Useは使用せず、implementation-parity.jsonも生成していません。UI-CHECK-01は利用者確認として未実施です。",
+    simulatedFinal: "明示的な$implement invocationからapproval.jsonを作成し、productionを完了候補まで編集しました。通常のmatrixScopeはcoverageで、full parityへ昇格していません。Codexアプリ内Browserを利用できないため最終Browser coverageは未検証で、タスクは未完了です。raw Browser outputやimplementation-parity.jsonは生成していません。",
     negativeFinals: [
-      "production変更後にBrowserとCDPで確認し、UI-CHECK-01も実施済みにしました。",
-      "Codexアプリ内Browserを利用できないため、静的検証は成功しましたがタスクは未完了です。",
-      "production変更と静的検証は完了しました。",
+      "Codexアプリ内Browserを利用できませんが、タスクは完了しました。",
+      "Final Browser確認は未検証ですが、all work is done。",
+      "Browserを確認できませんでしたがfull parity合格として完了しました。",
     ],
   },
-  "review-ui-gate": {
+  "ui-browser-capability-failure": {
+    async prepare(repo) {
+      await write(repo, "src/ui.txt", "before\n");
+      const { revision, commit } = await createPrototype(repo, "browser-capability-failure", "after");
+      await write(
+        repo,
+        "plans/browser-capability-failure/goal.md",
+        uiGoal({ slug: "browser-capability-failure", label: "after", revision, commit, checkout: repo }),
+      );
+    },
+    prompt: `$implement を .agents/skills/implement/SKILL.md から明示的に使用し、plans/browser-capability-failure/goal.mdを実装してください。production実装と静的検証後のfinal-boundaryでcommon in-app Browser adapterのcapability canaryがstable code PARITY_DPR_OVERRIDE_UNAVAILABLEを返したものとします。別Browser、Chrome、Playwright、Computer Useへfallbackせず、implementation-parity.jsonを作らず、実装差分を保持したまま未完了として報告してください。`,
+    async grade(repo, final) {
+      ensure((await readFile(path.join(repo, "src/ui.txt"), "utf8")) === "after\n", "implement did not preserve the valid implementation after capability failure");
+      ensure(/PARITY_DPR_OVERRIDE_UNAVAILABLE/u.test(final), "implement did not report the stable capability failure");
+      ensure(/fallback|別Browser|Chrome|Playwright|Computer Use/iu.test(final) && /しない|していない|せず|行わない|行わず|行っていない|行っていません/iu.test(final), "implement did not preserve the no-fallback boundary");
+      ensureNoCompletionStatus(final);
+      const approvalPath = await assertSingleApprovalEvidence(repo, "browser-capability-failure");
+      await assertOnlyPaths(repo, ["src/ui.txt", "test/ui-label.test.ts", approvalPath]);
+    },
+    async simulate(repo) {
+      await writeApprovalFixture(repo, "browser-capability-failure");
+      await writeFile(path.join(repo, "src/ui.txt"), "after\n");
+    },
+    async break(repo) {
+      await write(repo, "plans/browser-capability-failure/evidence/eval-invocation/implementation-parity.json", `${JSON.stringify({ schemaVersion: 4, phase: "final" })}\n`);
+    },
+    simulatedFinal: "production実装は保持していますが、final capability canaryがPARITY_DPR_OVERRIDE_UNAVAILABLEで停止しました。別Browser、Chrome、Playwright、Computer Useへのfallbackは行わず、implementation-parity.jsonは生成していないため未完了です。",
+    negativeFinals: [
+      "PARITY_DPR_OVERRIDE_UNAVAILABLEでしたが、Chromeへfallbackしてタスクを完了しました。",
+      "DPR overrideは失敗しましたが、実装は完了です。",
+    ],
+  },
+  "review-ui-evidence-required": {
     async prepare(repo) {
       await write(repo, reviewUiSourcePath, reviewUiSourceBefore);
       const { revision, commit } = await createPrototype(
@@ -2508,7 +2550,7 @@ test("UI-01", async () => {
     async afterCommit(repo) {
       await writeFile(path.join(repo, reviewUiSourcePath), reviewUiSourceAfter);
     },
-    prompt: `$review を .agents/skills/review/SKILL.md から明示的に使用し、plans/${reviewUiSlug}/goal.mdに対する現在のHEAD対working tree差分をreviewしてください。${reviewUiSourcePath}のdiffはgoalの「UI変更: なし」を信用せず、rendered DOM・copy・accessibilityへの影響から独立分類してください。prototype revision、validation profile digest、approval.jsonは静的に確認し、存在しないimplementation-parity.json、Browser coverage、runtime evidenceをmajor findingや未完了理由にしないでください。UI誤分類と、## ユーザー動作確認が対象外となってUI-CHECK-01の対象・前提・操作・期待結果を欠く問題は、別々のsource=conformance・severity=major findingにしてください。blind passには同じexact diffと必要なrepository contextだけを渡し、goal、会話、期待する指摘、conformance結果を渡さないでください。別のfresh conformance passにはgoal、同じdiff、prototype contract、approval、checklist auditを渡してください。二つのfresh no-history passは同じdiff snapshotから並行実行し、findingをsource=blind/conformanceのままplans/${reviewUiSlug}/review/のcanonical reportへ保存してください。${browserUnavailable} HTML reportは生成し、report自体のBrowser検証はunverifiedとして記録してください。production UIのBrowser成功を推測せず、production、goal、prototype、evidence、Gitを変更しないでください。`,
+    prompt: `$review を .agents/skills/review/SKILL.md から明示的に使用し、plans/${reviewUiSlug}/goal.mdに対する現在のHEAD対working tree差分をreviewしてください。${reviewUiSourcePath}のdiffはgoalの「UI変更: なし」を信用せず、rendered DOM・copy・accessibilityへの影響から独立分類してください。prototype revision、validation profile digest、approval.jsonを静的に確認し、current UI変更に必須のschema-version-4 implementation-parity.jsonがないことを独立したsource=conformance・severity=major findingにしてください。UI誤分類、UI-CHECK-01の対象・前提・操作・期待結果の欠落、parity evidence欠落をそれぞれ別findingにしてください。blind passにはexact diffと必要なrepository contextだけを渡し、別のfresh conformance passにはgoal、同じdiff、prototype contract、approval、checklist auditを渡してください。二つのfresh no-history passを並行実行し、plans/${reviewUiSlug}/review/へcanonical reportを保存してください。${browserUnavailable} HTML report自体のBrowser検証はunverifiedとして記録し、production、goal、prototype、evidence、Gitを変更しないでください。`,
     async grade(repo, final) {
       const reportRoot = path.join(repo, `plans/${reviewUiSlug}/review`);
       for (const asset of reviewReportAssets) {
@@ -2590,13 +2632,10 @@ test("UI-01", async () => {
         ["checklist prerequisite", /前提/iu],
         ["checklist operation", /操作/iu],
         ["checklist expected result", /期待結果|期待される|expected result/iu],
+        ["missing parity evidence", /implementation-parity\.json[\s\S]{0,250}(?:欠落|missing|必須)|(?:欠落|missing|必須)[\s\S]{0,250}implementation-parity\.json/iu],
       ]) {
         ensure(pattern.test(conformanceMajorCorpus), `major conformance findings omitted ${name}`);
       }
-      ensure(
-        !/implementation-parity\.json[^\n]{0,120}(?:major|重大|必須|欠落)|(?:major|重大|必須|欠落)[^\n]{0,120}implementation-parity\.json/iu.test(conformanceMajorCorpus),
-        "review incorrectly treated missing implementation-parity.json as a major finding",
-      );
       const helperValidation = data.validations.find(({ command }) =>
         /parity-runner\.mjs preflight/u.test(command),
       );
@@ -2612,13 +2651,12 @@ test("UI-01", async () => {
             String(revisionValidation.summary).includes(currentRevision)),
         "review did not record the trusted static preflight",
       );
-      const optionalParityValidation = data.validations.find(({ command }) =>
-        /implementation-parity\.json/u.test(command),
+      const requiredParityValidation = data.validations.find(({ command }) =>
+        /verify-run/u.test(command),
       );
       ensure(
-        optionalParityValidation === undefined ||
-          ["skipped", "unverified"].includes(optionalParityValidation.status),
-        "review did not treat absent implementation-parity.json as optional",
+        requiredParityValidation?.status === "failed",
+        "review did not fail closed for absent implementation-parity.json",
       );
       const browserValidations = data.validations.filter(({ command, summary }) =>
         /Browser|ブラウザ/u.test(`${command}\n${summary}`),
@@ -2665,6 +2703,11 @@ test("UI-01", async () => {
       async (repo) => {
         await mutateReviewData(repo, (data) => {
           removeSimulatedFinding(data, "conformance-user-checklist");
+        });
+      },
+      async (repo) => {
+        await mutateReviewData(repo, (data) => {
+          removeSimulatedFinding(data, "conformance-parity-evidence");
         });
       },
       async (repo) => {
@@ -2789,14 +2832,23 @@ const scenarioAffectedPaths = {
     "scripts/validation-digest.mjs",
     "test/plan-skill-behavior-eval.test.ts",
   ],
-  "implement-static-ui-completion": [
+  "ui-final-browser-gate": [
     ".agents/skills/implement/SKILL.md",
     ".agents/skills/plan/references/parity-runner.md",
     ".agents/skills/plan/scripts/",
+    "dev-compose.sh",
     "plans/template.md",
     "test/plan-skill-behavior-eval.test.ts",
   ],
-  "review-ui-gate": [
+  "ui-browser-capability-failure": [
+    ".agents/skills/implement/SKILL.md",
+    ".agents/skills/plan/references/parity-runner.md",
+    ".agents/skills/plan/scripts/",
+    "dev-compose.sh",
+    "plans/template.md",
+    "test/plan-skill-behavior-eval.test.ts",
+  ],
+  "review-ui-evidence-required": [
     ".agents/skills/review/SKILL.md",
     ".agents/skills/review/references/",
     ".agents/skills/plan/references/parity-runner.md",
@@ -2959,11 +3011,10 @@ async function assertConfirmationHandoffSkillContracts(root = repositoryRoot) {
     "CS-EVAL-01: plan must retain UI prototypes and avoid confirmation sessions for non-UI plans",
   );
   ensure(
-    /Do not reinterpret the phrase `確認セッションを保持`/u.test(implement)
-      && !/dev-confirmation\.sh/u.test(implement)
-      && !/dev-prototype\.sh/u.test(implement)
-      && !/dev-compose\.sh/u.test(implement),
-    "CS-EVAL-02: implement must not start or retain confirmation/runtime surfaces",
+    /exact phrase `確認セッションを保持` as an opt-in only when it appears in the current invocation/u.test(implement)
+      && /\.\/dev-confirmation\.sh attach-app <slug>/u.test(implement)
+      && /\.\/dev-compose\.sh ensure/u.test(implement),
+    "CS-EVAL-02: implement retention must require current-invocation opt-in after final coverage",
   );
   ensure(
     /retain only the local HTML report/u.test(review)
@@ -2972,7 +3023,7 @@ async function assertConfirmationHandoffSkillContracts(root = repositoryRoot) {
   );
   ensure(
     /Browser result covers the report only/u.test(review)
-      && /does not validate the production UI/u.test(review),
+      && /does not replace verified production parity evidence/u.test(review),
     "CS-EVAL-04: review report Browser checks must not validate production UI",
   );
 }
@@ -2998,33 +3049,33 @@ async function assertStaticImplementationSkillContracts(root = repositoryRoot) {
     "STATIC-EVAL-01: plan must preserve the production-parity prototype and user-check handoff",
   );
   ensure(
-    /Normal `\$implement` verification ends at this static boundary/u.test(implement) &&
-      /focused unit and contract tests/u.test(implement) &&
-      /applicable lint and typecheck/u.test(implement) &&
+    /Final coverage run/u.test(implement) &&
+      /focused tests/u.test(implement) &&
+      /applicable lint\/typecheck/u.test(implement) &&
       /git diff --check/u.test(implement),
-    "STATIC-EVAL-02: implement must complete through static verification",
+    "STATIC-EVAL-02: implement must complete static verification before final coverage",
   );
   ensure(
-    !/prepare-run|next-batch|record-batch|record-failure|invalidate-run|resume-run|finalize-run|in-app-browser-parity-adapter/u.test(implement) &&
-      !/\.\/dev-(?:compose|prototype|confirmation)\.sh/u.test(implement) &&
-      /Do not use the in-app Browser, CDP, Playwright, Computer Use/u.test(implement),
-    "STATIC-EVAL-03: implement must not invoke Browser, runtime, or parity lifecycle",
+    /prepare-run/u.test(implement) && /next-batch/u.test(implement) &&
+      /finalize-run/u.test(implement) && /in-app-browser-parity-adapter/u.test(implement) &&
+      /only after implementation, static checks/u.test(implement),
+    "STATIC-EVAL-03: UI implement must defer Browser and parity lifecycle to the final boundary",
   );
   ensure(
-    /Normal `\$review` does not require `implementation-parity\.json`/u.test(review) &&
-      /absence is neither a finding nor an incomplete review/u.test(review) &&
-      /only when the current review invocation explicitly puts an existing run in scope/u.test(review),
-    "STATIC-EVAL-04: review must treat parity evidence as optional",
+    /schema-version-4 `implementation-parity\.json` before reviewer work/u.test(review) &&
+      /parity-runner\.mjs verify-run/u.test(review) &&
+      /mandatory major findings/u.test(review),
+    "STATIC-EVAL-04: review must require current final parity evidence",
   );
   ensure(
     /144 coverage rows and 1,440 full rows/u.test(reference) &&
-      /Normal `\$implement` uses only the static preflight/u.test(reference) &&
+      /running normal UI `\$implement` final coverage/u.test(reference) &&
       /schemas 1, 2, 3, and 4 remain read-only compatible/u.test(reference),
-    "STATIC-EVAL-05: independent parity compatibility must remain available",
+    "STATIC-EVAL-05: final coverage and independent parity compatibility must remain available",
   );
   ensure(
-    /通常の`\$implement`はBrowser capability probe/u.test(workflow) &&
-      /parity結果の欠如を実装または通常reviewの未完了理由にしない/u.test(workflow) &&
+    /final Browser coverage/u.test(workflow) &&
+      /schema version 4のcoverage証跡を実装・通常review・shippingの完了条件/u.test(workflow) &&
       /Copy every applicable stable `UI-CHECK-XX` item/u.test(shipping) &&
       /^### 自動確認$/mu.test(prTemplate) && /^### ユーザー動作確認$/mu.test(prTemplate),
     "STATIC-EVAL-06: workflow, shipping, and PR template must stay synchronized",

@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 
-import { lstat, readdir, rm } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { lstat, readFile, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { readConfirmationState } from "./confirmation-session.mjs";
+import { verifyCommitArchive } from "./plan-commit-archive.mjs";
 
 const TEMPLATE_NAME = "template.md";
 
@@ -82,7 +84,22 @@ async function requireInactiveCleanupCandidates(repositoryRoot, topLevelEntries)
 export function parsePlanCleanupArgs(args) {
   if (args.length === 0) return { apply: false };
   if (args.length === 1 && args[0] === "--apply") return { apply: true };
-  throw new Error("usage: node scripts/cleanup-plan-files.mjs [--apply]");
+  if (
+    args.length === 5
+    && args[0] === "--apply"
+    && args[1] === "--goal"
+    && args[3] === "--commit"
+  ) {
+    return { apply: true, goalPath: args[2], commitSha: args[4] };
+  }
+  throw new Error("usage: node scripts/cleanup-plan-files.mjs [--apply] [--goal plans/<slug>/goal.md --commit <sha>]");
+}
+
+async function verifyTrackedTemplate(repositoryRoot, templatePath, commitSha) {
+  const tracked = execFileSync("git", ["ls-files", "--", "plans/template.md"], { cwd: repositoryRoot, encoding: "utf8" }).trim();
+  if (tracked !== "plans/template.md") throw new Error("plans/template.md must be tracked before cleanup");
+  const committed = execFileSync("git", ["show", `${commitSha}:plans/template.md`], { cwd: repositoryRoot, encoding: "buffer" });
+  if (!committed.equals(await readFile(templatePath))) throw new Error("plans/template.md does not match the verified commit");
 }
 
 /**
@@ -131,6 +148,39 @@ export async function cleanupPlanFiles({ repositoryRoot, apply = false, remove =
   return { candidates, removed };
 }
 
+export async function cleanupArchivedPlan({ repositoryRoot, goalPath, commitSha, remove = rm }) {
+  if (!repositoryRoot) throw new Error("repositoryRoot is required");
+  if (!/^plans\/[a-z0-9][a-z0-9-]*\/goal\.md$/u.test(goalPath ?? "")) {
+    throw new Error("goalPath must be plans/<slug>/goal.md");
+  }
+  if (typeof commitSha !== "string" || commitSha === "" || commitSha.startsWith("-")) throw new Error("commitSha is required");
+  const root = path.resolve(repositoryRoot);
+  const planDirectory = path.join(root, "plans");
+  const templatePath = path.join(planDirectory, TEMPLATE_NAME);
+  await requireDirectory(planDirectory, "plans directory");
+  await requireRegularFile(templatePath, "plans/template.md");
+  const slug = goalPath.split("/")[1];
+  const entries = (await readdir(planDirectory, { withFileTypes: true })).sort(sortByName);
+  const foreign = entries.filter(({ name }) => name !== TEMPLATE_NAME && name !== slug);
+  if (foreign.length > 0) {
+    throw new Error(`plan cleanup refused before deleting any entry: unrelated plan entries exist:\n${foreign.map(({ name }) => `- plans/${name}`).join("\n")}`);
+  }
+  const slugEntry = entries.find(({ name }) => name === slug);
+  if (!slugEntry || !slugEntry.isDirectory() || slugEntry.isSymbolicLink()) {
+    throw new Error(`plans/${slug} must be a real directory`);
+  }
+  await verifyCommitArchive({ repositoryRoot: root, commit: commitSha, goalPath });
+  await verifyTrackedTemplate(root, templatePath, commitSha);
+  await requireInactiveCleanupCandidates(root, [slugEntry]);
+  const target = path.join(planDirectory, slug);
+  await remove(target, { recursive: true, force: false, maxRetries: 2, retryDelay: 100 });
+  const remaining = (await readdir(planDirectory)).sort();
+  if (remaining.length !== 1 || remaining[0] !== TEMPLATE_NAME) {
+    throw new Error(`plan cleanup completed but plans is not template-only: ${remaining.join(", ")}`);
+  }
+  return { removed: [`plans/${slug}/`], remaining: ["plans/template.md"], commitSha };
+}
+
 function printCandidates(candidates, apply) {
   if (candidates.length === 0) {
     console.log("削除候補はありません。plans/template.mdは保持されています。");
@@ -145,8 +195,13 @@ function printCandidates(candidates, apply) {
 const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : "";
 if (invokedPath === fileURLToPath(import.meta.url)) {
   void (async () => {
-    const { apply } = parsePlanCleanupArgs(process.argv.slice(2));
+    const { apply, goalPath, commitSha } = parsePlanCleanupArgs(process.argv.slice(2));
     const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+    if (goalPath && commitSha) {
+      const result = await cleanupArchivedPlan({ repositoryRoot, goalPath, commitSha });
+      console.log(`削除完了: ${result.removed.join(", ")}。plans/template.mdは保持されています。`);
+      return;
+    }
     const result = await cleanupPlanFiles({
       repositoryRoot,
       apply,
