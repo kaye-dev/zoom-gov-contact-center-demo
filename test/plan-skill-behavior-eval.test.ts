@@ -126,7 +126,7 @@ async function assertRetryableFailure(
   assert.doesNotMatch(`${failure.stdout}\n${failure.stderr}\n${manifestText}`, new RegExp(privateMarker, "u"));
 }
 
-test("plan skill behavioral evalは実promptの11 scenarioを公開する", async () => {
+test("plan skill behavioral evalは実promptの12 scenarioを公開する", async () => {
   const { stdout } = await execFileAsync(process.execPath, [evaluator, "--list"], { cwd: root });
   assert.deepEqual(stdout.trim().split("\n"), [
     "plan-canonical",
@@ -135,8 +135,9 @@ test("plan skill behavioral evalは実promptの11 scenarioを公開する", asyn
     "implement-stale-revision",
     "implement-contract-mismatch",
     "implement-related-source-drift",
-    "implement-static-ui-completion",
-    "review-ui-gate",
+    "ui-final-browser-gate",
+    "ui-browser-capability-failure",
+    "review-ui-evidence-required",
     "workflow-performance-audit-bottleneck",
     "workflow-performance-audit-no-bottleneck",
     "workflow-performance-audit-insufficient-data",
@@ -196,8 +197,9 @@ test("plan skill behavioral evalはsymlink経由のCLI起動でもmainを実行�
     "implement-stale-revision",
     "implement-contract-mismatch",
     "implement-related-source-drift",
-    "implement-static-ui-completion",
-    "review-ui-gate",
+    "ui-final-browser-gate",
+    "ui-browser-capability-failure",
+    "review-ui-evidence-required",
     "workflow-performance-audit-bottleneck",
     "workflow-performance-audit-no-bottleneck",
     "workflow-performance-audit-insufficient-data",
@@ -211,7 +213,7 @@ test("forward evalは変更pathから関連scenarioだけを選び、共通契�
   }
   assert.deepEqual(
     evaluatorModule.selectAffectedScenarios([".agents/skills/review/references/review-contract.md"]),
-    ["review-ui-gate"],
+    ["review-ui-evidence-required"],
   );
   assert.deepEqual(
     evaluatorModule.selectAffectedScenarios(["app/styles/ui-foundation.css"]),
@@ -265,17 +267,17 @@ test("forward evalは独立workを最大2並列で実行し、結果順を固定
 test("forward eval result manifestは失敗scenarioだけをresumeし、raw errorを保存しない", async (context) => {
   const evaluatorModule = await evaluatorModulePromise;
   const resultPath = await evaluatorModule.writeResultManifest(
-    { mode: "all", names: ["plan-canonical", "review-ui-gate"] },
+    { mode: "all", names: ["plan-canonical", "review-ui-evidence-required"] },
     2,
     [
       { name: "plan-canonical", status: "pass", durationMs: 10 },
-      { name: "review-ui-gate", status: "fail", durationMs: 20, errorCode: "raw error secret" },
+      { name: "review-ui-evidence-required", status: "fail", durationMs: 20, errorCode: "raw error secret" },
     ],
   );
   context.after(() => rm(path.dirname(resultPath), { recursive: true, force: true }));
   const manifestText = await readFile(resultPath, "utf8");
   const manifest = JSON.parse(manifestText);
-  assert.deepEqual(evaluatorModule.failedScenariosFromManifest(manifest), ["review-ui-gate"]);
+  assert.deepEqual(evaluatorModule.failedScenariosFromManifest(manifest), ["review-ui-evidence-required"]);
   assert.equal(manifest.results[1].errorCode, "SCENARIO_FAILED");
   assert.doesNotMatch(manifestText, /stack|stderr|prompt|raw error/iu);
   assert.throws(
@@ -331,7 +333,7 @@ test("plan skill behavioral evalのartifact graderはpositive/negative control�
     cwd: root,
     timeout: 180_000,
   });
-  assert.match(stdout, /self-test passed: 11 scenarios/);
+  assert.match(stdout, /self-test passed: 12 scenarios/);
 });
 
 test("version 3のUI eval fixtureは各rowでcontract IDと同名のrequired probeを対応する", async (context) => {
@@ -365,17 +367,17 @@ test("version 3のUI eval fixtureは各rowでcontract IDと同名のrequired pro
   }
 });
 
-test("WF-EVAL-01 Browserなしでも静的UI実装を完了する", async (context) => {
+test("WF-EVAL-01 BrowserなしではUI実装を完了扱いにしない", async (context) => {
   const evaluatorModule = await evaluatorModulePromise;
   const fixture = await evaluatorModule.prepareScenario(
-    "implement-static-ui-completion",
-    `wf-eval-static-ui-${process.pid}`,
+    "ui-final-browser-gate",
+    `wf-eval-browser-gate-${process.pid}`,
   );
   context.after(() => rm(fixture.fixtureRoot, { recursive: true, force: true }));
   await fixture.scenario.simulate(fixture.repo);
   await evaluatorModule.gradePreparedScenario(
     fixture,
-    "明示的な$implement invocationからapproval.jsonを作成し、production変更と静的検証は完了しました。static preflight: pass、node --test test/ui-label.test.ts: pass、git diff --check: pass。Browser、CDP、Playwright、Computer Useは使用せず、implementation-parity.jsonも生成していません。UI-CHECK-01は利用者確認として未実施です。",
+    "明示的な$implement invocationからapproval.jsonを作成し、productionを完了候補まで編集しました。通常のmatrixScopeはcoverageで、full parityへ昇格していません。Codexアプリ内Browserを利用できないため最終Browser coverageは未検証で、タスクは未完了です。raw Browser outputやimplementation-parity.jsonは生成していません。",
   );
 });
 

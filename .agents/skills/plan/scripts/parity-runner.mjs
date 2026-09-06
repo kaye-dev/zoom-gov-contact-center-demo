@@ -1045,7 +1045,7 @@ async function writeRunEvidence({ repositoryRootPath = repositoryRoot, slug, run
 function parseCliArguments(argv) {
   ensure(
     argv.length >= 2,
-    "usage: parity-runner.mjs <preflight|validate|select|prepare-run|next-batch|resume-run|record-batch|record-failure|invalidate-run|finalize-run|cleanup-run|abort-run> plans/<slug>/prototype [options]",
+    "usage: parity-runner.mjs <preflight|validate|select|prepare-run|next-batch|resume-run|record-batch|record-failure|invalidate-run|finalize-run|verify-run|cleanup-run|abort-run> plans/<slug>/prototype [options]",
   );
   const [command, target, ...rest] = argv;
   ensure(
@@ -1060,6 +1060,7 @@ function parseCliArguments(argv) {
       "record-failure",
       "invalidate-run",
       "finalize-run",
+      "verify-run",
       "cleanup-run",
       "abort-run",
     ].includes(command),
@@ -1215,6 +1216,76 @@ async function readStdin(stream = process.stdin, limit = 512 * 1024) {
   return text;
 }
 
+async function readOptionalJsonRegular(target, label) {
+  try {
+    return await readJsonRegular(target, label);
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return undefined;
+    throw error;
+  }
+}
+
+async function verifyCurrentRun({ target, definition, options, repositoryRootPath = repositoryRoot }) {
+  const slug = planSlugFromTarget(target);
+  ensure(options.runId, "--run-id is required");
+  const root = await realpath(repositoryRootPath);
+  const goalText = await readFile(path.join(root, "plans", slug, "goal.md"), "utf8");
+  const runEvidenceRoot = path.join(root, "plans", slug, "evidence", options.runId);
+  await validatePrivateDirectory(path.dirname(runEvidenceRoot), "evidence root");
+  await validatePrivateDirectory(runEvidenceRoot, "run evidence directory");
+  const approval = await readJsonRegular(path.join(runEvidenceRoot, "approval.json"), "approval.json");
+  const implementation = await readJsonRegular(
+    path.join(runEvidenceRoot, "implementation-parity.json"),
+    "implementation-parity.json",
+  );
+  const preEdit = await readOptionalJsonRegular(path.join(runEvidenceRoot, "pre-edit-parity.json"), "pre-edit-parity.json");
+  ensure(isPlainObject(implementation.runtime), "implementation runtime must be an object");
+  ensure(
+    implementation.runtime.owner === definition.contract.productionBaseline.runtimeOwner,
+    "implementation runtime owner does not match ui-contract.json",
+  );
+  ensure(
+    typeof implementation.runtime.checkout === "string" &&
+      await realpath(implementation.runtime.checkout) === root,
+    "implementation runtime checkout does not match the current repository",
+  );
+  ensure(
+    implementation.runtime.fixture === definition.contract.comparisonConditions.fixture &&
+      implementation.runtime.authorization === definition.contract.comparisonConditions.authorization,
+    "implementation runtime comparison conditions do not match ui-contract.json",
+  );
+  const current = {
+    goalSha256: sha256(goalText),
+    prototypeRevision: definition.prototypeRevision,
+    validationProfileDigest: definition.validationProfileDigest,
+    runtime: implementation.runtime,
+    sources: await currentSourceDigests(definition.contract, root),
+  };
+  validateEvidenceBundle({ approval, preEdit, implementation, contract: definition.contract, spec: definition.spec, current });
+  ensure(implementation.schemaVersion === 4, "shipping requires schemaVersion 4 implementation evidence");
+  ensure(implementation.phase === "final", "shipping requires final implementation evidence");
+  ensure(["coverage", "full"].includes(implementation.matrixScope), "shipping requires coverage or full matrix scope");
+  ensure(implementation.automationCoverageStatus === "pass", "shipping requires automationCoverageStatus=pass");
+  ensure(implementation.cleanup?.status === "pass", "shipping requires passing cleanup");
+  const workspace = path.join(root, ".codex", "parity-runs", options.runId);
+  try {
+    await lstat(workspace);
+    throw new Error("shipping requires the parity run workspace to be absent after cleanup");
+  } catch (error) {
+    if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT")) throw error;
+  }
+  return {
+    status: "pass",
+    evidencePath: `plans/${slug}/evidence/${options.runId}/implementation-parity.json`,
+    schemaVersion: implementation.schemaVersion,
+    matrixScope: implementation.matrixScope,
+    automationCoverageStatus: implementation.automationCoverageStatus,
+    humanVisualApprovalStatus: implementation.humanVisualApprovalStatus,
+    fullParityStatus: implementation.fullParityStatus,
+    currentBindingStatus: "pass",
+  };
+}
+
 async function runCli({
   argv = process.argv.slice(2),
   repositoryRootPath = repositoryRoot,
@@ -1346,6 +1417,15 @@ async function runCli({
     stdout.write(`${JSON.stringify(output, null, 2)}\n`);
     return;
   }
+  if (command === "verify-run") {
+    stdout.write(`${JSON.stringify(await verifyCurrentRun({
+      target,
+      definition,
+      options,
+      repositoryRootPath: root,
+    }), null, 2)}\n`);
+    return;
+  }
   const output = {
     prototypeRevision: definition.prototypeRevision,
     validationProfileDigest: definition.validationProfileDigest,
@@ -1402,5 +1482,6 @@ export {
   validateInvariantProbeCoverage,
   validateParityEvidence,
   validateParitySpec,
+  verifyCurrentRun,
   writeRunEvidence,
 };
