@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 const MAX_GOAL_BYTES = 1_048_576;
 const ARCHIVE_MARKER = "Codex-Goal-Archive-Version:";
 const BEGIN_MARKER = "Codex-Goal-Begin:\n";
+const ARCHIVE_BLOCK_PATTERN = /^Codex-Goal-Archive-Version: 1\nCodex-Goal-Path: plans\/[a-z0-9][a-z0-9-]*\/goal\.md\nCodex-Goal-Bytes: (?:0|[1-9][0-9]*)\nCodex-Goal-SHA256: [0-9a-f]{64}\nCodex-Goal-Begin:\n/gmu;
 const GOAL_HEADINGS = [
   "# 目的と完了条件",
   "# 現状と根拠",
@@ -68,9 +69,16 @@ function validateSubject(subject) {
   ensure(!/[\r\n\0]/u.test(subject), "commit subject must be one line without NUL");
 }
 
+function countArchiveBlocks(bytes) {
+  const text = bytes.toString("utf8");
+  ensure(Buffer.from(text, "utf8").equals(bytes), "commit message must be valid UTF-8");
+  return text.match(ARCHIVE_BLOCK_PATTERN)?.length ?? 0;
+}
+
 function createArchiveMessage({ subject, goalPath, goalBytes }) {
   validateSubject(subject);
   validateGoalBytes(goalBytes);
+  ensure(countArchiveBlocks(goalBytes) === 0, "goal contains a duplicate goal archive block");
   ensure(/^plans\/[a-z0-9][a-z0-9-]*\/goal\.md$/u.test(goalPath), "invalid canonical goal path");
   const header = [
     subject,
@@ -87,10 +95,10 @@ function createArchiveMessage({ subject, goalPath, goalBytes }) {
 
 function parseArchiveMessage(messageBytes) {
   ensure(Buffer.isBuffer(messageBytes), "commit message must be bytes");
+  ensure(countArchiveBlocks(messageBytes) === 1, "commit message contains duplicate goal archive blocks");
   const marker = Buffer.from(BEGIN_MARKER, "utf8");
   const begin = messageBytes.indexOf(marker);
   ensure(begin >= 0, "commit message does not contain a goal archive");
-  ensure(messageBytes.indexOf(marker, begin + marker.length) < 0, "commit message contains duplicate goal archive markers");
   const prefix = messageBytes.subarray(0, begin).toString("utf8");
   const lines = prefix.split("\n");
   const subject = lines[0];

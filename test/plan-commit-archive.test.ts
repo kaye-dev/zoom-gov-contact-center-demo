@@ -73,6 +73,21 @@ test("GOAL-ARCHIVE-01: goalのUTF-8 bytesと最終改行をraw commitへその�
 test("GOAL-ARCHIVE-02: metadata改変、payload切詰め、上限超過、secret、symlinkを拒否する", async (context) => {
   const bytes = Buffer.from(goal);
   const message = createArchiveMessage({ subject: "feat: fixture", goalPath: "plans/example/goal.md", goalBytes: bytes });
+  const documentedFormat = Buffer.from(`${goal}\n\`\`\`text\nCodex-Goal-Archive-Version: 1\nCodex-Goal-Path: plans/<slug>/goal.md\nCodex-Goal-Bytes: <UTF-8 byte length>\nCodex-Goal-SHA256: <64 lowercase hex>\nCodex-Goal-Begin:\n<goal payload>\n\`\`\`\n`);
+  assert.deepEqual(
+    parseArchiveMessage(createArchiveMessage({
+      subject: "feat: documentation example",
+      goalPath: "plans/example/goal.md",
+      goalBytes: documentedFormat,
+    })).goalBytes,
+    documentedFormat,
+  );
+  const duplicateArchive = Buffer.concat([
+    message,
+    Buffer.from(`\nCodex-Goal-Archive-Version: 1\nCodex-Goal-Path: plans/example/goal.md\nCodex-Goal-Bytes: ${bytes.length}\nCodex-Goal-SHA256: ${sha256(bytes)}\nCodex-Goal-Begin:\n`),
+    bytes,
+  ]);
+  assert.throws(() => parseArchiveMessage(duplicateArchive), /duplicate goal archive blocks/u);
   assert.throws(() => parseArchiveMessage(message.subarray(0, message.length - 1)), /byte length/u);
   assert.throws(
     () => parseArchiveMessage(Buffer.from(message.toString("utf8").replace(`Codex-Goal-SHA256: ${sha256(bytes)}`, `Codex-Goal-SHA256: ${"0".repeat(64)}`))),
