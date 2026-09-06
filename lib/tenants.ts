@@ -8,7 +8,7 @@ import {
  * source of truth on purpose: adding an industry must not require a database
  * migration or a new Vercel environment variable.
  */
-export const TENANT_KEYS = ["lg"] as const;
+export const TENANT_KEYS = ["lg", "univ"] as const;
 
 export type TenantKey = (typeof TENANT_KEYS)[number];
 
@@ -21,6 +21,10 @@ export type TenantFeatures = {
   audienceNavigation: boolean;
   /** オンライン相談（今すぐ相談）ページ */
   onlineConsultation: boolean;
+  /** 学生支援ポータルと大学専用の公開ルート */
+  universityPortal: boolean;
+  /** 大学テナント専用のオンライン相談設定管理 */
+  onlineConsultationAdmin: boolean;
 };
 
 /**
@@ -70,6 +74,28 @@ const TENANT_DEFINITIONS: Record<TenantKey, TenantDefinition> = {
       disasterRadio: true,
       audienceNavigation: false,
       onlineConsultation: false,
+      universityPortal: false,
+      onlineConsultationAdmin: false,
+    },
+  },
+  univ: {
+    key: "univ",
+    metadata: {
+      title: "未来大学 学生支援ポータル",
+      description:
+        "未来大学の学生支援ポータルです。入学案内、履修・授業、学生生活、奨学金、キャリア、オンライン相談に関する情報をご案内します。",
+      shortName: "未来大学",
+    },
+    productionHost: "demo.univ.keien.dev",
+    devHostLabel: "univ",
+    knowledgeBaseDir: "大学-未来大学",
+    faqOrganizationName: "未来大学",
+    features: {
+      disasterRadio: false,
+      audienceNavigation: false,
+      onlineConsultation: true,
+      universityPortal: true,
+      onlineConsultationAdmin: true,
     },
   },
 };

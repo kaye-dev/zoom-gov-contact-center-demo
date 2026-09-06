@@ -22,6 +22,19 @@ typeset -g MIGRATION_DEPLOYED=0
 typeset -g ENSURE_OUTCOME_PENDING=0
 typeset -g ENSURE_OUTCOME_EMITTED=0
 
+startup_color_enabled() {
+  [[ -t 1 && -z "${CI:-}" && -z "${NO_COLOR:-}" ]]
+}
+
+print_startup_value() {
+  local key="$1" value="$2" color="$3"
+  if startup_color_enabled; then
+    print -r -- $'\e[90m'"${key}"$'\e[0m='$'\e['"${color}"'m'"${value}"$'\e[0m'
+  else
+    print -r -- "${key}=${value}"
+  fi
+}
+
 print_ensure_failure_outcome() {
   (( ENSURE_OUTCOME_PENDING )) || return 0
   (( ! ENSURE_OUTCOME_EMITTED )) || return 0
@@ -1232,10 +1245,11 @@ main() {
       ENSURE_OUTCOME_PENDING=1
       runtime_ensure_command "$@"
       ENSURE_OUTCOME_EMITTED=1
-      print -r -- "STARTUP_RESULT=SUCCESS"
-      print -r -- "STARTUP_URL=http://localhost:${HOST_PORT}"
-      print -r -- "STUDIO_START_COMMAND=./dev-compose.sh up -d studio"
-      print -r -- "STUDIO_URL=http://localhost:${STUDIO_PORT}"
+      print_startup_value "STARTUP_RESULT" "SUCCESS" "32"
+      print_startup_value "STARTUP_URL" "http://lg.localhost:${HOST_PORT}" "36"
+      print_startup_value "TENANT_URL_UNIV" "http://univ.localhost:${HOST_PORT}" "36"
+      print_startup_value "STUDIO_START_COMMAND" "./dev-compose.sh up -d studio" "33"
+      print_startup_value "STUDIO_URL" "http://localhost:${STUDIO_PORT}" "36"
       print -r -- "詳細ログ: ./dev-compose.sh logs"
       ;;
     logs)

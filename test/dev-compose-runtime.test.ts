@@ -388,7 +388,8 @@ test("RT-04: Local ensure reuses an exact healthy native runtime without lifecyc
   assert.equal(runtime.RUNTIME_RESTART_REQUIRED, "0");
   assert.equal(runtime.PRODUCTION_URL, "http://localhost:3000");
   assert.match(result.stdout, /STARTUP_RESULT=SUCCESS/u);
-  assert.match(result.stdout, /STARTUP_URL=http:\/\/localhost:3000/u);
+  assert.match(result.stdout, /STARTUP_URL=http:\/\/lg\.localhost:3000/u);
+  assert.match(result.stdout, /TENANT_URL_UNIV=http:\/\/univ\.localhost:3000/u);
   assert.match(result.stdout, /STUDIO_START_COMMAND=\.\/dev-compose\.sh up -d studio/u);
   assert.match(result.stdout, /STUDIO_URL=http:\/\/localhost:5555/u);
   assert.equal(lastNonEmptyLine(result.stdout), "詳細ログ: ./dev-compose.sh logs");

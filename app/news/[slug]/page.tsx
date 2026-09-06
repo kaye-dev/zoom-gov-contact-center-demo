@@ -8,6 +8,7 @@ import {
 } from '../../content/site-content';
 import { getRequestTenant } from '../../../lib/server/tenant';
 import { getRequestDictionary } from '../../i18n/server-dictionary';
+import { UniversityPortal } from '@/app/tenants/univ/UniversityPortal';
 
 type NewsPageProps = {
   params: Promise<{ slug: string }>;
@@ -22,6 +23,7 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: NewsPageProps): Promise<Metadata> {
   const { slug } = await params;
   const tenant = await getRequestTenant();
+  if (tenant.features.universityPortal) return {};
   const article = getNewsArticle(tenant.key, slug);
   if (!article) return {};
 
@@ -37,6 +39,7 @@ export async function generateMetadata({ params }: NewsPageProps): Promise<Metad
 export default async function NewsArticlePage({ params }: NewsPageProps) {
   const { slug } = await params;
   const tenant = await getRequestTenant();
+  if (tenant.features.universityPortal) return <UniversityPortal page="news" />;
   const article = getNewsArticle(tenant.key, slug);
   if (!article) notFound();
 

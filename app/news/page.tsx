@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 
 import { NewsIndexView } from '../components/InformationPageViews';
 import { getRequestDictionary } from '../i18n/server-dictionary';
+import { getRequestTenant } from '@/lib/server/tenant';
+import { UniversityPortal } from '@/app/tenants/univ/UniversityPortal';
 
 export async function generateMetadata(): Promise<Metadata> {
   const dictionary = await getRequestDictionary();
@@ -12,6 +14,7 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default function NewsIndexPage() {
+export default async function NewsIndexPage() {
+  if ((await getRequestTenant()).features.universityPortal) return <UniversityPortal page="news" />;
   return <NewsIndexView />;
 }

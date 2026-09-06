@@ -242,6 +242,20 @@ model SiteChatSetting {
   @@map("site_chat_settings")
 }
 
+/// Tenant-scoped, opt-in configuration for the three university consultation
+/// entrances. Tags remain inert until an administrator explicitly enables one.
+model SiteOnlineConsultationSetting {
+  siteKey       String
+  serviceKey    String
+  enabled       Boolean  @default(false)
+  webClientTag  String?
+  queueId       String?
+  updatedAt     DateTime @default(now()) @updatedAt
+
+  @@id([siteKey, serviceKey])
+  @@map("site_online_consultation_settings")
+}
+
 model LocaleDisplaySetting {
   siteKey      String
   locale       SiteLocale

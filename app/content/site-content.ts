@@ -42,6 +42,7 @@ const TENANT_SITE_CONTENT: Record<TenantKey, TenantSiteContent> = {
     lifeCategories: lgLifeCategories,
     newsArticles: lgNewsArticles,
   },
+  univ: { lifeCategories: [], newsArticles: [] },
 };
 
 export function getLifeCategories(tenantKey: TenantKey): readonly LifeCategory[] {

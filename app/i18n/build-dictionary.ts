@@ -1,6 +1,7 @@
 import { DEFAULT_TENANT_KEY, type TenantKey } from '@/lib/tenants';
 
 import { lgContent } from '../tenants/lg/content';
+import { univContent } from '../tenants/univ/content';
 import { chromeDictionaries, type Dictionary, type Locale } from './dictionaries';
 import type { TenantContentDictionary } from './tenant-content';
 
@@ -12,6 +13,19 @@ import type { TenantContentDictionary } from './tenant-content';
  */
 const TENANT_CONTENT: Record<TenantKey, Record<Locale, TenantContentDictionary>> = {
   lg: lgContent,
+  // The legacy dictionary only supplies shared provider chrome. University
+  // pages read their dedicated content model directly and never render these
+  // municipal labels.
+  univ: Object.fromEntries(
+    (Object.keys(lgContent) as Locale[]).map((locale) => [
+      locale,
+      {
+        ...lgContent[locale],
+        siteName: univContent[locale].siteName,
+        siteNameRoman: univContent[locale].siteNameRoman,
+      },
+    ]),
+  ) as Record<Locale, TenantContentDictionary>,
 };
 
 const cache = new Map<string, Dictionary>();
