@@ -3,13 +3,22 @@ import { readFileSync, readdirSync } from "node:fs";
 import { basename, join } from "node:path";
 
 import type { SiteLocale } from "./site-settings";
+import { DEFAULT_TENANT_KEY, getTenant, type TenantKey } from "./tenants";
 
-export const FAQ_KNOWLEDGE_BASE_ROOT = join(
-  process.cwd(),
-  "docs",
-  "knowledge-base",
-  "自治体-基礎自治体-未来市",
-);
+/** ナレッジベースのルート。業種テナントごとに別ディレクトリを持つ。 */
+export function getFaqKnowledgeBaseRoot(
+  tenantKey: TenantKey = DEFAULT_TENANT_KEY,
+): string {
+  return join(
+    process.cwd(),
+    "docs",
+    "knowledge-base",
+    getTenant(tenantKey).knowledgeBaseDir,
+  );
+}
+
+/** 既定テナントのナレッジルート。 */
+export const FAQ_KNOWLEDGE_BASE_ROOT = getFaqKnowledgeBaseRoot();
 
 export const FAQ_TRANSLATED_LOCALES = [
   "en",
@@ -367,7 +376,9 @@ export function parseFaqMarkdown(
   source: string,
   sourceFile: string,
   departmentName: string,
+  tenantKey: TenantKey = DEFAULT_TENANT_KEY,
 ): ParsedJapaneseFaq {
+  const tenantOrganizationName = getTenant(tenantKey).faqOrganizationName;
   const fileName = basename(sourceFile);
   const fileMatch = FAQ_FILE_PATTERN.exec(fileName);
   if (!fileMatch) {
@@ -392,15 +403,19 @@ export function parseFaqMarkdown(
     fail("INVALID_MARKDOWN", "作成日はYYYY-MM-DD形式で指定してください", sourceFile);
   }
   const municipality = readMetadataValue(lines, 4, "自治体設定", sourceFile);
-  if (municipality !== "未来市") {
-    fail("INVALID_MARKDOWN", "自治体設定は未来市である必要があります", sourceFile);
+  if (municipality !== tenantOrganizationName) {
+    fail(
+      "INVALID_MARKDOWN",
+      `自治体設定は${tenantOrganizationName}である必要があります`,
+      sourceFile,
+    );
   }
   readMetadataValue(lines, 5, "所在地", sourceFile);
   readMetadataValue(lines, 6, "代表電話", sourceFile);
   readMetadataValue(lines, 7, "開庁時間", sourceFile);
 
   const jurisdiction = readMetadataValue(lines, 9, "所管", sourceFile);
-  if (jurisdiction !== `未来市の${departmentName}`) {
+  if (jurisdiction !== `${tenantOrganizationName}の${departmentName}`) {
     fail("INVALID_MARKDOWN", "所管と部署フォルダ名が一致しません", sourceFile);
   }
   const organizationName = readMetadataValue(lines, 10, "組織区分", sourceFile);
@@ -561,7 +576,10 @@ function localizedLabels(
   return { ja: japanese, ...translated };
 }
 
-export function loadFaqRepository(root = FAQ_KNOWLEDGE_BASE_ROOT): FaqRepository {
+export function loadFaqRepository(
+  root: string = FAQ_KNOWLEDGE_BASE_ROOT,
+  tenantKey: TenantKey = DEFAULT_TENANT_KEY,
+): FaqRepository {
   const catalogPath = join(root, "_translations", "catalog.json");
   const catalog = parseFaqCatalog(catalogPath);
   if (catalog.departments.length !== 34) {
@@ -659,6 +677,7 @@ export function loadFaqRepository(root = FAQ_KNOWLEDGE_BASE_ROOT): FaqRepository
         readFileSync(markdownPath, "utf8"),
         markdownPath,
         catalogDepartment.sourceName,
+        tenantKey,
       );
       if (
         japanese.categoryName !== catalogCategory.sourceName ||
@@ -727,11 +746,20 @@ export function loadFaqRepository(root = FAQ_KNOWLEDGE_BASE_ROOT): FaqRepository
   };
 }
 
-let defaultRepository: FaqRepository | undefined;
+const repositoryCache = new Map<TenantKey, FaqRepository>();
 
-export function getFaqRepository(): FaqRepository {
-  defaultRepository ??= loadFaqRepository();
-  return defaultRepository;
+export function getFaqRepository(
+  tenantKey: TenantKey = DEFAULT_TENANT_KEY,
+): FaqRepository {
+  const cached = repositoryCache.get(tenantKey);
+  if (cached !== undefined) return cached;
+
+  const repository = loadFaqRepository(
+    getFaqKnowledgeBaseRoot(tenantKey),
+    tenantKey,
+  );
+  repositoryCache.set(tenantKey, repository);
+  return repository;
 }
 
 function departmentSummary(department: LocalizedFaqDepartment): FaqDepartmentSummary {
@@ -742,18 +770,28 @@ function departmentSummary(department: LocalizedFaqDepartment): FaqDepartmentSum
   };
 }
 
-export function getFaqIndexData(): FaqIndexData {
+export function getFaqIndexData(
+  tenantKey: TenantKey = DEFAULT_TENANT_KEY,
+): FaqIndexData {
   return {
-    departments: getFaqRepository().departments.map(departmentSummary),
+    departments: getFaqRepository(tenantKey).departments.map(departmentSummary),
   };
 }
 
-export function getFaqDepartment(slug: string): LocalizedFaqDepartment | undefined {
-  return getFaqRepository().departments.find((department) => department.slug === slug);
+export function getFaqDepartment(
+  slug: string,
+  tenantKey: TenantKey = DEFAULT_TENANT_KEY,
+): LocalizedFaqDepartment | undefined {
+  return getFaqRepository(tenantKey).departments.find(
+    (department) => department.slug === slug,
+  );
 }
 
-export function getFaqDepartmentPageData(slug: string): FaqDepartmentPageData | undefined {
-  const department = getFaqDepartment(slug);
+export function getFaqDepartmentPageData(
+  slug: string,
+  tenantKey: TenantKey = DEFAULT_TENANT_KEY,
+): FaqDepartmentPageData | undefined {
+  const department = getFaqDepartment(slug, tenantKey);
   if (!department) return undefined;
 
   return {
@@ -768,13 +806,14 @@ export function getFaqDepartmentPageData(slug: string): FaqDepartmentPageData | 
 export function getFaqCategory(
   departmentSlug: string,
   categorySlug: string,
+  tenantKey: TenantKey = DEFAULT_TENANT_KEY,
 ):
   | {
       department: LocalizedFaqDepartment;
       category: LocalizedFaqCategory;
     }
   | undefined {
-  const department = getFaqDepartment(departmentSlug);
+  const department = getFaqDepartment(departmentSlug, tenantKey);
   const category = department?.categories.find((item) => item.slug === categorySlug);
   return department && category ? { department, category } : undefined;
 }
@@ -782,8 +821,9 @@ export function getFaqCategory(
 export function getFaqDetailPageData(
   departmentSlug: string,
   categorySlug: string,
+  tenantKey: TenantKey = DEFAULT_TENANT_KEY,
 ): FaqDetailPageData | undefined {
-  const result = getFaqCategory(departmentSlug, categorySlug);
+  const result = getFaqCategory(departmentSlug, categorySlug, tenantKey);
   if (!result) return undefined;
 
   return {
@@ -796,12 +836,18 @@ export function getFaqDetailPageData(
   };
 }
 
-export function getFaqDepartmentStaticParams(): Array<{ department: string }> {
-  return getFaqRepository().departments.map((department) => ({ department: department.slug }));
+export function getFaqDepartmentStaticParams(
+  tenantKey: TenantKey = DEFAULT_TENANT_KEY,
+): Array<{ department: string }> {
+  return getFaqRepository(tenantKey).departments.map((department) => ({
+    department: department.slug,
+  }));
 }
 
-export function getFaqCategoryStaticParams(): Array<{ department: string; faq: string }> {
-  return getFaqRepository().departments.flatMap((department) =>
+export function getFaqCategoryStaticParams(
+  tenantKey: TenantKey = DEFAULT_TENANT_KEY,
+): Array<{ department: string; faq: string }> {
+  return getFaqRepository(tenantKey).departments.flatMap((department) =>
     department.categories.map((category) => ({
       department: department.slug,
       faq: category.slug,

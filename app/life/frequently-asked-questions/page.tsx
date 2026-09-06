@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { FaqIndexView } from "../../components/FaqPageViews";
 import { getRequestDictionary } from "../../i18n/server-dictionary";
 import { getFaqIndexData } from "../../../lib/faq-content";
+import { getRequestTenant } from "../../../lib/server/tenant";
 
 export async function generateMetadata(): Promise<Metadata> {
   const dictionary = await getRequestDictionary();
@@ -14,6 +15,8 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default function FrequentlyAskedQuestionsPage() {
-  return <FaqIndexView data={getFaqIndexData()} />;
+export default async function FrequentlyAskedQuestionsPage() {
+  const tenant = await getRequestTenant();
+
+  return <FaqIndexView data={getFaqIndexData(tenant.key)} />;
 }

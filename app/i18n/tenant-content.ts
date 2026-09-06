@@ -6,57 +6,12 @@
  * ここには業種によって内容が変わる表示文言だけを置く。
  */
 
-export type NewsArticleDictionary = {
-  assembly: string;
-  construction: string;
-  floodBoard: string;
-  aircon: string;
-  floodDamage: string;
-  myNumberExpress: string;
-  minpaku: string;
-  measles: string;
-  furigana: string;
-  setayell: string;
-  childcare: string;
-  solar: string;
-};
-
-export type LifeTopicDictionary = {
-  garbageSorting: string;
-  bulkyWaste: string;
-  pregnancyChildbirth: string;
-  nurseryKindergarten: string;
-  emergencyCare: string;
-  disasterPreparedness: string;
-  movingNotification: string;
-  familyRegister: string;
-  facilitySearch: string;
-  accessibleFacilities: string;
-  eventCalendar: string;
-  tourismGuide: string;
-  submitOpinion: string;
-  contactCenter: string;
-  healthCheckups: string;
-  seniorCare: string;
-  schoolEnrollment: string;
-  educationConsultation: string;
-  myNumberApplication: string;
-  convenienceCertificates: string;
-  dailyLifeConsultation: string;
-  legalConsultation: string;
-  residentTax: string;
-  nationalHealthInsurance: string;
-  librarySearchReserve: string;
-  libraryCard: string;
-  openDataCatalog: string;
-  cityStatistics: string;
-  departmentDirectory: string;
-  departmentResponsibilities: string;
-  counterSearch: string;
-  holidayCounter: string;
-  movingGuide: string;
-  housingSupport: string;
-};
+/**
+ * id をキーにした表示文言。id の集合は業種テナントごとに異なるため、
+ * 型は開いておき、site-content の id との対応は
+ * test/tenant-content.test.ts が全ロケール分を検証する。
+ */
+export type LocalizedLabels = Record<string, string>;
 
 export type DisasterRadioDictionary = {
   title: string;
@@ -114,11 +69,11 @@ export type TenantContentDictionary = {
   findInfo: {
     lifeInfo: {
       sectionLabel: string;
-      items: Record<string, string>;
+      items: LocalizedLabels;
     };
   };
   news: {
-    articles: NewsArticleDictionary;
+    articles: LocalizedLabels;
   };
   contentPages: {
     lifeIndexTitle: string;
@@ -127,9 +82,9 @@ export type TenantContentDictionary = {
     allCategories: string;
     contactNote: string;
     disasterRadio: DisasterRadioDictionary;
-    lifeTopics: LifeTopicDictionary;
-    lifeTopicSummaries: LifeTopicDictionary;
-    newsSummaries: NewsArticleDictionary;
+    lifeTopics: LocalizedLabels;
+    lifeTopicSummaries: LocalizedLabels;
+    newsSummaries: LocalizedLabels;
   };
   footer: {
     buildingGuide: string;

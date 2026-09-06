@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { newsArticles } from '../content/site-content';
+import { getNewsArticles } from '../content/site-content';
 import { useI18n } from '../i18n/LanguageProvider';
 
 /** 1 行あたりの件数。初期表示・「もっと見る」での追加件数に使う */
@@ -12,7 +12,8 @@ const STEP = 4;
 const DEFAULT_IMAGE = '/news/news-default-item.png';
 
 export function News() {
-  const { t, locale } = useI18n();
+  const { t, locale, tenantKey } = useI18n();
+  const newsArticles = getNewsArticles(tenantKey);
   const [visibleCount, setVisibleCount] = useState(STEP);
 
   const dateFormatter = new Intl.DateTimeFormat(locale, {

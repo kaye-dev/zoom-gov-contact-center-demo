@@ -3,9 +3,12 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { NextRequest } from "next/server";
 
-import { lifeCategories, newsArticles } from "../app/content/site-content";
+import {
+  getLifeCategories,
+  getNewsArticles,
+} from "../app/content/site-content";
 import { proxy } from "../proxy";
-import { TENANTS } from "../lib/tenants";
+import { DEFAULT_TENANT_KEY, TENANTS } from "../lib/tenants";
 import {
   getFaqCategoryStaticParams,
   getFaqDepartmentStaticParams,
@@ -21,6 +24,9 @@ import {
   listPublicSitemapPaths,
   resolveCanonicalOrigin,
 } from "../lib/search-indexing";
+
+const lifeCategories = getLifeCategories(DEFAULT_TENANT_KEY);
+const newsArticles = getNewsArticles(DEFAULT_TENANT_KEY);
 
 test("root metadata and every response opt out of indexing", () => {
   assert.deepEqual(NOINDEX_ROBOTS_METADATA, {

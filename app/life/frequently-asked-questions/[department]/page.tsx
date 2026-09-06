@@ -8,6 +8,7 @@ import {
   getFaqDepartmentPageData,
   getFaqDepartmentStaticParams,
 } from "../../../../lib/faq-content";
+import { getRequestTenant } from "../../../../lib/server/tenant";
 
 type FaqDepartmentPageProps = {
   params: Promise<{ department: string }>;
@@ -21,7 +22,8 @@ export function generateStaticParams() {
 
 export async function generateMetadata({ params }: FaqDepartmentPageProps): Promise<Metadata> {
   const { department: departmentSlug } = await params;
-  const department = getFaqDepartmentPageData(departmentSlug);
+  const tenant = await getRequestTenant();
+  const department = getFaqDepartmentPageData(departmentSlug, tenant.key);
   if (!department) return {};
 
   const dictionary = await getRequestDictionary();
@@ -34,7 +36,8 @@ export async function generateMetadata({ params }: FaqDepartmentPageProps): Prom
 
 export default async function FaqDepartmentPage({ params }: FaqDepartmentPageProps) {
   const { department: departmentSlug } = await params;
-  const data = getFaqDepartmentPageData(departmentSlug);
+  const tenant = await getRequestTenant();
+  const data = getFaqDepartmentPageData(departmentSlug, tenant.key);
   if (!data) notFound();
 
   return <FaqDepartmentView data={data} />;

@@ -4,7 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import type { CSSProperties, ReactNode } from 'react';
 import type { PhoneSettings } from '@/lib/phone-settings';
-import { lifeCategories } from '../content/site-content';
+import { getLifeCategories } from '../content/site-content';
 import { useI18n } from '../i18n/LanguageProvider';
 import { LabeledBox } from './LabeledBox';
 import { useIsDarkTheme } from './theme-store';
@@ -69,7 +69,8 @@ export function FindInfo({
 }: {
   aiPhoneNumbers: PhoneSettings['aiPhoneNumbers'];
 }) {
-  const { locale, t } = useI18n();
+  const { locale, t, tenantKey } = useI18n();
+  const lifeCategories = getLifeCategories(tenantKey);
 
   const cards = [
     {

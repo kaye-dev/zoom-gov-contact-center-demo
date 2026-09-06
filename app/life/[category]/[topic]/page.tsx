@@ -2,7 +2,11 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
 import { LifeTopicView } from '../../../components/InformationPageViews';
-import { getLifeTopic, lifeCategories } from '../../../content/site-content';
+import {
+  getLifeTopic,
+  listAllTenantLifeTopicSlugs,
+} from '../../../content/site-content';
+import { getRequestTenant } from '../../../../lib/server/tenant';
 import { getRequestDictionary } from "../../../i18n/server-dictionary";
 
 type TopicPageProps = {
@@ -12,14 +16,13 @@ type TopicPageProps = {
 export const dynamicParams = false;
 
 export function generateStaticParams() {
-  return lifeCategories.flatMap((category) =>
-    category.topics.map((topic) => ({ category: category.slug, topic: topic.slug })),
-  );
+  return listAllTenantLifeTopicSlugs();
 }
 
 export async function generateMetadata({ params }: TopicPageProps): Promise<Metadata> {
   const { category: categorySlug, topic: topicSlug } = await params;
-  const result = getLifeTopic(categorySlug, topicSlug);
+  const tenant = await getRequestTenant();
+  const result = getLifeTopic(tenant.key, categorySlug, topicSlug);
   if (!result) return {};
 
   const dictionary = await getRequestDictionary();
@@ -33,7 +36,8 @@ export async function generateMetadata({ params }: TopicPageProps): Promise<Meta
 
 export default async function LifeTopicPage({ params }: TopicPageProps) {
   const { category: categorySlug, topic: topicSlug } = await params;
-  const result = getLifeTopic(categorySlug, topicSlug);
+  const tenant = await getRequestTenant();
+  const result = getLifeTopic(tenant.key, categorySlug, topicSlug);
   if (!result) notFound();
 
   return <LifeTopicView category={result.category} topic={result.topic} />;

@@ -2,7 +2,11 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
 import { NewsArticleView } from '../../components/InformationPageViews';
-import { getNewsArticle, newsArticles } from '../../content/site-content';
+import {
+  getNewsArticle,
+  listAllTenantNewsSlugs,
+} from '../../content/site-content';
+import { getRequestTenant } from '../../../lib/server/tenant';
 import { getRequestDictionary } from '../../i18n/server-dictionary';
 
 type NewsPageProps = {
@@ -12,12 +16,13 @@ type NewsPageProps = {
 export const dynamicParams = false;
 
 export function generateStaticParams() {
-  return newsArticles.map((article) => ({ slug: article.slug }));
+  return listAllTenantNewsSlugs().map((slug) => ({ slug }));
 }
 
 export async function generateMetadata({ params }: NewsPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const article = getNewsArticle(slug);
+  const tenant = await getRequestTenant();
+  const article = getNewsArticle(tenant.key, slug);
   if (!article) return {};
 
   const dictionary = await getRequestDictionary();
@@ -31,7 +36,8 @@ export async function generateMetadata({ params }: NewsPageProps): Promise<Metad
 
 export default async function NewsArticlePage({ params }: NewsPageProps) {
   const { slug } = await params;
-  const article = getNewsArticle(slug);
+  const tenant = await getRequestTenant();
+  const article = getNewsArticle(tenant.key, slug);
   if (!article) notFound();
 
   return <NewsArticleView article={article} />;

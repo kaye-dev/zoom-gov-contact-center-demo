@@ -31,6 +31,8 @@ import {
 
 type LanguageContextValue = {
   locale: Locale;
+  /** Hostが決めた業種テナント。client componentのコンテンツ選択に使う。 */
+  tenantKey: TenantKey;
   availableLocales: readonly Locale[];
   isLocaleReady: boolean;
   setLocale: (locale: Locale) => void;
@@ -116,6 +118,7 @@ export function LanguageProvider({
     <LanguageContext.Provider
       value={{
         locale,
+        tenantKey,
         availableLocales,
         isLocaleReady,
         setLocale,

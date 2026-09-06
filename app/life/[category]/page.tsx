@@ -2,7 +2,11 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
 import { LifeCategoryView } from '../../components/InformationPageViews';
-import { getLifeCategory, lifeCategories } from '../../content/site-content';
+import {
+  getLifeCategory,
+  listAllTenantLifeCategorySlugs,
+} from '../../content/site-content';
+import { getRequestTenant } from '../../../lib/server/tenant';
 import { getRequestDictionary } from "../../i18n/server-dictionary";
 
 type CategoryPageProps = {
@@ -12,14 +16,13 @@ type CategoryPageProps = {
 export const dynamicParams = false;
 
 export function generateStaticParams() {
-  return lifeCategories
-    .filter((category) => category.id !== 'faq')
-    .map((category) => ({ category: category.slug }));
+  return listAllTenantLifeCategorySlugs().map((category) => ({ category }));
 }
 
 export async function generateMetadata({ params }: CategoryPageProps): Promise<Metadata> {
   const { category: categorySlug } = await params;
-  const category = getLifeCategory(categorySlug);
+  const tenant = await getRequestTenant();
+  const category = getLifeCategory(tenant.key, categorySlug);
   if (!category) return {};
 
   const dictionary = await getRequestDictionary();
@@ -33,7 +36,8 @@ export async function generateMetadata({ params }: CategoryPageProps): Promise<M
 
 export default async function LifeCategoryPage({ params }: CategoryPageProps) {
   const { category: categorySlug } = await params;
-  const category = getLifeCategory(categorySlug);
+  const tenant = await getRequestTenant();
+  const category = getLifeCategory(tenant.key, categorySlug);
   if (!category) notFound();
 
   return <LifeCategoryView category={category} />;

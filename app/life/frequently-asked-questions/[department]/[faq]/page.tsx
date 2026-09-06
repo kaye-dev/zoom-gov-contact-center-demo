@@ -8,6 +8,7 @@ import {
   getFaqCategoryStaticParams,
   getFaqDetailPageData,
 } from "../../../../../lib/faq-content";
+import { getRequestTenant } from "../../../../../lib/server/tenant";
 
 type FaqDetailPageProps = {
   params: Promise<{ department: string; faq: string }>;
@@ -21,7 +22,8 @@ export function generateStaticParams() {
 
 export async function generateMetadata({ params }: FaqDetailPageProps): Promise<Metadata> {
   const { department: departmentSlug, faq: faqSlug } = await params;
-  const data = getFaqDetailPageData(departmentSlug, faqSlug);
+  const tenant = await getRequestTenant();
+  const data = getFaqDetailPageData(departmentSlug, faqSlug, tenant.key);
   if (!data) return {};
 
   const dictionary = await getRequestDictionary();
@@ -34,7 +36,8 @@ export async function generateMetadata({ params }: FaqDetailPageProps): Promise<
 
 export default async function FaqDetailPage({ params }: FaqDetailPageProps) {
   const { department: departmentSlug, faq: faqSlug } = await params;
-  const data = getFaqDetailPageData(departmentSlug, faqSlug);
+  const tenant = await getRequestTenant();
+  const data = getFaqDetailPageData(departmentSlug, faqSlug, tenant.key);
   if (!data) notFound();
 
   return <FaqDetailView data={data} />;

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { lifeCategories, newsArticles } from "../app/content/site-content";
+import {
+  getLifeCategories,
+  getNewsArticles,
+} from "../app/content/site-content";
 import {
   buildDictionary,
   defaultTenantDictionaries,
@@ -43,7 +46,7 @@ test("site-content ids resolve to a label in every locale of every tenant", () =
     for (const locale of locales) {
       const t = buildDictionary(tenantKey, locale);
 
-      for (const category of lifeCategories) {
+      for (const category of getLifeCategories(tenantKey)) {
         assert.ok(
           t.findInfo.lifeInfo.items[category.id]?.trim(),
           `${tenantKey}/${locale}: missing label for category ${category.id}`,
@@ -60,7 +63,7 @@ test("site-content ids resolve to a label in every locale of every tenant", () =
         }
       }
 
-      for (const article of newsArticles) {
+      for (const article of getNewsArticles(tenantKey)) {
         assert.ok(
           t.news.articles[article.id]?.trim(),
           `${tenantKey}/${locale}: missing headline for news ${article.id}`,

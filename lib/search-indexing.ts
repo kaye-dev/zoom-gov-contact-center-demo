@@ -1,5 +1,11 @@
 import { normalizeRequestHostname } from "./hostname";
-import { findTenantByProductionHostname } from "./tenants";
+import {
+  DEFAULT_TENANT_KEY,
+  findTenantByProductionHostname,
+  getTenant,
+  resolveTenantFromHost,
+  type TenantKey,
+} from "./tenants";
 
 export const NOINDEX_ROBOTS_METADATA = {
   index: false,
@@ -133,13 +139,18 @@ export function buildRobotsForHost(
   };
 }
 
+/** 全テナント共通の固定公開パス。 */
 const FIXED_PUBLIC_PATHS = [
   "/",
   "/life",
-  "/life/emergency-safety-disaster/disaster-prevention-radio",
   "/life/frequently-asked-questions",
   "/news",
 ] as const;
+
+/** feature flagが立っているテナントだけが公開する固定パス。 */
+const FEATURE_PUBLIC_PATHS = {
+  disasterRadio: "/life/emergency-safety-disaster/disaster-prevention-radio",
+} as const;
 
 /** Encodes content slugs as literal URL path segments without URL reinterpretation. */
 export function buildSitemapPath(...segments: string[]): string {
@@ -165,30 +176,37 @@ export function buildSitemapPath(...segments: string[]): string {
     .join("/")}`;
 }
 
-/** Lists every canonical public HTML path from the same data used by pages. */
-export async function listPublicSitemapPaths(): Promise<string[]> {
+/** Lists every canonical public HTML path of one tenant, from the page data. */
+export async function listPublicSitemapPaths(
+  tenantKey: TenantKey = DEFAULT_TENANT_KEY,
+): Promise<string[]> {
   const [siteContent, faqContent, docs] = await Promise.all([
     import("../app/content/site-content"),
     import("./faq-content"),
     import("../app/docs/_lib/docs"),
   ]);
 
-  const lifeCategoryPaths = siteContent.lifeCategories
+  const lifeCategories = siteContent.getLifeCategories(tenantKey);
+  const featurePaths = getTenant(tenantKey).features.disasterRadio
+    ? [FEATURE_PUBLIC_PATHS.disasterRadio]
+    : [];
+
+  const lifeCategoryPaths = lifeCategories
     .filter((category) => category.id !== "faq")
     .map((category) => buildSitemapPath("life", category.slug));
-  const lifeTopicPaths = siteContent.lifeCategories.flatMap((category) =>
+  const lifeTopicPaths = lifeCategories.flatMap((category) =>
     category.topics.map(
       (topic) => buildSitemapPath("life", category.slug, topic.slug),
     ),
   );
-  const newsPaths = siteContent.newsArticles.map(
-    (article) => buildSitemapPath("news", article.slug),
-  );
-  const faqDepartmentPaths = faqContent.getFaqDepartmentStaticParams().map(
+  const newsPaths = siteContent
+    .getNewsArticles(tenantKey)
+    .map((article) => buildSitemapPath("news", article.slug));
+  const faqDepartmentPaths = faqContent.getFaqDepartmentStaticParams(tenantKey).map(
     ({ department }) =>
       buildSitemapPath("life", "frequently-asked-questions", department),
   );
-  const faqDetailPaths = faqContent.getFaqCategoryStaticParams().map(
+  const faqDetailPaths = faqContent.getFaqCategoryStaticParams(tenantKey).map(
     ({ department, faq }) =>
       buildSitemapPath(
         "life",
@@ -204,6 +222,7 @@ export async function listPublicSitemapPaths(): Promise<string[]> {
   return [
     ...new Set([
       ...FIXED_PUBLIC_PATHS,
+      ...featurePaths,
       ...lifeCategoryPaths,
       ...lifeTopicPaths,
       ...newsPaths,
@@ -219,7 +238,9 @@ export async function buildPublicSitemap(
   host?: string | null,
 ): Promise<Array<{ url: string }>> {
   const canonicalOrigin = resolveRequestCanonicalOrigin(host, env);
-  const paths = await listPublicSitemapPaths();
+  const paths = await listPublicSitemapPaths(
+    resolveTenantFromHost(host, env).key,
+  );
   const entries = paths.map((path) => ({
     url: new URL(path, canonicalOrigin).href,
   }));
