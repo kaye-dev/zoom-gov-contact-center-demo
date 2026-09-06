@@ -6,6 +6,7 @@ import {
   parseReservationApiRequestLogListQuery,
 } from "@/lib/server/reservation-api-request-logs";
 import { withPrisma } from "@/lib/server/prisma";
+import { getRequestTenant } from "@/lib/server/tenant";
 
 import { ReservationApiRequestLogsView } from "./ReservationApiRequestLogsView";
 
@@ -16,6 +17,7 @@ export default async function ReservationApiRequestLogsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const tenant = await getRequestTenant();
   await requireAdminAccess(
     "reservations",
     "VIEW",
@@ -25,7 +27,7 @@ export default async function ReservationApiRequestLogsPage({
   if (!parsed.ok) redirect(RESERVATION_API_LOGS_ROUTE);
 
   const result = await withPrisma((prisma) =>
-    listReservationApiRequestLogs(prisma, parsed.value),
+    listReservationApiRequestLogs(prisma, tenant.key, parsed.value),
   );
 
   return (

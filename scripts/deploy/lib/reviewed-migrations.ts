@@ -123,6 +123,13 @@ const EXACT_POST_REVIEWED_CHAIN = [
     sha256: "ccd52ad88b964a37c6d6d0a9e18f7dbb2dfd542b554e8ca3a3a844f7ba437be9",
     classification: "destructive-reviewed",
   },
+  {
+    // Reservation API key の全経路で tenant を明示指定し、発行時の暗黙既定値を外す。
+    // DROP DEFAULT は分類器が destructive として扱う。
+    name: "20260906180000_drop_reservation_api_key_site_key_default",
+    sha256: "bf82e0b5939fbce240a14b16de3851b46b3106d9119cd1c7521a08a08bad8993",
+    classification: "destructive-reviewed",
+  },
 ] as const satisfies readonly ExactBatchMigration[];
 
 export type ReviewedMigrationBatchPlan = {

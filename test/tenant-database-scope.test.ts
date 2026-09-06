@@ -100,8 +100,7 @@ test("shared models stay free of siteKey", () => {
 });
 
 test("only the local-government tenant enables the resident-facing subsystems", () => {
-  // ZAAD／防災無線と予約APIキーはテナント引数の配線が未完のため、siteKey に既定値を
-  // 置いている。他テナントで有効化する前に配線を終える必要があるので、その前提を固定する。
+  // 他テナントで有効化する前に、対応するサイト固有データの配線を終える必要がある。
   for (const tenant of TENANTS) {
     if (tenant.key === "lg") continue;
     assert.equal(
@@ -120,6 +119,7 @@ test("tenant-scoped models do not silently default to one tenant", () => {
     "ZaadOutboundMessage",
     "ZaadOneTimeDispatch",
     "ZaadAdminAudit",
+    "ReservationApiKey",
   ]) {
     assert.doesNotMatch(
       readModel(model),
@@ -127,20 +127,4 @@ test("tenant-scoped models do not silently default to one tenant", () => {
       `${model} must require an explicit tenant`,
     );
   }
-});
-
-test("the one remaining siteKey default stays documented", () => {
-  // ReservationApiKey だけは発行処理へテナントを渡せておらず既定値に依存している。
-  // 理由のコメントとセットで残し、解消時にこのテストも消す。
-  const body = readModel("ReservationApiKey");
-  assert.match(
-    body,
-    /siteKey[^\n]*@default\("lg"\)/u,
-    "ReservationApiKey still relies on the deferred default",
-  );
-  assert.match(
-    body,
-    /\/\/ NOTE:[\s\S]*既定値/u,
-    "the remaining default must explain why it is still there",
-  );
 });

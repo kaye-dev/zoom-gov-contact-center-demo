@@ -15,6 +15,7 @@ import {
   getReservationApiPeriod,
   toReservationApiKeyUsageDto,
 } from "./reservation-api-usage";
+import type { TenantKey } from "@/lib/tenants";
 
 export type ReservationApiKeyMetadata = {
   id: string;
@@ -70,15 +71,20 @@ export function previewReservationApiKey(publicId: string): string {
   return `zgcc_rsv_${publicId.slice(0, 4)}••••${publicId.slice(-4)}`;
 }
 
-export async function listReservationApiKeys(prisma: PrismaClient, now = new Date()) {
+export async function listReservationApiKeys(
+  prisma: PrismaClient,
+  tenantKey: TenantKey,
+  now = new Date(),
+) {
   const period = getReservationApiPeriod(now);
   const [keys, usages] = await Promise.all([
     prisma.reservationApiKey.findMany({
+      where: { siteKey: tenantKey },
       include: { permissions: true },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     }),
     prisma.reservationApiKeyMonthlyUsage.findMany({
-      where: { periodStart: period.periodDate },
+      where: { periodStart: period.periodDate, apiKey: { siteKey: tenantKey } },
       select: { apiKeyId: true, requestCount: true },
     }),
   ]);
@@ -92,6 +98,7 @@ export async function listReservationApiKeys(prisma: PrismaClient, now = new Dat
 
 export async function issueReservationApiKey(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   input: {
     name: string;
     permissions: ReservationApiPermission[];
@@ -105,6 +112,7 @@ export async function issueReservationApiKey(
     try {
       const apiKey = await prisma.reservationApiKey.create({
         data: {
+          siteKey: tenantKey,
           publicId: generated.publicId,
           name: input.name,
           secretHash: digestReservationApiKey(generated.rawKey),
@@ -131,6 +139,7 @@ export async function issueReservationApiKey(
 
 export async function updateReservationApiKeyUsageLimit(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   input: {
     id: string;
     monthlyLimit: bigint | null;
@@ -144,22 +153,27 @@ export async function updateReservationApiKeyUsageLimit(
 > {
   const now = input.now ?? new Date();
   return prisma.$transaction(async (transaction) => {
-    const exists = await transaction.reservationApiKey.findUnique({
-      where: { id: input.id },
+    const exists = await transaction.reservationApiKey.findFirst({
+      where: { id: input.id, siteKey: tenantKey },
       select: { id: true },
     });
     if (!exists) return { status: "NOT_FOUND" as const };
 
     const updated = await transaction.reservationApiKey.updateMany({
-      where: { id: input.id, revision: input.expectedRevision, revokedAt: null },
+      where: {
+        id: input.id,
+        siteKey: tenantKey,
+        revision: input.expectedRevision,
+        revokedAt: null,
+      },
       data: { monthlyLimit: input.monthlyLimit, revision: { increment: 1 } },
     });
     if (updated.count !== 1) return { status: "CONFLICT" as const };
 
     const period = getReservationApiPeriod(now);
     const [apiKey, usage] = await Promise.all([
-      transaction.reservationApiKey.findUniqueOrThrow({
-        where: { id: input.id },
+      transaction.reservationApiKey.findFirstOrThrow({
+        where: { id: input.id, siteKey: tenantKey },
         include: { permissions: true },
       }),
       transaction.reservationApiKeyMonthlyUsage.findUnique({
@@ -178,15 +192,21 @@ export async function updateReservationApiKeyUsageLimit(
 
 export async function revokeReservationApiKey(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   input: { id: string; expectedRevision: number; actorId: string; now?: Date },
 ): Promise<"REVOKED" | "NOT_FOUND" | "CONFLICT"> {
-  const exists = await prisma.reservationApiKey.findUnique({
-    where: { id: input.id },
+  const exists = await prisma.reservationApiKey.findFirst({
+    where: { id: input.id, siteKey: tenantKey },
     select: { id: true },
   });
   if (!exists) return "NOT_FOUND";
   const updated = await prisma.reservationApiKey.updateMany({
-    where: { id: input.id, revision: input.expectedRevision, revokedAt: null },
+    where: {
+      id: input.id,
+      siteKey: tenantKey,
+      revision: input.expectedRevision,
+      revokedAt: null,
+    },
     data: {
       revokedAt: input.now ?? new Date(),
       revokedByUserId: input.actorId,
@@ -198,6 +218,7 @@ export async function revokeReservationApiKey(
 
 export async function authenticateReservationApiRequest(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   input: {
     authorization: string | null;
     callerPhone?: ReservationCallerPhone | null;
@@ -259,7 +280,7 @@ export async function authenticateReservationApiRequest(
       }>>(Prisma.sql`
         SELECT "id", "name", "publicId", "secretHash", "monthlyLimit", "revokedAt"
         FROM "reservation_api_keys"
-        WHERE "publicId" = ${parsed.publicId}
+        WHERE "publicId" = ${parsed.publicId} AND "siteKey" = ${tenantKey}
         FOR UPDATE
       `);
       if (!locked || locked.revokedAt !== null || !verifyReservationApiKey(rawKey, locked.secretHash)) {
@@ -282,7 +303,7 @@ export async function authenticateReservationApiRequest(
       keyContext.permissions = new Set(
         permissions.map(({ permission }) => permission as ReservationApiPermission),
       );
-      const quota = await consumeReservationApiRequest(transaction, {
+      const quota = await consumeReservationApiRequest(transaction, tenantKey, {
         keyId: locked.id,
         keyMonthlyLimit: locked.monthlyLimit,
         now,

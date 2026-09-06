@@ -1,6 +1,6 @@
 import { Prisma, type PrismaClient } from "@/lib/generated/prisma/client";
 import type { ReservationApiPermission } from "@/lib/reservation-api";
-import { DEFAULT_TENANT_KEY, type TenantKey } from "@/lib/tenants";
+import type { TenantKey } from "@/lib/tenants";
 
 export const RESERVATION_API_REQUEST_LOG_RETENTION_DAYS = 30;
 export const RESERVATION_API_REQUEST_LOG_PAGE_SIZE = 50;
@@ -180,12 +180,9 @@ export function decodeReservationApiRequestLogCursor(
 
 export async function listReservationApiRequestLogs(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   input: ReservationApiRequestLogListInput,
   now = new Date(),
-  // NOTE: 呼び出し元の app/admin/reservations/api-keys/** を本変更では編集できず、
-  // テナントを渡せなかったため既定値を置いている。ReservationApiKey.siteKey の
-  // 既定値とまとめて、2つ目のテナントを追加する前に明示指定へ変更すること。
-  tenantKey: TenantKey = DEFAULT_TENANT_KEY,
 ): Promise<{ logs: ReservationApiRequestLogSummary[]; nextCursor: string | null }> {
   const statusRange = resultStatusRange(input.result);
   const conditions: Prisma.ReservationApiRequestLogWhereInput[] = [
@@ -249,12 +246,9 @@ export async function listReservationApiRequestLogs(
 
 export async function getReservationApiRequestLog(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   id: string,
   now = new Date(),
-  // NOTE: 呼び出し元の app/admin/reservations/api-keys/** を本変更では編集できず、
-  // テナントを渡せなかったため既定値を置いている。ReservationApiKey.siteKey の
-  // 既定値とまとめて、2つ目のテナントを追加する前に明示指定へ変更すること。
-  tenantKey: TenantKey = DEFAULT_TENANT_KEY,
 ): Promise<ReservationApiRequestLogDetail | null> {
   if (!isReservationApiRequestLogId(id)) return null;
   const row = await prisma.reservationApiRequestLog.findFirst({

@@ -4,7 +4,7 @@ import {
   type ReservationApiUsageLimitDto,
 } from "@/lib/reservation-api";
 import { addCalendarMonths, calendarDateToUtc, getTokyoCalendarDate } from "@/lib/reservations";
-import { DEFAULT_TENANT_KEY, type TenantKey } from "@/lib/tenants";
+import type { TenantKey } from "@/lib/tenants";
 
 type PrismaLike = PrismaClient | Prisma.TransactionClient;
 
@@ -26,10 +26,7 @@ export function getReservationApiPeriod(now: Date) {
 
 export async function getReservationApiUsageSnapshot(
   prisma: PrismaLike,
-  // NOTE: 呼び出し元の app/admin/reservations/api-keys/** を本変更では編集できず、
-  // テナントを渡せなかったため既定値を置いている。ReservationApiKey.siteKey の
-  // 既定値とまとめて、2つ目のテナントを追加する前に明示指定へ変更すること。
-  tenantKey: TenantKey = DEFAULT_TENANT_KEY,
+  tenantKey: TenantKey,
   now = new Date(),
 ): Promise<ReservationApiUsageLimitDto> {
   const period = getReservationApiPeriod(now);
@@ -73,11 +70,8 @@ export async function updateReservationApiUsageLimit(
 
 export async function consumeReservationApiRequest(
   transaction: Prisma.TransactionClient,
+  tenantKey: TenantKey,
   input: { keyId: string; keyMonthlyLimit: bigint | null; now: Date },
-  // NOTE: 呼び出し元の lib/server/reservation-api-keys.ts を本変更では編集できず、
-  // テナントを渡せなかったため既定値を置いている。ReservationApiKey.siteKey の既定値と
-  // まとめて、2つ目のテナントを追加する前に明示指定へ変更すること。
-  tenantKey: TenantKey = DEFAULT_TENANT_KEY,
 ): Promise<
   | { status: "ALLOWED"; globalRequestCount: bigint; keyRequestCount: bigint }
   | { status: "GLOBAL_LIMIT_EXCEEDED" | "KEY_LIMIT_EXCEEDED"; retryAfterSeconds: number }
@@ -117,10 +111,11 @@ export async function consumeReservationApiRequest(
   `);
   if (!keyUsage) throw new Error("Reservation API key usage counter is missing.");
 
-  await transaction.reservationApiKey.update({
-    where: { id: input.keyId },
+  const updatedKey = await transaction.reservationApiKey.updateMany({
+    where: { id: input.keyId, siteKey: tenantKey },
     data: { lastUsedAt: input.now },
   });
+  if (updatedKey.count !== 1) throw new Error("Reservation API key is missing for this tenant.");
 
   if (setting.monthlyLimit !== null && usage.requestCount >= setting.monthlyLimit) {
     return {

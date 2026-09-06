@@ -411,6 +411,10 @@ test("reviewed migration manifest exactly classifies the current SHA-verified ch
         name: "20260906150000_drop_zaad_site_key_default",
         classification: "destructive-reviewed",
       },
+      {
+        name: "20260906180000_drop_reservation_api_key_site_key_default",
+        classification: "destructive-reviewed",
+      },
     ],
   );
 });

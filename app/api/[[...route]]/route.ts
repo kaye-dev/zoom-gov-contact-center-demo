@@ -1177,7 +1177,7 @@ app.get("/admin/reservation-api-keys", async (c) => {
     c.get("auth"), c.get("prisma"), c.req.raw.headers, "reservations", "VIEW",
   );
   if (!authorization.ok) return c.json({ error: authorization.error }, authorization.status);
-  return c.json({ apiKeys: await listReservationApiKeys(c.get("prisma")) });
+  return c.json({ apiKeys: await listReservationApiKeys(c.get("prisma"), c.get("tenantKey")) });
 });
 
 app.post("/admin/reservation-api-keys", async (c) => {
@@ -1189,7 +1189,7 @@ app.post("/admin/reservation-api-keys", async (c) => {
   const input = parseReservationApiKeyIssue(await readJsonBody(c.req.raw));
   if (!input) return c.json({ error: RESERVATION_API_ERROR_CODES.invalidRequest }, 400);
   try {
-    return c.json(await issueReservationApiKey(c.get("prisma"), {
+    return c.json(await issueReservationApiKey(c.get("prisma"), c.get("tenantKey"), {
       ...input,
       actorId: authorization.actor.id,
     }), 201);
@@ -1207,7 +1207,7 @@ app.delete("/admin/reservation-api-keys/:id", async (c) => {
   if (!authorization.ok) return c.json({ error: authorization.error }, authorization.status);
   const input = parseReservationApiKeyRevoke(await readJsonBody(c.req.raw));
   if (!input) return c.json({ error: RESERVATION_API_ERROR_CODES.invalidRequest }, 400);
-  const result = await revokeReservationApiKey(c.get("prisma"), {
+  const result = await revokeReservationApiKey(c.get("prisma"), c.get("tenantKey"), {
     id: c.req.param("id"),
     expectedRevision: input.expectedRevision,
     actorId: authorization.actor.id,
@@ -1225,7 +1225,7 @@ app.put("/admin/reservation-api-keys/:id/usage-limit", async (c) => {
   if (!authorization.ok) return c.json({ error: authorization.error }, authorization.status);
   const input = parseReservationApiUsageLimit(await readJsonBody(c.req.raw));
   if (!input) return c.json({ error: RESERVATION_API_ERROR_CODES.invalidRequest }, 400);
-  const result = await updateReservationApiKeyUsageLimit(c.get("prisma"), {
+  const result = await updateReservationApiKeyUsageLimit(c.get("prisma"), c.get("tenantKey"), {
     id: c.req.param("id"),
     monthlyLimit: input.mode === "UNLIMITED" ? null : input.monthlyLimit,
     expectedRevision: input.expectedRevision,
@@ -1558,7 +1558,7 @@ app.put("/public/v1/reservations/:id", async (c) => {
         requestBody: serializeReservationWriteInput(input),
       };
       try {
-        const reservation = await updatePublicReservation(c.get("prisma"), {
+        const reservation = await updatePublicReservation(c.get("prisma"), c.get("tenantKey"), {
           apiKeyId: keyId,
           callerAniDigest: callerAniDigest!,
           id,
@@ -1645,7 +1645,7 @@ app.patch("/public/v1/reservations/:id", async (c) => {
         requestBody: serializeReservationPatchInput(input),
       };
       try {
-        const reservation = await updatePublicReservation(c.get("prisma"), {
+        const reservation = await updatePublicReservation(c.get("prisma"), c.get("tenantKey"), {
           apiKeyId: keyId,
           callerAniDigest: callerAniDigest!,
           id,
@@ -1714,7 +1714,7 @@ app.delete("/public/v1/reservations/:id", async (c) => {
         );
       }
       try {
-        return await deletePublicReservation(c.get("prisma"), {
+        return await deletePublicReservation(c.get("prisma"), c.get("tenantKey"), {
           apiKeyId: keyId,
           callerAniDigest: callerAniDigest!,
           id,
@@ -2122,7 +2122,7 @@ async function guardPublicReservationApi(
 ) {
   const rawCallerPhone = c.req.raw.headers.get(RESERVATION_CALLER_PHONE_HEADER);
   const callerPhone = parseReservationCallerPhone(rawCallerPhone);
-  const result = await authenticateReservationApiRequest(c.get("prisma"), {
+  const result = await authenticateReservationApiRequest(c.get("prisma"), c.get("tenantKey"), {
     authorization: c.req.raw.headers.get("authorization"),
     callerPhone,
   });
