@@ -295,7 +295,7 @@ export function AdminShell({
                   isSidebarExpanded ? "max-h-9" : "max-h-0"
                 } ${sidebarLabelClassName}`}
               >
-                {t.cityName}
+                {t.siteName}
               </span>
             </div>
             <AdminNavigation
@@ -315,7 +315,7 @@ export function AdminShell({
 
           <div className="min-w-0">
             <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-line bg-surface-raised px-4 lg:hidden">
-              <span className="font-bold">{t.cityName}</span>
+              <span className="font-bold">{t.siteName}</span>
               <button
                 ref={drawerTriggerRef}
                 id="admin-menu-button"
@@ -359,7 +359,7 @@ export function AdminShell({
                 data-admin-identity
                 className="flex h-16 shrink-0 items-center justify-between px-4"
               >
-                <span className="font-bold">{t.cityName}</span>
+                <span className="font-bold">{t.siteName}</span>
                 <button
                   ref={drawerCloseButtonRef}
                   type="button"

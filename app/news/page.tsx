@@ -1,12 +1,16 @@
 import type { Metadata } from 'next';
 
 import { NewsIndexView } from '../components/InformationPageViews';
-import { defaultLocale, dictionaries } from '../i18n/dictionaries';
+import { getRequestDictionary } from '../i18n/server-dictionary';
 
-export const metadata: Metadata = {
-  title: `${dictionaries[defaultLocale].contentPages.newsIndexTitle} | ${dictionaries[defaultLocale].cityName}`,
-  description: dictionaries[defaultLocale].contentPages.newsIndexLead,
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const dictionary = await getRequestDictionary();
+
+  return {
+    title: `${dictionary.contentPages.newsIndexTitle} | ${dictionary.siteName}`,
+    description: dictionary.contentPages.newsIndexLead,
+  };
+}
 
 export default function NewsIndexPage() {
   return <NewsIndexView />;

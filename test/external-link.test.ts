@@ -7,14 +7,13 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import { ExternalLink } from '../app/components/ExternalLink';
 import { LanguageProvider } from '../app/i18n/LanguageProvider';
-import {
-  dictionaries,
-  locales,
-  type Locale,
-} from '../app/i18n/dictionaries';
+import { locales, type Locale } from '../app/i18n/dictionaries';
+import { defaultTenantDictionaries as dictionaries } from '../app/i18n/build-dictionary';
+import { DEFAULT_TENANT_KEY, type TenantKey } from '../lib/tenants';
 
 const TestLanguageProvider = LanguageProvider as ComponentType<{
   availableLocales: readonly Locale[];
+  tenantKey: TenantKey;
   children?: ReactNode;
 }>;
 
@@ -22,7 +21,7 @@ test('external links open safely with an accessible Open In New icon', () => {
   const html = renderToStaticMarkup(
     createElement(
       TestLanguageProvider,
-      { availableLocales: ['ja'] },
+      { availableLocales: ['ja'], tenantKey: DEFAULT_TENANT_KEY },
       createElement(
         ExternalLink,
         { href: 'https://example.com/reference', className: 'text-accent' },

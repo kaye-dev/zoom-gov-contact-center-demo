@@ -116,9 +116,9 @@ export function MobileMenu({ open, onClose }: MobileMenuProps) {
           <div className="flex items-center gap-2">
             <StarEmblem className="h-9 w-9 shrink-0" />
             <div className="leading-tight">
-              <p className="text-lg font-bold tracking-wide">{t.cityName}</p>
+              <p className="text-lg font-bold tracking-wide">{t.siteName}</p>
               <p className="text-[9px] font-semibold tracking-[0.2em] text-fg-muted">
-                {t.cityNameRoman}
+                {t.siteNameRoman}
               </p>
             </div>
           </div>

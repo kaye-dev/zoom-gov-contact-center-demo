@@ -55,9 +55,9 @@ export function FooterClient({
           <div className="flex shrink-0 items-center gap-3">
             <StarEmblem className="h-10 w-10 shrink-0" />
             <div className="leading-tight">
-              <p className="text-xl font-bold tracking-wide">{t.cityName}</p>
+              <p className="text-xl font-bold tracking-wide">{t.siteName}</p>
               <p className="text-[10px] font-semibold tracking-[0.2em] text-fg-muted">
-                {t.cityNameRoman}
+                {t.siteNameRoman}
               </p>
             </div>
           </div>

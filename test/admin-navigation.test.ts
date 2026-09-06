@@ -7,7 +7,7 @@ import {
   resolveAdminNavigationState,
   type AdminNavigationItemKey,
 } from "../app/admin/admin-navigation";
-import { dictionaries } from "../app/i18n/dictionaries";
+import { defaultTenantDictionaries as dictionaries } from "../app/i18n/build-dictionary";
 
 const allItems: AdminNavigationItemKey[] = [
   "users",

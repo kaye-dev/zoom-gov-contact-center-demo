@@ -9,7 +9,8 @@ import { DeveloperApiSettingsForm } from "../app/admin/developer-api/DeveloperAp
 import { LanguageSettingsForm } from "../app/admin/languages/LanguageSettingsForm";
 import { MaintenanceSettingsForm } from "../app/admin/maintenance-settings/MaintenanceSettingsForm";
 import { NewUserForm } from "../app/admin/users/new/NewUserForm";
-import { dictionaries, locales } from "../app/i18n/dictionaries";
+import { locales } from "../app/i18n/dictionaries";
+import { defaultTenantDictionaries as dictionaries } from "../app/i18n/build-dictionary";
 import { settingsSectionClassName, settingsInputFocusClassName } from "../app/components/admin/settings-form-styles";
 
 function flatGroups(html: string, count: number, visibleLegend = false) {

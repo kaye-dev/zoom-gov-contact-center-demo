@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { FaqDepartmentView } from "../../../components/FaqPageViews";
-import { defaultLocale, dictionaries } from "../../../i18n/dictionaries";
+import { defaultLocale } from "../../../i18n/dictionaries";
+import { getRequestDictionary } from "../../../i18n/server-dictionary";
 import {
   getFaqDepartmentPageData,
   getFaqDepartmentStaticParams,
@@ -23,10 +24,10 @@ export async function generateMetadata({ params }: FaqDepartmentPageProps): Prom
   const department = getFaqDepartmentPageData(departmentSlug);
   if (!department) return {};
 
-  const dictionary = dictionaries[defaultLocale];
+  const dictionary = await getRequestDictionary();
   const title = department.labels[defaultLocale];
   return {
-    title: `${title} | ${dictionary.findInfo.lifeInfo.items.faq} | ${dictionary.cityName}`,
+    title: `${title} | ${dictionary.findInfo.lifeInfo.items.faq} | ${dictionary.siteName}`,
     description: dictionary.contentPages.faq.departmentLead.replace("{name}", title),
   };
 }

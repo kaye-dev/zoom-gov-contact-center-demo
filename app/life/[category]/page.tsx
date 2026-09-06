@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 
 import { LifeCategoryView } from '../../components/InformationPageViews';
 import { getLifeCategory, lifeCategories } from '../../content/site-content';
-import { defaultLocale, dictionaries } from '../../i18n/dictionaries';
+import { getRequestDictionary } from "../../i18n/server-dictionary";
 
 type CategoryPageProps = {
   params: Promise<{ category: string }>;
@@ -22,11 +22,11 @@ export async function generateMetadata({ params }: CategoryPageProps): Promise<M
   const category = getLifeCategory(categorySlug);
   if (!category) return {};
 
-  const dictionary = dictionaries[defaultLocale];
+  const dictionary = await getRequestDictionary();
   const title = dictionary.findInfo.lifeInfo.items[category.id];
 
   return {
-    title: `${title} | ${dictionary.cityName}`,
+    title: `${title} | ${dictionary.siteName}`,
     description: dictionary.contentPages.categoryLead.replace('{name}', title),
   };
 }

@@ -9,11 +9,13 @@ import { PhoneSettingsForm } from "../app/admin/phone-settings/PhoneSettingsForm
 import { ChatSettingsForm } from "../app/admin/chat-settings/ChatSettingsForm";
 import { buildAdminNavigation } from "../app/admin/admin-navigation";
 import { LanguageProvider } from "../app/i18n/LanguageProvider";
-import { dictionaries, locales } from "../app/i18n/dictionaries";
+import { locales } from "../app/i18n/dictionaries";
+import { DEFAULT_TENANT_KEY } from "../lib/tenants";
+import { defaultTenantDictionaries as dictionaries } from "../app/i18n/build-dictionary";
 
 const router = { bfcacheId: "settings-tabs-test", back() {}, forward() {}, refresh() {}, hmrRefresh() {}, push() {}, replace() {}, prefetch() {} };
 const renderPage = (children: ReactNode) => {
-  const languageProps = { availableLocales: locales, children };
+  const languageProps = { availableLocales: locales, tenantKey: DEFAULT_TENANT_KEY, children };
   return renderToStaticMarkup(createElement(AppRouterContext.Provider, { value: router },
     createElement(LanguageProvider, languageProps)));
 };

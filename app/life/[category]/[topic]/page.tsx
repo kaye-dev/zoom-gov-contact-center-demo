@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 
 import { LifeTopicView } from '../../../components/InformationPageViews';
 import { getLifeTopic, lifeCategories } from '../../../content/site-content';
-import { defaultLocale, dictionaries } from '../../../i18n/dictionaries';
+import { getRequestDictionary } from "../../../i18n/server-dictionary";
 
 type TopicPageProps = {
   params: Promise<{ category: string; topic: string }>;
@@ -22,11 +22,11 @@ export async function generateMetadata({ params }: TopicPageProps): Promise<Meta
   const result = getLifeTopic(categorySlug, topicSlug);
   if (!result) return {};
 
-  const dictionary = dictionaries[defaultLocale];
+  const dictionary = await getRequestDictionary();
   const title = dictionary.contentPages.lifeTopics[result.topic.id];
 
   return {
-    title: `${title} | ${dictionary.cityName}`,
+    title: `${title} | ${dictionary.siteName}`,
     description: dictionary.contentPages.lifeTopicSummaries[result.topic.id],
   };
 }

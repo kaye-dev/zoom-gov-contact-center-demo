@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 
 import { NewsArticleView } from '../../components/InformationPageViews';
 import { getNewsArticle, newsArticles } from '../../content/site-content';
-import { defaultLocale, dictionaries } from '../../i18n/dictionaries';
+import { getRequestDictionary } from '../../i18n/server-dictionary';
 
 type NewsPageProps = {
   params: Promise<{ slug: string }>;
@@ -20,11 +20,11 @@ export async function generateMetadata({ params }: NewsPageProps): Promise<Metad
   const article = getNewsArticle(slug);
   if (!article) return {};
 
-  const dictionary = dictionaries[defaultLocale];
+  const dictionary = await getRequestDictionary();
   const title = dictionary.news.articles[article.id];
 
   return {
-    title: `${title} | ${dictionary.cityName}`,
+    title: `${title} | ${dictionary.siteName}`,
     description: dictionary.contentPages.newsSummaries[article.id],
   };
 }

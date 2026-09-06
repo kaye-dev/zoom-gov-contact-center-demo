@@ -15,6 +15,7 @@ import {
 } from "../app/i18n/zaad-error-messages";
 import { zaadDictionaries } from "../app/i18n/zaad-dictionaries";
 import { ZAAD_ERROR_CODES } from "../lib/zaad/contracts";
+import { DEFAULT_TENANT_KEY, type TenantKey } from "../lib/tenants";
 
 const viewSource = readFileSync(
   new URL("../app/admin/zaad/ZaadView.tsx", import.meta.url),
@@ -56,8 +57,10 @@ test("ROW-ZAAD: retry eligibility, disabled count, row identity and revision are
 });
 
 function renderResidents(reviewState?: string, canViewDeveloperApi = true) {
-  const Provider = LanguageProvider as ComponentType<PropsWithChildren<{ availableLocales: readonly ["ja"] }>>;
-  return renderToStaticMarkup(createElement(Provider, { availableLocales: ["ja"] },
+  const Provider = LanguageProvider as ComponentType<
+    PropsWithChildren<{ availableLocales: readonly ["ja"]; tenantKey: TenantKey }>
+  >;
+  return renderToStaticMarkup(createElement(Provider, { availableLocales: ["ja"], tenantKey: DEFAULT_TENANT_KEY },
     createElement(ZaadView, {
       initialView: "residents", reviewState, canViewDeveloperApi,
       permissions: { create: false, update: false, delete: false },

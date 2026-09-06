@@ -33,6 +33,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const requestHeaders = await headers();
+  const tenant = await getRequestTenant();
   const isMaintenanceRewrite =
     requestHeaders.get(MAINTENANCE_REWRITE_HEADER) ===
     MAINTENANCE_REWRITE_HEADER_VALUE;
@@ -50,6 +51,7 @@ export default async function RootLayout({
   return (
     <html
       lang={toHtmlLanguageTag(DEFAULT_SITE_LOCALE)}
+      data-tenant={tenant.key}
       className="theme-loading language-loading scheme-light h-full antialiased dark:scheme-dark"
       suppressHydrationWarning
     >
@@ -64,7 +66,10 @@ export default async function RootLayout({
       </head>
       <body className="min-h-full flex flex-col">
         <ThemeSync />
-        <LanguageProvider availableLocales={availableLocales}>
+        <LanguageProvider
+          availableLocales={availableLocales}
+          tenantKey={tenant.key}
+        >
           {children}
         </LanguageProvider>
       </body>
