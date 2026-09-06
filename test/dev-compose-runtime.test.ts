@@ -78,7 +78,7 @@ function runHelper(fixture: RuntimeFixture, body: string) {
 function runColimaHelper(
   fixture: RuntimeFixture,
   body: string,
-  environment: NodeJS.ProcessEnv = {},
+  environment: Partial<NodeJS.ProcessEnv> = {},
 ) {
   return execFileSyncWithResult(
     "zsh",
