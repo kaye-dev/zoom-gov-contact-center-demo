@@ -45,10 +45,14 @@ import {
   ZaadResourceError,
 } from "./resources";
 
+import type { TenantKey } from "@/lib/tenants";
+
 export type ZaadApiEnvironment = {
   Variables: {
     auth: AppAuth;
     prisma: PrismaClient;
+    /** Hostから解決した業種テナント。すべてのDBアクセスをこのキーで絞る。 */
+    tenantKey: TenantKey;
   };
 };
 

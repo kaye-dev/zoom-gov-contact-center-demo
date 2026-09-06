@@ -67,7 +67,7 @@ test("ZMI-01: PostgreSQLで実在する2件のunique index名をPrisma schemaへ
   assert.match(
     disasterRadioModel,
     new RegExp(
-      `@@unique\\(\\[normalizedEmail, normalizedPhone\\], map: "${disasterRadioIndexName}"\\)`,
+      `@@unique\\(\\[siteKey, normalizedEmail, normalizedPhone\\], map: "${disasterRadioIndexName}"\\)`,
       "u",
     ),
   );
@@ -114,11 +114,14 @@ test("ZMI-02: 適用済みZAAD migrationのSQLとmanifest hashを維持する", 
   );
   assert.equal(
     manifest.migrations.findIndex(({ name }) => name === migrationName),
-    manifest.migrations.length - 2,
+    manifest.migrations.length - 3,
   );
-  assert.equal(
-    manifest.migrations.at(-1)?.name,
-    "20260901160000_add_reservation_caller_ani_binding",
+  assert.deepEqual(
+    manifest.migrations.slice(-2).map(({ name }) => name),
+    [
+      "20260901160000_add_reservation_caller_ani_binding",
+      "20260906120000_add_site_key_tenant_scope",
+    ],
   );
   assert.match(reviewed, new RegExp(migrationName, "u"));
   assert.match(reviewed, new RegExp(sha256, "u"));

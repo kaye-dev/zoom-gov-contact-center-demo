@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "@/lib/generated/prisma/client";
 import type { ReservationApiPermission } from "@/lib/reservation-api";
+import { DEFAULT_TENANT_KEY, type TenantKey } from "@/lib/tenants";
 
 export const RESERVATION_API_REQUEST_LOG_RETENTION_DAYS = 30;
 export const RESERVATION_API_REQUEST_LOG_PAGE_SIZE = 50;
@@ -181,9 +182,14 @@ export async function listReservationApiRequestLogs(
   prisma: PrismaClient,
   input: ReservationApiRequestLogListInput,
   now = new Date(),
+  // NOTE: 呼び出し元の app/admin/reservations/api-keys/** を本変更では編集できず、
+  // テナントを渡せなかったため既定値を置いている。ReservationApiKey.siteKey の
+  // 既定値とまとめて、2つ目のテナントを追加する前に明示指定へ変更すること。
+  tenantKey: TenantKey = DEFAULT_TENANT_KEY,
 ): Promise<{ logs: ReservationApiRequestLogSummary[]; nextCursor: string | null }> {
   const statusRange = resultStatusRange(input.result);
   const conditions: Prisma.ReservationApiRequestLogWhereInput[] = [
+    { siteKey: tenantKey },
     { requestedAt: { gte: reservationApiRequestLogCutoff(now) } },
   ];
   if (input.query) {
@@ -245,11 +251,16 @@ export async function getReservationApiRequestLog(
   prisma: PrismaClient,
   id: string,
   now = new Date(),
+  // NOTE: 呼び出し元の app/admin/reservations/api-keys/** を本変更では編集できず、
+  // テナントを渡せなかったため既定値を置いている。ReservationApiKey.siteKey の
+  // 既定値とまとめて、2つ目のテナントを追加する前に明示指定へ変更すること。
+  tenantKey: TenantKey = DEFAULT_TENANT_KEY,
 ): Promise<ReservationApiRequestLogDetail | null> {
   if (!isReservationApiRequestLogId(id)) return null;
   const row = await prisma.reservationApiRequestLog.findFirst({
     where: {
       id,
+      siteKey: tenantKey,
       requestedAt: { gte: reservationApiRequestLogCutoff(now) },
     },
     select: {
@@ -278,16 +289,21 @@ export async function getReservationApiRequestLog(
 
 export async function recordReservationApiRequestLog(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   input: ReservationApiRequestLogRecordInput,
   now = input.completedAt,
 ): Promise<void> {
   await prisma.$transaction(async (transaction) => {
     await transaction.reservationApiRequestLog.deleteMany({
-      where: { requestedAt: { lt: reservationApiRequestLogCutoff(now) } },
+      where: {
+        siteKey: tenantKey,
+        requestedAt: { lt: reservationApiRequestLogCutoff(now) },
+      },
     });
     await transaction.reservationApiRequestLog.create({
       data: {
         id: input.id,
+        siteKey: tenantKey,
         apiKeyId: input.apiKeyId,
         apiKeyName: input.apiKeyName,
         apiKeyPreview: input.apiKeyPreview,

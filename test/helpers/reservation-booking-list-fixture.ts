@@ -1,4 +1,5 @@
 import { createDatabaseContext } from "../../lib/server/prisma";
+import { DEFAULT_TENANT_KEY } from "../../lib/tenants";
 
 export const RESERVATION_BOOKING_LIST_FIXTURE_IDS = [
   "cmf7n8c2x0001reservation",
@@ -48,7 +49,7 @@ export async function applyReservationBookingListFixture() {
       rows.map((row) => database.prisma.reservationBooking.upsert({
         where: { id: row.id },
         update: row,
-        create: row,
+        create: { ...row, siteKey: DEFAULT_TENANT_KEY },
       })),
     );
     const count = await database.prisma.reservationBooking.count({

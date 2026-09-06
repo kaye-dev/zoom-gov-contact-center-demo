@@ -22,6 +22,7 @@ import {
   utcDateToCalendarDate,
   type ReservationServiceKey,
 } from "@/lib/reservations";
+import { DEFAULT_TENANT_KEY, type TenantKey } from "@/lib/tenants";
 
 export const RESERVATION_API_IDEMPOTENCY_RETENTION_MS = 24 * 60 * 60 * 1_000;
 
@@ -66,6 +67,7 @@ export function listPublicReservationServices(): ReservationServiceDto[] {
 
 export async function getPublicReservationAvailability(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   input: {
     serviceKey: ReservationServiceKey;
     dateFrom: string;
@@ -80,6 +82,7 @@ export async function getPublicReservationAvailability(
   }
   const bookings = await prisma.reservationBooking.findMany({
     where: {
+      siteKey: tenantKey,
       serviceKey: input.serviceKey,
       reservationDate: {
         gte: calendarDateToUtc(input.dateFrom),
@@ -128,11 +131,13 @@ export async function getPublicReservationAvailability(
 
 export async function listPublicReservations(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   apiKeyId: string,
   input: ReservationListInput,
 ) {
   const rows = await prisma.reservationBooking.findMany({
     where: {
+      siteKey: tenantKey,
       apiKeyId,
       isDemo: false,
       ...(input.serviceKey ? { serviceKey: input.serviceKey } : {}),
@@ -164,18 +169,20 @@ export async function listPublicReservations(
 
 export async function getPublicReservation(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   apiKeyId: string,
   id: string,
   callerAniDigest: ReservationCallerAniDigest,
 ) {
   const booking = await prisma.reservationBooking.findFirst({
-    where: { id, apiKeyId, callerAniDigest, isDemo: false },
+    where: { id, siteKey: tenantKey, apiKeyId, callerAniDigest, isDemo: false },
   });
   return booking ? toReservationDto(booking) : null;
 }
 
 export async function createPublicReservation(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   input: {
     apiKeyId: string;
     callerAniDigest: ReservationCallerAniDigest;
@@ -238,6 +245,7 @@ export async function createPublicReservation(
       await assertCapacity(transaction, input.reservation, slot.capacity);
       const booking = await transaction.reservationBooking.create({
         data: {
+          siteKey: tenantKey,
           serviceKey: input.reservation.serviceKey,
           reservationDate: calendarDateToUtc(input.reservation.reservationDate),
           startMinute: input.reservation.startMinute,
@@ -458,9 +466,11 @@ async function assertExternalReferenceAvailable(
   apiKeyId: string,
   externalReferenceId: string,
   excludeId?: string,
+  tenantKey: TenantKey = DEFAULT_TENANT_KEY,
 ) {
   const existing = await transaction.reservationBooking.findFirst({
     where: {
+      siteKey: tenantKey,
       apiKeyId,
       externalReferenceId,
       ...(excludeId ? { id: { not: excludeId } } : {}),
@@ -477,9 +487,11 @@ async function assertCapacity(
   input: ReservationWriteInput,
   capacity: number,
   excludeId?: string,
+  tenantKey: TenantKey = DEFAULT_TENANT_KEY,
 ) {
   const count = await transaction.reservationBooking.count({
     where: {
+      siteKey: tenantKey,
       serviceKey: input.serviceKey,
       reservationDate: calendarDateToUtc(input.reservationDate),
       startMinute: input.startMinute,

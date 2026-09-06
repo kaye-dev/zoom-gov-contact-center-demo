@@ -14,6 +14,7 @@ import {
   getPublicReservation,
   updatePublicReservation,
 } from "../lib/server/public-reservations";
+import { DEFAULT_TENANT_KEY } from "../lib/tenants";
 
 const now = new Date("2026-09-01T00:00:00.000Z");
 const callerPhone = parseReservationCallerPhone("+12025550123")!;
@@ -92,14 +93,14 @@ test("reservation creation stores only caller digest and binds idempotency repla
     now,
   };
 
-  const created = await createPublicReservation(prisma, input);
+  const created = await createPublicReservation(prisma, DEFAULT_TENANT_KEY, input);
   assert.equal(created.outcome, "NEW");
   assert.equal(captured.createdBookingData?.callerAniDigest, callerAniDigest);
   assert.equal("callerPhone" in (captured.createdBookingData ?? {}), false);
   assert.equal(JSON.stringify(created.body).includes(callerAniDigest), false);
   assert.equal(JSON.stringify(created.body).includes(callerPhone), false);
 
-  const replayed = await createPublicReservation(prisma, {
+  const replayed = await createPublicReservation(prisma, DEFAULT_TENANT_KEY, {
     ...input,
     requestId: "request_owner_binding_2",
   });
@@ -107,7 +108,7 @@ test("reservation creation stores only caller digest and binds idempotency repla
   assert.equal(replayed.body.requestId, "request_owner_binding_2");
 
   await assert.rejects(
-    createPublicReservation(prisma, {
+    createPublicReservation(prisma, DEFAULT_TENANT_KEY, {
       ...input,
       callerAniDigest: otherCallerAniDigest,
       requestId: "request_owner_binding_3",
@@ -142,11 +143,13 @@ test("reservation read filters by API key, ID, and caller digest without exposin
 
   const result = await getPublicReservation(
     prisma,
+    DEFAULT_TENANT_KEY,
     "api_key_owner_binding",
     "booking_owner_binding_1",
     callerAniDigest,
   );
   assert.deepEqual(where, {
+    siteKey: DEFAULT_TENANT_KEY,
     id: "booking_owner_binding_1",
     apiKeyId: "api_key_owner_binding",
     callerAniDigest,

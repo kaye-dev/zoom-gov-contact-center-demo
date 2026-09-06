@@ -109,6 +109,13 @@ const EXACT_POST_REVIEWED_CHAIN = [
     sha256: "5afbac07aaa22cfd36226cd2d6f919f0e59950fd083c3837903025248885e5f3",
     classification: "expand-compatible",
   },
+  {
+    // 設定シングルトン5件の主キーを id から siteKey へ差し替えるため、既存列の
+    // DROPを含む。既存行は 'lg' へbackfillしてから既定値を外す。
+    name: "20260906120000_add_site_key_tenant_scope",
+    sha256: "6b0e8dddafe51832e8128bb8a5b422e6a2c5e1bcfc04ef7d6d5ede96e695b2d5",
+    classification: "destructive-reviewed",
+  },
 ] as const satisfies readonly ExactBatchMigration[];
 
 export type ReviewedMigrationBatchPlan = {

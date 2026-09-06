@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@/lib/generated/prisma/client";
+import type { TenantKey } from "@/lib/tenants";
 
 import {
   MaintenanceStoreWriteError,
@@ -16,6 +17,7 @@ export type MaintenancePrismaClient = Pick<
 
 export async function writeMaintenanceSettingWithPrisma(
   prisma: MaintenancePrismaClient,
+  tenantKey: TenantKey,
   update: MaintenanceStoreUpdate,
 ): Promise<MaintenanceStoreWriteResult> {
   if (!isValidMaintenanceStoreUpdate(update)) {
@@ -25,6 +27,7 @@ export async function writeMaintenanceSettingWithPrisma(
   try {
     const rows = await prisma.siteMaintenanceSetting.updateManyAndReturn({
       where: {
+        siteKey: tenantKey,
         environment: toMaintenanceDatabaseEnvironment(update.environment),
         revision: update.expectedRevision,
         schemaVersion: 1,
@@ -54,7 +57,10 @@ export async function writeMaintenanceSettingWithPrisma(
     if (rows.length === 0) {
       const existing = await prisma.siteMaintenanceSetting.findUnique({
         where: {
-          environment: toMaintenanceDatabaseEnvironment(update.environment),
+          siteKey_environment: {
+            siteKey: tenantKey,
+            environment: toMaintenanceDatabaseEnvironment(update.environment),
+          },
         },
         select: { environment: true },
       });

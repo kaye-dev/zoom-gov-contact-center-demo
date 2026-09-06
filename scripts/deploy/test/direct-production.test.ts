@@ -403,6 +403,10 @@ test("reviewed migration manifest exactly classifies the current SHA-verified ch
         name: "20260901160000_add_reservation_caller_ani_binding",
         classification: "expand-compatible",
       },
+      {
+        name: "20260906120000_add_site_key_tenant_scope",
+        classification: "destructive-reviewed",
+      },
     ],
   );
 });

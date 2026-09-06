@@ -9,6 +9,7 @@ import {
 } from "@/lib/reservations";
 import { requireAdminAccess } from "@/lib/server/admin-access/server";
 import { withPrisma } from "@/lib/server/prisma";
+import { getRequestTenant } from "@/lib/server/tenant";
 import { getReservationCalendarSnapshot } from "@/lib/server/reservations";
 
 import { ReservationSystemView } from "./ReservationSystemView";
@@ -20,6 +21,7 @@ export default async function ReservationsPage({
 }: {
   searchParams: SearchParams;
 }) {
+  const tenant = await getRequestTenant();
   const { actor } = await requireAdminAccess(
     "reservations",
     "VIEW",
@@ -31,7 +33,7 @@ export default async function ReservationsPage({
   const service = resolveService(query.service);
   const month = resolveMonth(query.month, now, range.minimum);
   const calendar = await withPrisma((prisma) =>
-    getReservationCalendarSnapshot(prisma, { service, month, now }),
+    getReservationCalendarSnapshot(prisma, tenant.key, { service, month, now }),
   );
   const requestedDate = typeof query.date === "string" ? query.date : null;
   const selectedDate = requestedDate &&

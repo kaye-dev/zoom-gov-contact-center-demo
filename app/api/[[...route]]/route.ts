@@ -137,6 +137,7 @@ import {
   updatePublicReservation,
 } from "@/lib/server/public-reservations";
 import { registerZaadApiRoutes } from "@/lib/server/zaad/api-routes";
+import { resolveTenantFromHost, type TenantKey } from "@/lib/tenants";
 
 export const runtime = "nodejs";
 
@@ -144,10 +145,18 @@ type AppEnvironment = {
   Variables: {
     auth: AppAuth;
     prisma: PrismaClient;
+    /** Hostから解決した業種テナント。すべてのDBアクセスをこのキーで絞る。 */
+    tenantKey: TenantKey;
   };
 };
 
 const app = new Hono<AppEnvironment>().basePath("/api");
+
+// テナント解決はDB接続の有無に関わらず必要なので、最初のミドルウェアで行う。
+app.use("*", async (c, next) => {
+  c.set("tenantKey", resolveTenantFromHost(c.req.header("host")).key);
+  await next();
+});
 
 app.use("*", async (c, next) => {
   if (isDatabaseFreeRequest(c.req.raw)) {
@@ -181,7 +190,7 @@ app.get("/health", async (c) => {
       driver: "postgresql",
       orm: "prisma",
       configured: hasDatabaseConfiguration(),
-      demoRecordCount: await countDemoRecords(prisma),
+      demoRecordCount: await countDemoRecords(prisma, c.get("tenantKey")),
     },
   });
 });
@@ -189,7 +198,7 @@ app.get("/health", async (c) => {
 app.get("/demo-records", async (c) => {
   const prisma = c.get("prisma");
   return c.json({
-    records: await listDemoRecords(prisma),
+    records: await listDemoRecords(prisma, c.get("tenantKey")),
   });
 });
 
@@ -222,7 +231,7 @@ app.post("/demo-records", async (c) => {
     );
   }
 
-  return c.json({ record: await createDemoRecord(prisma, message) }, 201);
+  return c.json({ record: await createDemoRecord(prisma, c.get("tenantKey"), message) }, 201);
 });
 
 app.post("/password-reset-requests", async (c) => {
@@ -896,7 +905,7 @@ app.put("/admin/phone-settings", async (c) => {
   }
 
   try {
-    const settings = await savePhoneSettings(prisma, parsed.value);
+    const settings = await savePhoneSettings(prisma, c.get("tenantKey"), parsed.value);
     return c.json({ settings });
   } catch {
     console.error("Failed to save phone settings.");
@@ -924,7 +933,7 @@ app.put("/admin/developer-api", async (c) => {
   }
 
   try {
-    const settings = await saveDeveloperApiSettings(prisma, parsed.value);
+    const settings = await saveDeveloperApiSettings(prisma, c.get("tenantKey"), parsed.value);
     if (!settings) {
       return c.json(
         {
@@ -973,7 +982,7 @@ app.post("/admin/developer-api/reveal", async (c) => {
   }
 
   try {
-    const value = await revealDeveloperApiSecret(prisma, parsed.value.field);
+    const value = await revealDeveloperApiSecret(prisma, c.get("tenantKey"), parsed.value.field);
     if (value === null) {
       return c.json(
         { error: DEVELOPER_API_ERROR_CODES.secretNotConfigured },
@@ -1017,7 +1026,7 @@ app.put("/admin/chat-settings", async (c) => {
   }
 
   try {
-    await saveChatSettings(prisma, parsed.value);
+    await saveChatSettings(prisma, c.get("tenantKey"), parsed.value);
     return c.json({ saved: true });
   } catch {
     // Memo fields may contain copied tags or operational notes. Never log the payload.
@@ -1046,7 +1055,7 @@ app.put("/admin/language-settings", async (c) => {
   }
 
   try {
-    const settings = await saveLanguageSettings(prisma, parsed.value);
+    const settings = await saveLanguageSettings(prisma, c.get("tenantKey"), parsed.value);
     return c.json({ settings });
   } catch (error) {
     console.error("Failed to save language settings.", error);
@@ -1120,7 +1129,7 @@ app.get("/admin/reservations", async (c) => {
   }
 
   try {
-    const calendar = await getReservationCalendarSnapshot(prisma, {
+    const calendar = await getReservationCalendarSnapshot(prisma, c.get("tenantKey"), {
       ...parsed,
       now,
     });
@@ -1152,7 +1161,10 @@ app.post("/admin/reservations/demo-fill", async (c) => {
   }
 
   try {
-    return c.json(await regenerateDemoReservations(prisma, { month: body.month, now }));
+    return c.json(await regenerateDemoReservations(prisma, c.get("tenantKey"), {
+    month: body.month,
+    now,
+  }));
   } catch {
     console.error("Failed to generate demo reservations.");
     return c.json({ error: RESERVATION_ERROR_CODES.saveFailed }, 500);
@@ -1233,7 +1245,7 @@ app.get("/admin/reservation-api-usage-limit", async (c) => {
     c.get("auth"), c.get("prisma"), c.req.raw.headers, "reservations", "VIEW",
   );
   if (!authorization.ok) return c.json({ error: authorization.error }, authorization.status);
-  return c.json({ usageLimit: await getReservationApiUsageSnapshot(c.get("prisma")) });
+  return c.json({ usageLimit: await getReservationApiUsageSnapshot(c.get("prisma"), c.get("tenantKey")) });
 });
 
 app.put("/admin/reservation-api-usage-limit", async (c) => {
@@ -1244,7 +1256,7 @@ app.put("/admin/reservation-api-usage-limit", async (c) => {
   if (!authorization.ok) return c.json({ error: authorization.error }, authorization.status);
   const input = parseReservationApiUsageLimit(await readJsonBody(c.req.raw));
   if (!input) return c.json({ error: RESERVATION_API_ERROR_CODES.invalidRequest }, 400);
-  const usageLimit = await updateReservationApiUsageLimit(c.get("prisma"), {
+  const usageLimit = await updateReservationApiUsageLimit(c.get("prisma"), c.get("tenantKey"), {
     monthlyLimit: input.mode === "UNLIMITED" ? null : input.monthlyLimit,
     expectedRevision: input.expectedRevision,
     actorId: authorization.actor.id,
@@ -1306,6 +1318,7 @@ app.get("/public/v1/reservation-services/:serviceKey/availability", async (c) =>
       try {
         const availability = await getPublicReservationAvailability(
           c.get("prisma"),
+          c.get("tenantKey"),
           { serviceKey, ...range },
         );
         return publicReservationApiSuccess(
@@ -1339,7 +1352,7 @@ app.get("/public/v1/reservations", async (c) => {
       }
       const query = serializeReservationListQuery(input);
       try {
-        const result = await listPublicReservations(c.get("prisma"), keyId, input);
+        const result = await listPublicReservations(c.get("prisma"), c.get("tenantKey"), keyId, input);
         return publicReservationApiSuccess(
           200,
           "RESERVATIONS_LISTED",
@@ -1383,6 +1396,7 @@ app.get("/public/v1/reservations/:id", async (c) => {
       try {
         const reservation = await getPublicReservation(
           c.get("prisma"),
+          c.get("tenantKey"),
           keyId,
           id,
           callerAniDigest!,
@@ -1460,7 +1474,7 @@ app.post("/public/v1/reservations", async (c) => {
         requestBody: serializeReservationWriteInput(input),
       };
       try {
-        const result = await createPublicReservation(c.get("prisma"), {
+        const result = await createPublicReservation(c.get("prisma"), c.get("tenantKey"), {
           apiKeyId: keyId,
           callerAniDigest: callerAniDigest!,
           idempotencyKey,
@@ -2270,7 +2284,7 @@ async function runPublicReservationApiRequest(
 
   const completedAt = new Date();
   try {
-    await recordReservationApiRequestLog(c.get("prisma"), {
+    await recordReservationApiRequestLog(c.get("prisma"), c.get("tenantKey"), {
       id: requestId,
       apiKeyId: guard.result.keyId,
       apiKeyName: guard.result.keyName,

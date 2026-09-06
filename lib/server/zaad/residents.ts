@@ -18,6 +18,10 @@ import {
   type ZoomContactDto,
 } from "./zoom-client";
 
+// NOTE: ZAAD はテナント引数の配線を次段へ送っているため、既定テナントを直接参照する。
+// features.zaad が lg 限定である前提に依存する。
+import { DEFAULT_TENANT_KEY } from "@/lib/tenants";
+
 const PAGE_SIZE = 25;
 const ZOOM_CONTACT_BATCH_MAX_ITEMS = 100;
 const RETRYABLE_RESIDENT_SYNC_ERROR_CODES = new Set<string>([
@@ -457,7 +461,7 @@ function syncSnapshot(setting: { contactListId: string | null; contactListNameSn
 
 async function getRegistrationSetting(prisma: Pick<PrismaClient, "zaadRegistrationSetting">) {
   return prisma.zaadRegistrationSetting.findUniqueOrThrow({
-    where: { id: 1 },
+    where: { siteKey: DEFAULT_TENANT_KEY },
     select: { contactListId: true, contactListNameSnapshot: true },
   });
 }

@@ -13,6 +13,10 @@ import {
 import { writeZaadAudit, type ZaadAuditInput } from "./audit";
 import { ZaadZoomClient, ZaadZoomError } from "./zoom-client";
 
+// NOTE: ZAAD はテナント引数の配線を次段へ送っているため、既定テナントを直接参照する。
+// features.zaad が lg 限定である前提に依存する。
+import { DEFAULT_TENANT_KEY } from "@/lib/tenants";
+
 export class ZaadResourceError extends Error {
   constructor(
     readonly code: string,
@@ -391,7 +395,7 @@ export async function deleteZaadContactList(prisma: PrismaClient, actorUserId: s
 
 export async function getZaadRegistrationSetting(prisma: PrismaClient) {
   const setting = await prisma.zaadRegistrationSetting.findUniqueOrThrow({
-    where: { id: 1 },
+    where: { siteKey: DEFAULT_TENANT_KEY },
   });
   return settingDto(setting);
 }
@@ -427,7 +431,7 @@ export async function updateZaadRegistrationSetting(prisma: PrismaClient, actorU
   }
   const setting = await prisma.$transaction(async (transaction) => {
     const result = await transaction.zaadRegistrationSetting.updateMany({
-      where: { id: 1, revision: parsed.value.revision },
+      where: { siteKey: DEFAULT_TENANT_KEY, revision: parsed.value.revision },
       data: {
         contactListId: parsed.value.contactListId,
         contactListNameSnapshot: contactListName,
@@ -444,7 +448,7 @@ export async function updateZaadRegistrationSetting(prisma: PrismaClient, actorU
       result: "SUCCESS",
       changedFieldNames: ["contactListId"],
     });
-    return transaction.zaadRegistrationSetting.findUniqueOrThrow({ where: { id: 1 } });
+    return transaction.zaadRegistrationSetting.findUniqueOrThrow({ where: { siteKey: DEFAULT_TENANT_KEY } });
   });
   return settingDto(setting);
 }

@@ -4,6 +4,7 @@ import {
   type ReservationApiUsageLimitDto,
 } from "@/lib/reservation-api";
 import { addCalendarMonths, calendarDateToUtc, getTokyoCalendarDate } from "@/lib/reservations";
+import { DEFAULT_TENANT_KEY, type TenantKey } from "@/lib/tenants";
 
 type PrismaLike = PrismaClient | Prisma.TransactionClient;
 
@@ -25,18 +26,32 @@ export function getReservationApiPeriod(now: Date) {
 
 export async function getReservationApiUsageSnapshot(
   prisma: PrismaLike,
+  // NOTE: 呼び出し元の app/admin/reservations/api-keys/** を本変更では編集できず、
+  // テナントを渡せなかったため既定値を置いている。ReservationApiKey.siteKey の
+  // 既定値とまとめて、2つ目のテナントを追加する前に明示指定へ変更すること。
+  tenantKey: TenantKey = DEFAULT_TENANT_KEY,
   now = new Date(),
 ): Promise<ReservationApiUsageLimitDto> {
   const period = getReservationApiPeriod(now);
   const [setting, usage] = await Promise.all([
-    prisma.reservationApiUsageSetting.findUniqueOrThrow({ where: { id: 1 } }),
-    prisma.reservationApiMonthlyUsage.findUnique({ where: { periodStart: period.periodDate } }),
+    prisma.reservationApiUsageSetting.findUniqueOrThrow({
+      where: { siteKey: tenantKey },
+    }),
+    prisma.reservationApiMonthlyUsage.findUnique({
+      where: {
+        siteKey_periodStart: {
+          siteKey: tenantKey,
+          periodStart: period.periodDate,
+        },
+      },
+    }),
   ]);
   return toUsageDto(setting, usage?.requestCount ?? BigInt(0), period);
 }
 
 export async function updateReservationApiUsageLimit(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   input: {
     monthlyLimit: bigint | null;
     expectedRevision: number;
@@ -45,7 +60,7 @@ export async function updateReservationApiUsageLimit(
   },
 ): Promise<ReservationApiUsageLimitDto | null> {
   const updated = await prisma.reservationApiUsageSetting.updateMany({
-    where: { id: 1, revision: input.expectedRevision },
+    where: { siteKey: tenantKey, revision: input.expectedRevision },
     data: {
       monthlyLimit: input.monthlyLimit,
       revision: { increment: 1 },
@@ -53,12 +68,16 @@ export async function updateReservationApiUsageLimit(
     },
   });
   if (updated.count !== 1) return null;
-  return getReservationApiUsageSnapshot(prisma, input.now);
+  return getReservationApiUsageSnapshot(prisma, tenantKey, input.now);
 }
 
 export async function consumeReservationApiRequest(
   transaction: Prisma.TransactionClient,
   input: { keyId: string; keyMonthlyLimit: bigint | null; now: Date },
+  // NOTE: 呼び出し元の lib/server/reservation-api-keys.ts を本変更では編集できず、
+  // テナントを渡せなかったため既定値を置いている。ReservationApiKey.siteKey の既定値と
+  // まとめて、2つ目のテナントを追加する前に明示指定へ変更すること。
+  tenantKey: TenantKey = DEFAULT_TENANT_KEY,
 ): Promise<
   | { status: "ALLOWED"; globalRequestCount: bigint; keyRequestCount: bigint }
   | { status: "GLOBAL_LIMIT_EXCEEDED" | "KEY_LIMIT_EXCEEDED"; retryAfterSeconds: number }
@@ -67,20 +86,20 @@ export async function consumeReservationApiRequest(
   const [setting] = await transaction.$queryRaw<LockedUsageSetting[]>(Prisma.sql`
     SELECT "monthlyLimit", "revision"
     FROM "reservation_api_usage_settings"
-    WHERE "id" = 1
+    WHERE "siteKey" = ${tenantKey}
     FOR UPDATE
   `);
   if (!setting) throw new Error("Reservation API usage setting is missing.");
 
   await transaction.$executeRaw(Prisma.sql`
-    INSERT INTO "reservation_api_monthly_usage" ("periodStart", "requestCount", "updatedAt")
-    VALUES (${period.periodDate}, 0, CURRENT_TIMESTAMP)
-    ON CONFLICT ("periodStart") DO NOTHING
+    INSERT INTO "reservation_api_monthly_usage" ("siteKey", "periodStart", "requestCount", "updatedAt")
+    VALUES (${tenantKey}, ${period.periodDate}, 0, CURRENT_TIMESTAMP)
+    ON CONFLICT ("siteKey", "periodStart") DO NOTHING
   `);
   const [usage] = await transaction.$queryRaw<{ requestCount: bigint }[]>(Prisma.sql`
     SELECT "requestCount"
     FROM "reservation_api_monthly_usage"
-    WHERE "periodStart" = ${period.periodDate}
+    WHERE "siteKey" = ${tenantKey} AND "periodStart" = ${period.periodDate}
     FOR UPDATE
   `);
   if (!usage) throw new Error("Reservation API usage counter is missing.");
@@ -120,7 +139,12 @@ export async function consumeReservationApiRequest(
   const globalRequestCount = usage.requestCount + BigInt(1);
   const keyRequestCount = keyUsage.requestCount + BigInt(1);
   await transaction.reservationApiMonthlyUsage.update({
-    where: { periodStart: period.periodDate },
+    where: {
+      siteKey_periodStart: {
+        siteKey: tenantKey,
+        periodStart: period.periodDate,
+      },
+    },
     data: { requestCount: globalRequestCount },
   });
   await transaction.reservationApiKeyMonthlyUsage.update({

@@ -42,7 +42,7 @@ export default async function RootLayout({
 
   if (!isMaintenanceRewrite) {
     await connection();
-    const languageSettings = await getLanguageSettings();
+    const languageSettings = await getLanguageSettings(tenant.key);
     availableLocales = languageSettings.locales
       .filter(({ locale, enabled }) => enabled || locale === "ja")
       .map(({ locale }) => locale);

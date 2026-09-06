@@ -7,6 +7,7 @@ import {
   listReservationBookings,
 } from "../../lib/server/reservation-bookings";
 import { withIsolatedPostgresDatabase } from "../helpers/isolated-postgres";
+import { DEFAULT_TENANT_KEY } from "../../lib/tenants";
 
 test(
   "RES-LIST-DB-01/02/03 reservation list pages, filters, and fallback are stable in PostgreSQL",
@@ -35,7 +36,10 @@ test(
           booking("reservation-list-demo-civic", "civic-facility", true, 540),
         ];
         await database.prisma.reservationBooking.createMany({
-          data: [...pageRows, ...filterRows],
+          data: [...pageRows, ...filterRows].map((row) => ({
+            ...row,
+            siteKey: DEFAULT_TENANT_KEY,
+          })),
         });
 
         const first = await listReservationBookings(database.prisma, {});

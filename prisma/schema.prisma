@@ -184,9 +184,11 @@ model verification {
 
 model DemoRecord {
   id        Int      @id @default(autoincrement())
+  siteKey   String
   message   String
   createdAt DateTime @default(now()) @map("created_at")
 
+  @@index([siteKey, createdAt])
   @@map("demo_records")
 }
 
@@ -210,7 +212,7 @@ model PasswordResetRequest {
 }
 
 model SitePhoneSetting {
-  id                         Int      @id @default(1)
+  siteKey                    String   @id
   representativePhoneDisplay String
   representativePhoneE164    String
   updatedAt                  DateTime @default(now()) @updatedAt
@@ -219,15 +221,17 @@ model SitePhoneSetting {
 }
 
 model LocalizedAiPhoneSetting {
-  locale      SiteLocale @id
+  siteKey     String
+  locale      SiteLocale
   aiPhoneE164 String?
   updatedAt   DateTime   @default(now()) @updatedAt
 
+  @@id([siteKey, locale])
   @@map("localized_ai_phone_settings")
 }
 
 model SiteChatSetting {
-  id                         Int          @id @default(1)
+  siteKey                    String       @id
   activeMode                 ZoomChatMode @default(DISABLED)
   campaignWebTag             String?
   campaignMemo               String?
@@ -239,17 +243,20 @@ model SiteChatSetting {
 }
 
 model LocaleDisplaySetting {
-  locale       SiteLocale @id
+  siteKey      String
+  locale       SiteLocale
   enabled      Boolean    @default(true)
   displayOrder Int
   updatedAt    DateTime   @default(now()) @updatedAt
 
+  @@id([siteKey, locale])
   @@index([displayOrder])
   @@map("locale_display_settings")
 }
 
 model SiteMaintenanceSetting {
-  environment      MaintenanceEnvironment @id
+  siteKey          String
+  environment      MaintenanceEnvironment
   schemaVersion    Int                    @default(1) @map("version")
   mode             MaintenanceMode        @default(DISABLED)
   scheduledStartAt DateTime?              @db.Timestamptz(3)
@@ -257,11 +264,12 @@ model SiteMaintenanceSetting {
   revision         Int                    @default(1)
   updatedAt        DateTime               @default(now()) @updatedAt @db.Timestamptz(3)
 
+  @@id([siteKey, environment])
   @@map("site_maintenance_settings")
 }
 
 model SiteDeveloperApiSetting {
-  id                    Int      @id @default(1)
+  siteKey               String   @id
   accountId             String
   clientId              String
   clientSecretEncrypted String?
@@ -329,6 +337,7 @@ model AdminAccessMutationState {
 
 model ReservationBooking {
   id                  String    @id @default(cuid())
+  siteKey             String
   serviceKey          String
   reservationDate     DateTime  @db.Date
   startMinute         Int
@@ -340,13 +349,17 @@ model ReservationBooking {
   createdAt           DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt           DateTime? @updatedAt @db.Timestamptz(3)
 
-  @@index([serviceKey, reservationDate, startMinute])
-  @@index([reservationDate, isDemo])
+  @@index([siteKey, serviceKey, reservationDate, startMinute])
+  @@index([siteKey, reservationDate, isDemo])
   @@map("reservation_bookings")
 }
 
 model ReservationApiKey {
   id              String    @id @default(cuid())
+  // NOTE: 発行処理がある lib/server/reservation-api-keys.ts は本変更時に編集できず、
+  // siteKey を明示できなかったため既定値で補っている。2つ目のテナントを追加する前に、
+  // 発行時へ明示的な siteKey 指定を入れて既定値を外すこと。
+  siteKey         String    @default("lg")
   publicId        String    @unique
   name            String
   secretHash      String    @unique
@@ -365,13 +378,14 @@ model ReservationApiKey {
   requestLogs        ReservationApiRequestLog[]
   idempotencyRecords ReservationApiIdempotencyRecord[]
 
-  @@index([createdAt, id])
-  @@index([revokedAt])
+  @@index([siteKey, createdAt, id])
+  @@index([siteKey, revokedAt])
   @@map("reservation_api_keys")
 }
 
 model ReservationApiRequestLog {
   id                 String                   @id @default(cuid())
+  siteKey            String
   apiKeyId           String?
   apiKeyName         String
   apiKeyPreview      String
@@ -393,10 +407,10 @@ model ReservationApiRequestLog {
 
   apiKey ReservationApiKey? @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
 
-  @@index([requestedAt, id])
-  @@index([apiKeyId, requestedAt])
-  @@index([method, requestedAt])
-  @@index([statusCode, requestedAt])
+  @@index([siteKey, requestedAt, id])
+  @@index([siteKey, apiKeyId, requestedAt])
+  @@index([siteKey, method, requestedAt])
+  @@index([siteKey, statusCode, requestedAt])
   @@map("reservation_api_request_logs")
 }
 
@@ -445,7 +459,7 @@ model ReservationApiKeyPermission {
 }
 
 model ReservationApiUsageSetting {
-  id              Int      @id @default(1)
+  siteKey         String   @id
   monthlyLimit    BigInt?
   revision        Int      @default(1)
   updatedAt       DateTime @default(now()) @updatedAt @db.Timestamptz(3)
@@ -457,15 +471,21 @@ model ReservationApiUsageSetting {
 }
 
 model ReservationApiMonthlyUsage {
-  periodStart  DateTime @id @db.Date
+  siteKey      String
+  periodStart  DateTime @db.Date
   requestCount BigInt   @default(0)
   updatedAt    DateTime @default(now()) @updatedAt @db.Timestamptz(3)
 
+  @@id([siteKey, periodStart])
   @@map("reservation_api_monthly_usage")
 }
 
 model DisasterRadioSubscription {
   id                          String                          @id @default(cuid())
+  // NOTE: ZAAD／防災無線はテナント引数の配線を次段へ送っており、既定値で補っている。
+  // features.zaad が lg 限定である前提に依存する。他テナントで有効化する前に、
+  // 呼び出し経路へ tenantKey を通してこの既定値を外すこと。
+  siteKey                     String                          @default("lg")
   name                        String
   normalizedEmail             String
   normalizedPhone             String
@@ -487,15 +507,15 @@ model DisasterRadioSubscription {
   registeredBy user? @relation("DisasterRadioSubscriptionRegisteredBy", fields: [registeredByUserId], references: [id], onDelete: SetNull)
 
   // PostgreSQL truncated the 64-byte migration identifier to this 63-byte name.
-  @@unique([normalizedEmail, normalizedPhone], map: "disaster_radio_subscriptions_normalizedEmail_normalizedPhone_ke")
-  @@index([createdAt, id])
-  @@index([consentStatus, syncStatus])
+  @@unique([siteKey, normalizedEmail, normalizedPhone], map: "disaster_radio_subscriptions_normalizedEmail_normalizedPhone_ke")
+  @@index([siteKey, createdAt, id])
+  @@index([siteKey, consentStatus, syncStatus])
   @@index([zoomContactListId])
   @@map("disaster_radio_subscriptions")
 }
 
 model ZaadRegistrationSetting {
-  id                      Int      @id @default(1)
+  siteKey                 String   @id
   contactListId           String?
   contactListNameSnapshot String?
   revision                Int      @default(1)
@@ -509,6 +529,10 @@ model ZaadRegistrationSetting {
 
 model ZaadOutboundMessage {
   id              String                @id @default(cuid())
+  // NOTE: ZAAD／防災無線はテナント引数の配線を次段へ送っており、既定値で補っている。
+  // features.zaad が lg 限定である前提に依存する。他テナントで有効化する前に、
+  // 呼び出し経路へ tenantKey を通してこの既定値を外すこと。
+  siteKey         String                @default("lg")
   name            String
   body            String
   languageCode    String                @default("ja-JP")
@@ -527,12 +551,16 @@ model ZaadOutboundMessage {
   createdBy user? @relation("ZaadOutboundMessageCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   updatedBy user? @relation("ZaadOutboundMessageUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
 
-  @@index([updatedAt, id])
+  @@index([siteKey, updatedAt, id])
   @@map("zaad_outbound_messages")
 }
 
 model ZaadOneTimeDispatch {
   id                    String                   @id @default(cuid())
+  // NOTE: ZAAD／防災無線はテナント引数の配線を次段へ送っており、既定値で補っている。
+  // features.zaad が lg 限定である前提に依存する。他テナントで有効化する前に、
+  // 呼び出し経路へ tenantKey を通してこの既定値を外すこと。
+  siteKey               String                   @default("lg")
   operationKey          String                   @unique
   name                  String
   body                  String
@@ -559,8 +587,8 @@ model ZaadOneTimeDispatch {
   sourceLists ZaadOneTimeDispatchSourceList[]
   residents   ZaadOneTimeDispatchResident[]
 
-  @@index([createdAt, id])
-  @@index([state, updatedAt])
+  @@index([siteKey, createdAt, id])
+  @@index([siteKey, state, updatedAt])
   @@map("zaad_one_time_dispatches")
 }
 
@@ -592,6 +620,10 @@ model ZaadOneTimeDispatchResident {
 
 model ZaadAdminAudit {
   id                 String   @id @default(cuid())
+  // NOTE: ZAAD／防災無線はテナント引数の配線を次段へ送っており、既定値で補っている。
+  // features.zaad が lg 限定である前提に依存する。他テナントで有効化する前に、
+  // 呼び出し経路へ tenantKey を通してこの既定値を外すこと。
+  siteKey            String   @default("lg")
   actorUserId        String?
   resourceKind       String
   targetRef          String
@@ -605,8 +637,8 @@ model ZaadAdminAudit {
   stableErrorCode    String?
   createdAt          DateTime @default(now()) @db.Timestamptz(3)
 
-  @@index([createdAt, id])
-  @@index([actorUserId, createdAt])
-  @@index([resourceKind, createdAt])
+  @@index([siteKey, createdAt, id])
+  @@index([siteKey, actorUserId, createdAt])
+  @@index([siteKey, resourceKind, createdAt])
   @@map("zaad_admin_audits")
 }

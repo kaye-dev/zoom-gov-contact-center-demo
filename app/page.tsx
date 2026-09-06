@@ -5,9 +5,11 @@ import { HomeHeading } from './components/HomeHeading';
 import { News } from './components/News';
 import { ZoomWebChatLauncher } from './components/ZoomWebChatLauncher';
 import { getPhoneSettings } from '@/lib/server/phone-settings';
+import { getRequestTenant } from '@/lib/server/tenant';
 
 export default async function Home() {
-  const phoneSettings = await getPhoneSettings();
+  const tenant = await getRequestTenant();
+  const phoneSettings = await getPhoneSettings(tenant.key);
 
   return (
     <div className="">

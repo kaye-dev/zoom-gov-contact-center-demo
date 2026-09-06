@@ -1,11 +1,13 @@
 import { canAdminAccess } from "@/lib/admin-access/authorization";
 import { requireAdminAccess } from "@/lib/server/admin-access/server";
+import { getRequestTenant } from "@/lib/server/tenant";
 import { getPhoneSettings } from "@/lib/server/phone-settings";
 import { getLanguageSettings } from "@/lib/server/site-settings";
 
 import { PhoneSettingsForm } from "./PhoneSettingsForm";
 
 export default async function PhoneSettingsPage() {
+  const tenant = await getRequestTenant();
   const { actor } = await requireAdminAccess(
     "phone-settings",
     "VIEW",
@@ -13,8 +15,8 @@ export default async function PhoneSettingsPage() {
   );
 
   const [phoneSettings, languageSettings] = await Promise.all([
-    getPhoneSettings(),
-    getLanguageSettings(),
+    getPhoneSettings(tenant.key),
+    getLanguageSettings(tenant.key),
   ]);
 
   return (
