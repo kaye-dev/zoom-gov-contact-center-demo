@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url";
 
 const execFileAsync = promisify(execFile);
 const repositoryRoot = dirname(fileURLToPath(new URL("../package.json", import.meta.url)));
+const colimaHelperPath = join(repositoryRoot, "scripts/dev-compose-colima.zsh");
 const runtimeHelperPath = join(repositoryRoot, "scripts/dev-compose-runtime.zsh");
 const wrapperPath = join(repositoryRoot, "dev-compose.sh");
 
@@ -71,6 +72,18 @@ function runHelper(fixture: RuntimeFixture, body: string) {
     "zsh",
     ["-c", `set -euo pipefail; source "$1"; ${body}`, "zsh", runtimeHelperPath],
     fixtureEnv(fixture),
+  );
+}
+
+function runColimaHelper(
+  fixture: RuntimeFixture,
+  body: string,
+  environment: Partial<NodeJS.ProcessEnv> = {},
+) {
+  return execFileSyncWithResult(
+    "zsh",
+    ["-c", `set -euo pipefail; source "$1"; ${body}`, "zsh", colimaHelperPath],
+    { ...fixtureEnv(fixture), ...environment },
   );
 }
 
@@ -416,6 +429,204 @@ test("RT-04: ensure failure reports a final outcome and log command", (context) 
   assert.notEqual(result.status, 0);
   assert.match(output, /STARTUP_RESULT=FAILED/u);
   assert.equal(lastNonEmptyLine(result.stdout), "詳細ログ: ./dev-compose.sh logs");
+});
+
+test("RT-13: Colima resource preflight verifies recommended resources without mutation", (context) => {
+  const fixture = createRuntimeFixture("local");
+  const dockerLog = join(fixture.root, "docker.log");
+  const colimaLog = join(fixture.root, "colima.log");
+  context.after(() => rmSync(fixture.root, { force: true, recursive: true }));
+  writeExecutable(
+    join(fixture.stubDirectory, "docker"),
+    [
+      `printf '%s\\n' "$*" >> '${dockerLog}'`,
+      'if [ "$1" = "info" ]; then',
+      '  if [ "$2" = "--format" ]; then printf "6442450944\\n"; fi',
+      "  exit 0",
+      "fi",
+      'if [ "$1" = "context" ] && [ "$2" = "show" ]; then printf "colima\\n"; exit 0; fi',
+      'if [ "$1" = "context" ] && [ "$2" = "inspect" ]; then printf "unix:///tmp/colima.sock\\n"; exit 0; fi',
+      'if [ "$1" = "ps" ]; then exit 0; fi',
+      "exit 1",
+    ].join("\n"),
+  );
+  writeExecutable(
+    join(fixture.stubDirectory, "colima"),
+    [
+      `printf '%s\\n' "$*" >> '${colimaLog}'`,
+      'if [ "$1" = "status" ]; then',
+      "  printf '%s\\n' '{\"runtime\":\"docker\",\"docker_socket\":\"unix:///tmp/colima.sock\",\"cpu\":4,\"memory\":6442450944}'",
+      "  exit 0",
+      "fi",
+      "exit 1",
+    ].join("\n"),
+  );
+
+  const result = runColimaHelper(fixture, "dev_compose_colima_preflight");
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Colima resources verified/u);
+  assert.match(readFileSync(colimaLog, "utf8"), /^status default --json$/mu);
+  assert.doesNotMatch(readFileSync(colimaLog, "utf8"), /^(stop|start) /mu);
+  assert.doesNotMatch(readFileSync(dockerLog, "utf8"), /compose/u);
+});
+
+test("RT-13: Colima guest reservation is rounded up before persistent resize and revalidation", (context) => {
+  const fixture = createRuntimeFixture("local");
+  const state = join(fixture.root, "resized");
+  const colimaLog = join(fixture.root, "colima.log");
+  context.after(() => rmSync(fixture.root, { force: true, recursive: true }));
+  writeExecutable(
+    join(fixture.stubDirectory, "docker"),
+    [
+      'if [ "$1" = "info" ]; then',
+      '  if [ "$2" = "--format" ]; then',
+      `    if [ -e '${state}' ]; then printf "6442450944\\n"; else printf "6197448704\\n"; fi`,
+      "  fi",
+      "  exit 0",
+      "fi",
+      'if [ "$1" = "context" ] && [ "$2" = "show" ]; then printf "colima\\n"; exit 0; fi',
+      'if [ "$1" = "context" ] && [ "$2" = "inspect" ]; then printf "unix:///tmp/colima.sock\\n"; exit 0; fi',
+      'if [ "$1" = "ps" ]; then exit 0; fi',
+      "exit 1",
+    ].join("\n"),
+  );
+  writeExecutable(
+    join(fixture.stubDirectory, "colima"),
+    [
+      `printf '%s\\n' "$*" >> '${colimaLog}'`,
+      'if [ "$1" = "status" ]; then',
+      `  if [ -e '${state}' ]; then printf '%s\\n' '{\"runtime\":\"docker\",\"docker_socket\":\"unix:///tmp/colima.sock\",\"cpu\":4,\"memory\":7516192768}'; else printf '%s\\n' '{\"runtime\":\"docker\",\"docker_socket\":\"unix:///tmp/colima.sock\",\"cpu\":4,\"memory\":6442450944}'; fi`,
+      "  exit 0",
+      "fi",
+      `if [ "$1" = "start" ]; then : > '${state}'; exit 0; fi`,
+      'if [ "$1" = "stop" ]; then exit 0; fi',
+      "exit 1",
+    ].join("\n"),
+  );
+
+  const result = runColimaHelper(
+    fixture,
+    'dev_compose_colima_prompt_confirmation() { DEV_COMPOSE_COLIMA_PROMPT_ANSWER=yes; }; dev_compose_colima_preflight',
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /restarted and resources were verified/u);
+  assert.match(
+    readFileSync(colimaLog, "utf8"),
+    /stop default\nstart default --memory 7 --cpus 4 --save-config\n/u,
+  );
+});
+
+test("RT-13: low-resource Colima never restarts active workloads and requires explicit bypass", (context) => {
+  const fixture = createRuntimeFixture("local");
+  const colimaLog = join(fixture.root, "colima.log");
+  context.after(() => rmSync(fixture.root, { force: true, recursive: true }));
+  writeExecutable(
+    join(fixture.stubDirectory, "docker"),
+    [
+      'if [ "$1" = "info" ]; then if [ "$2" = "--format" ]; then printf "2147483648\\n"; fi; exit 0; fi',
+      'if [ "$1" = "context" ] && [ "$2" = "show" ]; then printf "colima\\n"; exit 0; fi',
+      'if [ "$1" = "context" ] && [ "$2" = "inspect" ]; then printf "unix:///tmp/colima.sock\\n"; exit 0; fi',
+      'if [ "$1" = "ps" ] && [ "$2" = "--quiet" ]; then printf "foreign-container\\n"; exit 0; fi',
+      'if [ "$1" = "ps" ] && [ "$2" = "--format" ]; then printf "foreign-container other-app image:latest Up 1 minute\\n"; exit 0; fi',
+      "exit 1",
+    ].join("\n"),
+  );
+  writeExecutable(
+    join(fixture.stubDirectory, "colima"),
+    [
+      `printf '%s\\n' "$*" >> '${colimaLog}'`,
+      'if [ "$1" = "status" ]; then printf "%s\\n" \'{\"runtime\":\"docker\",\"docker_socket\":\"unix:///tmp/colima.sock\",\"cpu\":2,\"memory\":2147483648}\'; exit 0; fi',
+      "exit 1",
+    ].join("\n"),
+  );
+
+  const active = runColimaHelper(
+    fixture,
+    'dev_compose_colima_prompt_confirmation() { print unexpected >&2; return 0; }; dev_compose_colima_preflight',
+  );
+  assert.notEqual(active.status, 0);
+  assert.match(active.stderr, /foreign-container other-app/u);
+  assert.doesNotMatch(readFileSync(colimaLog, "utf8"), /^(stop|start) /mu);
+
+  writeExecutable(join(fixture.stubDirectory, "docker"), [
+    'if [ "$1" = "info" ]; then if [ "$2" = "--format" ]; then printf "2147483648\\n"; fi; exit 0; fi',
+    'if [ "$1" = "context" ] && [ "$2" = "show" ]; then printf "colima\\n"; exit 0; fi',
+    'if [ "$1" = "context" ] && [ "$2" = "inspect" ]; then printf "unix:///tmp/colima.sock\\n"; exit 0; fi',
+    'if [ "$1" = "ps" ]; then exit 0; fi',
+    "exit 1",
+  ].join("\n"));
+  const bypass = runColimaHelper(
+    fixture,
+    'typeset -g prompt_count=0; dev_compose_colima_prompt_confirmation() { (( prompt_count += 1 )); DEV_COMPOSE_COLIMA_PROMPT_ANSWER=$([[ ${prompt_count} == 1 ]] && print n || print yes); }; dev_compose_colima_preflight',
+  );
+  assert.equal(bypass.status, 0, bypass.stderr);
+  assert.match(bypass.stderr, /Continuing once with insufficient Colima resources/u);
+  assert.doesNotMatch(readFileSync(colimaLog, "utf8"), /^(stop|start) /mu);
+});
+
+test("RT-13: Colima preflight fails closed without a TTY and detects ownership drift before stop", (context) => {
+  const fixture = createRuntimeFixture("local");
+  context.after(() => rmSync(fixture.root, { force: true, recursive: true }));
+  const commonStubs = [
+    "typeset -g stopped=0",
+    "typeset -g context_calls=0",
+    "docker() {",
+    '  case "$1:$2" in',
+    '    info:--format) print 2147483648 ;;',
+    '    info:*) return 0 ;;',
+    '    context:show) (( context_calls += 1 )); print colima ;;',
+    '    context:inspect) print unix:///tmp/colima.sock ;;',
+    '    ps:*) return 0 ;;',
+    '    *) return 1 ;;',
+    "  esac",
+    "}",
+    "colima() {",
+    '  case "$1" in',
+    "    status) print '{\"runtime\":\"docker\",\"docker_socket\":\"unix:///tmp/colima.sock\",\"cpu\":2,\"memory\":2147483648}' ;;",
+    '    stop) stopped=1 ;;',
+    '    start) return 0 ;;',
+    '    *) return 1 ;;',
+    "  esac",
+    "}",
+  ].join("\n");
+
+  const noninteractive = runColimaHelper(
+    fixture,
+    `${commonStubs}\ndev_compose_colima_prompt_confirmation() { return 1; }; dev_compose_colima_preflight || { print "failed stopped=\${stopped}"; exit 0; }`,
+  );
+  assert.equal(noninteractive.status, 0, noninteractive.stderr);
+  assert.match(noninteractive.stdout, /failed stopped=0/u);
+  assert.match(noninteractive.stderr, /interactive terminal is required/u);
+
+  const driftMarker = join(fixture.root, "context-drifted");
+  const drift = runColimaHelper(
+    fixture,
+    `${commonStubs}\ndocker() { case "$1:$2" in info:--format) print 2147483648 ;; info:*) return 0 ;; context:show) if [[ -e "${driftMarker}" ]]; then print colima-team; else : > "${driftMarker}"; print colima; fi ;; context:inspect) print unix:///tmp/colima.sock ;; ps:*) return 0 ;; *) return 1 ;; esac; }; dev_compose_colima_prompt_confirmation() { DEV_COMPOSE_COLIMA_PROMPT_ANSWER=yes; }; dev_compose_colima_preflight || { print "failed stopped=\${stopped}"; exit 0; }`,
+  );
+  assert.equal(drift.status, 0, drift.stderr);
+  assert.match(drift.stdout, /failed stopped=0/u);
+  assert.match(drift.stderr, /ownership changed after approval/u);
+});
+
+test("RT-13: explicit Docker endpoint ownership skips Colima mutation", (context) => {
+  const fixture = createRuntimeFixture("local");
+  context.after(() => rmSync(fixture.root, { force: true, recursive: true }));
+  const result = runColimaHelper(
+    fixture,
+    "docker() { [[ $1 == info && $2 == --format ]] && print 2147483648; }; colima() { return 99; }; dev_compose_colima_preflight",
+    { DOCKER_CONTEXT: "colima" },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stderr, /explicitly overrides Docker endpoint ownership/u);
+});
+
+test("RT-13: Colima preflight is Compose-only and precedes session or migration work", () => {
+  const wrapper = readFileSync(wrapperPath, "utf8");
+  const nativeStart = wrapper.indexOf('if [[ "${ACTIVE_RUNTIME_KIND}" == "native-unmanaged" ]];');
+  const preflight = wrapper.indexOf("dev_compose_colima_preflight");
+  const baseline = wrapper.indexOf("dev_runtime_capture_session_baseline", preflight);
+  assert.match(wrapper, /source .*scripts\/dev-compose-colima\.zsh/u);
+  assert.ok(nativeStart >= 0 && preflight > nativeStart && baseline > preflight);
 });
 
 test("RT-04: logs refuses native runtimes without starting Compose", (context) => {
