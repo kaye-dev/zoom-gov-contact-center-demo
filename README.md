@@ -42,7 +42,23 @@ Zoom 製品のデモ用に作成した、架空の市区町村ホームページ
 ./dev-compose.sh ensure
 ```
 
-`prepare`はcheckout固有のruntime identityを解決するだけで、Dockerやアプリを起動しません。`status`は現在のCompose project、port、URL、runtime owner、healthを表示します。`ensure`は正しい既存serverがあれば再利用し、存在しない場合だけ起動します。検証に使うURLだけを取得する場合は`./dev-compose.sh status --url`を使います。
+`prepare`はcheckout固有のruntime identityを解決するだけで、Dockerやアプリを起動しません。`status`は現在のCompose project、port、URL、runtime owner、healthを表示します。`ensure`は正しい既存serverがあれば再利用し、存在しない場合だけ起動します。終了時には必ず`STARTUP_RESULT=SUCCESS`または`STARTUP_RESULT=FAILED`を表示し、最後の行に詳細ログを確認するコマンドを表示します。検証に使うURLだけを取得する場合は`./dev-compose.sh status --url`を使います。
+
+`ensure`の成功時には、Prisma Studio を起動する`STUDIO_START_COMMAND`と、checkout固有の`STUDIO_URL`も表示します。Studioは必要な場合だけ起動し、表示されたURLをブラウザで開きます。
+
+起動中はコンテナログを追尾しません。Composeで起動したWebの直近100行を確認し、その後も追尾する場合だけ、別ターミナルで次を実行します。`Ctrl+C`はログ追尾だけを終了し、WebやDBは停止しません。
+
+```bash
+./dev-compose.sh logs
+```
+
+native Next.js processを手動で起動している場合、そのログは起動元ターミナルで確認します。`./dev-compose.sh logs`はDockerやColimaを起動せず、Composeログを安全に取得できない理由だけを表示します。
+
+起動済みで所有権を検証できる開発PostgreSQLへ接続する場合は、次を実行します。`psql` を終了するには `\q` を入力します。このコマンドもDockerやDBを起動しません。
+
+```bash
+./dev-compose.sh db
+```
 
 Local checkoutは従来どおり[http://localhost:3000](http://localhost:3000)、PostgreSQL `5432`、Prisma Studio `5555`を使用します。同じcheckoutのhealthyなnative Next.js processまたは正しいCompose `web`が起動済みなら、PIDまたはcontainer IDを変えずに再利用します。別checkoutや所有権不明のprocessが`3000`を使っている場合は、そのprocessを停止せずエラーにします。
 

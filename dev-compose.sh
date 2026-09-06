@@ -19,6 +19,24 @@ typeset -g RUNTIME_OWNERSHIP="available"
 typeset -g RUNTIME_OWNERSHIP_DETAIL="No web runtime is listening on the assigned port."
 typeset -g RUNTIME_RESTART_REQUIRED=0
 typeset -g MIGRATION_DEPLOYED=0
+typeset -g ENSURE_OUTCOME_PENDING=0
+typeset -g ENSURE_OUTCOME_EMITTED=0
+
+print_ensure_failure_outcome() {
+  (( ENSURE_OUTCOME_PENDING )) || return 0
+  (( ! ENSURE_OUTCOME_EMITTED )) || return 0
+
+  ENSURE_OUTCOME_EMITTED=1
+  print -r -- "STARTUP_RESULT=FAILED"
+  print -r -- "詳細ログ: ./dev-compose.sh logs"
+}
+
+TRAPZERR() {
+  local exit_code=$?
+
+  print_ensure_failure_outcome
+  return "${exit_code}"
+}
 
 check_colima() {
   command -v colima >/dev/null 2>&1 && colima status >/dev/null 2>&1
@@ -784,6 +802,67 @@ runtime_status_command() {
   runtime_print_status "${url_only}"
 }
 
+runtime_logs_command() {
+  local detection_status=0
+
+  [[ $# -eq 0 ]] || {
+    print -u2 "Usage: ./dev-compose.sh logs"
+    return 2
+  }
+
+  dev_runtime_load
+  runtime_detect_web || detection_status=$?
+  if [[ "${ACTIVE_RUNTIME_KIND}" == "compose" && "${RUNTIME_OWNERSHIP}" == "verified" ]]; then
+    runtime_compose logs --tail=100 --follow web
+    return
+  fi
+
+  if [[ "${ACTIVE_RUNTIME_KIND}" == "native-unmanaged" ]]; then
+    print -u2 "Native Next.js logs are available only in the terminal that started PID ${ACTIVE_RUNTIME_IDENTIFIER}; Compose logs were not requested."
+    return 1
+  fi
+
+  print -u2 "Compose web logs were not requested because no verified Compose web runtime is available: ${RUNTIME_OWNERSHIP_DETAIL}"
+  return 1
+}
+
+runtime_database_command() {
+  local database_container_id
+  local database_running
+
+  [[ $# -eq 0 ]] || {
+    print -u2 "Usage: ./dev-compose.sh db"
+    return 2
+  }
+
+  dev_runtime_load
+  if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+    print -u2 "Docker is unavailable; PostgreSQL was not started. Start Docker separately, then run './dev-compose.sh db'."
+    return 1
+  fi
+
+  database_container_id="$(runtime_compose ps -aq db)"
+  if [[ -z "${database_container_id}" || "${database_container_id}" == *$'\n'* ]]; then
+    print -u2 "No exactly one checkout-scoped PostgreSQL container is available for ${COMPOSE_PROJECT_NAME}. Start it explicitly before connecting."
+    return 1
+  fi
+  runtime_validate_container_identity "${database_container_id}" db 0 || {
+    print -u2 -r -- "${RUNTIME_OWNERSHIP_DETAIL}"
+    return 1
+  }
+  database_running="$(docker inspect --format '{{ .State.Running }}' "${database_container_id}" 2>/dev/null)" || {
+    print -u2 "Could not inspect the verified PostgreSQL container ${database_container_id}."
+    return 1
+  }
+  if [[ "${database_running}" != "true" ]]; then
+    print -u2 "The verified PostgreSQL container ${database_container_id} is not running. Start it explicitly before connecting."
+    return 1
+  fi
+
+  print -r -- "Opening PostgreSQL shell for ${COMPOSE_PROJECT_NAME}. Exit with \q."
+  runtime_compose exec db psql -U postgres -d zoom_demo
+}
+
 runtime_ensure_command() {
   local detection_status=0
 
@@ -1150,7 +1229,20 @@ main() {
       runtime_status_command "$@"
       ;;
     ensure)
+      ENSURE_OUTCOME_PENDING=1
       runtime_ensure_command "$@"
+      ENSURE_OUTCOME_EMITTED=1
+      print -r -- "STARTUP_RESULT=SUCCESS"
+      print -r -- "STARTUP_URL=http://localhost:${HOST_PORT}"
+      print -r -- "STUDIO_START_COMMAND=./dev-compose.sh up -d studio"
+      print -r -- "STUDIO_URL=http://localhost:${STUDIO_PORT}"
+      print -r -- "詳細ログ: ./dev-compose.sh logs"
+      ;;
+    logs)
+      runtime_logs_command "$@"
+      ;;
+    db)
+      runtime_database_command "$@"
       ;;
     restart)
       runtime_restart_web "$@"

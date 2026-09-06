@@ -91,6 +91,14 @@ function parseContext(output: string) {
   );
 }
 
+function lastNonEmptyLine(output: string) {
+  return output
+    .trim()
+    .split("\n")
+    .filter((line) => line.trim().length > 0)
+    .at(-1);
+}
+
 function candidateSlot(path: string) {
   const digest = createHash("sha256").update(realpathSync(path)).digest("hex");
   return Number.parseInt(digest.slice(0, 8), 16) % 800;
@@ -379,8 +387,183 @@ test("RT-04: Local ensure reuses an exact healthy native runtime without lifecyc
   assert.equal(runtime.ACTIVE_RUNTIME_HEALTH, "healthy");
   assert.equal(runtime.RUNTIME_RESTART_REQUIRED, "0");
   assert.equal(runtime.PRODUCTION_URL, "http://localhost:3000");
+  assert.match(result.stdout, /STARTUP_RESULT=SUCCESS/u);
+  assert.match(result.stdout, /STARTUP_URL=http:\/\/localhost:3000/u);
+  assert.match(result.stdout, /STUDIO_START_COMMAND=\.\/dev-compose\.sh up -d studio/u);
+  assert.match(result.stdout, /STUDIO_URL=http:\/\/localhost:5555/u);
+  assert.equal(lastNonEmptyLine(result.stdout), "詳細ログ: ./dev-compose.sh logs");
   assert.doesNotMatch(readFileSync(dockerLog, "utf8"), /compose|\bup\b|restart|stop/u);
   assert.throws(() => readFileSync(colimaLog, "utf8"), /ENOENT/u);
+});
+
+test("RT-04: ensure failure reports a final outcome and log command", (context) => {
+  const fixture = createRuntimeFixture("local");
+  context.after(() => rmSync(fixture.root, { force: true, recursive: true }));
+  writeExecutable(
+    join(fixture.stubDirectory, "lsof"),
+    [
+      'case "$*" in',
+      '  *"-t -iTCP:3000"*) printf "4242\\n" ;;',
+      '  *"-a -p 4242"*) printf "p4242\\nfcwd\\nn/foreign/checkout\\n" ;;',
+      "  *) exit 1 ;;",
+      "esac",
+    ].join("\n"),
+  );
+  writeExecutable(join(fixture.stubDirectory, "docker"), "exit 1");
+
+  const result = execFileSyncWithResult("zsh", [wrapperPath, "ensure"], fixtureEnv(fixture));
+  const output = `${result.stdout}\n${result.stderr}`;
+  assert.notEqual(result.status, 0);
+  assert.match(output, /STARTUP_RESULT=FAILED/u);
+  assert.equal(lastNonEmptyLine(result.stdout), "詳細ログ: ./dev-compose.sh logs");
+});
+
+test("RT-04: logs refuses native runtimes without starting Compose", (context) => {
+  const fixture = createRuntimeFixture("local");
+  const dockerLog = join(fixture.root, "docker.log");
+  context.after(() => rmSync(fixture.root, { force: true, recursive: true }));
+  writeExecutable(
+    join(fixture.stubDirectory, "lsof"),
+    [
+      'case "$*" in',
+      '  *"-t -iTCP:3000"*) printf "4242\\n" ;;',
+      `  *"-a -p 4242"*) printf "p4242\\nfcwd\\nn${fixture.checkout}\\n" ;;`,
+      "  *) exit 1 ;;",
+      "esac",
+    ].join("\n"),
+  );
+  writeExecutable(
+    join(fixture.stubDirectory, "ps"),
+    'case "$*" in *"command="*) printf "next-server (v16.3.0)\\n" ;; *) printf "Sat Aug 30 12:00:00 2026\\n" ;; esac',
+  );
+  writeExecutable(join(fixture.stubDirectory, "curl"), "exit 0");
+  writeExecutable(
+    join(fixture.stubDirectory, "docker"),
+    `printf '%s\\n' "$*" >> '${dockerLog}'\nexit 1`,
+  );
+
+  const result = execFileSyncWithResult("zsh", [wrapperPath, "logs"], fixtureEnv(fixture));
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Native Next\.js logs are available only in the terminal/u);
+  assert.doesNotMatch(readFileSync(dockerLog, "utf8"), /compose|\bup\b|restart|stop/u);
+});
+
+test("RT-04: logs refuses unverified runtimes without starting Compose", (context) => {
+  const fixture = createRuntimeFixture("local");
+  const dockerLog = join(fixture.root, "docker.log");
+  context.after(() => rmSync(fixture.root, { force: true, recursive: true }));
+  writeExecutable(
+    join(fixture.stubDirectory, "docker"),
+    `printf '%s\\n' "$*" >> '${dockerLog}'\nexit 1`,
+  );
+
+  const result = execFileSyncWithResult("zsh", [wrapperPath, "logs"], fixtureEnv(fixture));
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /no verified Compose web runtime is available/u);
+  assert.doesNotMatch(readFileSync(dockerLog, "utf8"), /compose|\bup\b|restart|stop/u);
+});
+
+test("RT-04: db refuses unavailable Docker without starting PostgreSQL", (context) => {
+  const fixture = createRuntimeFixture("local");
+  const dockerLog = join(fixture.root, "docker.log");
+  context.after(() => rmSync(fixture.root, { force: true, recursive: true }));
+  writeExecutable(
+    join(fixture.stubDirectory, "docker"),
+    `printf '%s\\n' "$*" >> '${dockerLog}'\nexit 1`,
+  );
+
+  const result = execFileSyncWithResult("zsh", [wrapperPath, "db"], fixtureEnv(fixture));
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Docker is unavailable; PostgreSQL was not started/u);
+  assert.doesNotMatch(readFileSync(dockerLog, "utf8"), /compose|\bup\b|restart|stop/u);
+});
+
+test("RT-06: logs follows only the verified checkout-scoped web container", (context) => {
+  const fixture = createRuntimeFixture("local");
+  const dockerLog = join(fixture.root, "docker.log");
+  const project = "zoom-gov-contact-center-demo";
+  const network = `${project}_default`;
+  context.after(() => rmSync(fixture.root, { force: true, recursive: true }));
+  copyFileSync(join(repositoryRoot, "compose.yaml"), join(fixture.checkout, "compose.yaml"));
+  writeExecutable(join(fixture.stubDirectory, "curl"), "exit 0");
+  writeExecutable(
+    join(fixture.stubDirectory, "docker"),
+    [
+      `printf '%s\\n' "$*" >> '${dockerLog}'`,
+      'last_arg=""',
+      'for current_arg do last_arg="$current_arg"; done',
+      'if [ "$1" = "info" ]; then exit 0; fi',
+      'if [ "$1" = "ps" ]; then printf "local-web 127.0.0.1:3000->3000/tcp\\n"; exit 0; fi',
+      'if [ "$1" = "inspect" ]; then',
+      '  case "$*" in',
+      `    *"com.docker.compose.project.working_dir"*) printf '%s\\n' '${fixture.checkout}' ;;`,
+      `    *"com.docker.compose.project"*) printf '${project}\\n' ;;`,
+      '    *"com.docker.compose.service"*) case "$last_arg" in local-web) printf "web\\n" ;; local-db) printf "db\\n" ;; *) exit 1 ;; esac ;;',
+      '    *"dev.zoomgov.runtime."*) printf "<no value>\\n" ;;',
+      `    *"/app/node_modules"*) printf '${project}_node_modules\\n' ;;`,
+      `    *"/var/lib/postgresql/data"*) printf '${project}_postgres-data\\n' ;;`,
+      `    *"NetworkSettings.Networks"*) printf '${network}\\n' ;;`,
+      `    *"/app"*) printf '%s\\n' '${fixture.checkout}' ;;`,
+      '    *".State.StartedAt"*) printf "2026-09-06T00:00:00Z\\n" ;;',
+      '    *".State.Running"*) printf "true\\n" ;;',
+      '    *".Path"*) printf "docker-entrypoint.sh sh -c npm run dev\\n" ;;',
+      '    *) exit 1 ;;',
+      '  esac',
+      '  exit 0',
+      'fi',
+      'if [ "$1" = "volume" ] && [ "$2" = "inspect" ]; then',
+      '  case "$*" in',
+      `    *"com.docker.compose.project"*) printf '${project}\\n' ;;`,
+      '    *"com.docker.compose.volume"*) case "$last_arg" in *node_modules) printf "node_modules\\n" ;; *postgres-data) printf "postgres-data\\n" ;; *) exit 1 ;; esac ;;',
+      '    *"dev.zoomgov.runtime."*) printf "<no value>\\n" ;;',
+      '    *) exit 1 ;;',
+      '  esac',
+      '  exit 0',
+      'fi',
+      'if [ "$1" = "network" ] && [ "$2" = "inspect" ]; then',
+      '  case "$*" in',
+      `    *"com.docker.compose.project"*) printf '${project}\\n' ;;`,
+      '    *"com.docker.compose.network"*) printf "default\\n" ;;',
+      '    *"dev.zoomgov.runtime."*) printf "<no value>\\n" ;;',
+      '    *) exit 1 ;;',
+      '  esac',
+      '  exit 0',
+      'fi',
+      'case "$*" in',
+      '  *"compose"*"ps -aq db"*) printf "local-db\\n"; exit 0 ;;',
+      '  *"compose"*"logs --tail=100 --follow web"*) printf "web log\\n"; exit 0 ;;',
+      '  *"compose"*"exec db psql -U postgres -d zoom_demo"*) printf "psql (17.0)\\n"; exit 0 ;;',
+      'esac',
+      'exit 1',
+    ].join("\n"),
+  );
+
+  const result = execFileSyncWithResult("zsh", [wrapperPath, "logs"], fixtureEnv(fixture));
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.trim(), "web log");
+  const log = readFileSync(dockerLog, "utf8");
+  assert.match(
+    log,
+    new RegExp(
+      `compose --project-directory ${realpathSync(fixture.checkout)} .* -p ${project} logs --tail=100 --follow web`,
+      "u",
+    ),
+  );
+  assert.doesNotMatch(log, /compose .*\b(up|restart|stop)\b/u);
+
+  const databaseResult = execFileSyncWithResult("zsh", [wrapperPath, "db"], fixtureEnv(fixture));
+  assert.equal(databaseResult.status, 0, databaseResult.stderr);
+  assert.match(databaseResult.stdout, /Opening PostgreSQL shell/u);
+  assert.match(databaseResult.stdout, /psql \(17\.0\)/u);
+  const databaseLog = readFileSync(dockerLog, "utf8");
+  assert.match(
+    databaseLog,
+    new RegExp(
+      `compose --project-directory ${realpathSync(fixture.checkout)} .* -p ${project} exec db psql -U postgres -d zoom_demo`,
+      "u",
+    ),
+  );
+  assert.doesNotMatch(databaseLog, /compose .*\b(up|restart|stop)\b/u);
 });
 
 test("RT-11: native configuration drift persists until an explicit refresh", (context) => {
