@@ -5,6 +5,7 @@ set -euo pipefail
 readonly DEV_COMPOSE_SCRIPT_DIR="${0:A:h}"
 source "${DEV_COMPOSE_SCRIPT_DIR}/scripts/dev-compose-network.zsh"
 source "${DEV_COMPOSE_SCRIPT_DIR}/scripts/dev-compose-runtime.zsh"
+source "${DEV_COMPOSE_SCRIPT_DIR}/scripts/dev-compose-colima.zsh"
 
 typeset -g ACTIVE_RUNTIME_KIND="none"
 typeset -g ACTIVE_RUNTIME_IDENTIFIER=""
@@ -901,6 +902,7 @@ runtime_ensure_command() {
   fi
 
   ensure_docker_daemon
+  dev_compose_colima_preflight
   dev_runtime_capture_session_baseline
   runtime_validate_project_containers
   detection_status=0

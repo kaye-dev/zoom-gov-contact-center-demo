@@ -82,7 +82,20 @@ LAN 向けの起動は、開発サーバーを平文 HTTP で同じネットワ�
 
 LocalのPrisma Studioは[http://localhost:5555](http://localhost:5555)です。worktreeのStudio portは`./dev-compose.sh status`で確認します。
 
-`./dev-compose.sh`は変更操作のときだけ、必要に応じてColimaを起動します。`prepare`と`status`はColimaを起動しません。WebまたはStudioを起動する前に現在のCompose projectのPrisma migration状態を確認し、未適用migrationがある場合だけ`db:deploy`の承認を求めます。通常のソース変更はHMRを使い、自動的な`web`再起動はmigration適用後に必要な場合だけです。package、Docker、Next.js設定などの変更では暗黙に再起動せず、明示的な`./dev-compose.sh restart web`を案内します。
+`./dev-compose.sh`は変更操作のときだけ、必要に応じてColimaを起動します。`prepare`と`status`はColimaを起動しません。`ensure` が Compose Web を起動または再利用する前には、現在の Docker context が所有する Colima profile の実効メモリ、構成メモリ、CPU を確認します。開発用の推奨値は **6 GiB / 4 CPU** です。Next.js の開発サーバーが Colima VM のメモリ不足で OOM 停止すると、loopback のポート転送も停止し、ブラウザでは接続拒否になります。
+
+推奨値未満では、`ensure` が profile を永続的に再構成してから起動するか確認します。`y` または `yes` を入力すると、対象profileだけを `--memory 6 --cpus 4 --save-config` で再起動し、Docker context・socket・メモリ・CPU を再検証してから続行します。最初の確認を拒否した場合は、設定を変えず今回だけ起動するかをもう一度確認します。非対話実行では低リソースのまま起動せず終了します。
+
+Colima の再起動は他の Docker workload も停止させるため、稼働中のコンテナが1つでもある場合は `ensure` は設定変更も起動も行いません。表示されたコンテナを利用者が明示的に停止または保全してから再実行してください。手動で復旧する場合は、対象profileを確認したうえで次を実行します。
+
+```bash
+colima status <profile>
+colima stop <profile>
+colima start <profile> --memory 6 --cpus 4 --save-config
+./dev-compose.sh ensure
+```
+
+`DOCKER_HOST` または `DOCKER_CONTEXT` を明示している場合、非 Colima の Docker context の場合、または profile と socket の所有権を照合できない場合は、`ensure` は Colima 設定を変更せず既存の起動処理を続行します。WebまたはStudioを起動する前に現在のCompose projectのPrisma migration状態を確認し、未適用migrationがある場合だけ`db:deploy`の承認を求めます。通常のソース変更はHMRを使い、自動的な`web`再起動はmigration適用後に必要な場合だけです。package、Docker、Next.js設定などの変更では暗黙に再起動せず、明示的な`./dev-compose.sh restart web`を案内します。
 
 日常操作でraw `docker compose`は使いません。wrapperが`--project-directory`、project名、runtime envを必ず注入し、別worktreeへの誤操作を防ぎます。
 
