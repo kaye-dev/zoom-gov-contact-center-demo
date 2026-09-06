@@ -22,7 +22,7 @@ An explicit `$git-commit-push-pr` invocation authorizes these actions for the cu
 - fetch and synchronize with the pull request base
 - push the topic branch and create or update its pull request
 
-It does not authorize force pushing, stashing or discarding changes, deleting local plan or review artifacts, broad staging, resolving conflicts automatically, creating a fork, merging the pull request, or waiting for CI. Honor any narrower instruction in the invoking prompt. A plan or review artifact is context, not shipping authorization, and this skill never deletes it automatically.
+It does not authorize force pushing, stashing or discarding changes, broad staging, resolving conflicts automatically, creating a fork, merging the pull request, or waiting for CI. Honor any narrower instruction in the invoking prompt. When a canonical `plans/<slug>/goal.md` belongs to the current task, this invocation authorizes deletion of that exact plan directory only after the complete goal has been archived in a verified local commit, base synchronization has completed, and no other plan entry exists. It never authorizes deleting or merging an unrelated plan.
 
 A recovery prompt emitted by this skill and sent back by the user may additionally authorize the exact base, new branch, task paths, staged-patch decision, and inherited commits written in that prompt. It may authorize `git restore --staged -- <explicit paths>` only for paths that the prompt names as excluded from the task. This index-only normalization never authorizes `--worktree`, hunk guessing, or modification or loss of working-tree content.
 
@@ -37,6 +37,8 @@ Before any Git write or GitHub mutation:
 5. Fetch the chosen remote with pruning before deciding the base or branch state. If a fetch fails specifically because network, DNS, SSH agent, credential-store, or sandbox access is unavailable, rerun that exact read-only fetch once through the available approval or sandbox-escalation mechanism. A semantic Git rejection or a second failure is a blocker.
 
 Preserve the initial status so the final report can distinguish task changes from unrelated user changes. Before any branch or index mutation, capture the full HEAD SHA, local and remote refs, `git worktree list --porcelain`, and one `node scripts/validation-digest.mjs --scope <task-path>` result for the proposed paths. It records staged, unstaged, untracked, scope, and validated diff digests without diff content; never put credentials, tokens, environment values, or personal data in a recovery prompt.
+
+Resolve a canonical goal before any branch or index mutation. Generated plan artifacts are visible untracked paths, not dirty task source and not stage candidates. If the current task has a canonical goal, require it to be a regular `plans/<slug>/goal.md`, capture its bytes, SHA-256, user-check handoff, and top-level plan inventory, and stop if another plan entry is present. Independently classify the diff as UI or non-UI. For current UI work, resolve the exact completed run and execute `node .agents/skills/plan/scripts/parity-runner.mjs verify-run plans/<slug>/prototype --run-id <run-id>`. Missing, failed, stale, or ambiguous schema-version-4 final evidence stops before branch, index, remote, or pull-request mutation. Require `automationCoverageStatus=pass`; allow `humanVisualApprovalStatus=pending` and coverage-mode `fullParityStatus=not-run` without upgrading either status.
 
 ## 2. Resolve the base and topic branch
 
@@ -108,11 +110,13 @@ Determine the exact current-task paths from the invocation context and the actua
 
 Before committing, record the current HEAD, inspect both `git diff --cached --name-status` and the complete staged patch, and rerun the digest helper after limited staging. If its validated diff digest matches the recorded implementation/review result, reuse those successful command/scope/status records and run only `git diff --cached --check` plus repository hooks; otherwise run the missing changed-scope validation first. Record only commands that actually ran and their results.
 
-Generate the commit message only from the staged diff. Follow repository conventions first; otherwise use a concrete Japanese Conventional Commit subject without a trailing period. Do not add AI attribution or `Co-authored-by`.
+Generate the commit subject only from the staged diff. Follow repository conventions first; otherwise use a concrete Japanese Conventional Commit subject without a trailing period. When a canonical current-task goal exists, create a private repository-external message file with `node scripts/plan-commit-archive.mjs prepare --goal plans/<slug>/goal.md --subject <subject> --output <temporary-file>`, verify its recorded path, byte length, and SHA-256, then commit with `git commit --cleanup=verbatim -F <temporary-file>`. This preserves the complete UTF-8 goal payload, including Markdown headings and its final newline. Never summarize, reformat, truncate, or redact the payload; stop before commit if secret or size validation fails. Do not add AI attribution or `Co-authored-by`.
+
+If task changes are already committed but a canonical goal remains unarchived, require a real base-relative task diff and create exactly one final archive commit with `git commit --allow-empty --cleanup=verbatim -F <temporary-file>`. Do not create an empty archive commit when the same goal SHA-256 already appears in the current base-relative history.
 
 Let commit hooks run. Never use `--no-verify`. If a hook fails, stop unless it changed only intended files in a clearly mechanical way; in that case inspect and restage those explicit paths and retry once. Stop if a hook touches unrelated files or the retry fails.
 
-After committing, verify that HEAD advanced, the index is empty, and the hash, subject, and paths are correct with `git show --stat --oneline --no-renames HEAD`. If a hook included an unexpected path, stop before push instead of amending or resetting automatically. An already-committed topic branch may skip an empty commit and continue. If neither a task commit nor a base-relative diff exists, stop without pushing or creating a pull request.
+After committing, verify that HEAD advanced, the index is empty, and the hash, subject, and paths are correct with `git show --stat --oneline --no-renames HEAD`. For an archived goal, also run `node scripts/plan-commit-archive.mjs verify-commit --commit HEAD --goal plans/<slug>/goal.md` and require raw commit-object payload equality. If a hook included an unexpected path or changed the archive, stop before push instead of amending or resetting automatically. If neither a task commit nor a base-relative diff exists, stop without pushing or creating a pull request. Delete only the task-owned temporary message on every success or failure path.
 
 ## 4. Synchronize with the latest base before push
 
@@ -129,6 +133,8 @@ Compute the merge base and incoming base name-status before touching the worktre
 
 After successful integration, require the preservation snapshot to match exactly, then verify the task commit subject and current-task path allowlist before continuing. On a rebase or merge conflict, capture `git diff --name-only --diff-filter=U`, abort the operation, and confirm that the pre-sync HEAD, branch, index, tracked diff, and preservation snapshot are restored before stopping without push or pull-request mutation. Do not resolve or retry automatically. A preservation mismatch is a terminal failure and must be reported before push; never attempt an automatic repair.
 
+When the task has a canonical goal, keep it on disk throughout synchronization. After integration, run `node scripts/plan-commit-archive.mjs verify-history --base <remote-base-sha> --head HEAD --require-goal-sha256 <goal-sha256>` and require the exact archive to occur once in base-relative history. Then run only the constrained cleanup `npm run plans:cleanup -- --apply --goal plans/<slug>/goal.md --commit <verified-archive-commit-sha>`. It must revalidate the disk goal against the raw commit, refuse active confirmation sessions and foreign plan entries before deletion, delete only `plans/<slug>/`, and leave the tracked `plans/template.md` byte-identical to the verified commit. Run `npm run plans:guard` after cleanup. Any archive, synchronization, cleanup, or guard failure preserves local history, performs no push or PR mutation, and reports an exact `plan-commit-archive.mjs extract` recovery command when the plan was already deleted. Never reset or amend the verified commit automatically.
+
 Immediately before push, require all of the following:
 
 - the current branch is not protected
@@ -137,6 +143,7 @@ Immediately before push, require all of the following:
 - `git diff --quiet <remote>/<base>...HEAD --` reports a real pull request diff
 - when supported, `git merge-tree --write-tree <remote>/<base> HEAD` reports no conflict
 - the remote topic SHA has not advanced since the divergence check
+- `plans/` contains only the regular tracked `plans/template.md`, and every goal archive in the changed history passes metadata, byte-length, SHA-256, and six-heading validation
 
 ## 5. Push without rewriting history
 
@@ -159,7 +166,7 @@ Build the title and body only from:
 - validations actually executed in this workflow or reliably recorded in the current task
 - the repository pull request template and applicable repository instructions
 
-Use the canonical `plans/<slug>/goal.md` only to transfer its unambiguous `## ユーザー動作確認` handoff; it does not broaden the PR change scope. Copy every applicable stable `UI-CHECK-XX` item into `### ユーザー動作確認` as unchecked. Never mark a user check complete from static validation, prototype smoke, or an agent statement. When a small UI diff has no canonical goal, derive the minimum concrete unchecked checks from the actual diff and use `未確認 / 後続確認` for any prerequisite or expected result that cannot be proven. For a non-UI diff, write `- 対象外: UI変更なし`. Under `### 自動確認`, list only commands actually run and their observed results; keep manual checks out and do not present an unchecked item as a failed automated test.
+Use the canonical goal handoff captured before verified cleanup only to transfer its unambiguous `## ユーザー動作確認`; it does not broaden the PR change scope. For planned work, record the goal archive commit SHA and goal SHA-256 under automated confirmation instead of presenting the deleted local evidence path as a durable link. Copy every applicable stable `UI-CHECK-XX` item into `### ユーザー動作確認` as unchecked. Never mark a user check complete from static validation, prototype smoke, automated coverage, or an agent statement. When a small UI diff has no canonical goal, derive the minimum concrete unchecked checks from the actual diff and use `未確認 / 後続確認` for any prerequisite or expected result that cannot be proven. For a non-UI diff, write `- 対象外: UI変更なし`. Under `### 自動確認`, list only commands actually run and their observed results; keep manual checks out and do not present an unchecked item as a failed automated test.
 
 When a Codex thread or session ID is available and repository instructions do not forbid it, include a single `## Codex セッション` section with `codex resume <id>`.
 
@@ -192,4 +199,4 @@ Confirm that local HEAD, the pushed remote SHA, and the pull request head OID ma
 - mergeability and merge-state result
 - any unrelated working-tree changes preserved
 
-Never present commit, push, pull request creation/update, or mergeability as interchangeable completion states. Preserve plan and review artifacts; cleanup is a separate user-authorized operation.
+Never present commit, goal archival, verified plan cleanup, push, pull request creation/update, or mergeability as interchangeable completion states. Preserve unrelated artifacts; only the current canonical plan may be removed under the verified archive contract.

@@ -7,12 +7,13 @@ import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 
-import { cleanupPlanFiles, parsePlanCleanupArgs } from "../scripts/cleanup-plan-files.mjs";
+import { cleanupArchivedPlan, cleanupPlanFiles, parsePlanCleanupArgs } from "../scripts/cleanup-plan-files.mjs";
+import { createArchiveMessage } from "../scripts/plan-commit-archive.mjs";
 
 const execFileAsync = promisify(execFile);
 
 async function createFixture(context: test.TestContext) {
-  const root = await mkdtemp(path.join(tmpdir(), "plan-cleanup-"));
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), "plan-cleanup-")));
   context.after(() => rm(root, { recursive: true, force: true }));
   await Promise.all([
     mkdir(path.join(root, "plans/example/prototype"), { recursive: true }),
@@ -114,6 +115,10 @@ test("候補なしのapplyは成功し、再実行できる", async (context) =>
 test("不明な引数を拒否し、部分完了時は削除済みentryと失敗entryを報告する", async (context) => {
   assert.deepEqual(parsePlanCleanupArgs([]), { apply: false });
   assert.deepEqual(parsePlanCleanupArgs(["--apply"]), { apply: true });
+  assert.deepEqual(
+    parsePlanCleanupArgs(["--apply", "--goal", "plans/example/goal.md", "--commit", "abc123"]),
+    { apply: true, goalPath: "plans/example/goal.md", commitSha: "abc123" },
+  );
   assert.throws(() => parsePlanCleanupArgs(["--yes"]), /usage:/);
   assert.throws(() => parsePlanCleanupArgs(["--apply", "plans\/reviews"]), /usage:/);
 
@@ -139,6 +144,74 @@ test("不明な引数を拒否し、部分完了時は削除済みentryと失敗
   await assert.rejects(lstat(path.join(root, "plans/a.md")), { code: "ENOENT" });
   assert.equal(await readFile(path.join(root, "plans/b.md"), "utf8"), "second\n");
   assert.equal(await readFile(path.join(root, "plans/template.md"), "utf8"), "canonical template\n");
+});
+
+async function commitArchivedGoal(root: string) {
+  const goalPath = path.join(root, "plans/example/goal.md");
+  const canonicalGoal = `# 目的と完了条件
+
+# 現状と根拠
+
+# 実装方針
+
+# インターフェースとデータフロー
+
+# テスト計画
+
+# 前提・対象外・リスク
+`;
+  await writeFile(goalPath, canonicalGoal);
+  await execFileAsync("git", ["init", "-q"], { cwd: root });
+  await execFileAsync("git", ["config", "user.email", "cleanup@example.invalid"], { cwd: root });
+  await execFileAsync("git", ["config", "user.name", "Cleanup Test"], { cwd: root });
+  await execFileAsync("git", ["add", "plans/template.md"], { cwd: root });
+  await execFileAsync("git", ["commit", "-qm", "chore: fixture"], { cwd: root });
+  const messagePath = path.join(root, "..", `${path.basename(root)}-message.txt`);
+  await writeFile(messagePath, createArchiveMessage({
+    subject: "feat: archive fixture",
+    goalPath: "plans/example/goal.md",
+    goalBytes: Buffer.from(canonicalGoal),
+  }), { mode: 0o600 });
+  await execFileAsync("git", ["commit", "--allow-empty", "--cleanup=verbatim", "-F", messagePath], { cwd: root });
+  await rm(messagePath, { force: true });
+  return (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: root })).stdout.trim();
+}
+
+test("GOAL-CLEANUP-01: verified archive後だけexact slugを削除してtemplateを残す", async (context) => {
+  const root = await createFixture(context);
+  const commitSha = await commitArchivedGoal(root);
+  await rm(path.join(root, "plans/top-level-plan.md"));
+  const result = await cleanupArchivedPlan({
+    repositoryRoot: root,
+    goalPath: "plans/example/goal.md",
+    commitSha,
+  });
+  assert.deepEqual(result.removed, ["plans/example/"]);
+  assert.deepEqual(await readdir(path.join(root, "plans")), ["template.md"]);
+});
+
+test("GOAL-CLEANUP-02/03: archive不一致とforeign planでは削除を開始しない", async (context) => {
+  const mismatchRoot = await createFixture(context);
+  const mismatchCommit = await commitArchivedGoal(mismatchRoot);
+  await rm(path.join(mismatchRoot, "plans/top-level-plan.md"));
+  const changedGoal = (await readFile(path.join(mismatchRoot, "plans/example/goal.md"), "utf8"))
+    .replace("# 現状と根拠", "変更後の本文\n\n# 現状と根拠");
+  await writeFile(path.join(mismatchRoot, "plans/example/goal.md"), changedGoal);
+  await assert.rejects(cleanupArchivedPlan({
+    repositoryRoot: mismatchRoot,
+    goalPath: "plans/example/goal.md",
+    commitSha: mismatchCommit,
+  }), /payload does not match/u);
+  assert.equal(await readFile(path.join(mismatchRoot, "plans/example/goal.md"), "utf8"), changedGoal);
+
+  const foreignRoot = await createFixture(context);
+  const foreignCommit = await commitArchivedGoal(foreignRoot);
+  await assert.rejects(cleanupArchivedPlan({
+    repositoryRoot: foreignRoot,
+    goalPath: "plans/example/goal.md",
+    commitSha: foreignCommit,
+  }), /unrelated plan entries/u);
+  assert.match(await readFile(path.join(foreignRoot, "plans/example/goal.md"), "utf8"), /^# 目的と完了条件/mu);
 });
 
 test("CS-CL-01/CS-CL-02: active sessionと不正stateは削除開始前にfail closedする", async (context) => {

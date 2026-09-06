@@ -8,7 +8,7 @@
 - 設定フォームに装飾目的の外枠・影・入れ子カードを追加しない。意味上の`fieldset`／`legend`と見た目の枠は別であり、外枠を消してもアクセシブルなグループ名は残す。入力境界、選択カード、独立データ、前景面は役割に応じて枠を残す。
 - `AdminShell`、`AdminNavigation`、`AdminSettingsTabs`、`AdminPageTitleHelp`、`SearchInput`、`Pagination`、既存SVGとsemantic tokenを先に確認する。新しい見た目をページ固有CSSで複製しない。
 - サイドバーのアイコン固定軸、下部アカウント、平坦なナビ順序、タブ下線の全幅、見出し／本文の共通開始線、単一境界の入力focus、本文に残す入力ガイダンスを変更対象の回帰条件に含める。
-- light/dark、390px、関連breakpointの直前／直後、長い翻訳、readonly・saving・error・success、keyboard／focusを設計する。通常の`$implement`ではBrowserを起動せず、静的検証と未チェックのユーザー動作確認を引き渡す。
+- light/dark、390px、関連breakpointの直前／直後、長い翻訳、readonly・saving・error・success、keyboard／focusを設計する。UI変更の`$implement`では静的検証後のfinal boundaryでproductionとprototypeのcoverageを実行し、未チェックのユーザー動作確認を別に引き渡す。
 - テーブルの同一行に2つ以上のアクションがある場合は三点メニューへ集約する。件数は権限・表示条件の適用後で数え、表示されたdisabled項目を除外しない。データ名リンクやcheckboxとの区別、0/1件の扱い、portal・keyboard・focus・危険操作は`DESIGN.md` 5.4に従う。`UsersView`／`ReservationApiKeysView`の既存メニューと共通行操作部品を先に確認し、ページ固有の横並びボタンや独自menuを増やさない。
 
 ## 1. クリック可能な要素はホバー時にポインターカーソルにする

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
-test("DOC-01 design source, entry and static implementation workflow stay synchronized", () => {
+test("DOC-01 design source, entry and final coverage workflow stay synchronized", () => {
   const design = read("DESIGN.md");
   const rule = read(".claude/rules/ui.md");
   assert.match(rule, /DESIGN\.md.*必ず読む/);
@@ -11,7 +11,7 @@ test("DOC-01 design source, entry and static implementation workflow stay synchr
   assert.match(design, /app\/styles\/ui-foundation\.css.*正本/);
   assert.match(design, /外枠・影・別背景を持たない/);
   assert.match(design, /fieldset.*legend/);
-  assert.match(rule, /通常の.*implement.*Browserを起動せず/);
+  assert.match(rule, /UI変更の`\$implement`では静的検証後のfinal boundaryでproductionとprototypeのcoverage/);
   assert.match(design, /非表示タブを含むページ全体/);
   assert.match(design, /Developer APIは各セクション/);
   assert.doesNotMatch(design, /フォームは必ずカード|管理画面は中央寄せ/);

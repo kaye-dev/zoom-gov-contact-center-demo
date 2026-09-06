@@ -414,6 +414,7 @@ test("COMPAT-01 legacy CLI exports adapters and evidence readers", async () => {
     "validateEvidenceBundle",
     "validateParityEvidence",
     "validateParitySpec",
+    "verifyCurrentRun",
     "writeRunEvidence",
   ]) {
     assert.equal(typeof (parity as Record<string, unknown>)[exportName], "function", `missing export ${exportName}`);
@@ -1019,6 +1020,35 @@ test("runnerはrow内のprobeをsurface単位でbatchしてtab往復を増やさ
     },
   });
   assert.deepEqual(switches, ["production", "prototype"]);
+});
+
+test("PARITY-REGRESSION-01 gross prototype divergence fails final coverage", async () => {
+  const { BrowserParityRunner } = await parityModulePromise;
+  const adapter = createAdapter({
+    async runProbe(tabId: string, probe: { kind: string }) {
+      if (probe.kind === "dom") {
+        return { value: tabId === "production" ? { shell: "unrelated", width: 320 } : { shell: "approved", width: 1280 } };
+      }
+      return { value: [] };
+    },
+  });
+  await assert.rejects(
+    new BrowserParityRunner(adapter).run({
+      definition: { contract, spec, prototypeRevision: revision, validationProfileDigest: digest },
+      phase: "final",
+      changedTargetIds: ["main"],
+      changedStates: ["default"],
+      tabs: { production: "production", prototype: "prototype" },
+      baseUrls: { production: "http://localhost:3000/", prototype: "http://127.0.0.1:4000/" },
+      run: {
+        runId: "gross-divergence",
+        goalSha256: digest,
+        runtime: { owner: "fixture", checkout: "/fixture" },
+        sources: [{ path: "src/ui.ts", sha256: digest }],
+      },
+    }),
+    (error: unknown) => (error as { code?: string }).code === "PARITY_ROW_FAILED",
+  );
 });
 
 test("runnerは全rowを実行しscroll provenanceとmetricsを構造化する", async () => {

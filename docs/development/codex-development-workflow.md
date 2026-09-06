@@ -8,7 +8,7 @@
 
 ## 成果物
 
-`plans/template.md`だけを追跡し、生成物はplan単位で同じdirectoryへ置く。1つのbranchで複数のplanを作成・実装できるよう、各planを固有のslugで`plans/`配下へ並列に保持する。
+`plans/template.md`だけを追跡し、生成物はGitからignoreせずplan単位で同じdirectoryへ置く。作業中は各planを固有のslugで`plans/`配下へ保持し、通常の`git status`へ表示させる。
 
 ```text
 plans/<slug>/
@@ -18,7 +18,7 @@ plans/<slug>/
 └── review/     # $review時
 ```
 
-生成directoryはGitへ追加しない。
+生成directoryはGitへ追加しない。出荷時はcurrent goalの全文をcommit messageへarchiveしてraw commitを検証し、base同期後にcurrent planを削除する。push前とCIでは`plans/template.md`だけが存在する状態を必須とする。
 
 ## モデル選択
 
@@ -58,11 +58,11 @@ skillメタデータとproject-local `profiles`ではmodelを指定しない。�
 基本は次の順で進める。
 
 1. `$plan`: goalと必要なUI prototypeを作る。
-2. `$implement`: 現在のgoalとprototypeを承認して実装・静的検証する。
+2. `$implement`: 現在のgoalとprototypeを承認して実装・静的検証し、UI変更ではfinal Browser coverageを行う。
 3. `$review`（必要な場合）: diffとgoalへの適合性をreviewする。
 4. `$git-commit-push-pr`（明示依頼時）: commit、push、PRを行う。
 
-plan成果物のcleanupは、この流れとは別の明示操作として行う。
+current planのarchive済みcleanupは`$git-commit-push-pr`の出荷gateとして行う。archiveされていないplanや別taskのplanを自動削除しない。
 
 ### `$plan`
 
@@ -96,17 +96,18 @@ plan成果物のcleanupは、この流れとは別の明示操作として行う
 2. HEAD、task scope、source、contract/profile、要件クロージャ、`## ユーザー動作確認`を静的に照合する。UI checklistは安定した`UI-CHECK-XX` ID、対象、前提、操作、期待結果を持ち、すべて未チェックとする。
 3. goalとUI契約に従って実装し、対象unit/contract testで確認する。
 4. `validation-digest.mjs`でHEAD、task scope、staged/unstaged/untrackedを含むvalidated diff digestを記録し、変更riskに比例するfocused test、lint、typecheck、必要な場合だけfull test/build、diff checkを行う。同じdigestではfull test/buildを各1回までとし、command・scope・pass statusが一致する結果を後工程で再利用する。
-5. 最終diffをgoal、要件クロージャ、task scope、ユーザー確認checklistと照合し、静的検証結果と未実施のユーザー確認を分けて報告する。
+5. UI変更では完了候補に対してtask-owned productionとprototypeを同一条件でcoverage実行し、全required row、risk、anchor、artifact、cleanupがpassした場合だけschema version 4の`implementation-parity.json`を確定する。
+6. 最終diffをgoal、要件クロージャ、task scope、ユーザー確認checklistと照合し、自動coverageと未実施の人間確認、full parityを分けて報告する。
 
-明示的な`$implement`実行自体を現在のgoal、revision、profile digestへの承認とする。「承認します」という別回答やrevision転記は不要である。静的gateの失敗はproduction差分0件のまま停止する。通常の`$implement`はBrowser capability probe、in-app Browser、CDP、Playwright、Computer Use、`dev-compose`、prototype/confirmation server、login、parity lifecycle、artifact sink、screenshot、`implementation-parity.json`を使わない。`確認セッションを保持`もruntime起動の許可として扱わない。
+明示的な`$implement`実行自体を現在のgoal、revision、profile digestへの承認とする。「承認します」という別回答やrevision転記は不要である。静的gateの失敗はproduction差分0件のまま停止する。Browser capability、runtime、prototype、parity lifecycleはUI実装と静的check後のfinal boundaryでだけ使い、authoring中や非UI変更では使わない。`確認セッションを保持`は現在のinvocationにある場合だけfinal coverage後のtask-owned surface保持を許可する。
 
 局所変更は対象testとlint、typecheck、diff checkを基本とする。全testは無関係suiteへ波及し得る場合または信頼できる対象testがない場合、production buildはroute、configuration、bundling、server boundaryを変える場合またはrepositoryの明示要件がある場合だけ行う。source修正後は影響checkだけを再実行する。
 
-既存のcoverage/full runner、adapter、schemaはrelease、CI、定期、ユーザー明示要求の独立parity task向けに維持する。schema version 1から4をread-only互換として扱い、parity結果の欠如を実装または通常reviewの未完了理由にしない。
+coverage/full runner、adapter、schemaはUI`$implement`のfinal coverageとrelease、CI、定期、ユーザー明示要求の独立parity taskで共有する。currentな計画駆動UI変更ではschema version 4のcoverage証跡を実装・通常review・shippingの完了条件とし、schema version 1から3はlegacy read-only互換として扱う。
 
 ### `$review`
 
-1. exact diffとvalidated diff digestを固定し、実装済みcheckはcommand・scope・pass status・digest一致時に再実行せず、UI影響、goal/prototype/approvalの静的整合、ユーザー確認checklistを監査する。`implementation-parity.json`は要求せず、明示scopeに既存runがある場合だけread-onlyで確認する。
+1. exact diffとvalidated diff digestを固定し、実装済みcheckはcommand・scope・pass status・digest一致時に再実行せず、UI影響、goal/prototype/approval、ユーザー確認checklistを監査する。UI変更ではcurrentなschema version 4 `implementation-parity.json`を必須とし、coverage、risk、anchor、artifact、checkpoint、cleanup、digestをread-only検証する。
 2. blind diff reviewとgoal適合reviewを独立した履歴なし`independent_reviewer`で並行実行する。
 3. `plans/<slug>/review/`へHTML reportを作り、desktopと390×844でreport自体を確認する。これはproduction UI検証ではない。現在のinvocationにexact phrase `確認セッションを保持`がある場合だけ、review reportを同じslugの確認セッションへhandoffする。
 
@@ -134,18 +135,20 @@ $implement plans/<slug>/goal.md
 ### `$git-commit-push-pr`
 
 1. Git規約、状態、remote、GitHub認証、repository対応を確認してfetchする。
-2. baseとtopic branchを解決し、protected branch上または安全条件を満たすdetached HEADならtopic branchを作る。
-3. 未commit変更があればcurrent taskのpathだけをstageする。staging前後でvalidated diff digestが一致すれば成功済みtest/buildを再利用し、`git diff --cached --check`とhookの後に1件のcommitを作る。不一致なら不足するscopeだけを検証する。
-4. 最新baseへ安全に同期する。
-5. historyを書き換えずにpushし、localとremoteのSHA一致を確認する。
-6. 同じheadのPRを作成するか、必要な箇所だけを更新する。`確認内容`を自動確認とユーザー動作確認へ分け、goalの`UI-CHECK-XX`を未チェックで転記する。未確認の必須UI項目がある新規PRはDraftにし、既存PRではdraft/ready、手動メモ、既存check状態を保持する。
-7. PRのbase/head OID、draft、mergeability、merge stateを1回の`gh pr view --json`でreadbackして報告する。未確定値のためにpollせず、unverifiedとして分離する。
+2. canonical goalとplan inventoryを解決し、UI変更では`verify-run`でcurrentなfinal coverage証跡を検証する。欠落・失敗・stale・曖昧ならbranchやindexを変更せず停止する。
+3. baseとtopic branchを解決し、protected branch上または安全条件を満たすdetached HEADならtopic branchを作る。
+4. 未commit変更があればcurrent taskのpathだけをstageする。staging前後でvalidated diff digestが一致すれば成功済みtest/buildを再利用し、`git diff --cached --check`とhookの後にgoal全文を含む1件のcommitを作る。既にtask差分がcommit済みならgoal archive専用commitを1件作る。
+5. raw commit objectのgoal path、byte length、SHA-256、payloadをdisk上goalと照合し、goalを残したまま最新baseへ安全に同期する。
+6. 同期後historyのarchiveを再検証し、exact current planだけを削除する。`plans/template.md`だけであることと`npm run plans:guard`を確認する。
+7. historyを書き換えずにpushし、localとremoteのSHA一致を確認する。
+8. 同じheadのPRを作成するか、必要な箇所だけを更新する。`確認内容`へgoal archive commit SHAとgoal SHA-256を記録し、自動確認とユーザー動作確認を分け、goalの`UI-CHECK-XX`を未チェックで転記する。未確認の必須UI項目がある新規PRはDraftにし、既存PRではdraft/ready、手動メモ、既存check状態を保持する。
+9. PRのbase/head OID、draft、mergeability、merge stateを1回の`gh pr view --json`でreadbackして報告する。未確定値のためにpollせず、unverifiedとして分離する。
 
 現在のユーザーが明示した場合だけ実行する。detached HEADではremoteとGitHub repositoryを確認してfetchした後、HEADが唯一のbase候補の履歴内にあり、task path、index、未使用branch名が一意な場合だけ`git switch -c`で新規topic branchを作り、通常のshippingへ合流する。
 
 `main`と`develop`のbase候補が競合する、別topicのcommitを含む、branch名が既存、同名branchを別worktreeが使用中、またはstaged scopeが曖昧な場合は、branch、index、remote、GitHubを変更せず停止する。停止報告にはrepository、full HEAD、baseとOID、未使用topic branch、task path、staged pathとdigest、index policy、必要なhistory decisionを実値で埋めた`次に送るプロンプト`を提示する。選択肢が複数ならplaceholderのない独立promptを提示し、ユーザーが一つを再送した時点でその値を明示判断として扱う。snapshotが一致すれば同じ停止理由を再質問せず、必要なexact pathのindex-only unstage、commit、同期、non-force push、PR作成または最小更新、readbackまで続行する。snapshotが変わっていれば何も部分適用せず、現在値から停止し直す。
 
-force push、force-create、shared worktree checkout、stash、変更破棄、広域stage、自動競合解決、PR merge、CI待機は行わない。再開promptが許可できるindex変更は、列挙された対象外pathへの`git restore --staged --`だけとし、working treeを変更しない。競合、remote divergence、複数PR、認証・repository不一致など、再開promptが解消していない独立条件は停止条件とする。plan・review生成物は明示scope外ならstageも削除もしない。
+force push、force-create、shared worktree checkout、stash、変更破棄、広域stage、自動競合解決、PR merge、CI待機は行わない。再開promptが許可できるindex変更は、列挙された対象外pathへの`git restore --staged --`だけとし、working treeを変更しない。競合、remote divergence、複数PR、認証・repository不一致など、再開promptが解消していない独立条件は停止条件とする。plan・review生成物はstageせず、verified archive後のcurrent slugだけを削除する。別planがあれば削除せず停止する。
 
 最新baseが進んでいること自体は停止理由にしない。同期が必要な場合は、incoming base pathとtask外の未追跡・ignored artifactについて、同一path、祖先・子孫、file／directory／symlink置換の衝突がないことを確認し、path・type・内容digestのsnapshotを取る。indexとtracked working treeが同期可能であれば、非衝突artifactを元の場所に保持したまま、未公開branchは`git rebase --no-autostash`、公開済みbranchはhistoryを書き換えないmergeで同期し、成功後またはabort後にsnapshotを照合する。tracked dirty、local artifactとのpath衝突、semantic conflictは自動stash・一時移動・削除・復元を行わず停止する。
 
@@ -187,24 +190,24 @@ node .agents/skills/plan/scripts/parity-runner.mjs preflight plans/<slug>/protot
 
 plan中のsmokeはtargetedな代表desktopと390×844を基本とし、具体的なtheme、breakpoint、dialog、menu、keyboard、focusリスクだけを追加する。coverageとfullは`$plan`では実行しない。
 
-### 承認、ユーザー確認、任意のparity証跡
+### 承認、ユーザー確認、final parity証跡
 
 `$implement`はfreshな`plans/<slug>/evidence/<run-id>/approval.json`へgoal digest、prototype revision、profile digestを記録する。`evidence/`とrun directoryはumaskに依存せず`0700`、canonical JSONは`0600`で排他的に作成し、既存pathのtype、symlink、realpath、mode不一致では修復せず停止する。runtimeと人間判断が必要な項目はgoalの`## ユーザー動作確認`へ未チェックで残し、shipping時にPRへ転記する。
 
 - `approval.json`: goal digest、prototype revision、profile digest
 
-独立parity taskで作る新規parity fileはfinal-onlyのschema version 4とし、`matrixScope: coverage | full`、exact row、全target-state/viewport/theme coverage、risk、anchor、checkpoint/resume、required probe、digest、artifact index、cleanupを記録する。自動coverage、人間のUI承認、full parityは独立statusにする。既存schema version 1から4はread-only互換で暗黙に書き換えない。通常の`$implement`と`$review`はこのfileを要求しない。
+UI`$implement`と独立parity taskで作る新規parity fileはfinal-onlyのschema version 4とし、`matrixScope: coverage | full`、exact row、全target-state/viewport/theme coverage、risk、anchor、checkpoint/resume、required probe、digest、artifact index、cleanupを記録する。通常UI実装はcoverageを必須とし、自動coverage、人間のUI承認、full parityは独立statusにする。既存schema version 1から3はread-only互換で暗黙に書き換えない。`$review`はcurrent UI変更についてこのfileを要求する。
 
 各targetのcovering matrix基本行数は`max(state数, viewport数, theme数)`である。18 target、5 state、8 viewport、2 themeの基準profileは通常144行、full 1,440行になる。risk/anchor座標が基本selection内なら重複させず昇格し、外なら一意な追加rowにする。
 
 UIの最終的な視覚品質はPRのユーザー動作確認で人間が確認する。独立parity結果がある場合も、自動結果、人間判断、full parityの状態を分ける。
 
-### 独立parity taskのRuntime所有権
+### UI final coverageと独立parity taskのRuntime所有権
 
 1. Localはport 3000、worktreeはruntime manifestの割当portについて、関連process、container、Compose、dependencyのbaselineとownerを記録する。
-2. 通常の`$implement`ではBrowserとprototype serverを起動しない。独立parity taskは静的検証後にだけ起動する。
+2. UI`$implement`と独立parity taskは実装・静的検証・diff確認後にだけBrowserとprototype serverを起動する。非UI`$implement`では起動しない。
 3. buildが必要な場合だけidentityを再確認し、agent-owned runtimeだけを停止する。
-4. 独立parity taskの完了直前に`./dev-compose.sh ensure`を1回実行し、同commandの最終出力にある`RUNTIME_OWNERSHIP=verified`、`ACTIVE_RUNTIME_HEALTH=healthy`、`RUNTIME_RESTART_REQUIRED=0`、PID/container、cwd、mount、Compose project、port、`PRODUCTION_URL`をauthoritative readbackとして使う。進行中に外側status、固定sleep、30秒poll、`docker logs -f`を発行せず、`finalize-run`直前だけdriftを1回読む。ensure失敗時だけ同じprojectのstatus、process state、直近logのbounded diagnosticを各1回取得する。
+4. final coverageの完了直前に`./dev-compose.sh ensure`を1回実行し、同commandの最終出力にある`RUNTIME_OWNERSHIP=verified`、`ACTIVE_RUNTIME_HEALTH=healthy`、`RUNTIME_RESTART_REQUIRED=0`、PID/container、cwd、mount、Compose project、port、`PRODUCTION_URL`をauthoritative readbackとして使う。進行中に外側status、固定sleep、30秒poll、`docker logs -f`を発行せず、`finalize-run`直前だけdriftを1回読む。ensure失敗時だけ同じprojectのstatus、process state、直近logのbounded diagnosticを各1回取得する。
 5. 最終確認後はworktreeだけ`./dev-compose.sh cleanup`を使い、baselineとの差分だけをcleanupする。
 
 Localでは同じcheckoutのhealthyなnative Next.jsまたは正しいCompose `web`を`http://localhost:3000`で再利用する。worktreeではcanonical checkout pathから固有Compose projectとweb・PostgreSQL・Studio portを割り当て、DB、named volume、network、originを他checkoutと分離する。保持するnamed volumeのcreation identityはsession間で固定し、可変なcurrent session labelを理由にdatabase再作成を要求しない。worktreeはloopbackだけにbindし、LANとCloudflareはLocal専用とする。
@@ -217,14 +220,16 @@ Localでは同じcheckoutのhealthyなnative Next.jsまたは正しいCompose `w
 
 通常のcontract testは対象testを先に使い、workflow全体の変更、CI、release、明示要求では`npm test`を1回実行する。認証済みCodex CLIのforward evalは変更pathに対する`npm run eval:plan-skills -- --affected-from <base> --concurrency 2`を通常入口とし、共通skill/runtime契約変更時だけ全scenarioを1回実行する。fixture isolationやrate limitを満たせなければ`--concurrency 1`へ下げ、失敗後はresult manifestを`--resume`へ渡して失敗scenarioだけを再実行する。
 
-CLI evalは独立parity taskのCodexアプリ内Browserを代替しない。ただし通常の`$implement`にはBrowser検証を追加しない。runtime所有権、build、migration起因のverified Compose `web` restart、live parity、cleanupの契約を変えた場合は、その独立taskのshipping前にCodex Desktopで成功・停止経路をmanual確認する。
+CLI evalはUI`$implement`または独立parity taskのCodexアプリ内Browserを代替しない。runtime所有権、build、migration起因のverified Compose `web` restart、live parity、cleanupの契約を変えた場合は、shipping前にCodex Desktopで成功・停止経路をmanual確認する。
 
-contract testは通常の`$implement`がstatic preflight、approval、focused test、lint、typecheck、必要時だけfull test/build、diff checkで終了し、Browser/CDP/Playwright/Computer Use、runtime/prototype/confirmation、parity lifecycle、artifact sink、`implementation-parity.json`の呼び出しが0回であることを決定的に検証する。別のrunner互換testは18×5×8×2 profileのcoverage 144行/full 1,440行、schema version 1から4のread-only互換を維持する。PR shipping evalはUI checklistの未チェック転記、Draft作成、既存PRのdraft/ready・手動メモ・check状態保持を検証する。
+contract testはUI`$implement`がstatic preflight、approval、focused test、lint、typecheck、必要時だけfull test/build、diff check後にcoverage lifecycleへ進み、schema version 4 evidenceなしで完了しないことを決定的に検証する。runner互換testは18×5×8×2 profileのcoverage 144行/full 1,440行、schema version 1から3のread-only互換とversion 4 writerを維持する。PR shipping evalはUI evidence fail-closed、goal archive、限定cleanup、UI checklistの未チェック転記、Draft作成、既存PRのdraft/ready・手動メモ・check状態保持を検証する。
 
 ## 権限とcleanup
 
 goalやskillは追加権限ではない。deploy、外部API書き込み、共有・本番DB変更、secret操作、削除、commit、push、PRには現在のユーザー依頼による権限が必要である。
 
-`npm run plans:cleanup`は`plans/template.md`以外の削除候補をpreviewする。実際に削除する場合だけ、別の明示操作として`npm run plans:cleanup -- --apply`を使う。
+`npm run plans:cleanup`は`plans/template.md`以外の削除候補をpreviewする。manual cleanupは別の明示操作として`npm run plans:cleanup -- --apply`を使う。shippingではgoal archive commitとbase同期を検証した後だけ、`npm run plans:cleanup -- --apply --goal plans/<slug>/goal.md --commit <sha>`でexact current planを削除する。
+
+`.gitignore`で`plans/`やlegacy `plan/`を隠さない。GitHub Actionsの`Verify plan artifacts`はcheckoutを走査し、regular tracked fileの`plans/template.md`以外のfile、directory、symlink、legacy path、template変更を拒否する。goal archive blockがあるchanged commitはversion、path、byte length、SHA-256、6見出しも検証する。mergeを実際にblockするにはGitHub rulesetでこのjobをrequired checkにする。
 
 active confirmation sessionのslugが削除候補に含まれる場合、applyは何も削除せず`./dev-confirmation.sh stop <slug>`を表示する。stateがmalformed、symlink、別checkoutの場合も所有権を推測せず停止する。

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { access, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
@@ -138,7 +139,7 @@ test("planはproduction-parity prototypeと返却前smokeを維持する", async
   assert.match(plan, /If it is unavailable, continue the investigation locally and report/);
   assert.match(quality, /Prepare iterative review/);
   assert.match(goalQuality, /explicit `\$implement` invocation is the approval/);
-  assert.match(goalQuality, /missing parity result is therefore normal/);
+  assert.match(goalQuality, /Missing, failed, stale, or ambiguous current parity evidence leaves UI implementation and review incomplete/);
   assert.match(goalQuality, /`UI-CHECK-XX`/);
   assert.match(parityReference, /144 coverage rows and 1,440 full rows/);
   assert.match(parityReference, /risk row/);
@@ -164,7 +165,7 @@ test("読みにくいplanは同じgoalを履歴なしの最終設計へ再整理
   assert.match(plan, /Do not start another skill or custom agent, and do not run Browser solely for this editorial rewrite/);
 });
 
-test("implementは静的検証のみで完了する", async () => {
+test("implementは静的検証後にUI final coverageを完了ゲートとする", async () => {
   const [implement, workflow, devServer, agents] = await Promise.all([
     read(".agents/skills/implement/SKILL.md"),
     read("docs/development/codex-development-workflow.md"),
@@ -179,38 +180,28 @@ test("implementは静的検証のみで完了する", async () => {
   assert.match(implement, /explicit `\$implement` invocation is the approval basis/);
   assert.match(implement, /approval\.json/);
   assert.match(implement, /implementation-parity\.json/);
-  assert.match(implement, /Static start gate/);
-  assert.match(implement, /focused unit and contract tests/);
-  assert.match(implement, /applicable lint and typecheck/);
-  assert.match(implement, /Run the full suite only when/);
-  assert.match(implement, /Run a build only for/);
+  assert.match(implement, /Coverage scope and start gate/);
+  assert.match(implement, /focused tests/);
+  assert.match(implement, /applicable lint\/typecheck/);
+  assert.match(implement, /run the full suite only when/);
+  assert.match(implement, /build only for/);
   assert.match(implement, /`UI-CHECK-XX`/);
-  assert.match(implement, /Normal `\$implement` verification ends at this static boundary/);
-  assert.match(implement, /absence never makes this implementation incomplete/);
-  for (const forbidden of [
-    /in-app-browser-parity-adapter\.mjs/,
-    /prepare-run/,
-    /next-batch/,
-    /record-batch/,
-    /record-failure/,
-    /invalidate-run/,
-    /resume-run/,
-    /finalize-run/,
-    /\.\/dev-compose\.sh ensure/,
-    /\.\/dev-prototype\.sh/,
-    /\.\/dev-confirmation\.sh/,
-  ]) {
-    assert.doesNotMatch(implement, forbidden);
-  }
+  assert.match(implement, /Final coverage run/);
+  assert.match(implement, /schema-version-4 `implementation-parity\.json`/);
+  assert.match(implement, /automationCoverageStatus=pass/);
+  assert.match(implement, /in-app-browser-parity-adapter\.mjs/);
+  assert.match(implement, /prepare-run[\s\S]*next-batch[\s\S]*record-batch[\s\S]*record-failure[\s\S]*invalidate-run[\s\S]*resume-run[\s\S]*finalize-run/);
+  assert.match(implement, /\.\/dev-compose\.sh ensure/);
+  assert.match(implement, /A missing Browser capability[\s\S]*prevents an automated-coverage completion claim/);
   assert.match(implement, /do not delegate implementation to a custom agent/);
-  assert.match(workflow, /通常の`\$implement`はBrowser capability probe/);
-  assert.match(workflow, /parity結果の欠如を実装または通常reviewの未完了理由にしない/);
+  assert.match(workflow, /Browser capability、runtime、prototype、parity lifecycleはUI実装と静的check後のfinal boundary/);
+  assert.match(workflow, /schema version 4のcoverage証跡を実装・通常review・shippingの完了条件/);
   assert.match(workflow, /全testは[\s\S]*場合[\s\S]*production buildは[\s\S]*場合/);
-  assert.match(devServer, /通常の`\$implement`は実アプリ、prototype、Browser、CDP、Playwright、Computer Useを起動・操作せず/);
-  assert.match(agents, /`\$implement`はBrowser、CDP、Playwright、Computer Use/);
+  assert.match(devServer, /UI変更の`\$implement`は実装・静的検証・diff確認が完了した後のfinal boundary/);
+  assert.match(agents, /final Browser coverage/);
 });
 
-test("parity runnerは独立検証とlegacy read-only互換として残る", async () => {
+test("parity runnerはUI final coverageと独立検証で共有しlegacyをread-onlyに保つ", async () => {
   const [plan, implement, review, workflow, reference, gitignore] = await Promise.all([
     read(".agents/skills/plan/SKILL.md"),
     read(".agents/skills/implement/SKILL.md"),
@@ -230,11 +221,11 @@ test("parity runnerは独立検証とlegacy read-only互換として残る", asy
     assert.match(contract, /390x844 \/ DPR 1|390×844 \/ DPR 1/u);
   }
   assert.match(workflow, /release、CI、定期、ユーザー明示要求の独立parity task/u);
-  for (const forbidden of [/prepare-run/u, /next-batch/u, /finalize-run/u, /in-app-browser-parity-adapter/u]) {
-    assert.doesNotMatch(implement, forbidden);
+  for (const required of [/prepare-run/u, /next-batch/u, /finalize-run/u, /in-app-browser-parity-adapter/u]) {
+    assert.match(implement, required);
   }
-  assert.match(review, /Normal `\$review` does not require `implementation-parity\.json`/u);
-  assert.match(review, /only when the current review invocation explicitly puts an existing run in scope/u);
+  assert.match(review, /schema-version-4 `implementation-parity\.json` before reviewer work/u);
+  assert.match(review, /parity-runner\.mjs verify-run/u);
   assert.match(reference, /PARITY_DPR_OVERRIDE_UNAVAILABLE/u);
   assert.match(reference, /PARITY_CLEANUP_FAILED/u);
   assert.match(reference, /task-owned in-app Browser session/u);
@@ -243,7 +234,7 @@ test("parity runnerは独立検証とlegacy read-only互換として残る", asy
   assert.match(gitignore, /^\/\.codex\/parity-runs\/$/mu);
 });
 
-test("CS-WF-01/02/03: confirmation handoffはplanとreview reportだけに限定する", async () => {
+test("CS-WF-01/02/03: confirmation handoffは現在invocationの明示opt-inに限定する", async () => {
   const [plan, implement, review, workflow, devServer, agents] = await Promise.all([
     read(".agents/skills/plan/SKILL.md"),
     read(".agents/skills/implement/SKILL.md"),
@@ -258,8 +249,8 @@ test("CS-WF-01/02/03: confirmation handoffはplanとreview reportだけに限定
     assert.match(contract, /確認セッションを保持/u);
     assert.match(contract, /current (?:user )?invocation|現在のinvocation/u);
   }
-  assert.match(implement, /Do not reinterpret the phrase `確認セッションを保持`/u);
-  assert.doesNotMatch(implement, /dev-confirmation\.sh/u);
+  assert.match(implement, /exact phrase `確認セッションを保持` as an opt-in only when it appears in the current invocation/u);
+  assert.match(implement, /\.\/dev-confirmation\.sh attach-app <slug>/u);
   assert.match(review, /retain only the local HTML report/u);
   assert.match(review, /Do not start, inspect, retain, or attach the production app or prototype/u);
   assert.match(devServer, /\.\/dev-confirmation\.sh status <slug>/u);
@@ -267,7 +258,7 @@ test("CS-WF-01/02/03: confirmation handoffはplanとreview reportだけに限定
   assert.match(workflow, /active confirmation sessionのslug/u);
 });
 
-test("runtime契約は独立parityに残しimplementから分離する", async () => {
+test("runtime契約はUI implementのfinal boundaryと独立parityで共有する", async () => {
   const [implement, workflow, devServer] = await Promise.all([
     read(".agents/skills/implement/SKILL.md"),
     read("docs/development/codex-development-workflow.md"),
@@ -290,9 +281,10 @@ test("runtime契約は独立parityに残しimplementから分離する", async (
   }
   assert.match(devServer, /PRODUCTION_URL/u);
   assert.match(devServer, /finalize-run.*drift readback/u);
-  assert.doesNotMatch(implement, /\.\/dev-compose\.sh/u);
-  assert.doesNotMatch(implement, /container ID|PRODUCTION_URL/u);
-  assert.match(implement, /Do not probe Browser capability[^.]*resolve runtime ownership/u);
+  assert.match(implement, /\.\/dev-compose\.sh ensure/u);
+  assert.match(implement, /container\/PID/u);
+  assert.match(implement, /PRODUCTION_URL/u);
+  assert.match(implement, /Browser availability is not a start gate/u);
   assert.match(devServer, /自動的な`web`再起動はpending migration適用後/u);
   assert.match(devServer, /Local cleanupはno-op/u);
   assert.match(workflow, /wrapperが自動再起動できるのはpending migration適用後/u);
@@ -343,8 +335,11 @@ test("reviewは静的整合とchecklistを先に検証して二つのpassを並�
   assert.match(review, /`sha256:` revision/);
   assert.match(review, /`## ユーザー動作確認`/);
   assert.match(review, /stable unchecked `UI-CHECK-XX`/);
-  assert.match(review, /absence is neither a finding nor an incomplete review/);
-  assert.match(review, /evidence schema versions 1 through 4 read-only/);
+  assert.match(review, /schema-version-4 `implementation-parity\.json` before reviewer work/);
+  for (const evidenceDefect of [/malformed schema/, /stale digest/, /incomplete axis coverage/, /failed required\/risk\/anchor probe/, /missing artifact/, /failed cleanup/]) {
+    assert.match(review, evidenceDefect);
+  }
+  assert.match(review, /automationCoverageStatus[\s\S]*humanVisualApprovalStatus[\s\S]*fullParityStatus/);
   assert.match(review, /Run both passes in parallel/);
   assert.match(review, /concurrently/);
   assert.match(review, /two fresh no-history `independent_reviewer` custom agents/);
@@ -462,12 +457,12 @@ test("workflow-performance-auditは3ファイルだけのread-only明示skillで
   assert.match(workflow, /標準フローへ自動追加せず/);
 });
 
-test("workflow簡素化は既存skillと直接referenceのinstruction量を増やさない", async () => {
+test("workflow skillと直接referenceのinstruction量は明示budget内に収まる", async () => {
   const budgets: Record<string, number> = {
     ".agents/skills/plan/SKILL.md": 29,
-    ".agents/skills/implement/SKILL.md": 52,
+    ".agents/skills/implement/SKILL.md": 60,
     ".agents/skills/review/SKILL.md": 27,
-    ".agents/skills/git-commit-push-pr/SKILL.md": 125,
+    ".agents/skills/git-commit-push-pr/SKILL.md": 135,
     ".agents/skills/plan/references/goal-quality.md": 44,
     ".agents/skills/plan/references/ui-prototype-quality.md": 71,
     ".agents/skills/plan/references/parity-runner.md": 95,
@@ -702,14 +697,23 @@ test("明示的な7 skill構成を保ち廃止skill・lifecycle・旧implementat
   }
 });
 
-test("plan生成物はignoredでshipping skillと自動結合しない", async () => {
-  const [gitignore, shipping] = await Promise.all([
+test("plan生成物はGit可視でshippingがarchive・限定cleanup・guardを順守する", async () => {
+  const [gitignore, shipping, workflow] = await Promise.all([
     read(".gitignore"),
     read(".agents/skills/git-commit-push-pr/SKILL.md"),
+    read(".github/workflows/plan-artifact-guard.yml"),
   ]);
-  assert.match(gitignore, /^\/plans\/\*$/m);
-  assert.match(gitignore, /^!\/plans\/template\.md$/m);
-  assert.match(gitignore, /^\/plan\/$/m);
-  assert.match(shipping, /Generate the commit message only from the staged diff/);
-  assert.match(shipping, /cleanup is a separate user-authorized operation/);
+  assert.doesNotMatch(gitignore, /^\/plans\/\*$/m);
+  assert.doesNotMatch(gitignore, /^!\/plans\/template\.md$/m);
+  assert.doesNotMatch(gitignore, /^\/plan\/$/m);
+  assert.notEqual(spawnSync("git", ["check-ignore", "--no-index", "plans/example/goal.md"], { cwd: root }).status, 0);
+  assert.match(shipping, /Generated plan artifacts are visible untracked paths/);
+  assert.match(shipping, /plan-commit-archive\.mjs prepare/);
+  assert.match(shipping, /git commit --cleanup=verbatim/);
+  assert.match(shipping, /verify-history/);
+  assert.match(shipping, /plans:cleanup -- --apply --goal/);
+  assert.match(shipping, /npm run plans:guard/);
+  assert.match(workflow, /fetch-depth: 0/);
+  assert.match(workflow, /npm run plans:guard/);
+  assert.match(workflow, /plan-commit-archive\.mjs verify-history/);
 });

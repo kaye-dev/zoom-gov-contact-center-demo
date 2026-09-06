@@ -35,6 +35,7 @@ const scenarioNames = [
   "validation-digest-reuse",
   "validation-digest-stale",
   "ui-manual-checklist",
+  "foreign-plan-stop",
 ];
 const codexEnvironmentKeys = [
   "HOME",
@@ -262,6 +263,9 @@ async function createFixture(name) {
     path.join(repositoryRoot, "scripts", "validation-digest.mjs"),
     path.join(repo, "scripts", "validation-digest.mjs"),
   );
+  for (const helper of ["plan-commit-archive.mjs", "cleanup-plan-files.mjs", "verify-plan-artifacts.mjs", "confirmation-session.mjs"]) {
+    await cp(path.join(repositoryRoot, "scripts", helper), path.join(repo, "scripts", helper));
+  }
   await write(path.join(repo, "scripts", "fixture-validation.mjs"), fixtureValidationSource());
   await write(
     path.join(repo, "AGENTS.md"),
@@ -269,7 +273,15 @@ async function createFixture(name) {
   );
   await write(path.join(repo, "src/task.txt"), "before\n");
   await write(path.join(repo, "src/unrelated.txt"), "unchanged\n");
-  await write(path.join(repo, ".gitignore"), "/local-ignored/\n/plans/\n");
+  await write(path.join(repo, ".gitignore"), "/local-ignored/\n");
+  await write(path.join(repo, "plans/template.md"), "# 目的と完了条件\n\n# 現状と根拠\n\n# 実装方針\n\n# インターフェースとデータフロー\n\n# テスト計画\n\n# 前提・対象外・リスク\n");
+  await write(path.join(repo, "package.json"), `${JSON.stringify({
+    private: true,
+    scripts: {
+      "plans:cleanup": "node scripts/cleanup-plan-files.mjs",
+      "plans:guard": "node scripts/verify-plan-artifacts.mjs",
+    },
+  }, null, 2)}\n`);
   git(repo, [
     "add",
     "--",
@@ -277,7 +289,13 @@ async function createFixture(name) {
     ".agents/skills/git-commit-push-pr",
     ".github/PULL_REQUEST_TEMPLATE/ja.md",
     ".gitignore",
+    "package.json",
+    "plans/template.md",
     "scripts/validation-digest.mjs",
+    "scripts/plan-commit-archive.mjs",
+    "scripts/cleanup-plan-files.mjs",
+    "scripts/verify-plan-artifacts.mjs",
+    "scripts/confirmation-session.mjs",
     "scripts/fixture-validation.mjs",
     "src/task.txt",
     "src/unrelated.txt",
@@ -403,6 +421,34 @@ fixtureを使用する。
 実画面は未確認。
 `,
     );
+  }
+  if (name === "foreign-plan-stop") {
+    const goal = `# 目的と完了条件
+
+src/task.txtを更新する。
+
+# 現状と根拠
+
+shipping fixtureの差分を対象とする。
+
+# 実装方針
+
+限定stageで出荷する。
+
+# インターフェースとデータフロー
+
+変更なし。
+
+# テスト計画
+
+- 対象外: UI変更なし
+
+# 前提・対象外・リスク
+
+fixture内だけを扱う。
+`;
+    await write(path.join(repo, "plans/current-task/goal.md"), goal);
+    await write(path.join(repo, "plans/other-task/goal.md"), goal.replace("src/task.txt", "別task"));
   }
 
   let validationRecord = null;
@@ -567,9 +613,12 @@ function scenarioPrompt(name) {
     ? "A prior successful check is recorded in the fixture context supplied below. Recompute the validated diff digest before index mutation and after limited staging. Reuse the check only if digest, command, scope, and status all match; otherwise run that exact missing check once before commit."
     : "";
   const uiChecklist = name === "ui-manual-checklist"
-    ? "This is a UI change. Read the ignored plans/ui-manual-checklist/goal.md and tracked .github/PULL_REQUEST_TEMPLATE/ja.md. Transfer UI-CHECK-01 to the pull request as unchecked, keep actual automated commands separate, and create the new pull request as Draft because user verification remains pending."
+    ? "This is a UI change. Read the visible untracked plans/ui-manual-checklist/goal.md and tracked .github/PULL_REQUEST_TEMPLATE/ja.md. Transfer UI-CHECK-01 to the pull request as unchecked, keep actual automated commands separate, and create the new pull request as Draft because user verification remains pending. Archive the exact goal in the commit message, verify it after synchronization, remove only this plan through the constrained cleanup, and require plans:guard to pass before push."
     : "";
-  return `Use $git-commit-push-pr from .agents/skills/git-commit-push-pr/SKILL.md. ${scope} ${preservation} ${validation} ${uiChecklist} If a topic branch is needed, use feature/eval-shipping. Complete the authorized workflow through commit, synchronization, non-force push, pull-request creation or minimal update, and final local/remote/PR SHA and mergeability readback. This is an isolated fixture: use only origin and the fixture gh, do not merge or wait for CI.`;
+  const planScope = name === "foreign-plan-stop"
+    ? "plans/current-task/goal.md is the current task goal; plans/other-task belongs to another task and must never be deleted or archived as this task. Stop before branch, index, remote, or PR mutation because a foreign plan is present."
+    : "";
+  return `Use $git-commit-push-pr from .agents/skills/git-commit-push-pr/SKILL.md. ${scope} ${preservation} ${validation} ${uiChecklist} ${planScope} If a topic branch is needed, use feature/eval-shipping. Complete the authorized workflow through commit, synchronization, non-force push, pull-request creation or minimal update, and final local/remote/PR SHA and mergeability readback. This is an isolated fixture: use only origin and the fixture gh, do not merge or wait for CI.`;
 }
 
 function scenarioPromptWithValidation(fixture, name) {
@@ -658,7 +707,7 @@ function selectRecoveryPrompt(final, selector) {
 
 async function assertStoppedUnchanged(fixture, before, final) {
   const reportsStop = /(?:停止|stopp?ed|blocked)/iu.test(final)
-    || /(?:実行していません|未実施|no mutations?|did not (?:perform|make|mutate|create|commit|push))/iu.test(final);
+    || /(?:実行していません|未実施|no[^\n]{0,100}mutations?|did not (?:perform|make|mutate|create|commit|push))/iu.test(final);
   ensure(reportsStop, "response did not report a stop or the absence of mutations");
   ensure(recoveryPrompts(final).length > 0, "stop did not include a recovery prompt");
   const after = await snapshot(fixture);
@@ -731,7 +780,9 @@ async function assertCompleted(
     ensure(!/UI-CHECK-01/u.test(automatic), "PR put user verification under automated checks");
     ensure(/^- \[ \] `?UI-CHECK-01`?/mu.test(userChecks), "PR omitted unchecked UI-CHECK-01");
     ensure(!/^- \[[xX]\] `?UI-CHECK-01`?/mu.test(pr.body), "PR falsely marked UI-CHECK-01 complete");
-    ensure(await exists(path.join(fixture.repo, "plans/ui-manual-checklist/goal.md")), "shipping removed the ignored goal");
+    ensure(!(await exists(path.join(fixture.repo, "plans/ui-manual-checklist/goal.md"))), "shipping did not clean up the archived goal");
+    ensure(JSON.stringify(await readdir(path.join(fixture.repo, "plans"))) === JSON.stringify(["template.md"]), "shipping did not leave a template-only plan tree");
+    run(process.execPath, ["scripts/plan-commit-archive.mjs", "verify-history", "--base", "origin/main", "--head", "HEAD"], { cwd: fixture.repo });
   }
   ensure(git(fixture.repo, ["diff", "--cached", "--quiet"]).status === 0, "index is not empty after commit");
   if (name === "base-ahead-untracked-preserved") {
@@ -870,6 +921,12 @@ async function executeScenario(name, { keepOnFailure = false } = {}) {
       const before = await snapshot(fixture);
       const final = await runCodex(fixture, scenarioPrompt(name), "collision");
       await assertCollisionStopped(fixture, before, final);
+    } else if (name === "foreign-plan-stop") {
+      const before = await snapshot(fixture);
+      const final = await runCodex(fixture, scenarioPrompt(name), "foreign-plan");
+      ensure(/(?:停止|stopp?ed|blocked|実行していません|未実施)/iu.test(final), "foreign-plan scenario did not stop");
+      ensure(sameSnapshot(before, await snapshot(fixture)), "foreign-plan stop mutated branch, index, worktree, refs, remote, or PR state");
+      ensure(/foreign|別task|他task|other-task|別のplan/iu.test(final), "foreign-plan scenario did not report the unrelated plan blocker");
     } else {
       const before = await snapshot(fixture);
       const firstFinal = await runCodex(fixture, scenarioPrompt(name), "stop");
