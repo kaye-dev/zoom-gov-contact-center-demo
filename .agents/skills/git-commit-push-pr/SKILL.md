@@ -22,7 +22,7 @@ An explicit `$git-commit-push-pr` invocation authorizes these actions for the cu
 - fetch and synchronize with the pull request base
 - push the topic branch and create or update its pull request
 
-It does not authorize force pushing, stashing or discarding changes, broad staging, resolving conflicts automatically, creating a fork, merging the pull request, or waiting for CI. Honor any narrower instruction in the invoking prompt. When a canonical `plans/<slug>/goal.md` belongs to the current task, this invocation authorizes deletion of that exact plan directory only after the complete goal has been archived in a verified local commit, base synchronization has completed, and no other plan entry exists. It never authorizes deleting or merging an unrelated plan.
+It does not authorize force pushing, stashing or discarding changes, broad staging, resolving conflicts automatically, creating a fork, merging the pull request, or waiting for CI; it also never authorizes deleting a plan. Honor any narrower instruction in the invoking prompt. A canonical plan uses the two-stage protocol below: this first invocation archives and verifies the goal, then stops for an explicit `$plan-finalize` handoff. Only a verified `$plan-finalize` continuation handoff permits the later push/PR path after cleanup.
 
 A recovery prompt emitted by this skill and sent back by the user may additionally authorize the exact base, new branch, task paths, staged-patch decision, and inherited commits written in that prompt. It may authorize `git restore --staged -- <explicit paths>` only for paths that the prompt names as excluded from the task. This index-only normalization never authorizes `--worktree`, hunk guessing, or modification or loss of working-tree content.
 
@@ -118,34 +118,23 @@ Let commit hooks run. Never use `--no-verify`. If a hook fails, stop unless it c
 
 After committing, verify that HEAD advanced, the index is empty, and the hash, subject, and paths are correct with `git show --stat --oneline --no-renames HEAD`. For an archived goal, also run `node scripts/plan-commit-archive.mjs verify-commit --commit HEAD --goal plans/<slug>/goal.md` and require raw commit-object payload equality. If a hook included an unexpected path or changed the archive, stop before push instead of amending or resetting automatically. If neither a task commit nor a base-relative diff exists, stop without pushing or creating a pull request. Delete only the task-owned temporary message on every success or failure path.
 
-## 4. Synchronize with the latest base before push
+## 4. Canonical-plan archive handoff
 
-Fetch the remote again immediately before synchronization. Check both the topic branch's remote ref and `<remote>/<base>`.
+When a canonical goal is present, stop after section 3 has created the archive commit and `verify-commit` has proven raw payload equality. Do not fetch again, synchronize, clean up, push, or create/update a pull request in this invocation. Require an empty index and preserve the complete plan directory unchanged.
 
-Base-only commits are a normal synchronization condition, not a reason to request another invocation. Before integration, capture the pre-sync HEAD, branch, resolved remote base OID, remote topic OID when present, index digest, tracked diff, and a preservation snapshot for untracked paths outside the current-task allowlist, explicitly preserved paths, existing local plan or review artifacts, and ignored paths that could collide with incoming base paths. Make the snapshot NUL-safe and record only repository-relative path, file type, and content digest; never expose file contents or enumerate an entire ignored dependency tree.
+Emit one self-contained `$plan-finalize` handoff in a fenced block. Include repository root, remote, branch, current HEAD, base ref and fetched base OID, canonical goal path, exact goal SHA-256, verified archive commit SHA, and complete top-level plan inventory. State that the user must explicitly resend this exact handoff to `$plan-finalize`, that it alone may synchronize and perform the constrained cleanup, and that no remote or PR mutation has occurred. Never turn this into a generic recovery prompt or infer permission to finalize from archive history alone.
 
-Compute the merge base and incoming base name-status before touching the worktree. A preserved local path collides when an incoming tracked path is the same path, either path is an ancestor of the other, or the update replaces a file, directory, or symlink type. Stop before integration for that collision and report only the conflicting paths. When supported, also run `git merge-tree --write-tree <remote>/<base> HEAD` before integration to detect tracked-tree conflicts, but do not use it as a substitute for the local-path collision check.
+## 5. Post-finalize continuation for a removed canonical plan
 
-- **No base drift:** if `<remote>/<base>` is already an ancestor of `HEAD`, preserve unrelated changes and continue to the pre-push gates without integration.
-- **Unpublished topic branch:** when synchronization is required, require an empty index and no tracked working-tree changes. Non-conflicting untracked or ignored artifacts may remain in place. Run `git rebase --no-autostash <remote>/<base>` without moving, deleting, stashing, or restoring those artifacts.
-- **Published topic branch:** determine publication from the remote ref, not merely upstream configuration. If the remote topic has commits not contained in local HEAD, stop for remote divergence. Otherwise require the same empty-index, tracked-clean, and non-collision gates, then run `git merge --no-autostash --no-edit <remote>/<base>` without rewriting history.
-- **Tracked dirty changes remain:** if synchronization is required, stop instead of stashing, committing, moving, or discarding them. A non-conflicting untracked or ignored artifact alone is not this blocker and must not produce a recovery prompt.
+When no canonical goal is on disk but `plans/` is template-only, proceed to push/PR only if the user explicitly sends a complete continuation handoff emitted by `$plan-finalize`. Revalidate repository root, remote, branch, post-cleanup HEAD, base ref/OID, resolved archive SHA, goal path/SHA-256, template-only inventory, successful `plans:guard`, and clean index. Run `node scripts/plan-commit-archive.mjs verify-history --base <remote-base-oid> --head HEAD --require-goal-sha256 <goal-sha256>` and require the resolved archive occurs exactly once in `<remote>/<base>..HEAD` for the named goal SHA-256. Any mismatch, absent handoff, untracked plan artifact, or guard failure stops before synchronization, push, or PR mutation.
 
-After successful integration, require the preservation snapshot to match exactly, then verify the task commit subject and current-task path allowlist before continuing. On a rebase or merge conflict, capture `git diff --name-only --diff-filter=U`, abort the operation, and confirm that the pre-sync HEAD, branch, index, tracked diff, and preservation snapshot are restored before stopping without push or pull-request mutation. Do not resolve or retry automatically. A preservation mismatch is a terminal failure and must be reported before push; never attempt an automatic repair.
+Read and apply [the shared base synchronization contract](references/base-sync-contract.md). If synchronization changes `HEAD`, revalidate the archive once in the new `<remote>/<base>..HEAD` history; no cleanup is ever performed here. Immediately before push, require the current branch is not protected, `<remote>/<base>` is an ancestor of `HEAD`, `git rev-list --left-right --count <remote>/<base>...HEAD` has zero base-only and at least one head-only commit, `git diff --quiet <remote>/<base>...HEAD --` reports a real pull-request diff, the remote topic has not advanced, and `plans/` remains regular tracked `plans/template.md` only.
 
-When the task has a canonical goal, keep it on disk throughout synchronization. After integration, run `node scripts/plan-commit-archive.mjs verify-history --base <remote-base-sha> --head HEAD --require-goal-sha256 <goal-sha256>` and require the exact archive to occur once in base-relative history. Then run only the constrained cleanup `npm run plans:cleanup -- --apply --goal plans/<slug>/goal.md --commit <verified-archive-commit-sha>`. It must revalidate the disk goal against the raw commit, refuse active confirmation sessions and foreign plan entries before deletion, delete only `plans/<slug>/`, and leave the tracked `plans/template.md` byte-identical to the verified commit. Run `npm run plans:guard` after cleanup. Any archive, synchronization, cleanup, or guard failure preserves local history, performs no push or PR mutation, and reports an exact `plan-commit-archive.mjs extract` recovery command when the plan was already deleted. Never reset or amend the verified commit automatically.
+## 6. Standard non-plan synchronization
 
-Immediately before push, require all of the following:
+For a task with no canonical goal and no `$plan-finalize` continuation handoff, read and apply [the shared base synchronization contract](references/base-sync-contract.md), then require the same pre-push ancestry, diff, remote-topic, and template-only-plan checks. This preserves the existing shipping behavior for ordinary tasks.
 
-- the current branch is not protected
-- `<remote>/<base>` is an ancestor of `HEAD`
-- `git rev-list --left-right --count <remote>/<base>...HEAD` reports zero base-only commits and at least one head-only commit
-- `git diff --quiet <remote>/<base>...HEAD --` reports a real pull request diff
-- when supported, `git merge-tree --write-tree <remote>/<base> HEAD` reports no conflict
-- the remote topic SHA has not advanced since the divergence check
-- `plans/` contains only the regular tracked `plans/template.md`, and every goal archive in the changed history passes metadata, byte-length, SHA-256, and six-heading validation
-
-## 5. Push without rewriting history
+## 7. Push without rewriting history
 
 Push an unpublished branch with an explicit upstream and refspec. Push an existing branch with an explicit remote and `HEAD:refs/heads/<branch>` refspec. Never use `--force`, `--force-with-lease`, or retry a non-fast-forward rejection by rewriting history.
 
@@ -153,7 +142,7 @@ If a push returns a network, DNS, SSH agent, credential-store, or sandbox-shaped
 
 After push, verify that local `HEAD` equals the remote branch SHA returned by Git. A rejected or unverifiable push is a partial result, not success.
 
-## 6. Create or minimally update the pull request
+## 8. Create or minimally update the pull request
 
 List open pull requests for the exact head branch and repository owner after push. Treat zero, one, and multiple results distinctly.
 
@@ -180,7 +169,7 @@ Pushing already updates its commits. Read the existing title and body, then use 
 
 Stop and report the candidates. Do not choose one heuristically. Do not run or wait for CI as part of this skill.
 
-## 7. Verify GitHub state and report
+## 9. Verify GitHub state and report
 
 Use one `gh pr view --json` call to verify at least the pull request number, URL, base/head names and OIDs, draft state, `mergeable`, and `mergeStateStatus`, and compare its base OID with the pre-push base SHA. Do not poll or wait for a value that is temporarily unavailable; report that field as unverified.
 
@@ -199,4 +188,4 @@ Confirm that local HEAD, the pushed remote SHA, and the pull request head OID ma
 - mergeability and merge-state result
 - any unrelated working-tree changes preserved
 
-Never present commit, goal archival, verified plan cleanup, push, pull request creation/update, or mergeability as interchangeable completion states. Preserve unrelated artifacts; only the current canonical plan may be removed under the verified archive contract.
+Never present commit, goal archival, plan finalization, push, pull request creation/update, or mergeability as interchangeable completion states. Preserve unrelated artifacts; plan deletion belongs only to `$plan-finalize`.

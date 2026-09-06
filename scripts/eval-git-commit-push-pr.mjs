@@ -35,6 +35,7 @@ const scenarioNames = [
   "validation-digest-reuse",
   "validation-digest-stale",
   "ui-manual-checklist",
+  "canonical-plan-two-stage",
   "foreign-plan-stop",
 ];
 const codexEnvironmentKeys = [
@@ -253,6 +254,11 @@ async function createFixture(name) {
     path.join(repo, ".agents", "skills", "git-commit-push-pr"),
     { recursive: true },
   );
+  await cp(
+    path.join(repositoryRoot, ".agents", "skills", "plan-finalize"),
+    path.join(repo, ".agents", "skills", "plan-finalize"),
+    { recursive: true },
+  );
   await mkdir(path.join(repo, ".github", "PULL_REQUEST_TEMPLATE"), { recursive: true });
   await cp(
     path.join(repositoryRoot, ".github", "PULL_REQUEST_TEMPLATE", "ja.md"),
@@ -269,7 +275,7 @@ async function createFixture(name) {
   await write(path.join(repo, "scripts", "fixture-validation.mjs"), fixtureValidationSource());
   await write(
     path.join(repo, "AGENTS.md"),
-    "# Isolated shipping eval\n\nUse only the repo-local `$git-commit-push-pr` skill. The explicit invocation authorizes commit, push to the configured local fixture remote, and pull-request operations through the fixture `gh`. Never access another repository, remote, credential, or external service.\n",
+    "# Isolated shipping eval\n\nUse only the repo-local `$git-commit-push-pr` and `$plan-finalize` skills. Explicit invocations authorize only their documented fixture-local Git operations. Never access another repository, remote, credential, or external service.\n",
   );
   await write(path.join(repo, "src/task.txt"), "before\n");
   await write(path.join(repo, "src/unrelated.txt"), "unchanged\n");
@@ -287,6 +293,7 @@ async function createFixture(name) {
     "--",
     "AGENTS.md",
     ".agents/skills/git-commit-push-pr",
+    ".agents/skills/plan-finalize",
     ".github/PULL_REQUEST_TEMPLATE/ja.md",
     ".gitignore",
     "package.json",
@@ -367,6 +374,7 @@ async function createFixture(name) {
       git(repo, ["add", "--", "src/task.txt", "src/unrelated.txt"]);
     }
   }
+  let canonicalGoal = null;
   if (name === "ui-manual-checklist") {
     await write(
       path.join(repo, "plans/ui-manual-checklist/goal.md"),
@@ -421,6 +429,37 @@ fixtureを使用する。
 実画面は未確認。
 `,
     );
+    canonicalGoal = "plans/ui-manual-checklist/goal.md";
+  }
+  if (name === "canonical-plan-two-stage") {
+    await write(
+      path.join(repo, "plans/canonical-plan-two-stage/goal.md"),
+      `# 目的と完了条件
+
+src/task.txtを更新する。
+
+# 現状と根拠
+
+fixtureのcanonical planを二段階出荷する。
+
+# 実装方針
+
+限定stageだけを行う。
+
+# インターフェースとデータフロー
+
+変更なし。
+
+# テスト計画
+
+- 対象外: UI変更なし
+
+# 前提・対象外・リスク
+
+fixture内だけを扱う。
+`,
+    );
+    canonicalGoal = "plans/canonical-plan-two-stage/goal.md";
   }
   if (name === "foreign-plan-stop") {
     const goal = `# 目的と完了条件
@@ -513,6 +552,7 @@ fixture内だけを扱う。
     commandLog,
     validationLog,
     validationRecord,
+    canonicalGoal,
     occupiedWorktree,
     preservedArtifacts,
   };
@@ -613,12 +653,18 @@ function scenarioPrompt(name) {
     ? "A prior successful check is recorded in the fixture context supplied below. Recompute the validated diff digest before index mutation and after limited staging. Reuse the check only if digest, command, scope, and status all match; otherwise run that exact missing check once before commit."
     : "";
   const uiChecklist = name === "ui-manual-checklist"
-    ? "This is a UI change. Read the visible untracked plans/ui-manual-checklist/goal.md and tracked .github/PULL_REQUEST_TEMPLATE/ja.md. Transfer UI-CHECK-01 to the pull request as unchecked, keep actual automated commands separate, and create the new pull request as Draft because user verification remains pending. Archive the exact goal in the commit message, verify it after synchronization, remove only this plan through the constrained cleanup, and require plans:guard to pass before push."
+    ? "This is a UI change. Read the visible untracked plans/ui-manual-checklist/goal.md and tracked .github/PULL_REQUEST_TEMPLATE/ja.md. Archive the exact goal in the commit message, verify its raw payload, leave the plan in place, make no base synchronization, cleanup, push, or PR mutation, and return the complete explicit $plan-finalize handoff."
+    : "";
+  const canonicalTwoStage = name === "canonical-plan-two-stage"
+    ? "This is a non-UI canonical-plan task. Read the visible untracked plans/canonical-plan-two-stage/goal.md. Archive the exact goal in the commit message, verify its raw payload, leave the plan in place, make no base synchronization, cleanup, push, or PR mutation, and return the complete explicit $plan-finalize handoff."
     : "";
   const planScope = name === "foreign-plan-stop"
     ? "plans/current-task/goal.md is the current task goal; plans/other-task belongs to another task and must never be deleted or archived as this task. Stop before branch, index, remote, or PR mutation because a foreign plan is present."
     : "";
-  return `Use $git-commit-push-pr from .agents/skills/git-commit-push-pr/SKILL.md. ${scope} ${preservation} ${validation} ${uiChecklist} ${planScope} If a topic branch is needed, use feature/eval-shipping. Complete the authorized workflow through commit, synchronization, non-force push, pull-request creation or minimal update, and final local/remote/PR SHA and mergeability readback. This is an isolated fixture: use only origin and the fixture gh, do not merge or wait for CI.`;
+  const completion = ["ui-manual-checklist", "canonical-plan-two-stage"].includes(name)
+    ? "Stop after the first-stage archive handoff."
+    : "Complete the authorized workflow through commit, synchronization, non-force push, pull-request creation or minimal update, and final local/remote/PR SHA and mergeability readback.";
+  return `Use $git-commit-push-pr from .agents/skills/git-commit-push-pr/SKILL.md. ${scope} ${preservation} ${validation} ${uiChecklist} ${canonicalTwoStage} ${planScope} If a topic branch is needed, use feature/eval-shipping. ${completion} This is an isolated fixture: use only origin and the fixture gh, do not merge or wait for CI.`;
 }
 
 function scenarioPromptWithValidation(fixture, name) {
@@ -671,6 +717,22 @@ function recoveryPrompts(final) {
   return [...final.slice(marker).matchAll(/```(?:text|markdown)?\s*\n([\s\S]*?)```/gu)]
     .map((match) => match[1].trim())
     .filter((prompt) => prompt.includes("$git-commit-push-pr"));
+}
+
+function handoffPrompts(final, skill) {
+  return [...final.matchAll(/```(?:text|markdown)?\s*\n([\s\S]*?)```/gu)]
+    .map((match) => match[1].trim())
+    .filter((prompt) => prompt.includes(`$${skill}`));
+}
+
+function selectHandoff(final, skill) {
+  const prompts = handoffPrompts(final, skill);
+  ensure(prompts.length === 1, `expected one $${skill} handoff, got ${prompts.length}`);
+  const handoff = prompts[0];
+  for (const pattern of [/fixture\/repo/u, /origin/u, /[0-9a-f]{40}/u, /SHA-?256/iu]) {
+    ensure(pattern.test(handoff), `$${skill} handoff omitted ${pattern}`);
+  }
+  return handoff;
 }
 
 function validateRecoveryPrompt(prompt) {
@@ -842,6 +904,42 @@ async function assertCompleted(
   await assertNoPreservedArtifactMutationCommands(fixture);
 }
 
+async function assertFirstStageArchive(fixture, final) {
+  ensure(/(?:handoff|handover|引き渡|停止)/iu.test(final), "first stage did not report its handoff stop");
+  const handoff = selectHandoff(final, "plan-finalize");
+  ensure(handoff.includes(fixture.canonicalGoal), "first-stage handoff omitted the canonical goal");
+  ensure(await exists(path.join(fixture.repo, fixture.canonicalGoal)), "first stage removed the plan");
+  ensure(!(await exists(fixture.ghState)), "first stage created or updated a pull request");
+  const remoteTopic = git(fixture.fixtureRoot, ["--git-dir", fixture.remote, "show-ref", "--verify", "--quiet", "refs/heads/feature/eval-shipping"], { allowFailure: true });
+  ensure(remoteTopic.status !== 0, "first stage pushed the topic branch");
+  run(process.execPath, ["scripts/plan-commit-archive.mjs", "verify-history", "--base", "origin/main", "--head", "HEAD"], { cwd: fixture.repo });
+}
+
+async function assertUiEvidenceStopped(fixture, before, final) {
+  ensure(/(?:parity|evidence|証跡)/iu.test(final), "UI evidence gate stop was not reported");
+  ensure(sameSnapshot(before, await snapshot(fixture)), "UI evidence gate mutated fixture state");
+}
+
+async function advanceBaseForFinalize(fixture) {
+  git(fixture.repo, ["switch", "-q", "main"]);
+  await write(path.join(fixture.repo, "src/finalize-base.txt"), "base advanced after archive\n");
+  git(fixture.repo, ["add", "--", "src/finalize-base.txt"]);
+  git(fixture.repo, ["commit", "-qm", "chore: advance base before finalize"]);
+  git(fixture.repo, ["push", "-q", "origin", "main"]);
+  git(fixture.repo, ["switch", "-q", "feature/eval-shipping"]);
+}
+
+async function assertFinalized(fixture, final) {
+  ensure(/(?:continuation|handoff|引き渡|完了)/iu.test(final), "finalize did not report a continuation handoff");
+  selectHandoff(final, "git-commit-push-pr");
+  ensure(!(await exists(path.join(fixture.repo, fixture.canonicalGoal))), "finalize did not clean up the plan");
+  ensure(JSON.stringify(await readdir(path.join(fixture.repo, "plans"))) === JSON.stringify(["template.md"]), "finalize did not leave a template-only plan tree");
+  run("npm", ["run", "plans:guard"], { cwd: fixture.repo });
+  ensure(!(await exists(fixture.ghState)), "finalize created or updated a pull request");
+  const remoteTopic = git(fixture.fixtureRoot, ["--git-dir", fixture.remote, "show-ref", "--verify", "--quiet", "refs/heads/feature/eval-shipping"], { allowFailure: true });
+  ensure(remoteTopic.status !== 0, "finalize pushed the topic branch");
+}
+
 async function assertNoPreservedArtifactMutationCommands(fixture) {
   const log = await readFile(fixture.commandLog, "utf8");
   for (const relativePath of fixture.preservedArtifacts) {
@@ -903,12 +1001,25 @@ async function executeScenario(name, { keepOnFailure = false } = {}) {
   const fixture = await createFixture(name);
   let succeeded = false;
   try {
-    if ([
+    if (name === "canonical-plan-two-stage") {
+      const first = await runCodex(fixture, scenarioPrompt(name), "archive");
+      await assertFirstStageArchive(fixture, first);
+      const finalizeHandoff = selectHandoff(first, "plan-finalize");
+      await advanceBaseForFinalize(fixture);
+      const finalized = await runCodex(fixture, finalizeHandoff, "finalize");
+      await assertFinalized(fixture, finalized);
+      const continuation = selectHandoff(finalized, "git-commit-push-pr");
+      await runCodex(fixture, continuation, "continuation");
+      await assertCompleted(fixture, name);
+    } else if (name === "ui-manual-checklist") {
+      const before = await snapshot(fixture);
+      const final = await runCodex(fixture, scenarioPrompt(name), "ui-evidence-stop");
+      await assertUiEvidenceStopped(fixture, before, final);
+    } else if ([
       "detached-auto-adopt",
       "base-ahead-untracked-preserved",
       "validation-digest-reuse",
       "validation-digest-stale",
-      "ui-manual-checklist",
     ].includes(name)) {
       const before = await snapshot(fixture);
       const final = await runCodex(fixture, scenarioPromptWithValidation(fixture, name), "initial");

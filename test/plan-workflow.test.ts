@@ -20,7 +20,7 @@ const headings = [
 ];
 
 const workflowSkillNames = ["plan", "implement", "review", "workflow-retrospective", "workflow-performance-audit"];
-const allSkillNames = [...workflowSkillNames, "git-commit-push-pr", "kabeuchi"];
+const allSkillNames = [...workflowSkillNames, "git-commit-push-pr", "plan-finalize", "kabeuchi"];
 
 function parseTomlSource(relative: string, source: string): Record<string, unknown> {
   try {
@@ -463,6 +463,8 @@ test("workflow skillと直接referenceのinstruction量は明示budget内に収�
     ".agents/skills/implement/SKILL.md": 60,
     ".agents/skills/review/SKILL.md": 27,
     ".agents/skills/git-commit-push-pr/SKILL.md": 135,
+    ".agents/skills/plan-finalize/SKILL.md": 35,
+    ".agents/skills/git-commit-push-pr/references/base-sync-contract.md": 30,
     ".agents/skills/plan/references/goal-quality.md": 44,
     ".agents/skills/plan/references/ui-prototype-quality.md": 71,
     ".agents/skills/plan/references/parity-runner.md": 95,
@@ -518,6 +520,7 @@ test("親モデル既定を持たず3つのread-only custom agentへ限定routin
     "| `$implement` | `gpt-5.6-sol` | `high` |",
     "| `$review` | `gpt-5.6-sol` | `high` |",
     "| `$git-commit-push-pr` | `gpt-5.6-luna` | `medium` |",
+    "| `$plan-finalize` | `gpt-5.6-luna` | `medium` |",
     "| `$workflow-retrospective` | `gpt-5.6-terra` | `high` |",
     "| `$workflow-performance-audit` | `gpt-5.6-terra` | `high` |",
   ]) {
@@ -537,7 +540,7 @@ test("親モデル既定を持たず3つのread-only custom agentへ限定routin
   assert.match(workflow, /`xhigh`、`max`、`ultra`は親エージェントのskill別推奨にもcustom agentの固定設定にも使わない/);
   assert.match(workflow, /品質不足が確認された場合だけ/);
   assert.match(workflow, /skillメタデータとproject-local `profiles`ではmodelを指定しない/);
-  assert.match(workflow, /`\$implement`、`\$git-commit-push-pr`、`\$workflow-retrospective`、`\$workflow-performance-audit`はsubagentへ委譲せず/);
+  assert.match(workflow, /`\$implement`、`\$git-commit-push-pr`、`\$plan-finalize`、`\$workflow-retrospective`、`\$workflow-performance-audit`はsubagentへ委譲せず/);
 
   const modelSelection = workflow.match(/^## モデル選択\n[\s\S]*?(?=^## )/m)?.[0];
   assert.ok(modelSelection, "workflow is missing the model selection section");
@@ -569,18 +572,20 @@ test("kabeuchiは明示呼び出しで1体のadvisorだけをread-only利用す�
   assert.doesNotMatch(metadata, /gpt-5\.|model|reasoning/);
 });
 
-test("実装・shipping・振り返り・期間監査はcustom agentへ委譲しない", async () => {
-  const [implement, shipping, retrospective, performanceAudit] = await Promise.all([
+test("実装・shipping・finalize・振り返り・期間監査はcustom agentへ委譲しない", async () => {
+  const [implement, shipping, finalize, retrospective, performanceAudit] = await Promise.all([
     read(".agents/skills/implement/SKILL.md"),
     read(".agents/skills/git-commit-push-pr/SKILL.md"),
+    read(".agents/skills/plan-finalize/SKILL.md"),
     read(".agents/skills/workflow-retrospective/SKILL.md"),
     read(".agents/skills/workflow-performance-audit/SKILL.md"),
   ]);
   assert.match(implement, /do not delegate implementation to a custom agent/);
   assert.match(shipping, /Do not delegate it to a custom agent/);
+  assert.match(finalize, /do not delegate to a custom agent/);
   assert.match(retrospective, /Do not delegate the audit to a custom agent/);
   assert.match(performanceAudit, /Do not delegate this skill to a custom agent/);
-  for (const skill of [implement, shipping, retrospective, performanceAudit]) {
+  for (const skill of [implement, shipping, finalize, retrospective, performanceAudit]) {
     assert.doesNotMatch(skill, /`product_advisor`|`project_explorer`|`independent_reviewer`/);
   }
 });
@@ -638,9 +643,11 @@ test("git shippingはdetached引受け後も既存の禁止操作を維持する
   }
 });
 
-test("git shippingはbase drift時に非衝突artifactを保持して同期する", async () => {
-  const [shipping, workflow] = await Promise.all([
+test("finalizeとcontinuation shippingは共通base同期契約を使う", async () => {
+  const [shipping, finalize, reference, workflow] = await Promise.all([
     read(".agents/skills/git-commit-push-pr/SKILL.md"),
+    read(".agents/skills/plan-finalize/SKILL.md"),
+    read(".agents/skills/git-commit-push-pr/references/base-sync-contract.md"),
     read("docs/development/codex-development-workflow.md"),
   ]);
 
@@ -653,8 +660,10 @@ test("git shippingはbase drift時に非衝突artifactを保持して同期す�
     /require the preservation snapshot to match exactly/,
     /pre-sync HEAD, branch, index, tracked diff, and preservation snapshot are restored/,
   ]) {
-    assert.match(shipping, pattern);
+    assert.match(reference, pattern);
   }
+  assert.match(shipping, /shared base synchronization contract/);
+  assert.match(finalize, /shared base synchronization contract/);
   for (const pattern of [
     /最新baseが進んでいること自体は停止理由にしない/,
     /同一path、祖先・子孫、file／directory／symlink置換/,
@@ -666,7 +675,7 @@ test("git shippingはbase drift時に非衝突artifactを保持して同期す�
   }
 });
 
-test("明示的な7 skill構成を保ち廃止skill・lifecycle・旧implementation agentを復活させない", async () => {
+test("明示的な8 skill構成を保ち廃止skill・lifecycle・旧implementation agentを復活させない", async () => {
   const removed = [
     ".agents/skills/plan-critic/SKILL.md",
     ".agents/skills/plan-critic/agents/openai.yaml",
@@ -697,10 +706,11 @@ test("明示的な7 skill構成を保ち廃止skill・lifecycle・旧implementat
   }
 });
 
-test("plan生成物はGit可視でshippingがarchive・限定cleanup・guardを順守する", async () => {
-  const [gitignore, shipping, workflow] = await Promise.all([
+test("plan生成物はGit可視で二段階shippingがarchive・限定cleanup・guardを順守する", async () => {
+  const [gitignore, shipping, finalize, workflow] = await Promise.all([
     read(".gitignore"),
     read(".agents/skills/git-commit-push-pr/SKILL.md"),
+    read(".agents/skills/plan-finalize/SKILL.md"),
     read(".github/workflows/plan-artifact-guard.yml"),
   ]);
   assert.doesNotMatch(gitignore, /^\/plans\/\*$/m);
@@ -711,9 +721,43 @@ test("plan生成物はGit可視でshippingがarchive・限定cleanup・guardを�
   assert.match(shipping, /plan-commit-archive\.mjs prepare/);
   assert.match(shipping, /git commit --cleanup=verbatim/);
   assert.match(shipping, /verify-history/);
-  assert.match(shipping, /plans:cleanup -- --apply --goal/);
-  assert.match(shipping, /npm run plans:guard/);
+  assert.match(shipping, /Canonical-plan archive handoff/);
+  assert.match(shipping, /Do not fetch again, synchronize, clean up, push/);
+  assert.doesNotMatch(shipping, /Then run only the constrained cleanup/);
+  assert.match(finalize, /plans:cleanup -- --apply --goal/);
+  assert.match(finalize, /npm run plans:guard/);
+  assert.match(finalize, /active or malformed confirmation session/);
+  assert.match(finalize, /foreign plan/);
+  assert.match(finalize, /never pushes or creates a pull request/);
   assert.match(workflow, /fetch-depth: 0/);
   assert.match(workflow, /npm run plans:guard/);
   assert.match(workflow, /plan-commit-archive\.mjs verify-history/);
+});
+
+test("plan finalizeはhandoff不一致とcleanup危険条件をfail closedにする", async () => {
+  const [shipping, finalize] = await Promise.all([
+    read(".agents/skills/git-commit-push-pr/SKILL.md"),
+    read(".agents/skills/plan-finalize/SKILL.md"),
+  ]);
+  for (const field of [
+    /repository root/,
+    /remote/,
+    /branch/,
+    /initial HEAD/,
+    /base ref/,
+    /initial base OID/,
+    /goal SHA-256/,
+    /initial archive commit SHA/,
+    /plan inventory/,
+  ]) {
+    assert.match(finalize, field);
+  }
+  for (const stop of [/foreign plan/, /template drift/, /active or malformed confirmation session/, /tracked dirty state/, /remote divergence/, /rebase\/merge conflict/]) {
+    assert.match(finalize, stop);
+  }
+  assert.match(finalize, /may change after rebase/);
+  assert.match(finalize, /no push or pull-request mutation/);
+  assert.doesNotMatch(finalize, /\bgh\s+(?:pr|api|repo)/u);
+  assert.match(shipping, /Only a verified `\$plan-finalize` continuation handoff permits/);
+  assert.match(shipping, /Any mismatch, absent handoff, untracked plan artifact, or guard failure stops/);
 });

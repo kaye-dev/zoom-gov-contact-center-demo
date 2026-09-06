@@ -18,7 +18,7 @@ plans/<slug>/
 └── review/     # $review時
 ```
 
-生成directoryはGitへ追加しない。出荷時はcurrent goalの全文をcommit messageへarchiveしてraw commitを検証し、base同期後にcurrent planを削除する。push前とCIでは`plans/template.md`だけが存在する状態を必須とする。
+生成directoryはGitへ追加しない。canonical planの出荷は、current goal全文をcommit messageへarchiveしてraw commitを検証する初回shipping、明示再送されたhandoffによるbase同期・限定cleanup、continuation shippingの順に分離する。push前とCIでは`plans/template.md`だけが存在する状態を必須とする。
 
 ## モデル選択
 
@@ -30,6 +30,7 @@ plans/<slug>/
 | `$implement` | `gpt-5.6-sol` | `high` |
 | `$review` | `gpt-5.6-sol` | `high` |
 | `$git-commit-push-pr` | `gpt-5.6-luna` | `medium` |
+| `$plan-finalize` | `gpt-5.6-luna` | `medium` |
 | `$workflow-retrospective` | `gpt-5.6-terra` | `high` |
 | `$workflow-performance-audit` | `gpt-5.6-terra` | `high` |
 
@@ -41,7 +42,7 @@ read-only custom agentのモデルはスキルメタデータではなく、`.co
 | `$plan` | `project_explorer` | `gpt-5.6-luna` | `medium` | 複数subsystemまたは大量資料を横断するread-only探索だけで最大1体起動する。利用不能なら親が継続して未使用を報告する |
 | `$review` | `independent_reviewer` | `gpt-5.6-terra` | `high` | 分離したblind reviewとgoal適合reviewに2体を並行起動する。片方でも利用不能なら停止する |
 
-これらのcustom agentはすべて`read-only`とし、spawn時のmodelまたはreasoning overrideを渡さない。`$implement`、`$git-commit-push-pr`、`$workflow-retrospective`、`$workflow-performance-audit`はsubagentへ委譲せず、親エージェントが単独で実行する。全体のsubagent既定モデル、既定reasoning、同時実行数制限はproject-local設定へ追加しない。上表以外の一般subagentは、Codexの通常動作として親taskで選択した設定を継承する。ユーザーまたは管理者の上位設定によるoverrideはrepositoryの管理対象外とする。
+これらのcustom agentはすべて`read-only`とし、spawn時のmodelまたはreasoning overrideを渡さない。`$implement`、`$git-commit-push-pr`、`$plan-finalize`、`$workflow-retrospective`、`$workflow-performance-audit`はsubagentへ委譲せず、親エージェントが単独で実行する。全体のsubagent既定モデル、既定reasoning、同時実行数制限はproject-local設定へ追加しない。上表以外の一般subagentは、Codexの通常動作として親taskで選択した設定を継承する。ユーザーまたは管理者の上位設定によるoverrideはrepositoryの管理対象外とする。
 
 `xhigh`、`max`、`ultra`は親エージェントのskill別推奨にもcustom agentの固定設定にも使わない。推奨設定で品質不足が確認された場合だけ、対象taskの親エージェントで明示的に選択する。
 
@@ -60,9 +61,11 @@ skillメタデータとproject-local `profiles`ではmodelを指定しない。�
 1. `$plan`: goalと必要なUI prototypeを作る。
 2. `$implement`: 現在のgoalとprototypeを承認して実装・静的検証し、UI変更ではfinal Browser coverageを行う。
 3. `$review`（必要な場合）: diffとgoalへの適合性をreviewする。
-4. `$git-commit-push-pr`（明示依頼時）: commit、push、PRを行う。
+4. `$git-commit-push-pr`（明示依頼時）: canonical planではarchive commitと`$plan-finalize` handoffを作って停止し、通常taskではcommit、push、PRを行う。
+5. `$plan-finalize`（handoffをユーザーが明示再送した場合）: base同期・限定cleanup・guardを行い、`$git-commit-push-pr` continuation handoffを返す。
+6. `$git-commit-push-pr`（continuation handoffをユーザーが明示再送した場合）: cleanup済みbranchをnon-force pushし、PRを作成または最小更新する。
 
-current planのarchive済みcleanupは`$git-commit-push-pr`の出荷gateとして行う。archiveされていないplanや別taskのplanを自動削除しない。
+plan cleanupは`$plan-finalize`だけの削除権限であり、archiveされていないplan、別taskのplan、handoff不一致のplanを自動削除しない。
 
 ### `$plan`
 
@@ -138,9 +141,9 @@ $implement plans/<slug>/goal.md
 2. canonical goalとplan inventoryを解決し、UI変更では`verify-run`でcurrentなfinal coverage証跡を検証する。欠落・失敗・stale・曖昧ならbranchやindexを変更せず停止する。
 3. baseとtopic branchを解決し、protected branch上または安全条件を満たすdetached HEADならtopic branchを作る。
 4. 未commit変更があればcurrent taskのpathだけをstageする。staging前後でvalidated diff digestが一致すれば成功済みtest/buildを再利用し、`git diff --cached --check`とhookの後にgoal全文を含む1件のcommitを作る。既にtask差分がcommit済みならgoal archive専用commitを1件作る。
-5. raw commit objectのgoal path、byte length、SHA-256、payloadをdisk上goalと照合し、goalを残したまま最新baseへ安全に同期する。
-6. 同期後historyのarchiveを再検証し、exact current planだけを削除する。`plans/template.md`だけであることと`npm run plans:guard`を確認する。
-7. historyを書き換えずにpushし、localとremoteのSHA一致を確認する。
+5. canonical goalではraw commit objectのgoal path、byte length、SHA-256、payloadをdisk上goalと照合し、planを残したまま、branch・remote・base ref/OID・HEAD・archive SHA・goal SHA・inventoryを固定した`$plan-finalize` handoffを返して停止する。同期、cleanup、push、PRは行わない。
+6. canonical planがdisk上から消えたtaskは、検証済み`$plan-finalize` continuation handoffを明示再送された場合だけ、handoffのHEAD/base/archive/goal SHA/inventory/guardを再検証して続行する。通常taskの出荷は従来どおりbase同期後に続行する。
+7. continuationまたは通常taskではhistoryを書き換えずにpushし、localとremoteのSHA一致を確認する。
 8. 同じheadのPRを作成するか、必要な箇所だけを更新する。`確認内容`へgoal archive commit SHAとgoal SHA-256を記録し、自動確認とユーザー動作確認を分け、goalの`UI-CHECK-XX`を未チェックで転記する。未確認の必須UI項目がある新規PRはDraftにし、既存PRではdraft/ready、手動メモ、既存check状態を保持する。
 9. PRのbase/head OID、draft、mergeability、merge stateを1回の`gh pr view --json`でreadbackして報告する。未確定値のためにpollせず、unverifiedとして分離する。
 
@@ -148,9 +151,15 @@ $implement plans/<slug>/goal.md
 
 `main`と`develop`のbase候補が競合する、別topicのcommitを含む、branch名が既存、同名branchを別worktreeが使用中、またはstaged scopeが曖昧な場合は、branch、index、remote、GitHubを変更せず停止する。停止報告にはrepository、full HEAD、baseとOID、未使用topic branch、task path、staged pathとdigest、index policy、必要なhistory decisionを実値で埋めた`次に送るプロンプト`を提示する。選択肢が複数ならplaceholderのない独立promptを提示し、ユーザーが一つを再送した時点でその値を明示判断として扱う。snapshotが一致すれば同じ停止理由を再質問せず、必要なexact pathのindex-only unstage、commit、同期、non-force push、PR作成または最小更新、readbackまで続行する。snapshotが変わっていれば何も部分適用せず、現在値から停止し直す。
 
-force push、force-create、shared worktree checkout、stash、変更破棄、広域stage、自動競合解決、PR merge、CI待機は行わない。再開promptが許可できるindex変更は、列挙された対象外pathへの`git restore --staged --`だけとし、working treeを変更しない。競合、remote divergence、複数PR、認証・repository不一致など、再開promptが解消していない独立条件は停止条件とする。plan・review生成物はstageせず、verified archive後のcurrent slugだけを削除する。別planがあれば削除せず停止する。
+force push、force-create、shared worktree checkout、stash、変更破棄、広域stage、自動競合解決、PR merge、CI待機は行わない。再開promptが許可できるindex変更は、列挙された対象外pathへの`git restore --staged --`だけとし、working treeを変更しない。競合、remote divergence、複数PR、認証・repository不一致など、再開promptが解消していない独立条件は停止条件とする。plan・review生成物はstageせず、plan削除は`$plan-finalize`の検証済みhandoffだけに限定する。別planがあれば削除せず停止する。
 
-最新baseが進んでいること自体は停止理由にしない。同期が必要な場合は、incoming base pathとtask外の未追跡・ignored artifactについて、同一path、祖先・子孫、file／directory／symlink置換の衝突がないことを確認し、path・type・内容digestのsnapshotを取る。indexとtracked working treeが同期可能であれば、非衝突artifactを元の場所に保持したまま、未公開branchは`git rebase --no-autostash`、公開済みbranchはhistoryを書き換えないmergeで同期し、成功後またはabort後にsnapshotを照合する。tracked dirty、local artifactとのpath衝突、semantic conflictは自動stash・一時移動・削除・復元を行わず停止する。
+最新baseが進んでいること自体は停止理由にしない。`$plan-finalize`とcontinuation shippingは共通のbase同期契約を使う。同期が必要な場合は、incoming base pathとtask外の未追跡・ignored artifactについて、同一path、祖先・子孫、file／directory／symlink置換の衝突がないことを確認し、path・type・内容digestのsnapshotを取る。indexとtracked working treeが同期可能であれば、非衝突artifactを元の場所に保持したまま、未公開branchは`git rebase --no-autostash`、公開済みbranchはhistoryを書き換えないmergeで同期し、成功後またはabort後にsnapshotを照合する。tracked dirty、local artifactとのpath衝突、semantic conflictは自動stash・一時移動・削除・復元を行わず停止する。
+
+### `$plan-finalize`
+
+初回`$git-commit-push-pr`が返した完全なhandoffをユーザーが明示再送した場合だけ実行する。repository、remote、branch、initial HEAD、base ref/OID、goal path/SHA-256、archive SHA、plan inventoryを再検証し、foreign plan、template drift、active confirmation session、archive不一致、tracked dirty、remote divergence、同期競合では削除0件で停止する。base同期後は`base..HEAD`からgoal SHA-256が一致するarchiveを一意に再解決し、rebaseで変化したarchive SHAを採用してcurrent slugだけをcleanupする。
+
+cleanup成功には`plans/template.md`だけ、`npm run plans:guard`成功、clean indexを必須とする。`$plan-finalize`はstage、task commit、push、PR作成/更新を行わず、post-cleanup HEAD、base OID、branch、archive SHA、goal SHA、template-only inventory、clean indexを固定した`$git-commit-push-pr` continuation handoffを返す。ユーザーがそのhandoffを明示再送するまで、出荷を続けない。
 
 ## 任意の振り返り
 
@@ -228,7 +237,7 @@ contract testはUI`$implement`がstatic preflight、approval、focused test、li
 
 goalやskillは追加権限ではない。deploy、外部API書き込み、共有・本番DB変更、secret操作、削除、commit、push、PRには現在のユーザー依頼による権限が必要である。
 
-`npm run plans:cleanup`は`plans/template.md`以外の削除候補をpreviewする。manual cleanupは別の明示操作として`npm run plans:cleanup -- --apply`を使う。shippingではgoal archive commitとbase同期を検証した後だけ、`npm run plans:cleanup -- --apply --goal plans/<slug>/goal.md --commit <sha>`でexact current planを削除する。
+`npm run plans:cleanup`は`plans/template.md`以外の削除候補をpreviewする。manual cleanupは別の明示操作として`npm run plans:cleanup -- --apply`を使う。canonical planの削除は、ユーザーが初回shipping handoffを明示再送した`$plan-finalize`だけが、goal archiveとbase同期後の一意archiveを検証して`npm run plans:cleanup -- --apply --goal plans/<slug>/goal.md --commit <sha>`でexact current planへ行える。
 
 `.gitignore`で`plans/`やlegacy `plan/`を隠さない。GitHub Actionsの`Verify plan artifacts`はcheckoutを走査し、regular tracked fileの`plans/template.md`以外のfile、directory、symlink、legacy path、template変更を拒否する。goal archive blockがあるchanged commitはversion、path、byte length、SHA-256、6見出しも検証する。mergeを実際にblockするにはGitHub rulesetでこのjobをrequired checkにする。
 
