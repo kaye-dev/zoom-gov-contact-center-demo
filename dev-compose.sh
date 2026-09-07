@@ -1280,6 +1280,13 @@ main() {
     cleanup)
       runtime_cleanup "$@"
       ;;
+    worktrees)
+      [[ $# -eq 0 ]] || {
+        print -u2 "Usage: ./dev-compose.sh worktrees"
+        return 2
+      }
+      exec node "${DEV_COMPOSE_SCRIPT_DIR}/scripts/manage-worktree-runtimes.mjs"
+      ;;
     *)
       runtime_passthrough "${command_name}" "$@"
       ;;
