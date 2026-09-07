@@ -1100,9 +1100,9 @@ function requireLoopbackBaseUrl(value, surface) {
   if (surface === "production") {
     const port = Number(parsed.port);
     ensure(
-      parsed.hostname === "localhost" &&
+      (parsed.hostname === "localhost" || /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.localhost$/u.test(parsed.hostname)) &&
         (port === 3000 || (port >= 3100 && port <= 3899)),
-      "production base URL must use Local localhost:3000 or an allocated worktree localhost port in 3100-3899",
+      "production base URL must use localhost or a tenant .localhost host on Local port 3000 or an allocated worktree port in 3100-3899",
     );
   } else {
     ensure(parsed.hostname === "127.0.0.1" && parsed.port !== "", "prototype base URL must use 127.0.0.1 with an explicit port");
@@ -1132,6 +1132,12 @@ function requireAdapter(adapter) {
 }
 
 class ParityRunError extends Error {
+  // REPL module reloads may give the adapter and executor separate class objects.
+  // Keep fail-closed diagnostics recognizable across those module instances.
+  static [Symbol.hasInstance](value) {
+    return value?.[Symbol.for("codex.parity.error")] === true;
+  }
+
   constructor(code, message, evidence) {
     if (typeof message !== "string") {
       evidence = message;
@@ -1140,6 +1146,7 @@ class ParityRunError extends Error {
     }
     super(message);
     this.name = "ParityRunError";
+    Object.defineProperty(this, Symbol.for("codex.parity.error"), { value: true });
     this.code = code;
     this.evidence = evidence;
   }
@@ -1416,6 +1423,7 @@ class BrowserParityRunner {
     matrixScope,
     executionContext,
     run,
+    batch,
   }) {
     const { contract, spec } = definition;
     const resolvedMatrixScope = matrixScope ?? (spec.version === 3 && phase === "final" ? "coverage" : "targeted");
@@ -1431,7 +1439,7 @@ class BrowserParityRunner {
         "in-app Browser execution requires parity-spec.json version 2 or 3 browserSetups",
       );
     }
-    const rows = selectRows({
+    let rows = selectRows({
       phase,
       contract,
       spec,
@@ -1442,6 +1450,18 @@ class BrowserParityRunner {
       matrixScope: resolvedMatrixScope,
       executionContext,
     });
+    if (batch !== undefined) {
+      requireExactKeys(batch, ["batchId", "rowIds", "rows"], "execution batch");
+      const expected = createBatches(rows, {
+        maxRows: spec.batchPolicy.maxRows,
+        maxBytes: spec.batchPolicy.maxBytes,
+        preserveTargetBoundaries: spec.version === 3,
+      }).find(({ batchId }) => batchId === batch.batchId);
+      if (!expected || stableStringify(expected) !== stableStringify(batch)) {
+        throwParityError("PARITY_BATCH_INVALID", "execution batch differs from the canonical selection");
+      }
+      rows = expected.rows;
+    }
     const probeById = new Map(spec.probes.map((probe) => [probe.id, probe]));
     const probeIdsByRow = new Map(spec.rowProbeMap.map(({ rowId, probeIds }) => [rowId, probeIds]));
     const setupByTuple = new Map(

@@ -1,9 +1,10 @@
+import { getSettingsReview } from "@/lib/server/admin-settings-review";
 import type { ReactNode } from "react";
 
 import { canAdminAccess } from "@/lib/admin-access/authorization";
 import { getCurrentAdminAccessActor } from "@/lib/server/admin-access/server";
 import { getSessionUser } from "@/lib/server/auth/helpers";
-import { getRequestTenant } from "@/lib/server/tenant";
+import { settingsTenantOptions } from "@/lib/admin-settings-tenant";
 
 import { AdminShell } from "./AdminShell";
 import type { AdminNavigationItemKey } from "./admin-navigation";
@@ -14,7 +15,6 @@ export default async function AdminLayout({
   children: ReactNode;
 }) {
   const { actor, session } = await getCurrentAdminAccessActor("/admin");
-  const tenant = await getRequestTenant();
   const visibleItems: AdminNavigationItemKey[] = [];
   if (canAdminAccess(actor, "users", "VIEW")) visibleItems.push("users");
   if (canAdminAccess(actor, "users", "CREATE")) visibleItems.push("new-user");
@@ -26,7 +26,7 @@ export default async function AdminLayout({
   if (canAdminAccess(actor, "chat-settings", "VIEW"))
     visibleItems.push("chat-settings");
   if (
-    tenant.features.onlineConsultationAdmin &&
+    settingsTenantOptions("online-consultation-settings").length > 0 &&
     canAdminAccess(actor, "chat-settings", "VIEW")
   ) {
     visibleItems.push("online-consultation-settings");
@@ -44,6 +44,7 @@ export default async function AdminLayout({
 
   return (
     <AdminShell
+      allowSettingsReview={Boolean(await getSettingsReview("default"))}
       visibleItems={visibleItems}
       currentUserName={getSessionUser(session)!.name}
     >

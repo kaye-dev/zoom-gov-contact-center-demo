@@ -1,256 +1,305 @@
 "use client";
-
-import { useSearchParams } from "next/navigation";
-import { useState, type FormEvent } from "react";
-
+import { useEffect, useState, type FormEvent } from "react";
+import { flushSync } from "react-dom";
 import { AdminPageTitleHelp } from "@/app/components/admin/AdminPageTitleHelp";
+import {
+  AdminSettingsTenantSelect,
+  AdminSettingsLoadState,
+} from "@/app/components/admin/AdminSettingsTenantSelect";
 import { settingsInputFocusClassName } from "@/app/components/admin/settings-form-styles";
 import { useI18n } from "@/app/i18n/LanguageProvider";
-import { univContent } from "@/app/tenants/univ/content";
 import {
-  ONLINE_CONSULTATION_ERROR_CODES,
-  UNIVERSITY_CONSULTATION_SERVICES,
+  consultationServices,
+  type ConsultationService,
+} from "@/lib/online-consultation-catalog";
+import {
+  parseOnlineConsultationSettings,
   parseVideoClientWebTag,
   type OnlineConsultationSetting,
-  type UniversityConsultationService,
 } from "@/lib/online-consultation-settings";
-
-import { AdminSettingsPanel, AdminSettingsTabs } from "../AdminSettingsTabs";
+import { MAX_CHAT_MEMO_LENGTH } from "@/lib/chat-settings";
+import type { SettingsReviewState } from "@/lib/admin-settings-review";
+import type { TenantKey } from "@/lib/tenants";
+import {
+  AdminSettingsPanel,
+  AdminSettingsTabs,
+  validateSettingsTabs,
+} from "../AdminSettingsTabs";
+import { useAdminSettingsTenant } from "../useAdminSettingsTenant";
 
 type Props = {
   initialSettings: OnlineConsultationSetting[];
-  siteName: string;
+  initialTenant: TenantKey;
   canEdit: boolean;
+  reviewState?: SettingsReviewState;
 };
-
-const serviceMemos: Record<UniversityConsultationService, string> = {
-  admissions: "大学入試相談窓口",
-  "student-support": "学生生活・奨学金相談窓口",
-  careers: "キャリア相談窓口",
-};
-
 export function OnlineConsultationSettingsForm({
   initialSettings,
-  siteName,
+  initialTenant,
   canEdit,
+  reviewState,
 }: Props) {
-  const { locale, t } = useI18n();
-  const previewState = useSearchParams().get("state");
-  const content = univContent[locale];
-  const serviceLabels = Object.fromEntries(
-    UNIVERSITY_CONSULTATION_SERVICES.map((serviceKey, index) => [
-      serviceKey,
-      content.consultation.services[index][0],
-    ]),
-  ) as Record<UniversityConsultationService, string>;
-  const [activeSection, setActiveSection] =
-    useState<UniversityConsultationService>("admissions");
-  const [tags, setTags] = useState<
-    Record<UniversityConsultationService, string>
-  >(
-    () =>
-      Object.fromEntries(
-        UNIVERSITY_CONSULTATION_SERVICES.map((serviceKey) => [
-          serviceKey,
-          initialSettings.find((setting) => setting.serviceKey === serviceKey)
-            ?.webClientTag ?? "",
-        ]),
-      ) as Record<UniversityConsultationService, string>,
+  const { t } = useI18n();
+  const copy = t.admin.industrySettings;
+  const [activeSection, setActiveSection] = useState<string>(
+    consultationServices(initialTenant)[
+      reviewState === "detail" ? 1 : reviewState === "third" ? 2 : 0
+    ] ?? consultationServices(initialTenant)[0],
   );
-  const [invalidService, setInvalidService] =
-    useState<UniversityConsultationService | null>(
-      previewState === "admin-error" ? "admissions" : null,
-    );
   const [feedback, setFeedback] = useState<"saved" | "error" | null>(
-    previewState === "admin-saved" ? "saved" : null,
+    reviewState === "saved"
+      ? "saved"
+      : reviewState === "save-error"
+        ? "error"
+        : null,
   );
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!canEdit) return;
-    const invalid = UNIVERSITY_CONSULTATION_SERVICES.find(
-      (serviceKey) => parseVideoClientWebTag(tags[serviceKey]) === null,
-    );
-    if (invalid) {
-      setActiveSection(invalid);
-      setInvalidService(invalid);
+  const [invalidField, setInvalidField] = useState<string | null>(
+    reviewState === "validation"
+      ? `online-consultation-tag-${consultationServices(initialTenant)[0]}`
+      : null,
+  );
+  useEffect(() => {
+    if (invalidField) document.getElementById(invalidField)?.focus();
+  }, [invalidField]);
+  const control = useAdminSettingsTenant(
+    initialSettings,
+    initialTenant,
+    "online-consultation-settings",
+    () => {
+      setActiveSection("");
       setFeedback(null);
+      setInvalidField(null);
+    },
+    reviewState,
+  );
+  const { settings, setSettings, isSubmitting } = control;
+  const services = consultationServices(control.tenantKey);
+  const active = services.some((key) => key === activeSection)
+    ? activeSection
+    : services[0];
+  function update(
+    key: ConsultationService,
+    field: "webClientTag" | "memo",
+    value: string,
+  ) {
+    setSettings((current) =>
+      current.map((s) => (s.serviceKey === key ? { ...s, [field]: value } : s)),
+    );
+    setFeedback(null);
+    setInvalidField(null);
+  }
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canEdit || isSubmitting || control.loading || control.loadError)
+      return;
+    if (!validateSettingsTabs(event.currentTarget, setActiveSection)) {
+      const invalidInput = event.currentTarget.querySelector<
+        HTMLInputElement | HTMLTextAreaElement
+      >("input:invalid, textarea:invalid");
+      setInvalidField(invalidInput?.id ?? null);
       return;
     }
-
-    setInvalidService(null);
-    setFeedback(null);
-    setIsSubmitting(true);
-    try {
-      const response = await fetch("/api/admin/online-consultation-settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          services: UNIVERSITY_CONSULTATION_SERVICES.map((serviceKey) => ({
-            serviceKey,
-            webClientTag: tags[serviceKey],
-          })),
-        }),
+    const payload = {
+      services: settings.map((s) => ({
+        serviceKey: s.serviceKey,
+        webClientTag: s.webClientTag ?? "",
+        memo: s.memo ?? "",
+      })),
+    };
+    const parsed = parseOnlineConsultationSettings(payload, control.tenantKey);
+    if (!parsed.ok) {
+      const invalid =
+        payload.services.find(
+          (s) =>
+            parseVideoClientWebTag(s.webClientTag) === null ||
+            Array.from(s.memo).length > MAX_CHAT_MEMO_LENGTH,
+        )?.serviceKey ?? services[0];
+      const invalidRow = payload.services.find(
+        (s) => s.serviceKey === invalid,
+      )!;
+      flushSync(() => {
+        setActiveSection(invalid);
+        setInvalidField(
+          parseVideoClientWebTag(invalidRow.webClientTag) === null
+            ? `online-consultation-tag-${invalid}`
+            : `memo-${invalid}`,
+        );
       });
-      const body = (await response.json().catch(() => null)) as {
-        saved?: boolean;
-        error?: string;
-      } | null;
-      setFeedback(response.ok && body?.saved ? "saved" : "error");
+      return;
+    }
+    setFeedback(null);
+    setInvalidField(null);
+    try {
+      await control.save(settings, parsed.value);
+      setFeedback("saved");
     } catch {
       setFeedback("error");
-    } finally {
-      setIsSubmitting(false);
     }
-  };
-
-  const title = `${t.admin.onlineConsultation}${locale === "ja" ? "管理" : ""}`;
+  }
   return (
-    <section>
+    <section
+      data-industry-state={control.pending ? "confirm-switch" : invalidField ? "validation" : control.invalid ? "invalid" : control.loading ? "loading" : control.loadError ? "load-error" : control.isSubmitting ? "saving" : feedback === "saved" ? "saved" : feedback === "error" ? "save-error" : control.dirty ? "dirty" : control.reviewIdentity ?? "default"}
+    >
       <div data-admin-page-chrome className="space-y-4">
         <div data-admin-page-header className="ml-1 mr-0 max-w-5xl space-y-2">
           <AdminPageTitleHelp
-            title={title}
-            description="3種類のオンライン相談窓口に、接続用Webタグを設定します。"
-            label={t.admin.pageDescriptionLabel.replace("{title}", title)}
+            title={copy.consultationTitle}
+            description={copy.consultationDescription}
+            label={t.admin.pageDescriptionLabel.replace(
+              "{title}",
+              copy.consultationTitle,
+            )}
           />
         </div>
-        <AdminSettingsTabs
-          activeSection={activeSection}
-          onSelect={setActiveSection}
-          label={title}
-          items={UNIVERSITY_CONSULTATION_SERVICES.map((serviceKey) => ({
-            key: serviceKey,
-            label: serviceLabels[serviceKey],
-          }))}
+        <AdminSettingsTenantSelect
+          control={control}
+          resource="online-consultation-settings"
         />
+        {!control.invalid && !control.loading && !control.loadError && (
+          <AdminSettingsTabs
+            activeSection={active}
+            onSelect={setActiveSection}
+            label={copy.consultationTitle}
+            items={services.map((key) => ({ key, label: copy.services[key] }))}
+          />
+        )}
       </div>
-
-      <form
-        data-admin-form
-        noValidate
-        onSubmit={submit}
-        className="ml-1 mr-0 mt-6 max-w-5xl space-y-6"
-      >
-        {UNIVERSITY_CONSULTATION_SERVICES.map((serviceKey) => {
-          const invalid = invalidService === serviceKey;
-          const inputId = `online-consultation-tag-${serviceKey}`;
-          return (
-            <AdminSettingsPanel
-              key={serviceKey}
-              section={serviceKey}
-              activeSection={activeSection}
+      <div data-admin-page-body className="ml-1 mr-0 mt-6 max-w-5xl">
+        <AdminSettingsLoadState control={control} />
+        {!control.invalid && !control.loading && !control.loadError && (
+          <form
+            data-admin-form
+            noValidate
+            onSubmit={submit}
+            className="space-y-6"
+          >
+            {services.map((key) => {
+              const setting = settings.find((s) => s.serviceKey === key);
+              const id = `online-consultation-tag-${key}`;
+              return (
+                <AdminSettingsPanel
+                  key={key}
+                  section={key}
+                  activeSection={active}
+                >
+                  <fieldset disabled={isSubmitting} className="space-y-6">
+                    <legend className="sr-only">{copy.consultationConnectionLabel.replace("{service}", copy.services[key])}</legend>
+                    <div>
+                      <p className="text-lg font-bold">{copy.services[key]}</p>
+                      <p className="mt-2 text-sm leading-6 text-fg-muted">
+                        {copy.consultationTagDescription}
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <label
+                        htmlFor={id}
+                        className="block text-sm font-semibold"
+                      >
+                        {copy.tag}
+                      </label>
+                      <textarea
+                        id={id}
+                        rows={7}
+                        required
+                        readOnly={!canEdit}
+                        value={setting?.webClientTag ?? ""}
+                        onChange={(e) =>
+                          update(key, "webClientTag", e.target.value)
+                        }
+                        aria-invalid={invalidField === id}
+                        aria-describedby={`${id}-help${invalidField === id ? ` ${id}-error` : ""}`}
+                        className={`w-full resize-y rounded-md border ${invalidField === id ? "border-red-600" : "border-line"} bg-surface px-3 py-2 font-mono text-sm text-fg outline-none transition-colors ${settingsInputFocusClassName}`}
+                      />
+                      <p
+                        id={`${id}-help`}
+                        className="text-xs leading-5 text-fg-muted"
+                      >
+                        {copy.tagHelp}
+                      </p>
+                      {invalidField === id && (
+                        <p
+                          id={`${id}-error`}
+                          role="alert"
+                          className="text-sm text-red-700 dark:text-red-400"
+                        >
+                          {copy.invalidInput}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <label
+                        htmlFor={`memo-${key}`}
+                        className="block text-sm font-semibold"
+                      >
+                        {copy.memo}
+                      </label>
+                      <textarea
+                        id={`memo-${key}`}
+                        aria-describedby={
+                          invalidField === `memo-${key}`
+                            ? `memo-${key}-error`
+                            : undefined
+                        }
+                        rows={4}
+                        readOnly={!canEdit}
+                        value={setting?.memo ?? ""}
+                        onChange={(e) => update(key, "memo", e.target.value)}
+                        aria-invalid={
+                          Array.from(setting?.memo ?? "").length >
+                          MAX_CHAT_MEMO_LENGTH
+                        }
+                        className={`mb-2 w-full resize-y rounded-md border border-line bg-surface px-3 py-2 text-base text-fg outline-none transition-colors ${settingsInputFocusClassName}`}
+                      />
+                      {invalidField === `memo-${key}` && (
+                        <p
+                          id={`memo-${key}-error`}
+                          role="alert"
+                          className="text-sm text-red-700 dark:text-red-400"
+                        >
+                          {copy.invalidInput}
+                        </p>
+                      )}
+                    </div>
+                  </fieldset>
+                </AdminSettingsPanel>
+              );
+            })}
+            <p id="save-scope" className="text-sm leading-6 text-fg-muted">
+              {copy.scope.replace("{tenant}", control.tenantName)}
+            </p>
+            {control.dirty && (
+              <p className="text-sm text-fg-muted">{copy.dirty}</p>
+            )}
+            {!canEdit && (
+              <p role="status" className="text-sm text-fg-muted">
+                {copy.readonly}
+              </p>
+            )}
+            {feedback && (
+              <p
+                role={feedback === "saved" ? "status" : "alert"}
+                className={
+                  feedback === "saved"
+                    ? "rounded-md bg-green-50 px-4 py-3 text-sm text-green-900 dark:bg-surface-raised dark:text-green-300"
+                    : "text-sm text-red-700 dark:text-red-400"
+                }
+              >
+                {feedback === "saved"
+                  ? copy.saved.replace("{tenant}", control.tenantName)
+                  : t.admin.settings.saveError}
+              </p>
+            )}
+            <button
+              type="submit"
+              aria-describedby="save-scope"
+              disabled={!canEdit || isSubmitting}
+              className="cursor-pointer rounded-md bg-primary px-5 py-2.5 font-semibold text-white transition hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <fieldset className="space-y-6">
-                <legend className="sr-only">
-                  {serviceLabels[serviceKey]}の接続設定
-                </legend>
-                <div>
-                  <p className="text-lg font-bold">
-                    {serviceLabels[serviceKey]}
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-fg-muted">
-                    オンライン相談サービスで発行した接続用Webタグを設定します。
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <label
-                    htmlFor={inputId}
-                    className="block text-sm font-semibold"
-                  >
-                    {content.consultation.connectionTag}
-                  </label>
-                  <textarea
-                    id={inputId}
-                    rows={7}
-                    required
-                    readOnly={!canEdit}
-                    value={
-                      previewState === "admin-default" ||
-                      previewState === "admin-saved"
-                        ? "設定済み（値は安全のためprototypeでは表示しません）"
-                        : tags[serviceKey]
-                    }
-                    onChange={(event) => {
-                      setTags((current) => ({
-                        ...current,
-                        [serviceKey]: event.target.value,
-                      }));
-                      setInvalidService(null);
-                      setFeedback(null);
-                    }}
-                    aria-invalid={invalid}
-                    aria-describedby={`${inputId}-help${invalid ? ` ${inputId}-error` : ""}`}
-                    className={`w-full resize-y rounded-md border ${
-                      invalid ? "border-red-600" : "border-line"
-                    } bg-surface px-3 py-2 font-mono text-sm text-fg outline-none transition-colors ${settingsInputFocusClassName}`}
-                  />
-                  <p
-                    id={`${inputId}-help`}
-                    className="text-xs leading-5 text-fg-muted"
-                  >
-                    仕様に適合する接続用Webタグだけを受け付けます。
-                  </p>
-                  {invalid ? (
-                    <p
-                      id={`${inputId}-error`}
-                      role="alert"
-                      className="text-sm font-semibold text-red-700 dark:text-red-400"
-                    >
-                      接続用Webタグを入力してください。
-                    </p>
-                  ) : null}
-                </div>
-                <div className="space-y-2">
-                  <label
-                    htmlFor={`online-consultation-memo-${serviceKey}`}
-                    className="block text-sm font-semibold"
-                  >
-                    管理メモ
-                  </label>
-                  <textarea
-                    id={`online-consultation-memo-${serviceKey}`}
-                    rows={4}
-                    readOnly={!canEdit}
-                    defaultValue={serviceMemos[serviceKey]}
-                    className={`w-full resize-y rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg outline-none transition-colors ${settingsInputFocusClassName}`}
-                  />
-                </div>
-              </fieldset>
-            </AdminSettingsPanel>
-          );
-        })}
-
-        <div className="border-l-4 border-primary-500 bg-primary-50 px-4 py-3 text-sm leading-6 dark:bg-surface-raised">
-          <p className="font-bold">保存範囲</p>
-          <p className="text-fg-muted">
-            3種類すべてのオンライン相談設定を、この大学テナントに保存します。
-          </p>
-        </div>
-        {feedback === "saved" ? (
-          <p
-            role="status"
-            className="border-l-4 border-green-600 bg-green-50 px-4 py-3 font-semibold text-green-900 dark:bg-surface-raised dark:text-green-300"
-          >
-            {siteName}のオンライン相談設定を保存しました。
-          </p>
-        ) : feedback === "error" ? (
-          <p
-            role="alert"
-            className="font-semibold text-red-700 dark:text-red-400"
-          >
-            {ONLINE_CONSULTATION_ERROR_CODES.saveFailed}
-          </p>
-        ) : null}
-        <button
-          type="submit"
-          disabled={!canEdit || isSubmitting}
-          className="inline-flex min-h-12 cursor-pointer items-center justify-center rounded-md bg-primary px-6 py-3 font-bold text-white hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        >
-          {isSubmitting ? "保存中" : "設定を保存"}
-        </button>
-      </form>
+              {isSubmitting ? t.admin.settings.saving : t.admin.settings.save}
+            </button>
+          </form>
+        )}
+      </div>
     </section>
   );
 }

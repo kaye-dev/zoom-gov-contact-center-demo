@@ -32,9 +32,12 @@ test("PHONE-ALIGN-12: readable left-aligned width, responsive fields and save/ac
   assert.equal((form.match(/min-w-0 w-full rounded-md/g) ?? []).length, 3);
   assert.match(form, /readOnly=\{!canEdit\}/);
   assert.match(form, /disabled=\{isSubmitting \|\| !canEdit\}/);
-  assert.match(form, /if \(!canEdit\) return/);
-  assert.match(form, /method: "PUT"/); assert.match(form, /body: JSON.stringify\(settings\)/);
-  assert.match(form, /setSettings\(body.settings\)/);
+  assert.match(form, /if \(!canEdit \|\| isSubmitting/);
+  assert.match(form, /await control.save\(settings\)/);
+  const controller = readFileSync(new URL("../app/admin/useAdminSettingsTenant.ts", import.meta.url), "utf8");
+  assert.match(controller, /method: "PUT"/);
+  assert.match(controller, /body: JSON.stringify\(payload\)/);
+  assert.match(controller, /setSettings\(body.settings\)/);
   assert.match(form, /setFeedback\(\{ kind: "error" \}\)/);
 });
 

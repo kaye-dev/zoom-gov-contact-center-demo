@@ -6,6 +6,12 @@ import { useEffect, useState } from "react";
 import { useI18n } from "@/app/i18n/LanguageProvider";
 import { localeNames } from "@/app/i18n/dictionaries";
 import { setStoredTheme, useIsDarkTheme } from "@/app/components/theme-store";
+import { UniversityIcon as Icon } from "./icons/UniversityIcon";
+import {
+  universitySectionIcons,
+  universityGuidanceKeys,
+  universityGuidanceIcons,
+} from "./icons/universityIconMap";
 import { ConsultationAvailability } from "./ConsultationAvailability";
 import {
   univContent,
@@ -22,84 +28,6 @@ const paths: Record<UniversitySectionKey, string> = {
   scholarships: "/scholarships",
   careers: "/careers",
 };
-
-function Icon({
-  name,
-  className = "h-5 w-5",
-}: {
-  name:
-    | "arrow"
-    | "book"
-    | "chat"
-    | "check"
-    | "chevron"
-    | "clock"
-    | "close"
-    | "menu"
-    | "phone"
-    | "search"
-    | "warning"
-    | "video";
-  className?: string;
-}) {
-  const path = {
-    arrow: <path d="M5 12h14m-5-5 5 5-5 5" />,
-    book: (
-      <>
-        <path d="M4 5.5h6.5A3.5 3.5 0 0 1 14 9v10a3.5 3.5 0 0 0-3.5-3.5H4v-10Z" />
-        <path d="M20 5.5h-2.5A3.5 3.5 0 0 0 14 9v10a3.5 3.5 0 0 1 3.5-3.5H20v-10Z" />
-      </>
-    ),
-    chat: (
-      <>
-        <path d="M5 5.5h14v10H9l-4 3v-13Z" />
-        <path d="M8 9h8M8 12h5" />
-      </>
-    ),
-    check: <path d="m5 12 4 4 10-10" />,
-    chevron: <path d="m9 6 6 6-6 6" />,
-    clock: (
-      <>
-        <circle cx="12" cy="12" r="8.5" />
-        <path d="M12 7v5l3 2" />
-      </>
-    ),
-    close: <path d="m6 6 12 12M18 6 6 18" />,
-    menu: <path d="M4 7h16M4 12h16M4 17h16" />,
-    phone: (
-      <path d="M7 3.5h3l1.3 4-2 1.6a15 15 0 0 0 5.6 5.6l1.6-2 4 1.3v3c0 2-1.5 3.5-3.5 3.5A13.5 13.5 0 0 1 3.5 7C3.5 5 5 3.5 7 3.5Z" />
-    ),
-    search: (
-      <path d="m21 21-4.3-4.3m2.3-5.2a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z" />
-    ),
-    warning: (
-      <>
-        <path d="M12 3 2.8 20h18.4L12 3Z" />
-        <path d="M12 9v5M12 17.2v.1" />
-      </>
-    ),
-    video: (
-      <>
-        <rect x="3.5" y="6" width="12" height="12" rx="2" />
-        <path d="m15.5 10 5-3v10l-5-3" />
-      </>
-    ),
-  }[name];
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      {path}
-    </svg>
-  );
-}
 
 function UniversityMark({ compact = false }: { compact?: boolean }) {
   return (
@@ -482,7 +410,7 @@ function Home({ content }: { content: UniversityContent }) {
           </Link>
         </div>
         <ul className="mt-8 grid border-l border-t border-line sm:grid-cols-2 lg:grid-cols-3">
-          {supportKeys.map((key, index) => (
+          {supportKeys.map((key) => (
             <li key={key} className="border-b border-r border-line">
               <Link
                 href={key === "faq" ? "/faq" : paths[key]}
@@ -490,7 +418,7 @@ function Home({ content }: { content: UniversityContent }) {
               >
                 <span className="text-accent">
                   <Icon
-                    name={index < 2 ? "book" : index === 5 ? "chat" : "check"}
+                    name={universitySectionIcons[key]}
                     className="h-7 w-7"
                   />
                 </span>
@@ -600,7 +528,7 @@ function Consultation({
         <div className="mt-6 grid border-l border-t border-line md:grid-cols-2">
           <article className="flex flex-col border-b border-r border-line px-6 py-7">
             <span className="text-accent">
-              <Icon name="chat" className="h-10 w-10" />
+              <Icon name="calendar" className="h-10 w-10" />
             </span>
             <h3 className="mt-4 text-xl font-bold">
               {content.consultation.reserveTitle}
@@ -699,23 +627,26 @@ function ConsultationSupportingContent({
           {content.consultation.beforeTitle}
         </h2>
         <div className="mt-6 grid border-l border-t border-line md:grid-cols-3">
-          {content.consultation.before.map(([title, description], index) => (
-            <article
-              className="border-b border-r border-line bg-primary-50 px-5 py-6 dark:bg-surface-raised md:px-6"
-              key={title}
-            >
-              <span className="text-accent">
-                <Icon
-                  name={index === 0 ? "video" : index === 1 ? "check" : "book"}
-                  className="h-8 w-8"
-                />
-              </span>
-              <h3 className="mt-3 font-bold">{title}</h3>
-              <p className="mt-2 text-sm leading-6 text-fg-muted">
-                {description}
-              </p>
-            </article>
-          ))}
+          {universityGuidanceKeys.map((key, index) => {
+            const [title, description] = content.consultation.before[index];
+            return (
+              <article
+                className="border-b border-r border-line bg-primary-50 px-5 py-6 dark:bg-surface-raised md:px-6"
+                key={key}
+              >
+                <span className="text-accent">
+                  <Icon
+                    name={universityGuidanceIcons[key]}
+                    className="h-8 w-8"
+                  />
+                </span>
+                <h3 className="mt-3 font-bold">{title}</h3>
+                <p className="mt-2 text-sm leading-6 text-fg-muted">
+                  {description}
+                </p>
+              </article>
+            );
+          })}
         </div>
       </section>
       <section
@@ -796,7 +727,7 @@ function ReservationConsultation({
               className="mt-6 inline-flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-primary px-5 py-3 font-bold text-white hover:bg-primary-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               {content.consultation.chatAction}
-              <Icon name="arrow" />
+              <Icon name="chat" />
             </button>
           </article>
           <article className="border-b border-r border-line px-6 py-6">

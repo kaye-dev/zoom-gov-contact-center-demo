@@ -1,3 +1,5 @@
+import { resolveAdminSettingsTenant, ADMIN_SETTINGS_RESOURCES } from "@/lib/admin-settings-tenant";
+import { consultationServices } from "@/lib/online-consultation-catalog";
 import { randomUUID } from "node:crypto";
 
 import { Hono, type Context } from "hono";
@@ -56,10 +58,10 @@ import {
   createDatabaseContext,
   hasDatabaseConfiguration,
 } from "@/lib/server/prisma";
-import { saveChatSettings } from "@/lib/server/chat-settings";
-import { saveOnlineConsultationSettings } from "@/lib/server/online-consultation-settings";
-import { savePhoneSettings } from "@/lib/server/phone-settings";
-import { saveLanguageSettings } from "@/lib/server/site-settings";
+import { getChatSettings, saveChatSettings } from "@/lib/server/chat-settings";
+import { getOnlineConsultationSettings, saveOnlineConsultationSettings } from "@/lib/server/online-consultation-settings";
+import { getPhoneSettings, savePhoneSettings } from "@/lib/server/phone-settings";
+import { getLanguageSettings, saveLanguageSettings } from "@/lib/server/site-settings";
 import { saveMaintenanceSettings } from "@/lib/server/maintenance-settings-write";
 import { createBoundedPasswordResetRequest } from "@/lib/server/password-reset-requests";
 import { parseChatSettings } from "@/lib/chat-settings";
@@ -141,7 +143,6 @@ import {
 } from "@/lib/server/public-reservations";
 import { registerZaadApiRoutes } from "@/lib/server/zaad/api-routes";
 import {
-  getTenant,
   resolveTenantFromHost,
   type TenantKey,
 } from "@/lib/tenants";
@@ -897,6 +898,26 @@ app.delete("/admin/users/:id", async (c) => {
   }
 });
 
+for (const resource of ADMIN_SETTINGS_RESOURCES) {
+  app.get(`/admin/${resource}`, async (c) => {
+    const authorization = await authorizeAdminApi(c.get("auth"), c.get("prisma"), c.req.raw.headers,
+      resource === "phone-settings" ? "phone-settings" : "chat-settings", "VIEW");
+    if (!authorization.ok) return c.json({ error: authorization.error }, authorization.status);
+    const selected = resolveAdminSettingsTenant(c.req.queries("tenant") ?? [], c.get("tenantKey"), resource);
+    if (!selected.ok) return c.json({ error: selected.error }, selected.status);
+    const tenantKey = selected.tenant.key;
+    c.header("Cache-Control", "no-store");
+    try {
+      if (resource === "phone-settings") {
+        const [settings, languages] = await Promise.all([getPhoneSettings(tenantKey), getLanguageSettings(tenantKey)]);
+        return c.json({ tenantKey, settings, orderedLocales: languages.locales });
+      }
+      if (resource === "chat-settings") return c.json({ tenantKey, settings: await getChatSettings(tenantKey) });
+      return c.json({ tenantKey, settings: await getOnlineConsultationSettings(tenantKey), services: consultationServices(tenantKey) });
+    } catch { return c.json({ error: "SETTINGS_LOAD_FAILED" }, 500); }
+  });
+}
+
 app.put("/admin/phone-settings", async (c) => {
   const auth = c.get("auth");
   const prisma = c.get("prisma");
@@ -911,6 +932,10 @@ app.put("/admin/phone-settings", async (c) => {
     return c.json({ error: authorization.error }, authorization.status);
   }
 
+  const selected = resolveAdminSettingsTenant(c.req.queries("tenant") ?? [], c.get("tenantKey"), "phone-settings");
+  if (!selected.ok) return c.json({ error: selected.error }, selected.status);
+  const tenantKey = selected.tenant.key;
+
   const parsed = parsePhoneSettings(await readJsonBody(c.req.raw));
   if (!parsed.ok) {
     return c.json({ error: parsed.code }, 400);
@@ -919,10 +944,10 @@ app.put("/admin/phone-settings", async (c) => {
   try {
     const settings = await savePhoneSettings(
       prisma,
-      c.get("tenantKey"),
+      tenantKey,
       parsed.value,
     );
-    return c.json({ settings });
+    return c.json({ tenantKey, settings });
   } catch {
     console.error("Failed to save phone settings.");
     return c.json({ error: SETTINGS_ERROR_CODES.saveFailed }, 500);
@@ -1041,14 +1066,18 @@ app.put("/admin/chat-settings", async (c) => {
     return c.json({ error: authorization.error }, authorization.status);
   }
 
+  const selected = resolveAdminSettingsTenant(c.req.queries("tenant") ?? [], c.get("tenantKey"), "chat-settings");
+  if (!selected.ok) return c.json({ error: selected.error }, selected.status);
+  const tenantKey = selected.tenant.key;
+
   const parsed = parseChatSettings(await readJsonBody(c.req.raw));
   if (!parsed.ok) {
     return c.json({ error: parsed.code }, 400);
   }
 
   try {
-    await saveChatSettings(prisma, c.get("tenantKey"), parsed.value);
-    return c.json({ saved: true });
+    await saveChatSettings(prisma, tenantKey, parsed.value);
+    return c.json({ saved: true, tenantKey, settings: parsed.value });
   } catch {
     // Memo fields may contain copied tags or operational notes. Never log the payload.
     console.error("Failed to save chat settings.");
@@ -1057,10 +1086,6 @@ app.put("/admin/chat-settings", async (c) => {
 });
 
 app.put("/admin/online-consultation-settings", async (c) => {
-  const tenantKey = c.get("tenantKey");
-  if (!getTenant(tenantKey).features.onlineConsultationAdmin) {
-    return c.json({ error: "NOT_FOUND" }, 404);
-  }
   const authorization = await authorizeAdminApi(
     c.get("auth"),
     c.get("prisma"),
@@ -1072,7 +1097,11 @@ app.put("/admin/online-consultation-settings", async (c) => {
     return c.json({ error: authorization.error }, authorization.status);
   }
 
-  const parsed = parseOnlineConsultationSettings(await readJsonBody(c.req.raw));
+  const selected = resolveAdminSettingsTenant(c.req.queries("tenant") ?? [], c.get("tenantKey"), "online-consultation-settings");
+  if (!selected.ok) return c.json({ error: selected.error }, selected.status);
+  const tenantKey = selected.tenant.key;
+
+  const parsed = parseOnlineConsultationSettings(await readJsonBody(c.req.raw), tenantKey);
   if (!parsed.ok) {
     return c.json({ error: parsed.code }, 400);
   }
@@ -1083,7 +1112,7 @@ app.put("/admin/online-consultation-settings", async (c) => {
       tenantKey,
       parsed.value,
     );
-    return c.json({ saved: true });
+    return c.json({ saved: true, tenantKey, settings: await getOnlineConsultationSettings(tenantKey) });
   } catch {
     console.error("Failed to save online consultation settings.");
     return c.json({ error: ONLINE_CONSULTATION_ERROR_CODES.saveFailed }, 500);

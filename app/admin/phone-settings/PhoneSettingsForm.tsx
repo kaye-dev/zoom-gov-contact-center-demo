@@ -1,16 +1,17 @@
 "use client";
 
 import { settingsSectionClassName, settingsInputFocusClassName } from "@/app/components/admin/settings-form-styles";
-import { SettingsSaveScope } from "@/app/components/admin/SettingsSaveScope";
+import { AdminSettingsTenantSelect, AdminSettingsLoadState } from "@/app/components/admin/AdminSettingsTenantSelect";
+import { useAdminSettingsTenant } from "../useAdminSettingsTenant";
+import type { SettingsReviewState } from "@/lib/admin-settings-review";
+import type { TenantKey } from "@/lib/tenants";
 import { AdminPageTitleHelp } from "@/app/components/admin/AdminPageTitleHelp";
 
-import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { localeNames } from "@/app/i18n/dictionaries";
 import type { PhoneSettings } from "@/lib/phone-settings";
 import {
-  isSettingsErrorCode,
   type LanguageSetting,
   type SettingsErrorCode,
   type SiteLocale,
@@ -23,6 +24,8 @@ type PhoneSettingsFormProps = {
   initialSettings: PhoneSettings;
   orderedLocales: LanguageSetting[];
   canEdit: boolean;
+  initialTenant: TenantKey;
+  reviewState?: SettingsReviewState;
 };
 
 type Feedback =
@@ -31,18 +34,22 @@ type Feedback =
 
 export function PhoneSettingsForm({
   initialSettings,
-  orderedLocales,
+  orderedLocales: initialLocales,
   canEdit,
+  initialTenant,
+  reviewState,
 }: PhoneSettingsFormProps) {
   const { t } = useI18n();
-  const router = useRouter();
-  const [settings, setSettings] = useState(initialSettings);
-  const [activeSection, setActiveSection] = useState("representative-phone");
-  const [feedback, setFeedback] = useState<Feedback | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [invalidField, setInvalidField] = useState<string | null>(reviewState === "validation" ? "representative-phone-display" : null);
+  useEffect(() => { if (invalidField) document.getElementById(invalidField)?.focus(); }, [invalidField]);
+  const [activeSection, setActiveSection] = useState(reviewState === "detail" ? "ai-phone" : reviewState === "third" ? "ai-phone" : "representative-phone");
+  const [feedback, setFeedback] = useState<Feedback | null>(reviewState === "saved" ? {kind:"success"} : (reviewState === "save-error" || reviewState === "validation") ? {kind:"error"} : null);
+  const control = useAdminSettingsTenant(initialSettings, initialTenant, "phone-settings", () => { setActiveSection("representative-phone"); setFeedback(null); setInvalidField(null); }, reviewState);
+  const { settings, setSettings, isSubmitting } = control;
+  const orderedLocales = (control.extras.orderedLocales as LanguageSetting[] | undefined) ?? initialLocales;
   const feedbackMessage = feedback
     ? feedback.kind === "success"
-      ? t.admin.settings.saved
+      ? control.copy.saved.replace("{tenant}", control.tenantName)
       : feedback.code
         ? t.admin.settings.errors[feedback.code]
         : t.admin.settings.saveError
@@ -60,6 +67,7 @@ export function PhoneSettingsForm({
       },
     }));
     setFeedback(null);
+    setInvalidField(null);
   };
 
   const updateAiPhone = (locale: SiteLocale, value: string) => {
@@ -71,48 +79,30 @@ export function PhoneSettingsForm({
       },
     }));
     setFeedback(null);
+    setInvalidField(null);
   };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!canEdit) return;
-    if (!validateSettingsTabs(event.currentTarget, setActiveSection)) return;
+    if (!canEdit || isSubmitting || control.loading || control.loadError) return;
+    if (!validateSettingsTabs(event.currentTarget, setActiveSection)) {
+      setInvalidField(event.currentTarget.querySelector<HTMLInputElement>("input:invalid")?.id ?? null);
+      return;
+    }
     setFeedback(null);
-    setIsSubmitting(true);
+    setInvalidField(null);
 
     try {
-      const response = await fetch(
-        "/api/admin/phone-settings",
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(settings),
-        },
-      );
-      const body = (await response.json().catch(() => null)) as
-        | { settings?: PhoneSettings; error?: unknown }
-        | null;
-
-      if (!response.ok || !body?.settings) {
-        setFeedback({
-          kind: "error",
-          code: isSettingsErrorCode(body?.error) ? body.error : undefined,
-        });
-        return;
-      }
-
-      setSettings(body.settings);
+      await control.save(settings);
       setFeedback({ kind: "success" });
-      router.refresh();
     } catch {
       setFeedback({ kind: "error" });
-    } finally {
-      setIsSubmitting(false);
     }
+
   };
 
   return (
-    <section>
+    <section data-industry-state={control.pending ? "confirm-switch" : invalidField ? "validation" : control.invalid ? "invalid" : control.loading ? "loading" : control.loadError ? "load-error" : control.isSubmitting ? "saving" : feedback?.kind === "success" ? "saved" : feedback?.kind === "error" ? "save-error" : control.dirty ? "dirty" : control.reviewIdentity ?? "default"}>
       <div data-admin-page-chrome className="space-y-4">
         <div
           data-admin-page-header
@@ -124,7 +114,8 @@ export function PhoneSettingsForm({
             label={t.admin.pageDescriptionLabel.replace("{title}", t.admin.phoneManagement.title)}
           />
         </div>
-        <AdminSettingsTabs
+        <AdminSettingsTenantSelect control={control} resource="phone-settings" />
+        {!control.invalid && !control.loading && !control.loadError && <AdminSettingsTabs
           activeSection={activeSection}
           onSelect={setActiveSection}
           label={t.admin.phoneManagement.title}
@@ -132,13 +123,14 @@ export function PhoneSettingsForm({
             { key: "representative-phone", label: t.admin.phoneManagement.representativeTitle },
             { key: "ai-phone", label: t.admin.phoneManagement.aiPhoneTitle },
           ]}
-        />
+        />}
       </div>
 
       <div data-admin-page-body className="ml-1 mr-0 mt-6 max-w-4xl">
-      <form noValidate onSubmit={submit} className="space-y-6">
+      <AdminSettingsLoadState control={control} />
+      {!control.invalid && !control.loading && !control.loadError && <form data-admin-form noValidate onSubmit={submit} className="space-y-6">
         <AdminSettingsPanel section="representative-phone" activeSection={activeSection}>
-        <fieldset className={settingsSectionClassName}>
+        <fieldset disabled={isSubmitting} className={settingsSectionClassName}>
           <legend className="sr-only">
             {t.admin.phoneManagement.representativeTitle}
           </legend>
@@ -155,6 +147,7 @@ export function PhoneSettingsForm({
               </label>
               <input
                 id="representative-phone-display"
+                aria-invalid={invalidField === "representative-phone-display" || undefined}
                 name="representativePhoneDisplay"
                 required
                 readOnly={!canEdit}
@@ -184,6 +177,7 @@ export function PhoneSettingsForm({
               </label>
               <input
                 id="representative-phone-e164"
+                aria-invalid={invalidField === "representative-phone-e164" || undefined}
                 name="representativePhoneE164"
                 required
                 readOnly={!canEdit}
@@ -209,7 +203,7 @@ export function PhoneSettingsForm({
 
         </AdminSettingsPanel>
         <AdminSettingsPanel section="ai-phone" activeSection={activeSection}>
-        <fieldset className={settingsSectionClassName}>
+        <fieldset disabled={isSubmitting} className={settingsSectionClassName}>
           <legend className="sr-only">
             {t.admin.phoneManagement.aiPhoneTitle}
           </legend>
@@ -266,9 +260,12 @@ export function PhoneSettingsForm({
           </p>
         ) : null}
 
-        <SettingsSaveScope scope="page" id="phone-save-scope" />
+        {invalidField && <p role="alert" className="text-sm text-red-700 dark:text-red-400">{control.copy.invalidInput}</p>}
+        <p id="save-scope" className="text-sm leading-6 text-fg-muted">{control.copy.scope.replace("{tenant}", control.tenantName)}</p>
+        {control.dirty && <p className="text-sm text-fg-muted">{control.copy.dirty}</p>}
+        {!canEdit && <p role="status" className="text-sm text-fg-muted">{control.copy.readonly}</p>}
         <button
-          aria-describedby="phone-save-scope"
+          aria-describedby="save-scope"
           type="submit"
           disabled={isSubmitting || !canEdit}
           className="cursor-pointer rounded-md bg-primary px-5 py-2.5 font-semibold text-white transition-colors hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50"
@@ -277,7 +274,7 @@ export function PhoneSettingsForm({
             ? t.admin.settings.saving
             : t.admin.settings.save}
         </button>
-      </form>
+      </form>}
       </div>
     </section>
   );

@@ -1379,12 +1379,20 @@ test("WS-COVERAGE-03 targetとsharedとglobal invalidationは非影響batchを�
       input: JSON.stringify(coverageFragment(handshake, next.batch, definition)),
     });
   }
+  const updatedSources = [{ path: "src/ui.ts", sha256: `sha256:${"b".repeat(64)}` }];
+  await assert.rejects(workspace.invalidateRunWorkspace({
+    repositoryRootPath: fixture.root, runId: handshake.runId,
+    scope: "target", targetIds: ["secondary"], currentSources: updatedSources,
+  }), /outside invalidation|unknown target/u);
   const targeted = await workspace.invalidateRunWorkspace({
     repositoryRootPath: fixture.root,
     runId: handshake.runId,
     scope: "target",
     targetIds: ["main"],
+    currentSources: updatedSources,
   });
+  const refreshedManifest = JSON.parse(await readFile(handshake.manifestPath, "utf8"));
+  assert.deepEqual(refreshedManifest.sources, updatedSources);
   assert.deepEqual(targeted.batchIds, ["batch-0001"]);
   assert.equal(targeted.summary.passedRows, 2);
   const component = await workspace.invalidateRunWorkspace({
@@ -1423,6 +1431,10 @@ test("WS-COVERAGE-04 artifact sinkはprivate artifactだけを保存し秘密値
     repositoryRootPath: fixture.root,
     runId: handshake.runId,
   });
+  const jpeg = await sink({ kind: "screenshot", rowId: "main-default-mobile-light", probeId: "jpeg-test",
+    surface: "production", content: Buffer.from([255,216,255,217]), mediaType: "image/jpeg" });
+  assert.ok(jpeg.path.endsWith(".jpg"));
+  assert.deepEqual(await readFile(path.join(fixture.root, jpeg.path)), Buffer.from([255,216,255,217]));
   const artifact = await sink({
     kind: "dom",
     rowId: "main-ready-0-light",
@@ -1851,4 +1863,65 @@ test("WS-COVERAGE-05 finalizeはraw artifactを昇格してschema version 4 evid
     assert.equal((await stat(path.join(fixture.root, artifact.path))).mode & 0o777, 0o600);
   }
   await assert.rejects(access(path.dirname(handshake.manifestPath)));
+});
+
+test("workspace Browser executor checkpoints bounded rows and validates both cleanup tabs", async (context) => {
+  const workspace = await workspaceModulePromise;
+  const fixture = await createFixture(context, "ws-browser-executor");
+  const definition = createCoverageWorkspaceDefinition();
+  const handshake = await workspace.prepareRunWorkspace({ repositoryRootPath: fixture.root,
+    slug: "fixture", runId: "ws-browser-executor", definition, approval: fixture.approval,
+    current: fixture.current, baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    matrixScope: "coverage", validateApproval: fixture.runner.validateApprovalEvidence });
+  const batchDescriptors = await Promise.all(handshake.batches.map(async (descriptor: { path: string }) => ({ ...descriptor, ...JSON.parse(await readFile(descriptor.path, "utf8")) })));
+  const executed: string[] = [];
+  let cleanupCount = 0;
+  const terminal = coverageFragment(handshake, batchDescriptors.at(-1)!, definition).terminalCleanup!;
+  const runner = {
+    operations: 100,
+    async runWithoutCleanup(input: { batch: { batchId: string; rowIds: string[] } }) {
+      executed.push(input.batch.batchId);
+      this.operations += 20;
+      const fragment = coverageFragment(handshake, batchDescriptors.find((batch: { batchId: string }) => batch.batchId === input.batch.batchId)!, definition);
+      return { rows: fragment.rows, capabilities: fragment.capabilities, metrics: { ...fragment.metrics, browserOperations: this.operations } };
+    },
+    adapter: { async cleanup() { cleanupCount += 1; return { status: "pass", tabs: [terminal, { ...terminal, tabId: "prototype" }] }; } },
+  };
+  const options = { repositoryRootPath: fixture.root, runId: handshake.runId, runner,
+    tabs: { production: "comparison", prototype: "prototype" } };
+  const first = await workspace.executeBrowserBatch(options);
+  assert.equal(first.summary.passedRows, 2);
+  assert.equal(cleanupCount, 0);
+  const last = await workspace.executeBrowserBatch(options);
+  assert.equal(last.summary.passedRows, 4);
+  assert.equal(cleanupCount, 1);
+  for (const batchId of executed) {
+    const recorded = JSON.parse(await readFile(path.join(fixture.root, '.codex/parity-runs', handshake.runId, `fragment-${batchId}.json`), 'utf8'));
+    assert.equal(recorded.metrics.browserOperations, 20);
+  }
+  assert.equal((await workspace.executeBrowserBatch(options)).status, "complete");
+  assert.deepEqual(executed, ["batch-0001", "batch-0002"]);
+});
+
+test("target invalidation removes only its verified artifacts and allows fresh capture", async (context) => {
+  const workspace = await workspaceModulePromise;
+  const fixture = await createFixture(context, "ws-artifact-invalidate");
+  const definition = createCoverageWorkspaceDefinition();
+  const handshake = await workspace.prepareRunWorkspace({ repositoryRootPath: fixture.root,
+    slug: "fixture", runId: "ws-artifact-invalidate", definition, approval: fixture.approval,
+    current: fixture.current, baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    matrixScope: "coverage", validateApproval: fixture.runner.validateApprovalEvidence });
+  const sink = await workspace.createWorkspaceArtifactSink({ repositoryRootPath: fixture.root, runId: handshake.runId });
+  const anchors = definition.spec.coverage.anchorRows;
+  const records = [];
+  for (const anchor of anchors) records.push(await sink({ kind: "dom", rowId: anchor.rowId,
+    probeId: "anchor-dom", surface: "production", content: '{}', mediaType: "application/json" }));
+  await workspace.invalidateRunWorkspace({ repositoryRootPath: fixture.root, runId: handshake.runId,
+    scope: "target", targetIds: [anchors[0].targetId] });
+  await assert.rejects(access(path.join(fixture.root, records[0].path)));
+  await access(path.join(fixture.root, records[1].path));
+  const checkpoint = JSON.parse(await readFile(path.join(fixture.root, '.codex/parity-runs', handshake.runId, 'checkpoint.json'), 'utf8'));
+  assert.equal(checkpoint.artifactIndex.length, 1);
+  await sink({ kind: "dom", rowId: anchors[0].rowId, probeId: "anchor-dom", surface: "production",
+    content: '{"recaptured":true}', mediaType: "application/json" });
 });

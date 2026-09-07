@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { UniversityIcon } from "./icons/UniversityIcon";
+import { consultationIllustrations } from "./icons/ConsultationIllustrations";
 import type { UniversityConsultationService } from "@/lib/online-consultation-settings";
 
 type AvailabilityName = "ready" | "busy" | "unavailable" | "unknown";
@@ -13,81 +15,6 @@ type Status = {
     status?: AvailabilityName;
   }[];
 };
-
-function Illustration({
-  serviceKey,
-}: {
-  serviceKey: UniversityConsultationService;
-}) {
-  const drawing = {
-    admissions: (
-      <>
-        <path d="M45 128h150M62 128V69l58-31 58 31v59M82 82h76M89 128V91h25v37M126 91h25v37" />
-        <path d="M160 38h34v44h-34zM168 50h18M168 60h18M168 70h11" />
-        <circle cx="120" cy="58" r="6" />
-      </>
-    ),
-    "student-support": (
-      <>
-        <path d="M38 63c24-5 49 1 72 18v54c-23-17-48-23-72-18V63ZM202 63c-24-5-49 1-72 18v54c23-17 48-23 72-18V63Z" />
-        <path d="M110 81c7 4 13 10 20 18M72 53l13-20 13 20M79 42h12M158 49a16 16 0 1 1 32 0c0 12-16 25-16 25s-16-13-16-25Z" />
-        <circle cx="174" cy="49" r="5" />
-      </>
-    ),
-    careers: (
-      <>
-        <rect x="48" y="65" width="144" height="72" rx="8" />
-        <path d="M92 65V50c0-7 5-12 12-12h32c7 0 12 5 12 12v15M48 91c31 18 113 18 144 0M108 95h24v16h-24z" />
-        <path d="M79 39 67 27M161 39l12-12M120 28V13" />
-      </>
-    ),
-  }[serviceKey];
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 240 160"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-36 w-full"
-    >
-      {drawing}
-    </svg>
-  );
-}
-
-function ButtonIcon({ name }: { name: "video" | "phone" | "clock" }) {
-  const drawing =
-    name === "video" ? (
-      <>
-        <rect x="3.5" y="6" width="12" height="12" rx="2" />
-        <path d="m15.5 10 5-3v10l-5-3" />
-      </>
-    ) : name === "phone" ? (
-      <path d="M7 3.5h3l1.3 4-2 1.6a15 15 0 0 0 5.6 5.6l1.6-2 4 1.3v3c0 2-1.5 3.5-3.5 3.5A13.5 13.5 0 0 1 3.5 7C3.5 5 5 3.5 7 3.5Z" />
-    ) : (
-      <>
-        <circle cx="12" cy="12" r="8.5" />
-        <path d="M12 7v5l3 2" />
-      </>
-    );
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-5 w-5"
-    >
-      {drawing}
-    </svg>
-  );
-}
 
 type ConsultationAvailabilityProps = {
   labels: Record<UniversityConsultationService, string>;
@@ -167,6 +94,7 @@ export function ConsultationAvailability({
                 ? "ready"
                 : "unavailable");
           const enabled = availability === "ready";
+          const Illustration = consultationIllustrations[serviceKey];
           const statusClass =
             availability === "ready"
               ? "text-green-700 dark:text-green-300"
@@ -193,7 +121,7 @@ export function ConsultationAvailability({
               className="flex min-h-[29rem] flex-col border border-line bg-surface-raised"
             >
               <div className="flex min-h-52 items-center justify-center border-b border-primary-200 bg-primary-50 px-7 py-6 text-primary-700 dark:border-line dark:bg-surface-hover dark:text-primary-300">
-                <Illustration serviceKey={serviceKey} />
+                <Illustration />
               </div>
               <div className="flex flex-1 flex-col px-5 py-5">
                 <div
@@ -218,15 +146,7 @@ export function ConsultationAvailability({
                       : "mt-auto inline-flex min-h-12 w-full cursor-not-allowed items-center justify-center gap-2 rounded-md border border-line bg-surface-selected px-4 py-3 font-bold text-fg-muted"
                   }
                 >
-                  <ButtonIcon
-                    name={
-                      enabled
-                        ? "video"
-                        : availability === "busy"
-                          ? "phone"
-                          : "clock"
-                    }
-                  />
+                  <UniversityIcon name={enabled ? "video" : "clock"} />
                   {buttonLabel}
                 </button>
               </div>

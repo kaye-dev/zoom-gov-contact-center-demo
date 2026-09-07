@@ -22,6 +22,8 @@ import type {
 } from "@/lib/reservations";
 import type { ReservationApiPermission } from "@/lib/reservation-api";
 import { zaadDictionaries, type ZaadDictionary } from "./zaad-dictionaries";
+import type { TenantKey } from "@/lib/tenants";
+import type { ConsultationService } from "@/lib/online-consultation-catalog";
 import type { TenantContentDictionary } from "./tenant-content";
 
 export const locales = SITE_LOCALES;
@@ -46,6 +48,34 @@ export const localeNames: Record<Locale, string> = {
  * 利用側（useI18n().t）から見た形はテナント軸の導入前と変わらない。
  */
 export type Dictionary = ChromeDictionary & TenantContentDictionary;
+
+export type IndustrySettingsDictionary = {
+  label: string;
+  help: string;
+  scope: string;
+  saved: string;
+  dirty: string;
+  loading: string;
+  loadError: string;
+  retry: string;
+  readonly: string;
+  invalid: string;
+  continue: string;
+  discard: string;
+  confirmTitle: string;
+  confirmTenant: string;
+  confirmPage: string;
+  consultationTitle: string;
+  consultationDescription: string;
+  consultationConnectionLabel: string;
+  consultationTagDescription: string;
+  tag: string;
+  tagHelp: string;
+  memo: string;
+  invalidInput: string;
+  names: Record<TenantKey, string>;
+  services: Record<ConsultationService, string>;
+};
 
 export type ChromeDictionary = {
   nav: {
@@ -165,6 +195,7 @@ export type ChromeDictionary = {
     error: string;
   };
   admin: {
+    industrySettings: IndustrySettingsDictionary;
     title: string;
     pageDescriptionLabel: string;
     users: string;
@@ -2334,6 +2365,41 @@ export const chromeDictionaries: Record<Locale, ChromeDictionary> = {
       error: "処理に失敗しました。",
     },
     admin: {
+      industrySettings: {
+        "label": "設定対象の業種",
+        "help": "このページで編集する業種を選択します。",
+        "scope": "{tenant}の、このページのすべてのタブの設定を保存します。",
+        "saved": "{tenant}の設定を保存しました。",
+        "dirty": "未保存の変更があります。",
+        "loading": "{tenant}の設定を読み込んでいます。",
+        "loadError": "{tenant}の設定を読み込めませんでした。",
+        "retry": "再読み込み",
+        "readonly": "閲覧のみ可能です。編集権限がありません。",
+        "invalid": "指定された業種は利用できません。",
+        "continue": "編集を続ける",
+        "discard": "変更を破棄して切り替える",
+        "confirmTitle": "未保存の変更を破棄しますか？",
+        "confirmTenant": "{tenant}の変更は保存されていません。{destination}に切り替えると、入力した変更が失われます。",
+        "confirmPage": "{tenant}の変更は保存されていません。{destination}に移動すると、入力した変更が失われます。",
+        "consultationTitle": "オンライン相談管理",
+        "consultationDescription": "選択した業種のオンライン相談窓口に、接続用Webタグを設定します。",
+        "consultationConnectionLabel": "{service}の接続設定",
+        "consultationTagDescription": "オンライン相談サービスで発行した接続用Webタグを設定します。",
+        "tag": "接続用Webタグ",
+        "tagHelp": "仕様に適合する接続用Webタグだけを受け付けます。",
+        "memo": "管理メモ",
+        "invalidInput": "入力内容を確認してください。",
+        "names": {
+          "lg": "自治体（未来市）",
+          "univ": "大学（未来大学）"
+        },
+        "services": {
+          "general": "総合相談",
+          "admissions": "入学・入試",
+          "student-support": "学生生活・奨学金",
+          "careers": "キャリア"
+        }
+      },
       title: "管理画面",
       pageDescriptionLabel: "{title}について",
       users: "ユーザー管理",
@@ -2955,6 +3021,41 @@ export const chromeDictionaries: Record<Locale, ChromeDictionary> = {
       error: "The request failed.",
     },
     admin: {
+      industrySettings: {
+        "label": "Industry to configure",
+        "help": "Choose the industry to edit on this page.",
+        "scope": "Save all tabs on this page for {tenant}.",
+        "saved": "Settings saved for {tenant}.",
+        "dirty": "You have unsaved changes.",
+        "loading": "Loading settings for {tenant}.",
+        "loadError": "Could not load settings for {tenant}.",
+        "retry": "Reload",
+        "readonly": "View only. You do not have permission to edit.",
+        "invalid": "This industry is not available.",
+        "continue": "Continue editing",
+        "discard": "Discard changes and switch",
+        "confirmTitle": "Discard unsaved changes?",
+        "confirmTenant": "Changes for {tenant} have not been saved. Switching to {destination} will discard your changes.",
+        "confirmPage": "Changes for {tenant} have not been saved. Opening {destination} will discard your changes.",
+        "consultationTitle": "Online consultation management",
+        "consultationDescription": "Configure connection web tags for the selected industry’s consultation services.",
+        "consultationConnectionLabel": "{service} connection settings",
+        "consultationTagDescription": "Configure the connection web tag issued by the online consultation service.",
+        "tag": "Connection web tag",
+        "tagHelp": "Only supported connection web tags are accepted.",
+        "memo": "Admin memo",
+        "invalidInput": "Check your input.",
+        "names": {
+          "lg": "Local government (Future City)",
+          "univ": "University (Future University)"
+        },
+        "services": {
+          "general": "General consultation",
+          "admissions": "Admissions",
+          "student-support": "Student life and scholarships",
+          "careers": "Careers"
+        }
+      },
       title: "Admin",
       pageDescriptionLabel: "About {title}",
       users: "User Management",
@@ -3574,6 +3675,41 @@ export const chromeDictionaries: Record<Locale, ChromeDictionary> = {
       error: "处理失败。",
     },
     admin: {
+      industrySettings: {
+        "label": "设置对象行业",
+        "help": "选择要在此页面编辑的行业。",
+        "scope": "保存{tenant}在此页面所有选项卡中的设置。",
+        "saved": "已保存{tenant}的设置。",
+        "dirty": "有未保存的更改。",
+        "loading": "正在加载{tenant}的设置。",
+        "loadError": "无法加载{tenant}的设置。",
+        "retry": "重新加载",
+        "readonly": "仅可查看。您没有编辑权限。",
+        "invalid": "该行业不可用。",
+        "continue": "继续编辑",
+        "discard": "放弃更改并切换",
+        "confirmTitle": "放弃未保存的更改？",
+        "confirmTenant": "{tenant}的更改尚未保存。切换到{destination}将丢弃输入的更改。",
+        "confirmPage": "{tenant}的更改尚未保存。打开{destination}将丢弃输入的更改。",
+        "consultationTitle": "在线咨询管理",
+        "consultationDescription": "为所选行业的在线咨询窗口设置连接网页标签。",
+        "consultationConnectionLabel": "{service}连接设置",
+        "consultationTagDescription": "设置在线咨询服务提供的连接网页标签。",
+        "tag": "连接网页标签",
+        "tagHelp": "仅接受符合规范的连接网页标签。",
+        "memo": "管理备注",
+        "invalidInput": "请检查输入内容。",
+        "names": {
+          "lg": "地方政府（未来市）",
+          "univ": "大学（未来大学）"
+        },
+        "services": {
+          "general": "综合咨询",
+          "admissions": "入学与招生",
+          "student-support": "学生生活与奖学金",
+          "careers": "就业指导"
+        }
+      },
       title: "管理页面",
       pageDescriptionLabel: "关于{title}",
       users: "用户管理",
@@ -4149,6 +4285,41 @@ export const chromeDictionaries: Record<Locale, ChromeDictionary> = {
       error: "處理失敗。",
     },
     admin: {
+      industrySettings: {
+        "label": "設定對象行業",
+        "help": "選擇要在此頁面編輯的行業。",
+        "scope": "儲存{tenant}在此頁面所有分頁中的設定。",
+        "saved": "已儲存{tenant}的設定。",
+        "dirty": "有未儲存的變更。",
+        "loading": "正在載入{tenant}的設定。",
+        "loadError": "無法載入{tenant}的設定。",
+        "retry": "重新載入",
+        "readonly": "僅可檢視。您沒有編輯權限。",
+        "invalid": "該行業無法使用。",
+        "continue": "繼續編輯",
+        "discard": "捨棄變更並切換",
+        "confirmTitle": "捨棄未儲存的變更？",
+        "confirmTenant": "{tenant}的變更尚未儲存。切換至{destination}將捨棄輸入的變更。",
+        "confirmPage": "{tenant}的變更尚未儲存。開啟{destination}將捨棄輸入的變更。",
+        "consultationTitle": "線上諮詢管理",
+        "consultationDescription": "為所選行業的線上諮詢窗口設定連線網頁標籤。",
+        "consultationConnectionLabel": "{service}連線設定",
+        "consultationTagDescription": "設定線上諮詢服務提供的連線網頁標籤。",
+        "tag": "連線網頁標籤",
+        "tagHelp": "僅接受符合規範的連線網頁標籤。",
+        "memo": "管理備註",
+        "invalidInput": "請檢查輸入內容。",
+        "names": {
+          "lg": "地方政府（未來市）",
+          "univ": "大學（未來大學）"
+        },
+        "services": {
+          "general": "綜合諮詢",
+          "admissions": "入學與招生",
+          "student-support": "學生生活與獎學金",
+          "careers": "就業輔導"
+        }
+      },
       title: "管理頁面",
       pageDescriptionLabel: "關於{title}",
       users: "使用者管理",
@@ -4731,6 +4902,41 @@ export const chromeDictionaries: Record<Locale, ChromeDictionary> = {
       error: "처리에 실패했습니다.",
     },
     admin: {
+      industrySettings: {
+        "label": "설정 대상 업종",
+        "help": "이 페이지에서 편집할 업종을 선택하세요.",
+        "scope": "{tenant}의 이 페이지에 있는 모든 탭 설정을 저장합니다.",
+        "saved": "{tenant}의 설정을 저장했습니다.",
+        "dirty": "저장하지 않은 변경 사항이 있습니다.",
+        "loading": "{tenant}의 설정을 불러오는 중입니다.",
+        "loadError": "{tenant}의 설정을 불러오지 못했습니다.",
+        "retry": "다시 불러오기",
+        "readonly": "조회만 가능합니다. 편집 권한이 없습니다.",
+        "invalid": "이 업종은 사용할 수 없습니다.",
+        "continue": "계속 편집",
+        "discard": "변경 사항을 버리고 전환",
+        "confirmTitle": "저장하지 않은 변경 사항을 버릴까요?",
+        "confirmTenant": "{tenant}의 변경 사항이 저장되지 않았습니다. {destination}(으)로 전환하면 입력한 변경 사항이 사라집니다.",
+        "confirmPage": "{tenant}의 변경 사항이 저장되지 않았습니다. {destination}(으)로 이동하면 입력한 변경 사항이 사라집니다.",
+        "consultationTitle": "온라인 상담 관리",
+        "consultationDescription": "선택한 업종의 온라인 상담 창구에 연결용 웹 태그를 설정합니다.",
+        "consultationConnectionLabel": "{service} 연결 설정",
+        "consultationTagDescription": "온라인 상담 서비스에서 발급한 연결용 웹 태그를 설정합니다.",
+        "tag": "연결용 웹 태그",
+        "tagHelp": "규격에 맞는 연결용 웹 태그만 허용합니다.",
+        "memo": "관리 메모",
+        "invalidInput": "입력 내용을 확인하세요.",
+        "names": {
+          "lg": "지방자치단체 (미래시)",
+          "univ": "대학교 (미래대학교)"
+        },
+        "services": {
+          "general": "종합 상담",
+          "admissions": "입학·입시",
+          "student-support": "학생 생활·장학금",
+          "careers": "진로"
+        }
+      },
       title: "관리 화면",
       pageDescriptionLabel: "{title} 정보",
       users: "사용자 관리",

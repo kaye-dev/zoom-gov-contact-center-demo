@@ -40,7 +40,7 @@ test("desktop sidebar toggle and shortcut share one guarded state transition", (
 
   assert.match(
     shell,
-    /const \[isSidebarExpanded, setIsSidebarExpanded\] = useState\(true\)/u,
+    /const \[isSidebarExpanded, setIsSidebarExpanded\] = useState\(!\(settingsReview && reviewState === "collapsed"\)\)/u,
   );
   assert.match(
     shell,

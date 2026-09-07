@@ -120,6 +120,9 @@ test("the pre-paint script restores dark only for an explicit dark preference", 
 
 test("review theme query is development-only, loopback-only, and non-persistent", () => {
   assert.equal(resolveReviewTheme({ hostname: "localhost", search: "?theme=dark" }, "development"), "dark");
+  assert.equal(resolveReviewTheme({ hostname: "univ.localhost", search: "?theme=dark" }, "development"), "dark");
+  assert.equal(resolveReviewTheme({ hostname: "univ.localhost", search: "?theme=dark" }, "production"), null);
+  assert.equal(resolveReviewTheme({ hostname: "univ.localhost.example.com", search: "?theme=dark" }, "development"), null);
   assert.equal(resolveReviewTheme({ hostname: "127.0.0.1", search: "?theme=light" }, "test"), "light");
   assert.equal(resolveReviewTheme({ hostname: "[::1]", search: "?theme=dark" }, "development"), "dark");
   assert.equal(resolveReviewTheme({ hostname: "demo.example", search: "?theme=dark" }, "development"), null);

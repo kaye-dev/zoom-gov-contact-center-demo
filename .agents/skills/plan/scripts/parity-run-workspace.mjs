@@ -336,14 +336,14 @@ async function createWorkspaceArtifactSink({ repositoryRootPath, runId, maxBytes
     ensure(typeof mediaType === "string" && mediaType.length > 0, "PARITY_BATCH_INVALID", "artifact mediaType is invalid");
     assertSecretFree(mediaType, "artifact mediaType");
     ensure(
-      typeof content === "string" || content instanceof Uint8Array,
+      typeof content === "string" || Buffer.isBuffer(content) || content instanceof Uint8Array,
       "PARITY_BATCH_INVALID",
       "artifact content must be a string or byte array",
     );
     const bytes = typeof content === "string" ? Buffer.from(content, "utf8") : Buffer.from(content);
     ensure(bytes.length <= maxBytes, "PARITY_BATCH_INVALID", "artifact exceeds the byte limit");
     assertSecretFree(bytes.toString("utf8"), "artifact content");
-    const extension = kind === "screenshot" ? "png" : "json";
+    const extension = kind === "screenshot" ? (mediaType === "image/jpeg" ? "jpg" : "png") : "json";
     const fileName = `${rowId}--${probeId}--${surface}.${extension}`;
     const target = path.join(artifactRoot, fileName);
     ensure(path.dirname(target) === artifactRoot, "PARITY_BATCH_INVALID", "artifact escaped its root");
@@ -610,6 +610,15 @@ function validateCapabilities(value, manifest) {
 }
 
 function validateTerminalCleanup(value, capabilities) {
+  if (Array.isArray(value?.tabs)) {
+    exactKeys(value, ["status", "tabs"], "terminalCleanup");
+    ensure(value.status === "pass", "PARITY_CLEANUP_FAILED", "terminal Browser cleanup must pass");
+    const expectedIds = capabilities.surfaceContexts.map(({ tabId }) => tabId).sort();
+    ensure(stableStringify(value.tabs.map(({ tabId }) => tabId).sort()) === stableStringify(expectedIds),
+      "PARITY_CLEANUP_FAILED", "cleanup must cover both owned surface tabs exactly once");
+    for (const cleanup of value.tabs) validateTerminalCleanup(cleanup, { ...capabilities, tabId: cleanup.tabId });
+    return;
+  }
   exactKeys(
     value,
     ["status", "tabId", "cdpCleared", "viewportReset", "baseline", "readback"],
@@ -915,6 +924,63 @@ async function nextRunBatch({ repositoryRootPath, runId }) {
   };
 }
 
+// Execute the immutable workspace batch through the common Browser runner.
+// Only compact summaries cross the caller boundary; raw artifacts stay in the sink.
+async function executeBrowserBatch({ repositoryRootPath, runId, runner, tabs }) {
+  const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
+  const { value: manifest } = await readJsonFile(path.join(paths.runRoot, "manifest.json"), {
+    limit: maxManifestBytes, parentIdentity: paths.runIdentity,
+  });
+  const next = await nextRunBatch({ repositoryRootPath, runId });
+  if (!next.batch) return next;
+  const descriptor = manifest.batches.find(({ batchId }) => batchId === next.batch.batchId);
+  const batchFile = await readJsonFile(next.batch.path, {
+    limit: maxManifestBytes, parentIdentity: paths.runIdentity,
+  });
+  ensure(batchFile.sha256 === descriptor.sha256 && batchFile.bytes === descriptor.bytes,
+    "PARITY_BATCH_INVALID", "execution batch integrity changed");
+  const { batchId, rowIds, rows } = batchFile.value;
+  const isFirst = batchId === manifest.batches[0].batchId;
+  const isLast = batchId === manifest.batches.at(-1).batchId;
+  const operationsBefore = runner.operations ?? 0;
+  try {
+    const result = await runner.runWithoutCleanup({
+      definition: manifest.definition, phase: manifest.phase, matrixScope: manifest.matrixScope,
+      executionContext: manifest.executionContext, tabs, baseUrls: manifest.baseUrls,
+      batch: { batchId, rowIds, rows },
+      run: { runId, goalSha256: manifest.goalSha256, runtime: manifest.runtime,
+        sources: manifest.sources, shellCommands: manifest.shellCommands },
+    });
+    const terminalCleanup = isLast ? await runner.adapter.cleanup() : null;
+    const fragment = {
+      schemaVersion: manifest.schemaVersion, runId, batchId, batchSha256: descriptor.sha256,
+      rowIds, rows: result.rows, capabilities: isFirst ? result.capabilities : null,
+      metrics: { ...result.metrics, browserOperations: result.metrics.browserOperations - operationsBefore }, terminalCleanup,
+    };
+    return await recordBatchResult({ repositoryRootPath, runId, batchId, input: JSON.stringify(fragment) });
+  } catch (error) {
+    let cleanup;
+    try { cleanup = await runner.adapter.cleanup(); }
+    catch (cleanupError) {
+      cleanup = cleanupError instanceof ParityRunError && cleanupError.evidence
+        ? cleanupError.evidence : { status: "fail" };
+    }
+    const code = cleanup.status === "pass"
+      ? (error instanceof ParityRunError ? error.code : "PARITY_UNEXPECTED_ERROR")
+      : "PARITY_CLEANUP_FAILED";
+    const failedProbes = (error?.evidence?.rows ?? []).flatMap((row) =>
+      (row.probes ?? []).filter(({ status }) => status === "fail").map(({ probeId }) => `${row.rowId}:${probeId}`));
+    const diagnostic = failedProbes.length ? failedProbes.join(", ").slice(0, 1000)
+      : (error instanceof ParityRunError ? error.message.slice(0, 1000) : "Browser batch execution failed");
+    const detail = JSON.parse(JSON.stringify({ code, diagnostic, cleanup, evidence: error instanceof ParityRunError ? error.evidence ?? null : null }));
+    assertSecretFree(detail);
+    await writeJsonExclusive(path.join(paths.runRoot, `failure-${batchId}-${Date.now()}.json`), detail, {
+      parentIdentity: paths.runIdentity,
+    });
+    return recordBatchFailure({ repositoryRootPath, runId, batchId, code, diagnostic, transient: false });
+  }
+}
+
 async function resumeRunWorkspace({ repositoryRootPath, runId }) {
   const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
   const checkpoint = await readCheckpoint(paths.runRoot, paths.runIdentity);
@@ -970,6 +1036,7 @@ async function invalidateRunWorkspace({
   scope,
   targetIds = [],
   source,
+  currentSources,
 }) {
   const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
   const { value: manifest } = await readJsonFile(path.join(paths.runRoot, "manifest.json"), {
@@ -985,6 +1052,21 @@ async function invalidateRunWorkspace({
     source,
   });
   const affectedTargets = new Set(resolution.targetIds);
+  if (currentSources !== undefined) {
+    ensure(Array.isArray(currentSources) && currentSources.length === manifest.sources.length &&
+      new Set(currentSources.map((entry) => entry.path)).size === manifest.sources.length,
+    "PARITY_CURRENT_STATE_DRIFT", "invalidation source inventory changed");
+    for (const previous of manifest.sources) {
+      const current = currentSources.find((entry) => entry.path === previous.path);
+      ensure(current && /^sha256:[a-f0-9]{64}$/u.test(current.sha256),
+        "PARITY_CURRENT_STATE_DRIFT", "invalidation source inventory changed");
+      if (current.sha256 === previous.sha256) continue;
+      const impact = resolveInvalidationTargets({ spec: manifest.definition.spec,
+        contract: manifest.definition.contract, scope: "shared", source: previous.path });
+      ensure(impact.targetIds.every((targetId) => affectedTargets.has(targetId)),
+        "PARITY_CURRENT_STATE_DRIFT", "changed source affects a target outside invalidation");
+    }
+  }
   const rowsById = new Map(manifest.definition.contract.parityMatrix.map((row) => [row.id, row]));
   const checkpoint = await readCheckpoint(paths.runRoot, paths.runIdentity);
   const invalidatedBatchIds = [];
@@ -1006,6 +1088,21 @@ async function invalidateRunWorkspace({
     batch.fragmentSha256 = null;
     invalidatedBatchIds.push(batch.batchId);
   }
+  const invalidatedRows = new Set(checkpoint.batches
+    .filter(({ batchId }) => invalidatedBatchIds.includes(batchId)).flatMap(({ rowIds }) => rowIds));
+  const artifactRoot = path.join(paths.runRoot, "artifacts");
+  const invalidatedArtifacts = checkpoint.artifactIndex.filter(({ rowId }) => invalidatedRows.has(rowId));
+  const artifactIdentity = invalidatedArtifacts.length ? await captureDirectoryIdentity(artifactRoot) : undefined;
+  for (const artifact of invalidatedArtifacts) {
+    const target = path.resolve(paths.repositoryRoot, artifact.path);
+    ensure(path.dirname(target) === artifactRoot, "PARITY_BATCH_INVALID", "invalidated artifact escaped its root");
+    await assertWorkspaceIdentities(paths);
+    const bytes = await readStableFile(target, { limit: artifact.bytes, parentIdentity: artifactIdentity });
+    ensure(bytes.length === artifact.bytes && sha256(bytes) === artifact.sha256,
+      "PARITY_BATCH_INVALID", "invalidated artifact digest changed");
+    await rm(target);
+  }
+  checkpoint.artifactIndex = checkpoint.artifactIndex.filter(({ rowId }) => !invalidatedRows.has(rowId));
   checkpoint.invalidations.push({
     at: new Date().toISOString(),
     scope,
@@ -1017,6 +1114,12 @@ async function invalidateRunWorkspace({
   await writeJsonAtomic(path.join(paths.runRoot, "checkpoint.json"), checkpoint, {
     parentIdentity: paths.runIdentity,
   });
+  if (currentSources !== undefined) {
+    manifest.sources = currentSources;
+    await writeJsonAtomic(path.join(paths.runRoot, "manifest.json"), manifest, {
+      parentIdentity: paths.runIdentity,
+    });
+  }
   return {
     runId,
     status: "invalidated",
@@ -1460,6 +1563,7 @@ export {
   compactRunSummary,
   createWorkspaceArtifactSink,
   finalizeRunWorkspace,
+  executeBrowserBatch,
   invalidateRunWorkspace,
   nextRunBatch,
   prepareRunWorkspace,

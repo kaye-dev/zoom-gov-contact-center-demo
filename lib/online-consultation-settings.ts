@@ -1,22 +1,26 @@
-export const UNIVERSITY_CONSULTATION_SERVICES = [
-  "admissions",
-  "student-support",
-  "careers",
-] as const;
-export type UniversityConsultationService =
-  (typeof UNIVERSITY_CONSULTATION_SERVICES)[number];
+import { MAX_CHAT_MEMO_LENGTH } from "./chat-settings";
+import type { TenantKey } from "./tenants";
+import {
+  consultationServices,
+  UNIVERSITY_CONSULTATION_SERVICES,
+  type UniversityConsultationService,
+  type ConsultationService,
+} from "./online-consultation-catalog";
+export { UNIVERSITY_CONSULTATION_SERVICES, type UniversityConsultationService };
 
 export type OnlineConsultationSetting = {
-  serviceKey: UniversityConsultationService;
+  serviceKey: ConsultationService;
   enabled: boolean;
   webClientTag: string | null;
   queueId: string | null;
+  memo?: string;
 };
 
 export type OnlineConsultationSettingsInput = {
   services: Array<{
-    serviceKey: UniversityConsultationService;
+    serviceKey: ConsultationService;
     webClientTag: string;
+    memo?: string;
   }>;
 };
 
@@ -51,6 +55,7 @@ export function parseVideoClientWebTag(value: string): string | null {
 
 export function parseOnlineConsultationSettings(
   value: unknown,
+  tenantKey: TenantKey = "univ",
 ):
   | { ok: true; value: OnlineConsultationSettingsInput }
   | {
@@ -63,27 +68,39 @@ export function parseOnlineConsultationSettings(
   const services = (value as { services?: unknown }).services;
   if (
     !Array.isArray(services) ||
-    services.length !== UNIVERSITY_CONSULTATION_SERVICES.length
+    services.length !== consultationServices(tenantKey).length
   ) {
     return { ok: false, code: ONLINE_CONSULTATION_ERROR_CODES.invalidPayload };
   }
   const parsed = services.map((service) => {
     if (!service || typeof service !== "object") return null;
-    const { serviceKey, webClientTag } = service as Record<string, unknown>;
+    const { serviceKey, webClientTag, memo } = service as Record<
+      string,
+      unknown
+    >;
     if (
       typeof serviceKey !== "string" ||
-      !isUniversityConsultationService(serviceKey) ||
-      typeof webClientTag !== "string"
+      !consultationServices(tenantKey).some((key) => key === serviceKey) ||
+      typeof webClientTag !== "string" ||
+      (memo !== undefined &&
+        (typeof memo !== "string" ||
+          Array.from(memo).length > MAX_CHAT_MEMO_LENGTH))
     ) {
       return null;
     }
     const tag = parseVideoClientWebTag(webClientTag);
-    return tag ? { serviceKey, webClientTag: tag } : null;
+    return tag
+      ? {
+          serviceKey,
+          webClientTag: tag,
+          ...(memo === undefined ? {} : { memo }),
+        }
+      : null;
   });
   if (
     parsed.some((service) => service === null) ||
     new Set(parsed.map((service) => service?.serviceKey)).size !==
-      UNIVERSITY_CONSULTATION_SERVICES.length
+      consultationServices(tenantKey).length
   ) {
     return { ok: false, code: ONLINE_CONSULTATION_ERROR_CODES.invalidTag };
   }

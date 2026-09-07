@@ -249,6 +249,7 @@ model SiteOnlineConsultationSetting {
   serviceKey    String
   enabled       Boolean  @default(false)
   webClientTag  String?
+  memo          String   @default("") @db.Text
   queueId       String?
   updatedAt     DateTime @default(now()) @updatedAt
 

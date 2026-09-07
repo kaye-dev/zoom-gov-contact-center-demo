@@ -1330,12 +1330,14 @@ async function runCli({
     planSlugFromTarget(target);
     ensure(options.runId, "--run-id is required");
     ensure(options.invalidationScope, "--invalidation-scope is required");
+    const invalidationDefinition = await loadParityDefinition(target, root);
     stdout.write(`${JSON.stringify(await invalidateRunWorkspace({
       repositoryRootPath: root,
       runId: options.runId,
       scope: options.invalidationScope,
       targetIds: options.changedTargetIds,
       source: options.source,
+      currentSources: await currentSourceDigests(invalidationDefinition.contract, root),
     }), null, 2)}\n`);
     return;
   }

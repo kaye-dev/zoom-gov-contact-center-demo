@@ -55,6 +55,7 @@ export type TenantDefinition = {
   /** Organization name asserted while parsing the FAQ corpus. */
   faqOrganizationName: string;
   features: TenantFeatures;
+  adminSettings: readonly ("phone-settings" | "chat-settings" | "online-consultation-settings")[];
 };
 
 const TENANT_DEFINITIONS: Record<TenantKey, TenantDefinition> = {
@@ -70,6 +71,7 @@ const TENANT_DEFINITIONS: Record<TenantKey, TenantDefinition> = {
     devHostLabel: "lg",
     knowledgeBaseDir: "自治体-基礎自治体-未来市",
     faqOrganizationName: "未来市",
+    adminSettings: ["phone-settings", "chat-settings", "online-consultation-settings"],
     features: {
       disasterRadio: true,
       audienceNavigation: false,
@@ -90,6 +92,7 @@ const TENANT_DEFINITIONS: Record<TenantKey, TenantDefinition> = {
     devHostLabel: "univ",
     knowledgeBaseDir: "大学-未来大学",
     faqOrganizationName: "未来大学",
+    adminSettings: ["phone-settings", "chat-settings", "online-consultation-settings"],
     features: {
       disasterRadio: false,
       audienceNavigation: false,

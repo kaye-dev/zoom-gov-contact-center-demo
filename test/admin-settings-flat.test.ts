@@ -24,7 +24,7 @@ function flatGroups(html: string, count: number, visibleLegend = false) {
 }
 for (const canEdit of [true, false]) {
   test(`FLAT-01/02 A11Y-01 SAVE-01 phone editable=${canEdit}`, () => {
-    const html = renderAdmin(createElement(PhoneSettingsForm, { canEdit,
+    const html = renderAdmin(createElement(PhoneSettingsForm, { initialTenant: "lg", canEdit,
       orderedLocales: [{ locale: "ja", enabled: true }, { locale: "en", enabled: false }],
       initialSettings: { representativePhone: { display: "03-1234-5678", e164: "+81312345678" }, aiPhoneNumbers: { ja: null, en: null, "zh-Hans": null, "zh-Hant": null, ko: null } },
     }));
@@ -34,19 +34,19 @@ for (const canEdit of [true, false]) {
     assert.match(html, /md:grid-cols-2/);
     assert.match(html, /border-b border-line-subtle py-4 md:grid-cols-\[12rem_minmax\(0,1fr\)\]/);
     assert.match(html, /aria-describedby="representative-phone-e164-help"/);
-    assert.match(html, /aria-describedby="phone-save-scope"/);
-    assert.ok(html.includes(dictionaries.ja.admin.settings.pageSaveScope));
+    assert.match(html, /aria-describedby="save-scope"/);
+    assert.ok(html.includes(dictionaries.ja.admin.industrySettings.scope.replace("{tenant}", dictionaries.ja.admin.industrySettings.names.lg)));
     assert.equal(/readOnly=""/i.test(html), !canEdit);
   });
   test(`FLAT-03/04 A11Y-01 SAVE-01 chat editable=${canEdit}`, () => {
-    const html = renderAdmin(createElement(ChatSettingsForm, { canEdit, initialSettings: {
+    const html = renderAdmin(createElement(ChatSettingsForm, { initialTenant: "lg", canEdit, initialSettings: {
       activeMode: "CAMPAIGN", campaignWebTag: "draft", campaignMemo: "memo", contactCenterEntryIdWebTag: "entry", contactCenterEntryIdMemo: null,
     } }));
     flatGroups(html, 3);
     assert.equal((html.match(/type="radio"/g) ?? []).length, 3);
     assert.equal((html.match(/<textarea/g) ?? []).length, 4);
     assert.match(html, /border-accent bg-surface-selected/);
-    assert.match(html, /aria-describedby="chat-save-scope"/);
+    assert.match(html, /aria-describedby="save-scope"/);
     assert.match(html, /id="chat-campaign-panel"[^>]*hidden=""/);
     assert.match(html, /maxLength="4096"/i);
     assert.match(html, /max-w-5xl/);

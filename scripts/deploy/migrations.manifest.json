@@ -105,6 +105,11 @@
       "name": "20260906190000_add_univ_online_consultation_settings",
       "sha256": "3cbaf69c19539801da7668cb7b2987f40d6b1c8803411385f6e27056f901b924",
       "classification": "destructive-reviewed"
+    },
+    {
+      "name": "20260907070000_add_online_consultation_memo",
+      "sha256": "512493c07754637460dfa50e2b2b734b8315bce3fad00cc38cd161e56df35d5d",
+      "classification": "destructive-reviewed"
     }
   ]
 }

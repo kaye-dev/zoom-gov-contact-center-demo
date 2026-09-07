@@ -135,6 +135,12 @@ const EXACT_POST_REVIEWED_CHAIN = [
     sha256: "3cbaf69c19539801da7668cb7b2987f40d6b1c8803411385f6e27056f901b924",
     classification: "destructive-reviewed",
   },
+  {
+    // 既存行を空文字で維持する追加列。NOT NULL / DEFAULT は自動expand判定の対象外。
+    name: "20260907070000_add_online_consultation_memo",
+    sha256: "512493c07754637460dfa50e2b2b734b8315bce3fad00cc38cd161e56df35d5d",
+    classification: "destructive-reviewed",
+  },
 ] as const satisfies readonly ExactBatchMigration[];
 
 export type ReviewedMigrationBatchPlan = {

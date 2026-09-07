@@ -10,7 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { CloseIcon } from "@/app/components/svg/CloseIcon";
 import { LeftPanelCloseIcon } from "@/app/components/svg/LeftPanelCloseIcon";
@@ -34,6 +34,7 @@ type AdminShellProps = {
   children: ReactNode;
   visibleItems: AdminNavigationItemKey[];
   currentUserName: string;
+  allowSettingsReview?: boolean;
 };
 
 type AdminNavigationContextValue = {
@@ -68,13 +69,16 @@ export function AdminShell({
   children,
   visibleItems,
   currentUserName,
+  allowSettingsReview = false,
 }: AdminShellProps) {
   const { t } = useI18n();
   const pathname = usePathname();
+  const reviewState = useSearchParams()?.get("state");
+  const settingsReview = allowSettingsReview && ["/admin/phone-settings", "/admin/chat-settings", "/admin/online-consultation-settings"].includes(pathname);
   const router = useRouter();
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(!(settingsReview && reviewState === "collapsed"));
+  const [isDrawerOpen, setIsDrawerOpen] = useState(settingsReview && reviewState === "menu");
   const [accountMenuSurface, setAccountMenuSurface] = useState<
     "desktop" | "drawer" | null
   >(null);

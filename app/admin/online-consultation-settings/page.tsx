@@ -1,4 +1,7 @@
-import { notFound } from "next/navigation";
+import { getSettingsReview } from "@/lib/server/admin-settings-review";
+import { settingsReviewData } from "@/lib/admin-settings-review";
+import { getAdminSettingsTenant } from "@/lib/server/admin-settings-tenant";
+import { InvalidSettingsTenant } from "../InvalidSettingsTenant";
 import type { Metadata } from "next";
 
 import { canAdminAccess } from "@/lib/admin-access/authorization";
@@ -15,22 +18,26 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default async function OnlineConsultationSettingsPage() {
-  const tenant = await getRequestTenant();
-  if (!tenant.features.onlineConsultationAdmin) notFound();
+export default async function OnlineConsultationSettingsPage({ searchParams }: { searchParams: Promise<{ tenant?: string | string[]; state?: string | string[] }> }) {
 
   const { actor } = await requireAdminAccess(
     "chat-settings",
     "VIEW",
     "/admin/online-consultation-settings",
   );
+  const reviewState = await getSettingsReview((await searchParams).state);
+  const selected = await getAdminSettingsTenant((await searchParams).tenant, "online-consultation-settings");
+  if (!selected.ok) return <InvalidSettingsTenant />;
+  const tenant = selected.tenant;
   const initialSettings = await getOnlineConsultationSettings(tenant.key);
 
   return (
     <OnlineConsultationSettingsForm
-      initialSettings={initialSettings}
-      siteName={tenant.metadata.shortName}
-      canEdit={canAdminAccess(actor, "chat-settings", "UPDATE")}
+      reviewState={reviewState}
+      key={tenant.key}
+      initialTenant={tenant.key}
+      initialSettings={reviewState ? settingsReviewData("online-consultation-settings", tenant.key).settings as typeof initialSettings : initialSettings}
+      canEdit={reviewState !== "readonly" && canAdminAccess(actor, "chat-settings", "UPDATE")}
     />
   );
 }

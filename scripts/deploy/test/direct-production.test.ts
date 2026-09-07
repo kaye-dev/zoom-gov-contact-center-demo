@@ -419,6 +419,10 @@ test("reviewed migration manifest exactly classifies the current SHA-verified ch
         name: "20260906190000_add_univ_online_consultation_settings",
         classification: "destructive-reviewed",
       },
+      {
+        name: "20260907070000_add_online_consultation_memo",
+        classification: "destructive-reviewed",
+      },
     ],
   );
 });
