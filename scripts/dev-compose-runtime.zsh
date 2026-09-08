@@ -425,8 +425,8 @@ dev_runtime_load_manifest() {
       return 1
     fi
     if [[ "${manifest_schema}" == "2" ]]; then
-      if (( manifest_host_port < 3001 || manifest_host_port > 3010 )); then
-        dev_runtime_error "Worktree app port must be in 3001-3010."
+      if (( manifest_host_port < 3001 || manifest_host_port > 3005 )); then
+        dev_runtime_error "Worktree app port must be in 3001-3005."
         return 1
       fi
       PORT_SLOT=$(( manifest_host_port - 3000 ))
@@ -725,7 +725,7 @@ dev_runtime_allocate_web_ports() {
   values="$(print -rn -- "${allocation}" | node --input-type=module -e '
     let text=""; for await (const chunk of process.stdin) text+=chunk;
     const value=JSON.parse(text);
-    if (!Number.isInteger(value.slot) || value.slot<0 || value.slot>10 || value.appPort!==3000+value.slot || value.artifactPort!==4000+value.slot || value.schemaVersion!==1) process.exit(1);
+    if (!Number.isInteger(value.slot) || value.slot<0 || value.slot>5 || value.appPort!==3000+value.slot || value.artifactPort!==4000+value.slot || value.schemaVersion!==1) process.exit(1);
     console.log([value.slot,value.appPort,value.schemaVersion].join(" "));
   ')" || return 1
   local -a fields

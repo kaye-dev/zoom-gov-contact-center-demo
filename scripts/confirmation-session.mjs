@@ -178,10 +178,10 @@ function validateLoopbackUrl(value, label, { app = false, legacy = true } = {}) 
   if (app) {
     ensure(parsed.protocol === "http:" && /^(?:[a-z0-9-]+\.)?localhost$/u.test(parsed.hostname), `${label} must use http://localhost or a tenant .localhost host`);
     const port = Number(parsed.port || "80");
-    ensure((port >= 3000 && port <= 3010) || (legacy && port >= 3100 && port <= 3899), `${label} uses an unavailable app port`);
+    ensure((port >= 3000 && port <= 3005) || (legacy && port >= 3100 && port <= 3899), `${label} uses an unavailable app port`);
   } else {
     ensure(parsed.protocol === "http:" && parsed.hostname === "127.0.0.1" && parsed.port !== "", `${label} must use an explicit 127.0.0.1 port`);
-    ensure(legacy || (Number(parsed.port) >= 4000 && Number(parsed.port) <= 4010), `${label} must use an artifact port in 4000-4010`);
+    ensure(legacy || (Number(parsed.port) >= 4000 && Number(parsed.port) <= 4005), `${label} must use an artifact port in 4000-4005`);
   }
   return parsed.toString();
 }
@@ -559,7 +559,7 @@ async function stopArtifact(identity, state, surface) {
   if (!artifact) return;
   await probeArtifact({ ...identity, slug: state.slug }, artifact);
   const port = Number(new URL(artifact.url).port);
-  if (port >= 4000 && port <= 4010) {
+  if (port >= 4000 && port <= 4005) {
     const allocation = await createPortAllocator().status(await resolvePortIdentity(identity.checkout));
     const registered = await verifyArtifactProcess(allocation);
     ensure(registered?.pid === artifact.pid && registered.processToken === artifact.processToken,

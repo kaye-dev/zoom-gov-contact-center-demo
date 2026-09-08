@@ -177,7 +177,7 @@ test("RT-02: worktrees receive stable and distinct projects and port slots", (co
   assert.notEqual(firstRuntime.COMPOSE_PROJECT_NAME, secondRuntime.COMPOSE_PROJECT_NAME);
   assert.notEqual(firstRuntime.HOST_PORT, secondRuntime.HOST_PORT);
   assert.equal(Number(firstRuntime.STUDIO_PORT) - Number(firstRuntime.POSTGRES_PORT), 10123);
-  assert.ok(Number(firstRuntime.HOST_PORT) >= 3001 && Number(firstRuntime.HOST_PORT) <= 3010);
+  assert.ok(Number(firstRuntime.HOST_PORT) >= 3001 && Number(firstRuntime.HOST_PORT) <= 3005);
 
   const repeated = runHelper(first, "dev_runtime_prepare; dev_runtime_print_context");
   assert.equal(repeated.status, 0, repeated.stderr);

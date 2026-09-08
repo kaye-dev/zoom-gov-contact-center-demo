@@ -290,7 +290,7 @@ test("PORT-06: real prototype wrapper starts without starting Docker, app or dat
       child.once("exit", code => { clearTimeout(timer); reject(new Error(`prototype exit ${code}`)); });
       child.once("error", reject);
     });
-    assert.ok(Number(new URL(url).port) >= 4001 && Number(new URL(url).port) <= 4010);
+    assert.ok(Number(new URL(url).port) >= 4001 && Number(new URL(url).port) <= 4005);
     assert.equal((await fetch(url)).status, 200);
     assert.ok((await readFile(dockerLog, "utf8")).trim().split("\n").every(line => line === "ps -q"));
   } finally {
