@@ -9,6 +9,8 @@
 | 要件 | goal内の設計 | prototype | テスト | 完了条件 |
 | --- | --- | --- | --- | --- |
 
+<!-- 各要件に一意のREQ-* ID、具体的期待結果、検証caseを対応付ける。UIはprofile v4にも同じIDを記録する。 -->
+
 # 現状と根拠
 
 # 実装方針
@@ -36,6 +38,9 @@
 - risk rows: なし
 - anchor rows: なし
 - full parity条件: なし
+- interaction groups: なし
+- runtime checks: なし
+- Codex visual checks: なし
 - human UI review: なし
 
 # インターフェースとデータフロー

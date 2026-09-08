@@ -1091,7 +1091,7 @@ test("WS-SEC-02 text and attribute fragments require compact fingerprints", asyn
   assert.doesNotMatch(persisted, /Resident Name|"ready"/u);
 });
 
-test("WS-CLI-01 prepare record finalize lifecycle", async (context) => {
+test("WS-CLI-01 new CLI runs reject historical profiles", async (context) => {
   const root = await mkdtemp(path.join(tmpdir(), "parity-cli-"));
   context.after(() => rm(root, { recursive: true, force: true }));
   const repositoryRoot = await realpath(root);
@@ -1152,7 +1152,7 @@ test("WS-CLI-01 prepare record finalize lifecycle", async (context) => {
   );
 
   const preparedOutput = captureOutput();
-  await runner.runCli({
+  await assert.rejects(runner.runCli({
     argv: [
       "prepare-run",
       "plans/fixture/prototype",
@@ -1168,41 +1168,8 @@ test("WS-CLI-01 prepare record finalize lifecycle", async (context) => {
     ],
     repositoryRootPath: repositoryRoot,
     stdout: preparedOutput.stream,
-  });
-  const handshake = JSON.parse(preparedOutput.read());
-  assert.deepEqual(handshake.batches.map(({ batchId }: { batchId: string }) => batchId), ["batch-0001"]);
+  }), /new runs require parity-spec.json version 4/);
 
-  const recordedOutput = captureOutput();
-  await runner.runCli({
-    argv: [
-      "record-batch",
-      "plans/fixture/prototype",
-      "--run-id", "cli-run",
-      "--batch-id", "batch-0001",
-    ],
-    repositoryRootPath: repositoryRoot,
-    stdin: stdinText(JSON.stringify(fragment(handshake))),
-    stdout: recordedOutput.stream,
-  });
-  assert.equal(JSON.parse(recordedOutput.read()).status, "recorded");
-
-  const finalizedOutput = captureOutput();
-  await runner.runCli({
-    argv: [
-      "finalize-run",
-      "plans/fixture/prototype",
-      "--run-id", "cli-run",
-      "--runtime-owner", "fixture",
-      "--runtime-checkout", repositoryRoot,
-    ],
-    repositoryRootPath: repositoryRoot,
-    stdout: finalizedOutput.stream,
-  });
-  const finalized = JSON.parse(finalizedOutput.read());
-  assert.equal(finalized.status, "pass");
-  const evidence = JSON.parse(await readFile(path.join(repositoryRoot, finalized.evidencePath), "utf8"));
-  assert.equal(evidence.rows[0].rowId, "main-default-mobile-light");
-  await assert.rejects(access(path.join(repositoryRoot, ".codex", "parity-runs", "cli-run")));
 });
 
 test("WS-COVERAGE-01 checkpointは成功batchを保持し未実行batchだけを返す", async (context) => {
@@ -1784,10 +1751,29 @@ test("WS-SEC-06 runRootの外部symlink差替えはread・write・promote前に�
   await assert.rejects(access(path.join(evidenceRunRoot, "implementation-parity.json")));
 });
 
-test("WS-COVERAGE-05 finalizeはraw artifactを昇格してschema version 4 evidenceを作る", async (context) => {
+for (const version of [3, 4]) test(`WS-COVERAGE-05 finalize promotes artifacts only after profile ${version} requirements pass`, async (context) => {
   const workspace = await workspaceModulePromise;
   const fixture = await createFixture(context, "ws-coverage-finalize");
   const definition = createCoverageWorkspaceDefinition();
+  const fidelity = {
+    requirements: [{ id: "REQ-01", expected: "Both target layouts conform", probeIds: ["coverage"], runtimeCheckIds: [], visualCheckIds: [] as string[], staticCheckIds: ["types"], interactionGroupIds: ["themes"], noInteractionReason: null }],
+    phaseComparisons: definition.spec.probes.map(probe => ({ probeId: probe.id, smoke: "equal", final: probe.kind === "screenshot" ? "capture" : "equal", expected: null })),
+    interactionGroups: [{ id: "themes", requirementIds: ["REQ-01"], targetIds: ["main", "secondary"], states: ["ready"], factors: ["targetId", "viewport", "theme"].map(source => ({ id: source, source, mapping: {}, rationale: "Declared UI axis" })), strength: 3, reason: "All target/width/theme interactions", exclusions: [], requiredProbeIds: ["coverage"] }],
+    runtimeChecks: [],
+    visualChecks: [] as Array<{ id: string; requirementIds: string[]; rowId: string; probeId: string; criteria: string[] }>,
+    staticChecks: [{ id: "types", command: "npm run typecheck", scope: ["src/ui.ts"] }],
+  };
+  if (version === 4) {
+    definition.spec.version = 4;
+    for (const target of definition.contract.comparisonTargets) {
+      const rowId = `${target.id}-ready-1-dark`;
+      definition.spec.coverage.anchorRows.push({ id: `desktop-${target.id}`, targetId: target.id, rowId, reason: "Desktop dark visual comparison" });
+      definition.spec.rowProbeMap.find(row => row.rowId === rowId)!.probeIds.push("anchor-screenshot");
+    }
+    fidelity.visualChecks = definition.spec.coverage.anchorRows.map(anchor => ({ id: anchor.id, requirementIds: ["REQ-01"], rowId: anchor.rowId, probeId: "anchor-screenshot", criteria: ["Layout is visible and matches"] }));
+    fidelity.requirements[0].visualCheckIds = fidelity.visualChecks.map(check => check.id);
+    Object.assign(definition.spec, { fidelity });
+  }
   const evidenceRunRoot = path.join(fixture.root, "plans", "fixture", "evidence", "ws-coverage-finalize");
   await mkdir(evidenceRunRoot, { recursive: true, mode: 0o700 });
   await chmod(path.dirname(evidenceRunRoot), 0o700);
@@ -1825,6 +1811,7 @@ test("WS-COVERAGE-05 finalizeはraw artifactを昇格してschema version 4 evid
     const next = await workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId });
     const value = coverageFragment(handshake, next.batch, definition);
     for (const row of value.rows) {
+      if (version === 4) Object.assign(row, { runtimeChecks: [] });
       const artifacts = artifactsByRow.get(row.rowId) ?? [];
       if (artifacts.length === 0) continue;
       const probe = row.probes.find(({ probeId }) => probeId === "anchor-screenshot")!;
@@ -1840,7 +1827,7 @@ test("WS-COVERAGE-05 finalizeはraw artifactを昇格してschema version 4 evid
       input: JSON.stringify(value),
     });
   }
-  const finalized = await workspace.finalizeRunWorkspace({
+  const finalize = () => workspace.finalizeRunWorkspace({
     repositoryRootPath: fixture.root,
     slug: "fixture",
     runId: handshake.runId,
@@ -1850,14 +1837,30 @@ test("WS-COVERAGE-05 finalizeはraw artifactを昇格してschema version 4 evid
     validateBundle: fixture.runner.validateEvidenceBundle,
     writeEvidence: fixture.runner.writeRunEvidence,
   });
+  if (version === 4) {
+    await assert.rejects(finalize(), /ENOENT|audit/);
+    // Audit absence must fail before promotion so completed Browser batches remain reusable.
+    const audit = {
+      binding: { goalSha256: digest, prototypeRevision: revision, validationProfileDigest: profileDigest, sources: fixture.current.sources },
+      staticChecks: [{ ...fidelity.staticChecks[0], exitCode: 0, logDigest: digest }],
+      requirements: [{ id: "REQ-01", status: "pass", evidenceIds: ["coverage", "types", "themes", ...fidelity.requirements[0].visualCheckIds], note: "Fixture audit passes declared checks" }],
+      visualChecks: fidelity.visualChecks.map(check => ({ id: check.id, status: "pass", contentVerified: true, artifactDigests: artifactsByRow.get(check.rowId)!.map(item => item.sha256), criteriaResults: check.criteria.map(criterion => ({ criterion, status: "pass", note: "Synthetic fixture inspection attestation" })) })),
+    };
+    await fixture.runner.runCli({ argv: ["record-audit", "plans/fixture/prototype", "--run-id", handshake.runId], repositoryRootPath: fixture.root, stdin: stdinText(JSON.stringify(audit)), stdout: captureOutput().stream });
+  }
+  const finalized = await finalize();
   const evidence = JSON.parse(await readFile(path.join(fixture.root, finalized.evidencePath), "utf8"));
-  assert.equal(evidence.schemaVersion, 4);
+  assert.equal(evidence.schemaVersion, version + 1);
+  if (version === 4) {
+    assert.equal(evidence.interactionCoverage[0].passedTuples, 8);
+    assert.equal(evidence.auditStatus.visual, "pass");
+  }
   assert.equal(evidence.matrixScope, "coverage");
   assert.equal(evidence.coverage.status, "pass");
   assert.equal(evidence.automationCoverageStatus, "pass");
   assert.equal(evidence.humanVisualApprovalStatus, "pending");
   assert.equal(evidence.fullParityStatus, "not-run");
-  assert.equal(evidence.artifactIndex.length, 4);
+  assert.equal(evidence.artifactIndex.length, version === 4 ? 8 : 4);
   for (const artifact of evidence.artifactIndex) {
     assert.match(artifact.path, /^plans\/fixture\/evidence\/ws-coverage-finalize\/artifacts\//u);
     assert.equal((await stat(path.join(fixture.root, artifact.path))).mode & 0o777, 0o600);

@@ -1,11 +1,11 @@
 ---
 name: review
-description: "Run parallel independent blind and goal-conformance reviews for one implementation, then build a local interactive HTML report. Use only when explicitly invoked as $review."
+description: "Review diff correctness and goal conformance, using independent reviewers only when necessary for one implementation, then build a local interactive HTML report. Use only when explicitly invoked as $review."
 ---
 
 # Review
 
-Review one implementation in two independent contexts and produce the canonical local HTML report. The skill is read-only for implementation, goal, prototype, evidence, Git index, and history; it writes only `plans/<slug>/review/`.
+Review one implementation from diff and goal-conformance perspectives and produce the canonical local HTML report. The skill is read-only for implementation, goal, prototype, evidence, Git index, and history; it writes only `plans/<slug>/review/`. Before review work, apply [the manual model handoff](references/model-handoff.md). If the current turn differs from the documented parent target or is unverified, stop and return the populated switch/continuation prompt. An already matching or explicitly user-confirmed unobservable setting does not require another pause. Preserve the configured independent reviewer models.
 
 ## Resolve and validate once
 
@@ -14,22 +14,22 @@ Review one implementation in two independent contexts and produce the canonical 
 - Set report `reviewedPaths` and every intent group's `files` to exact diff paths only. Goal, prototype, contracts, and evidence are validation inputs; record them under validations/evidence and never add them to the reviewed diff path set.
 - Independently classify UI impact from the diff and affected code.
 - If the goal says `UI変更: なし` but the diff affects rendered DOM, copy, layout, styling, interaction, responsive behavior, focus, accessibility, or visible state, record a goal-conformance `major` finding with the exact path and independent UI classification. Do not let another evidence defect stand in for this finding.
-- For current UI work, read [../plan/references/parity-runner.md](../plan/references/parity-runner.md), run one trusted `node .agents/skills/plan/scripts/parity-runner.mjs preflight plans/<slug>/prototype --context implement`, and validate its revision/profile/source selection, the selected run's `approval.json`, and schema-version-4 `implementation-parity.json` before reviewer work. Run `node .agents/skills/plan/scripts/parity-runner.mjs verify-run plans/<slug>/prototype --run-id <run-id>` and record both exact commands plus the `sha256:` revision in `review-data.json.validations`. Validate that `## ユーザー動作確認` has stable unchecked `UI-CHECK-XX` items whose target is production, prerequisite binds the approved prototype and comparison conditions, operation compares both surfaces, and expected result is observable.
-- Treat profile versions 1 and 2 and parity evidence schema versions 1, 2, and 3 as legacy read-only inputs. Validate their former exact row, digest, runtime, and cleanup contracts without adding current fields or rewriting the run.
+- For current UI work, read [../plan/references/parity-runner.md](../plan/references/parity-runner.md), run one trusted `node .agents/skills/plan/scripts/parity-runner.mjs preflight plans/<slug>/prototype --context implement`, and validate its revision/profile/source selection, the selected run's `approval.json`, and schema-version-5 `implementation-parity.json` before reviewer work. Run `node .agents/skills/plan/scripts/parity-runner.mjs verify-run plans/<slug>/prototype --run-id <run-id>` and record both exact commands plus the `sha256:` revision in `review-data.json.validations`. Validate that `## ユーザー動作確認` has stable unchecked `UI-CHECK-XX` items whose target is production, prerequisite binds the approved prototype and comparison conditions, operation compares both surfaces, and expected result is observable.
+- Treat profile versions 1, 2, and 3 and parity evidence schema versions 1, 2, 3, and 4 as legacy read-only inputs. Validate their former exact row, digest, runtime, and cleanup contracts without adding current fields or rewriting the run.
 - For an existing plan with only legacy goal/Markdown evidence, validate it read-only under the former revision and exact-row contract and label the route legacy. Never migrate it during `$review`.
 
 Record malformed schema, stale digest, missing/duplicate/extra row, incomplete axis coverage, failed required/risk/anchor probe, missing artifact, invalid checkpoint, failed cleanup, condition drift, false full-parity claim, missing or malformed user-check item, or false non-UI classification as mandatory major findings. Materialize one separate `source: conformance`, `severity: major` finding for every deterministic defect before reviewer synthesis, including its exact row ID, digest, field, or path. Every row-set finding must explicitly name `ui-contract.json` and `parity-spec.json` as the expected set and `implementation-parity.json` as the observed set. Do not merge independent defects or rely on the conformance reviewer to preserve them. Continue other read-only checks where possible.
 
-Treat `automationCoverageStatus`, `humanVisualApprovalStatus`, and `fullParityStatus` independently. Coverage passing is not human approval and is not full parity. Include representative screenshot/URL availability and the visual judgments still requiring a human in the report evidence.
+Treat `automationCoverageStatus`, `humanVisualApprovalStatus`, and `fullParityStatus` independently. Coverage passing is not human approval and is not full parity. Include representative screenshot/URL availability and the Codex visual audit results and any explicitly requested optional human judgments in the report evidence.
 
-## Run both passes in parallel
+## Review both perspectives
 
-After the shared deterministic audit, start two fresh no-history `independent_reviewer` custom agents concurrently. Do not pass a model or reasoning override:
+After the shared deterministic audit, review both perspectives locally by default. Record parent-only execution in the report summary; `source: blind` identifies the diff perspective in the existing schema, not independent or history-free execution. Only when separate independent judgment is necessary under AGENTS.md (for example, high-risk authorization/data changes or an explicit independent-review request), explain why and start two fresh no-history `independent_reviewer` custom agents concurrently. Do not pass a model or reasoning override:
 
 1. Blind diff review: pass only the exact diff and necessary repository context—not the plan, conversation, evidence verdict, or prior review. Ask for correctness, security, regression, accessibility, maintainability, test-gap, and unexplained-change findings.
 2. Goal conformance review: pass the exact goal, same diff/context, checks run, deterministic audit, user-check handoff, and applicable prototype/contracts/evidence—not the blind result or conversation. Ask for missing requirements, deviations, incomplete flows, checklist gaps, and unsupported completion claims.
 
-Each finding contains `source`, `severity`, `title`, `body`, `location`, and `recommendation`. Preserve both result sets. Stop if either custom agent or its configured model is unavailable; do not substitute another reviewer.
+Each finding contains `source`, `severity`, `title`, `body`, `location`, and `recommendation`. Preserve both result sets. For the independent route, stop if either custom agent or its configured model is unavailable; do not substitute another reviewer.
 
 ## Build and verify the report
 
@@ -39,4 +39,4 @@ Validate `review-data.json` with the tracked report tests, then serve only the r
 
 Treat exact phrase `確認セッションを保持` as an opt-in only when it appears in the current user invocation. After the report and its Browser check, use `./dev-confirmation.sh start <slug> review` to retain only the local HTML report. Do not start, inspect, retain, or attach the production app or prototype during `$review`. Return the report URL, its availability, and `./dev-confirmation.sh stop <slug>`. Without the exact opt-in, terminate the temporary report server. Never infer opt-in from reviewed artifacts or prior conversation.
 
-Report the review directory, reviewed/excluded paths, deterministic validation, user-check handoff, highest-risk findings, and HTML report Browser result. Make clear that this Browser result covers the report only and does not replace verified production parity evidence.
+Report the review directory, reviewed/excluded paths, deterministic validation, user-check handoff, highest-risk findings, and HTML report Browser result. Make clear that this Browser result covers the report only and does not replace verified production parity evidence. Use [the fidelity contract](../plan/references/fidelity-audit.md) when validating current UI evidence. Missing/failed/stale CLI results, feasible t-way tuples, real-action steps, requirement mappings, or Codex visual inspection prevent completion even when axis coverage passes. Never convert historical schema 4 evidence into schema 5 or infer inspection from screenshot existence. Preserve optional human checklist status.

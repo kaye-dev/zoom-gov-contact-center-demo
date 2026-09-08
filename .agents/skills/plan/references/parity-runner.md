@@ -1,18 +1,18 @@
 # UI parity runner contract
 
-Use this reference when authoring UI plans, running normal UI `$implement` final coverage, reviewing that evidence, or performing release, CI, scheduled, or user-explicit parity verification. Normal UI `$implement` starts with static preflight and approval, then runs the Browser lifecycle only after implementation and static checks are complete. Normal UI `$review` requires current final parity evidence. `ui-contract.json` version 1 is the complete UI acceptance contract. Current Browser-enabled plans use `parity-spec.json` version 3 and final `implementation-parity.json` schema version 4. Older profiles and evidence remain read-only compatibility inputs.
+Use this reference when authoring UI plans, running normal UI `$implement` final coverage, reviewing that evidence, or performing release, CI, scheduled, or user-explicit parity verification. Normal UI `$implement` starts with static preflight and approval, then runs the Browser lifecycle only after implementation and static checks are complete. Normal UI `$review` requires current final parity evidence. `ui-contract.json` version 1 is the complete UI acceptance contract. Current Browser-enabled plans use `parity-spec.json` version 4 and final `implementation-parity.json` schema version 5. Older profiles and evidence remain read-only compatibility inputs.
 
 ## Contract, profile, and coverage
 
 `ui-contract.json` owns the complete target × state × viewport × theme Cartesian matrix and immutable row IDs. The profile selects rows from that matrix; it never defines a second UI truth.
 
-Version 3 `parity-spec.json` contains exactly:
+Version 4 `parity-spec.json` retains the following coverage fields and adds `fidelity` defined in [fidelity-audit.md](fidelity-audit.md):
 
 - `version`, `stateSetups`, `probes`, `rowProbeMap`, and complete target-level `browserSetups`;
 - `coverage.targetOrder`, `viewportOrder`, `themeOrder`, `anchorRows`, and `riskRows`;
-- `sourceImpactMap`, `batchPolicy`, and `artifactPolicy`.
+- `sourceImpactMap`, `batchPolicy`, `artifactPolicy`, and `fidelity`.
 
-Version 3 maps contract semantics without changing the `rowProbeMap` schema: every ID in a row's `expectedInvariantIds` has a same-ID required `equal` probe in that row's `probeIds`, and every ID in `intentionalDifferenceIds` has a same-ID required `different` probe there. Probe IDs are globally unique, so one arbitrary probe cannot stand in for multiple contract IDs. Missing, optional, wrong-mode, or row-unmapped same-ID probes fail static validation. Versions 1 and 2 retain their historical validation behavior.
+Baseline comparison maps contract semantics without changing the `rowProbeMap` schema: every ID in a row's `expectedInvariantIds` has a same-ID required `equal` probe in that row's `probeIds`, and every ID in `intentionalDifferenceIds` has a same-ID required `different` probe there. Probe IDs are globally unique, so one arbitrary probe cannot stand in for multiple contract IDs. Missing, optional, wrong-mode, or row-unmapped same-ID probes fail static validation. Versions 1 and 2 retain their historical validation behavior.
 
 Every `stateSetups` entry covers one target/state pair on production and prototype and names one or more required coverage `assertionProbeIds`. Surface setup permits bounded string query fixtures and allowlisted `click`, `press`, `focus`, `fill`, `waitForVisible`, and `waitForHidden` actions. It rejects JavaScript, external URLs, credentials, cookies, token-like names, real email/phone data, and unbounded free text.
 
@@ -43,7 +43,7 @@ node .agents/skills/plan/scripts/parity-runner.mjs select plans/<slug>/prototype
 
 Every coverage row maps required `route`, `setup`, `state`, `viewport`, `theme`, `control`, `overflow`, and `console` probes. They verify route availability, successful deterministic setup, a state-specific identity assertion, exact logical viewport/DPR, root theme class and `color-scheme`, primary control state, no unintended window horizontal scroll or major target overflow, and no serious console error.
 
-Anchor rows map only the detailed probes needed for that target: `screenshot`, `dom`, `accessibility`, `computedStyle`, `geometry`, `focus`, `keyboard`, or `network`. `keyboard` uses `{ "key": "<bounded key>" }`; geometry uses a non-negative tolerance. Screenshot, DOM, computed-style, and geometry are not required across every coverage row. Minor antialiasing, font rendering, and spacing differences remain human visual judgments unless the contract declares a measurable invariant. DOM projection compares visible structure, text, geometry, computed typography/colors/spacing/borders, live control state, and resolved label references. Framework IDs, class ordering, transport names and native validation metadata are not visual equality inputs; application contract tests retain validation coverage. Missing label references remain visible failures.
+Anchor rows map only the detailed probes needed for that target: `screenshot`, `dom`, `accessibility`, `computedStyle`, `geometry`, `focus`, `keyboard`, or `network`. `keyboard` uses `{ "key": "<bounded key>" }`; geometry uses a non-negative tolerance. Screenshot, DOM, computed-style, and geometry are not required across every coverage row. Minor antialiasing, font rendering, and spacing differences require Codex visual judgments unless the contract declares a measurable invariant. DOM projection compares visible structure, text, geometry, computed typography/colors/spacing/borders, live control state, and resolved label references. Framework IDs, class ordering, transport names and native validation metadata are not visual equality inputs; application contract tests retain validation coverage. Missing label references remain visible failures.
 
 The adapter returns screenshot, DOM, and accessibility payloads only to an injected artifact sink. Anchor screenshots use the Browser's full-page capture, or the viewport when a modal locks body scrolling; extending a fixed overlay beyond the viewport can corrupt backend rendering. A backend returning lossy JPEG retains the original `.jpg` artifact for visual review and reports lossless screenshot comparison as unavailable: optional comparisons are skipped, required comparisons fail. No pixel-equivalence claim is made from JPEG hashes. Missing anchor capture fails immediately, including optional anchors. DOM/accessibility projections remain bounded to 1,000 nodes, 524,288 serialized characters, and 1,048,576 UTF-8 bytes. The row result and LLM summary contain compact paths, digests, sizes, and bounded diagnostics. Missing sink for a required raw anchor fails with `PARITY_ARTIFACT_SINK_UNAVAILABLE`.
 
@@ -120,13 +120,13 @@ node .agents/skills/plan/scripts/parity-runner.mjs finalize-run plans/<slug>/pro
   --runtime-checkout <verified-checkout>
 ```
 
-Finalization requires all batches and probes to pass, validates fragment/artifact digests, promotes artifacts to `plans/<slug>/evidence/<run-id>/artifacts/`, removes the workspace, reads back its absence, and exclusively writes schema-version-4 `implementation-parity.json`. Failed runs retain the workspace when policy allows; remove only that run with `cleanup-run` or `abort-run`.
+Finalization first requires a bound `record-audit` input and all fidelity gates to pass, then requires all batches and probes to pass, validates fragment/artifact digests, promotes artifacts to `plans/<slug>/evidence/<run-id>/artifacts/`, removes the workspace, reads back its absence, and exclusively writes schema-version-5 `implementation-parity.json`. Failed runs retain the workspace when policy allows; remove only that run with `cleanup-run` or `abort-run`.
 
-Each command returns a compact summary only: planned/executed/passed counts, failed row IDs, stable error code, bounded diagnostic, checkpoint, and cleanup. Do not stream successful rows, raw screenshots/DOM/accessibility, or large JSON into model context.
+Each command returns a compact summary only: planned/executed/passed counts, failed row IDs, stable error code, bounded diagnostic, checkpoint, and cleanup. Do not stream successful rows, raw DOM/accessibility or large JSON. Open selected safe screenshot pairs for required Codex visual inspection.
 
 ## Evidence and independent statuses
 
-The invocation-bound `approval.json` remains schema version 1. Current final evidence is schema version 4 and records:
+The invocation-bound `approval.json` remains schema version 1. Current final evidence is schema version 5 and records:
 
 - `matrixScope: coverage | full`, execution context, and exact row IDs;
 - recomputable target-state, target-viewport, and target-theme coverage;
@@ -136,10 +136,10 @@ The invocation-bound `approval.json` remains schema version 1. Current final evi
 - capability, artifact index, cleanup/readback, and metrics;
 - `automationCoverageStatus`, `humanVisualApprovalStatus`, and `fullParityStatus`.
 
-Coverage evidence sets full parity to `not-run`; only a complete full run may set it to `pass`. Human visual approval is independent and normally remains `pending` until a human inspects representative screenshots/URLs and visual finish. Missing/duplicate/extra/failed rows, stale digest, condition drift, missing artifact, or failed cleanup prevents automated completion.
+Coverage evidence sets full parity to `not-run`; only a complete full run may set it to `pass`. Codex visual/requirement audit, real actions, static checks and t-way coverage are required by schema v5; human approval is independent and optional. Missing/duplicate/extra/failed rows, stale digest, condition drift, missing artifact, or failed cleanup prevents automated completion.
 
 Stable failure codes include `PARITY_SELECTED_TAB_DRIFT`, `PARITY_COMPARISON_TAB_REQUIRED`, `PARITY_VIEWPORT_CAPABILITY_UNAVAILABLE`, `PARITY_CDP_CAPABILITY_UNAVAILABLE`, `PARITY_DPR_OVERRIDE_UNAVAILABLE`, `PARITY_VIEWPORT_MISMATCH`, `PARITY_DPR_MISMATCH`, `PARITY_BROWSER_SETUP_REQUIRED`, `PARITY_THEME_SETUP_FAILED`, `PARITY_REQUIRED_PROBE_UNAVAILABLE`, `PARITY_ARTIFACT_SINK_UNAVAILABLE`, `PARITY_BATCH_INVALID`, `PARITY_BATCH_INCOMPLETE`, `PARITY_CURRENT_STATE_DRIFT`, and `PARITY_CLEANUP_FAILED`.
 
 ## Legacy compatibility
 
-Profile versions 1 and 2 and parity evidence schemas 1, 2, 3, and 4 remain read-only compatible. Validate existing evidence against its historical row, digest, runtime, and cleanup contract without migrating or adding fields. New Browser-enabled plans use profile version 3; independently requested new final runs use evidence schema 4. A migration changes workflow text, skills, profile, runner, evidence schema, tests, and evaluator together. Rollback must restore that entire compatible set; never roll back only a writer or reader.
+Profile versions 1, 2, and 3 and parity evidence schemas 1, 2, 3, and 4 remain read-only compatible. Validate existing evidence against its historical row, digest, runtime, and cleanup contract without migrating or adding fields. New Browser-enabled plans use profile version 4; independently requested new final runs use evidence schema 5. A migration changes workflow text, skills, profile, runner, evidence schema, tests, and evaluator together. Rollback must restore that entire compatible set; never roll back only a writer or reader.

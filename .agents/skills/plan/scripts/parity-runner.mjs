@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { interactionCoverage, validateFidelityAudit, compareFidelityProbe } from "./parity-fidelity.mjs";
 import { createHash } from "node:crypto";
 import { chmod, lstat, mkdir, open, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
@@ -15,6 +16,7 @@ import {
   prepareRunWorkspace,
   recordBatchFailure,
   recordBatchResult,
+  recordRunAudit,
   resumeRunWorkspace,
 } from "./parity-run-workspace.mjs";
 import {
@@ -269,7 +271,7 @@ function validateGoalContract({ goalText, slug, prototypeRevision, contract, spe
     "goal.md approval contract must reference ui-contract.json version 1",
   );
   ensure(
-    profile.includes(`plans/${slug}/prototype/parity-spec.json`) && /version\s*3/iu.test(profile),
+    profile.includes(`plans/${slug}/prototype/parity-spec.json`) && new RegExp(`version\\s*${spec.version}`, "iu").test(profile),
     "goal.md validation profile must reference parity-spec.json version 3",
   );
   ensure(
@@ -298,12 +300,17 @@ function validateGoalContract({ goalText, slug, prototypeRevision, contract, spe
       !/`build-prototype-css\.mjs`\s*を\s*(?:再)?実行/u.test(implementation),
     "goal.md must not instruct implement to rebuild an approved prototype",
   );
-  ensure(spec.version === 3, "preflight requires parity-spec.json version 3");
+  ensure(spec.version >= 3, "preflight requires parity-spec.json version 3");
+  if (spec.version === 4) {
+    const closure = markdownSection(goalText, "## 要件クロージャ");
+    const goalIds = [...closure.matchAll(/\bREQ-[A-Za-z0-9-]+\b/g)].map(match => match[0]);
+    ensure(JSON.stringify([...new Set(goalIds)].sort()) === JSON.stringify(spec.fidelity.requirements.map(item => item.id).sort()), "goal requirement IDs do not match fidelity requirements");
+  }
   return { status: "pass", requirementRows };
 }
 
 function validateInvariantProbeCoverage(contract, spec) {
-  if (spec.version === 3) {
+  if (spec.version >= 3) {
     validateParitySpec(spec, contract);
     return {
       status: "pass",
@@ -594,7 +601,7 @@ function validateCapabilityEvidence(capabilities, contract, schemaVersion) {
   return validateSurfaceContextProvenance(capabilities, contract);
 }
 
-function validateRowEvidence(rowEvidence, manifestRow, contract, expectedProbes, schemaVersion = 3) {
+function validateRowEvidence(rowEvidence, manifestRow, contract, expectedProbes, schemaVersion = 3, spec, phase) {
   const label = `parity evidence row ${manifestRow.id}`;
   ensure(isPlainObject(rowEvidence), `${label} must be an object`);
   ensure(rowEvidence.rowId === manifestRow.id, `${label} rowId does not match the manifest`);
@@ -605,7 +612,7 @@ function validateRowEvidence(rowEvidence, manifestRow, contract, expectedProbes,
   if (rowEvidence.actualConditions === null) {
     requireExactKeys(
       rowEvidence,
-      ["rowId", "status", "actualConditions", "probes", "artifactPaths", "error", ...(schemaVersion === 4 ? ["artifacts"] : [])],
+      ["rowId", "status", "actualConditions", "probes", "artifactPaths", "error", ...(schemaVersion >= 4 ? ["artifacts"] : []), ...(schemaVersion === 5 ? ["runtimeChecks"] : [])],
       label,
     );
     ensure(rowEvidence.status === "fail", `${label} without actual conditions must fail`);
@@ -616,10 +623,10 @@ function validateRowEvidence(rowEvidence, manifestRow, contract, expectedProbes,
 
   requireExactKeys(
     rowEvidence,
-    ["rowId", "status", "actualConditions", "probes", "artifactPaths", ...(schemaVersion === 4 ? ["artifacts"] : [])],
+    ["rowId", "status", "actualConditions", "probes", "artifactPaths", ...(schemaVersion >= 4 ? ["artifacts"] : []), ...(schemaVersion === 5 ? ["runtimeChecks"] : [])],
     label,
   );
-  if (schemaVersion === 4) {
+  if (schemaVersion >= 4) {
     ensure(Array.isArray(rowEvidence.artifacts), `${label}.artifacts must be an array`);
     rowEvidence.artifacts.forEach((artifact, index) => validateArtifactRecord(artifact, `${label}.artifacts[${index}]`));
   }
@@ -667,7 +674,7 @@ function validateRowEvidence(rowEvidence, manifestRow, contract, expectedProbes,
       "prototype",
       "reason",
       "artifactPaths",
-      ...(schemaVersion === 4 ? ["tier", "artifacts"] : []),
+      ...(schemaVersion >= 4 ? ["tier", "artifacts"] : []),
     ]);
     ensure(Object.keys(probe).every((key) => allowedKeys.has(key)), `${probeLabel} contains an unknown field`);
     const probeId = requireNonEmptyString(probe.probeId, `${probeLabel}.probeId`);
@@ -678,9 +685,9 @@ function validateRowEvidence(rowEvidence, manifestRow, contract, expectedProbes,
       ensure(expectedProbe, `${probeLabel}.probeId is not mapped to this row`);
       ensure(probe.kind === expectedProbe.kind, `${probeLabel}.kind does not match parity-spec.json`);
       ensure(!(expectedProbe.required && probe.status === "skipped"), `${probeLabel} required probe must not be skipped`);
-      if (schemaVersion === 4) ensure(probe.tier === expectedProbe.tier, `${probeLabel}.tier does not match parity-spec.json`);
+      if (schemaVersion >= 4) ensure(probe.tier === expectedProbe.tier, `${probeLabel}.tier does not match parity-spec.json`);
       if (
-        schemaVersion === 4 &&
+        schemaVersion >= 4 &&
         expectedProbe.tier === "anchor" &&
         ["screenshot", "dom", "accessibility"].includes(expectedProbe.kind)
       ) {
@@ -688,12 +695,20 @@ function validateRowEvidence(rowEvidence, manifestRow, contract, expectedProbes,
       }
     }
     requireStringArray(probe.artifactPaths, `${probeLabel}.artifactPaths`);
-    if (schemaVersion === 4) {
+    if (schemaVersion >= 4) {
       ensure(Array.isArray(probe.artifacts), `${probeLabel}.artifacts must be an array`);
       probe.artifacts.forEach((artifact, artifactIndex) => validateArtifactRecord(artifact, `${probeLabel}.artifacts[${artifactIndex}]`));
       for (const artifact of probe.artifacts) {
         ensure(artifact.rowId === manifestRow.id && artifact.probeId === probeId, `${probeLabel} artifact ownership is invalid`);
       }
+    }
+    if (schemaVersion === 5 && probe.status !== "skipped") {
+      const expectedProbe = expectedProbeById.get(probeId);
+      const result = compareFidelityProbe(expectedProbe,
+        { value: probe.production, artifact: probe.artifacts.find(item => item.surface === "production") },
+        { value: probe.prototype, artifact: probe.artifacts.find(item => item.surface === "prototype") },
+        spec, phase, compareProbe);
+      ensure(result.status === probe.status, `${probeLabel} comparison result is not reproducible`);
     }
     if (probe.status === "skipped") {
       requireNonEmptyString(probe.reason, `${probeLabel}.reason`);
@@ -725,11 +740,11 @@ function validateParityEvidence(evidence, contract, spec) {
   assertPersistedJsonSecretFree(evidence, "parity evidence");
   ensure(isPlainObject(evidence), "parity evidence must be an object");
   ensure(
-    [1, 2, 3, 4].includes(evidence.schemaVersion),
-    "parity evidence schemaVersion must be 1, 2, 3, or 4",
+    [1, 2, 3, 4, 5].includes(evidence.schemaVersion),
+    "parity evidence schemaVersion must be 1, 2, 3, 4, or 5",
   );
   const legacyFullMatrixEvidence = evidence.schemaVersion === 1;
-  const coverageEvidence = evidence.schemaVersion === 4;
+  const coverageEvidence = evidence.schemaVersion >= 4;
   requireExactKeys(
     evidence,
     [
@@ -746,6 +761,7 @@ function validateParityEvidence(evidence, contract, spec) {
       "capabilities",
       "rows",
       "metrics",
+      ...(evidence.schemaVersion === 5 ? ["audit", "auditStatus", "interactionCoverage"] : []),
       ...(coverageEvidence
         ? [
             "coverage",
@@ -899,7 +915,7 @@ function validateParityEvidence(evidence, contract, spec) {
       )
     : undefined;
   for (const row of evidence.rows) {
-    validateRowEvidence(row, manifestRows.get(row.rowId), contract, probesByRow?.get(row.rowId), evidence.schemaVersion);
+    validateRowEvidence(row, manifestRows.get(row.rowId), contract, probesByRow?.get(row.rowId), evidence.schemaVersion, spec, evidence.phase);
     if (row.actualConditions && surfaceContexts) {
       for (const surface of ["production", "prototype"]) {
         ensure(
@@ -910,7 +926,7 @@ function validateParityEvidence(evidence, contract, spec) {
     }
   }
   if (coverageEvidence) {
-    ensure(spec?.version === 3, "schemaVersion 4 evidence requires parity-spec.json version 3");
+    ensure(spec?.version >= 3, "schemaVersion 4 evidence requires parity-spec.json version 3");
     ensure(
       JSON.stringify([...rowIds].sort()) === JSON.stringify([...evidence.selection.exactRowIds].sort()),
       "schemaVersion 4 exactRowIds do not match executed rows",
@@ -963,6 +979,18 @@ function validateParityEvidence(evidence, contract, spec) {
       "schemaVersion 4 fullParityStatus does not match matrixScope",
     );
   }
+  if (evidence.schemaVersion === 5) {
+    ensure(spec?.version === 4, "schema v5 requires profile v4");
+    const coverage = interactionCoverage(contract, spec, evidence.rows);
+    ensure(stableStringify(coverage) === stableStringify(evidence.interactionCoverage), "interaction coverage is not reproducible");
+    if (evidence.phase === "final") {
+      ensure(coverage.every(group => group.status === "pass"), "interaction coverage is incomplete");
+      const status = validateFidelityAudit(evidence.audit, evidence, spec);
+      ensure(stableStringify(status) === stableStringify(evidence.auditStatus), "audit status is not reproducible");
+    } else {
+      ensure(evidence.audit === null && stableStringify(evidence.auditStatus) === stableStringify({ static: "not-run", runtime: "not-run", requirements: "not-run", visual: "not-run" }), "smoke must not claim implementation audit");
+    }
+  }
   return evidence;
 }
 
@@ -970,7 +998,7 @@ function validateEvidenceBundle({ approval, preEdit, implementation, contract, s
   validateApprovalEvidence(approval);
   validateParityEvidence(implementation, contract, spec);
   ensure(implementation.phase === "final", "implementation evidence has the wrong phase");
-  if (implementation.schemaVersion === 3 || implementation.schemaVersion === 4) {
+  if (implementation.schemaVersion === 3 || implementation.schemaVersion >= 4) {
     ensure(preEdit === undefined, `schemaVersion ${implementation.schemaVersion} completion evidence must not include pre-edit parity`);
     ensure(
       implementation.rows.every(({ status }) => status === "pass"),
@@ -1057,6 +1085,7 @@ function parseCliArguments(argv) {
       "next-batch",
       "resume-run",
       "record-batch",
+      "record-audit",
       "record-failure",
       "invalidate-run",
       "finalize-run",
@@ -1262,7 +1291,7 @@ async function verifyCurrentRun({ target, definition, options, repositoryRootPat
     sources: await currentSourceDigests(definition.contract, root),
   };
   validateEvidenceBundle({ approval, preEdit, implementation, contract: definition.contract, spec: definition.spec, current });
-  ensure(implementation.schemaVersion === 4, "shipping requires schemaVersion 4 implementation evidence");
+  ensure(implementation.schemaVersion === 5 && definition.spec.version === 4, "shipping requires schemaVersion 5 implementation evidence and profile version 4");
   ensure(implementation.phase === "final", "shipping requires final implementation evidence");
   ensure(["coverage", "full"].includes(implementation.matrixScope), "shipping requires coverage or full matrix scope");
   ensure(implementation.automationCoverageStatus === "pass", "shipping requires automationCoverageStatus=pass");
@@ -1341,6 +1370,14 @@ async function runCli({
     }), null, 2)}\n`);
     return;
   }
+  if (command === "record-audit") {
+    ensure(options.runId, "--run-id is required");
+    let input = "";
+    for await (const chunk of stdin) { input += chunk; ensure(Buffer.byteLength(input) <= 512 * 1024, "audit input too large"); }
+    const output = await recordRunAudit({ repositoryRootPath: root, runId: options.runId, audit: JSON.parse(input) });
+    stdout.write(`${JSON.stringify(output)}\n`);
+    return output;
+  }
   if (command === "record-batch") {
     planSlugFromTarget(target);
     ensure(options.runId, "--run-id is required");
@@ -1377,6 +1414,7 @@ async function runCli({
       options,
       repositoryRootPath: root,
     });
+    ensure(definition.spec.version === 4, "new runs require parity-spec.json version 4");
     const output = await prepareRunWorkspace({
       repositoryRootPath: root,
       slug,

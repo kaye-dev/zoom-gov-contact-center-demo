@@ -1,3 +1,4 @@
+import { interactionCoverage, validateFidelityAudit } from "./parity-fidelity.mjs";
 import { createHash } from "node:crypto";
 import { constants as fsConstants } from "node:fs";
 import {
@@ -768,7 +769,7 @@ async function prepareRunWorkspace({
   changedStates = [],
   changedViewports = [],
   risks = ["normal"],
-  matrixScope = definition?.spec?.version === 3 ? "coverage" : "targeted",
+  matrixScope = definition?.spec?.version >= 3 ? "coverage" : "targeted",
   executionContext,
   maxRows,
   maxBytes,
@@ -784,7 +785,7 @@ async function prepareRunWorkspace({
     ensure(approval[field] === current[field], "PARITY_CURRENT_STATE_DRIFT", `approval ${field} is stale`);
   }
   ensure(approval.runId === runId, "PARITY_CURRENT_STATE_DRIFT", "approval runId does not match");
-  const workspaceSchemaVersion = definition.spec.version === 3
+  const workspaceSchemaVersion = definition.spec.version >= 3
     ? coverageWorkspaceSchemaVersion
     : legacyWorkspaceSchemaVersion;
   const resolvedMaxRows = maxRows ?? definition.spec.batchPolicy?.maxRows ?? defaultMaxRows;
@@ -835,7 +836,7 @@ async function prepareRunWorkspace({
       slug,
       phase: "final",
       matrixScope,
-      executionContext: executionContext ?? (definition.spec.version === 3 ? "feature" : null),
+      executionContext: executionContext ?? (definition.spec.version >= 3 ? "feature" : null),
       selection: context.selection,
       goalSha256: current.goalSha256,
       prototypeRevision: current.prototypeRevision,
@@ -1318,6 +1319,17 @@ function mergeMetrics(manifest, fragments) {
   };
 }
 
+async function recordRunAudit({ repositoryRootPath, runId, audit }) {
+  const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
+  const { value: manifest } = await readJsonFile(path.join(paths.runRoot, "manifest.json"), { limit: maxManifestBytes, parentIdentity: paths.runIdentity });
+  ensure(manifest.definition.spec.version === 4, "PARITY_BATCH_INVALID", "audit requires profile v4");
+  const binding = Object.fromEntries(["goalSha256", "prototypeRevision", "validationProfileDigest", "sources"].map(key => [key, manifest[key]]));
+  ensure(stableStringify(audit?.binding) === stableStringify(binding), "PARITY_CURRENT_STATE_DRIFT", "audit binding differs from run");
+  assertSecretFree(audit);
+  await writeJsonAtomic(path.join(paths.runRoot, "audit.json"), audit, { parentIdentity: paths.runIdentity });
+  return { status: "recorded", runId, completionStatus: "pending-finalization" };
+}
+
 async function finalizeRunWorkspace({
   repositoryRootPath,
   slug,
@@ -1429,6 +1441,17 @@ async function finalizeRunWorkspace({
   );
   const capabilities = validatedCapabilities;
   ensure(capabilities?.status === "pass", "PARITY_BATCH_INCOMPLETE", "capability canary must pass");
+  let fidelityAudit;
+  let fidelityStatus;
+  let fidelityCoverage;
+  if (definition.spec.version === 4) {
+    const recorded = await readJsonFile(path.join(paths.runRoot, "audit.json"), { limit: maxFragmentBytes, parentIdentity: paths.runIdentity });
+    fidelityAudit = recorded.value;
+    const observed = { ...manifest, rows, artifactIndex: checkpoint.artifactIndex };
+    fidelityCoverage = interactionCoverage(definition.contract, definition.spec, rows);
+    ensure(fidelityCoverage.every(group => group.status === "pass"), "PARITY_BATCH_INCOMPLETE", "t-way coverage incomplete");
+    fidelityStatus = validateFidelityAudit(fidelityAudit, observed, definition.spec);
+  }
   let artifactIndex = [];
   let evidenceIdentity;
   let canonicalIdentity;
@@ -1455,7 +1478,8 @@ async function finalizeRunWorkspace({
   }
   const coverageMode = workspaceSchemaVersion === coverageWorkspaceSchemaVersion;
   const evidence = {
-    schemaVersion: coverageMode ? 4 : 3,
+    schemaVersion: definition.spec.version === 4 ? 5 : coverageMode ? 4 : 3,
+    ...(definition.spec.version === 4 ? { audit: fidelityAudit, auditStatus: fidelityStatus, interactionCoverage: fidelityCoverage } : {}),
     phase: "final",
     runId,
     generatedAt: new Date().toISOString(),
@@ -1563,6 +1587,7 @@ export {
   compactRunSummary,
   createWorkspaceArtifactSink,
   finalizeRunWorkspace,
+  recordRunAudit,
   executeBrowserBatch,
   invalidateRunWorkspace,
   nextRunBatch,

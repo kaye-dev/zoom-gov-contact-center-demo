@@ -5,13 +5,13 @@ description: "Challenge a product or engineering decision with a read-only senio
 
 # Kabeuchi
 
-Use one independent advisor to pressure-test a product or engineering decision without changing the repository or external state.
+Default to the parent agent to pressure-test a product or engineering decision without changing the repository or external state.
 
 ## Prepare and delegate
 
 1. Resolve the current question, confirmed user decisions, constraints, and the minimum repository or authoritative evidence needed to evaluate it.
-2. Start exactly one fresh no-history `product_advisor` custom agent. Do not pass a model or reasoning override. Give it only the current question, confirmed decisions, and necessary evidence; omit unrelated conversation, raw logs, and hidden context.
-3. Wait for the advisor result. If the custom agent or its configured model is unavailable, stop and report that the kabeuchi was not run. Do not silently substitute another agent or model.
+2. Give advice locally by default. Only when independent judgment is necessary under AGENTS.md, explain why and start exactly one fresh no-history `product_advisor` custom agent. Do not pass a model or reasoning override. Give it only the current question, confirmed decisions, and necessary evidence; omit unrelated conversation, raw logs, and hidden context.
+3. If delegated, wait for the advisor result. If the custom agent or its configured model is unavailable, stop and report that the independent advice was not run. Do not silently substitute another agent or model.
 
 ## Return advice
 

@@ -1142,6 +1142,12 @@ function createSingleTabParityAdapter({
     setTheme,
     async runAction(requestedTabId, action) {
       await comparisonTab(requestedTabId);
+      if (action.type === "reload") {
+        await advanceNetworkCursor();
+        await navigateAndVerify(requestedTabId, await tab.url());
+        await comparisonTab(requestedTabId);
+        return;
+      }
       const locator = tab.playwright.locator(action.selector);
       const count = await locator.count();
       if (action.type === "waitForHidden") {
