@@ -207,6 +207,14 @@ node .agents/skills/plan/scripts/parity-runner.mjs preflight plans/<slug>/protot
 
 plan中のsmokeはtargetedな代表desktopと390×844を基本とし、具体的なtheme、breakpoint、dialog、menu、keyboard、focusリスクだけを追加する。coverageとfullは`$plan`では実行しない。
 
+### Manifestのサイズ超過への対応
+
+現行runnerの2 MiBはworkspace JSONの生成・読込上限であり、Browserの制約や要件数の上限ではない。整形用空白を省いても収まらない場合は、契約・検証定義を含む論理manifestを自動分割し、索引から順序付きのpath・digestで参照する。各ファイルは2 MiB以内、論理JSON全体は32 MiB以内・最大256分割とし、読込時に復元と整合性検証を行う。今後の超過は拒否だけで解決済みにせず、要件・source・比較行・risk・anchor・probeを維持して保存形式を改善する。
+
+基本方針は、契約・検証定義をファイルごとの上限内へ分割し、manifestからpathとdigestで参照すること。想定規模とメモリ使用量に根拠がある限定的な対応では、生成側・全読込側の上限を同時に引き上げてもよい。無制限化や比較ケースの削減はしない。自動分割は実装済みであり、総量・分割数の上限引き上げは必要性を確認して行う改善方針とする。
+
+詳細と検証条件は[Manifest size recovery policy](../../.agents/skills/plan/references/manifest-storage.md)を正本とする。ユーザーが検証基盤修正を明示した場合は、その依頼をscope拡張として扱い、元のfeature planの対象外という理由だけで再承認を求めない。文書方針の更新だけでrunner実装を始めず、修正時は既存証跡・checkpoint・無関係な変更を保全する。保存・読込の復旧とBrowser coverageの完了は別に報告する。
+
 ### 承認、ユーザー確認、final parity証跡
 
 `$implement`はfreshな`plans/<slug>/evidence/<run-id>/approval.json`へgoal digest、prototype revision、profile digestを記録する。`evidence/`とrun directoryはumaskに依存せず`0700`、canonical JSONは`0600`で排他的に作成し、既存pathのtype、symlink、realpath、mode不一致では修復せず停止する。runtimeと人間判断が必要な項目はgoalの`## ユーザー動作確認`へ未チェックで残し、shipping時にPRへ転記する。

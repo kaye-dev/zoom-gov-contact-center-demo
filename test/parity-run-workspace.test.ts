@@ -1566,6 +1566,112 @@ test("WS-SEC-04 JSON readerはsymlink・byte超過・読取中のinode metadata�
   );
 });
 
+test("WS-MANIFEST-01 大きな契約は行やdigestを変えず読込可能なサイズで生成・更新する", async (context) => {
+  const workspace = await workspaceModulePromise;
+  const fixture = await createFixture(context, "ws-manifest-formatting");
+  const definition = createCoverageWorkspaceDefinition();
+  definition.contract.stateAndInteraction = Array.from({ length: 90_000 }, (_, index) => `interaction-${index}`);
+  const handshake = await workspace.prepareRunWorkspace({
+    repositoryRootPath: fixture.root, slug: "fixture", runId: "ws-manifest-formatting",
+    definition, approval: fixture.approval, current: fixture.current,
+    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    matrixScope: "coverage", validateApproval: fixture.runner.validateApprovalEvidence,
+  });
+  const text = await readFile(handshake.manifestPath, "utf8");
+  const manifest = JSON.parse(text);
+  assert.ok(Buffer.byteLength(JSON.stringify(manifest, null, 2)) > 2 * 1024 * 1024);
+  assert.ok(Buffer.byteLength(text) <= 2 * 1024 * 1024);
+  assert.deepEqual(manifest.definition, definition);
+  assert.equal(handshake.manifestSha256, sha256(fixture.runner.stableStringify(manifest)));
+  const first = await workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId });
+  assert.equal(first.batch.batchId, "batch-0001");
+  const updatedSources = [{ path: "src/ui.ts", sha256: revision }];
+  await workspace.invalidateRunWorkspace({
+    repositoryRootPath: fixture.root, runId: handshake.runId,
+    scope: "global", currentSources: updatedSources,
+  });
+  const updated = JSON.parse(await readFile(handshake.manifestPath, "utf8"));
+  assert.deepEqual(updated.sources, updatedSources);
+  assert.deepEqual(updated.definition, definition);
+  assert.deepEqual(updated.rowIds, manifest.rowIds);
+  const next = await workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId });
+  assert.equal(next.batch.batchId, "batch-0001");
+});
+
+test("WS-MANIFEST-02 aggregate上限を超える契約はprepareで拒否し部分workspaceを残さない", async (context) => {
+  const workspace = await workspaceModulePromise;
+  const fixture = await createFixture(context, "ws-manifest-too-large");
+  const definition = createCoverageWorkspaceDefinition();
+  definition.contract.stateAndInteraction = ["界".repeat(12_000_000)];
+  await assert.rejects(workspace.prepareRunWorkspace({
+    repositoryRootPath: fixture.root, slug: "fixture", runId: "ws-manifest-too-large",
+    definition, approval: fixture.approval, current: fixture.current,
+    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    matrixScope: "coverage", validateApproval: fixture.runner.validateApprovalEvidence,
+  }), /exceeds the aggregate byte limit/u);
+  await assert.rejects(access(path.join(fixture.root, ".codex/parity-runs/ws-manifest-too-large")));
+});
+
+test("WS-MANIFEST-03 分割契約の再開・更新と参照の改ざん・欠落・逸脱を検証する", async (context) => {
+  const workspace = await workspaceModulePromise;
+  const fixture = await createFixture(context, "ws-split-manifest");
+  const definition = createCoverageWorkspaceDefinition();
+  definition.contract.stateAndInteraction = ["界😀".repeat(400_000)];
+  const handshake = await workspace.prepareRunWorkspace({
+    repositoryRootPath: fixture.root, slug: "fixture", runId: "ws-split-manifest",
+    definition, approval: fixture.approval, current: fixture.current,
+    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    matrixScope: "coverage", validateApproval: fixture.runner.validateApprovalEvidence,
+  });
+  const indexText = await readFile(handshake.manifestPath, "utf8");
+  const index = JSON.parse(indexText);
+  assert.equal(index.kind, "split-manifest");
+  assert.equal(index.sha256, handshake.manifestSha256);
+  assert.ok(index.bytes > 2 * 1024 * 1024);
+  for (const part of index.parts) {
+    const metadata = await stat(path.join(path.dirname(handshake.manifestPath), part.fileName));
+    assert.ok(metadata.size <= 2 * 1024 * 1024);
+    assert.equal(metadata.mode & 0o777, 0o600);
+  }
+  const next = await workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId });
+  await workspace.recordBatchResult({ repositoryRootPath: fixture.root, runId: handshake.runId,
+    batchId: next.batch.batchId, input: JSON.stringify(coverageFragment(handshake, next.batch, definition)) });
+  const resumed = await workspace.resumeRunWorkspace({ repositoryRootPath: fixture.root, runId: handshake.runId });
+  assert.equal(resumed.batch.batchId, "batch-0002");
+  await workspace.invalidateRunWorkspace({ repositoryRootPath: fixture.root, runId: handshake.runId,
+    scope: "global", currentSources: [{ path: "src/ui.ts", sha256: revision }] });
+  const updatedText = await readFile(handshake.manifestPath, "utf8");
+  const updated = JSON.parse(updatedText);
+  const partPath = path.join(path.dirname(handshake.manifestPath), updated.parts[0].fileName);
+  const original = await readFile(partPath, "utf8");
+  await writeFile(partPath, JSON.stringify({ text: "tampered" }));
+  await assert.rejects(workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId }), /digest/u);
+  await rm(partPath);
+  await assert.rejects(workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId }), /ENOENT/u);
+  const external = path.join(fixture.root, "external.json");
+  await writeFile(external, original, { mode: 0o600 });
+  await symlink(external, partPath);
+  await assert.rejects(workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId }), /regular file|mode 600/u);
+  await rm(partPath);
+  await writeFile(partPath, original, { mode: 0o600 });
+  updated.parts[0].fileName = "../external.json";
+  await writeFile(handshake.manifestPath, JSON.stringify(updated));
+  await assert.rejects(workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId }), /reference/u);
+  for (const invalid of [
+    { ...JSON.parse(updatedText), bytes: 33 * 1024 * 1024 },
+    { ...JSON.parse(updatedText), parts: Array(257).fill(JSON.parse(updatedText).parts[0]) },
+    { ...JSON.parse(updatedText), sha256: digest },
+    { ...JSON.parse(updatedText), parts: [...JSON.parse(updatedText).parts].reverse() },
+  ]) {
+    await writeFile(handshake.manifestPath, JSON.stringify(invalid));
+    await assert.rejects(workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId }),
+      /bounds|digest|JSON|byte mismatch/u);
+  }
+  await writeFile(handshake.manifestPath, updatedText);
+  const fresh = await workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId });
+  assert.equal(fresh.batch.batchId, "batch-0001");
+});
+
 test("WS-SEC-05 manifestとcheckpointの用途別byte上限を強制する", async (context) => {
   const workspace = await workspaceModulePromise;
   const definition = createCoverageWorkspaceDefinition();
@@ -1751,10 +1857,11 @@ test("WS-SEC-06 runRootの外部symlink差替えはread・write・promote前に�
   await assert.rejects(access(path.join(evidenceRunRoot, "implementation-parity.json")));
 });
 
-for (const version of [3, 4]) test(`WS-COVERAGE-05 finalize promotes artifacts only after profile ${version} requirements pass`, async (context) => {
+for (const storage of ["inline", "split"]) for (const version of [3, 4]) test(`WS-COVERAGE-05 ${storage} finalize promotes artifacts only after profile ${version} requirements pass`, async (context) => {
   const workspace = await workspaceModulePromise;
   const fixture = await createFixture(context, "ws-coverage-finalize");
   const definition = createCoverageWorkspaceDefinition();
+  if (storage === "split") definition.contract.stateAndInteraction = ["界😀".repeat(400_000)];
   const fidelity = {
     requirements: [{ id: "REQ-01", expected: "Both target layouts conform", probeIds: ["coverage"], runtimeCheckIds: [], visualCheckIds: [] as string[], staticCheckIds: ["types"], interactionGroupIds: ["themes"], noInteractionReason: null }],
     phaseComparisons: definition.spec.probes.map(probe => ({ probeId: probe.id, smoke: "equal", final: probe.kind === "screenshot" ? "capture" : "equal", expected: null })),
