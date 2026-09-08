@@ -61,7 +61,7 @@ The ignored workspace is `.codex/parity-runs/<run-id>/`. Directories are `0700`;
 
 For normal UI `$implement` or an independently requested parity task, prepare only after approval, implementation, static checks, final diff review, and external runtime ownership/health readback:
 
-Local uses `http://localhost:3000` or an ownership-verified single-label tenant origin such as `http://univ.localhost:3000`; worktrees use the ownership-verified allocated port in `3100-3899`. Obtain owner, process/container, mount, health, and `PRODUCTION_URL` from one completed `./dev-compose.sh ensure`; do not wrap it in status polling, fixed sleep, or follow-log commands. Matching CLI arguments do not prove ownership.
+Local uses `http://localhost:3000` or an ownership-verified single-label tenant origin such as `http://univ.localhost:3000`; worktrees use the ownership-verified allocated port within the [Browser operating range](../../../../docs/development/development-ports.md#利用範囲と割り当て). Obtain owner, process/container, mount, health, and `PRODUCTION_URL` from one completed `./dev-compose.sh ensure`; do not wrap it in status polling, fixed sleep, or follow-log commands. Matching CLI arguments do not prove ownership.
 
 ```sh
 node .agents/skills/plan/scripts/parity-runner.mjs prepare-run plans/<slug>/prototype \
@@ -143,3 +143,7 @@ Stable failure codes include `PARITY_SELECTED_TAB_DRIFT`, `PARITY_COMPARISON_TAB
 ## Legacy compatibility
 
 Profile versions 1, 2, and 3 and parity evidence schemas 1, 2, 3, and 4 remain read-only compatible. Validate existing evidence against its historical row, digest, runtime, and cleanup contract without migrating or adding fields. New Browser-enabled plans use profile version 4; independently requested new final runs use evidence schema 5. A migration changes workflow text, skills, profile, runner, evidence schema, tests, and evaluator together. Rollback must restore that entire compatible set; never roll back only a writer or reader.
+
+## Development origins
+
+Use the app and artifact origins in [Development ports](../../../../docs/development/development-ports.md). Check the reported allocation against the Browser operating range before opening either surface; stop the task if it is outside that range. The same document defines artifact reuse, explicit release, migration, data preservation, rollback, and evidence handling.

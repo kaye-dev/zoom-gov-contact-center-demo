@@ -495,7 +495,7 @@ test("IAB-01 pure ESM import and distinct-tab final run", async () => {
     changedStates: ["default"],
     changedViewports: ["390x844"],
     tabs: { production: fixture.tab.id, prototype: prototype.tab.id },
-    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
     run: {
       runId: "iab-01",
       goalSha256: digest,
@@ -519,8 +519,8 @@ test("IAB-01 pure ESM import and distinct-tab final run", async () => {
   }
   assert.deepEqual(fixture.state.loadStateOptions, { state: "load", timeoutMs: 10_000 });
   assert.equal(new URL(evidence.rows[0].actualConditions.urls.production).search, "");
-  assert.match(fixture.state.navigation[0], /localhost:3142/u);
-  assert.match(prototype.navigation[0], /127\.0\.0\.1:4142/u);
+  assert.match(fixture.state.navigation[0], /localhost:3002/u);
+  assert.match(prototype.navigation[0], /127\.0\.0\.1:4002/u);
 });
 
 test("IAB-01b production/prototypeを別tab contextでnavigate・cache・cleanupする", async () => {
@@ -538,7 +538,7 @@ test("IAB-01b production/prototypeを別tab contextでnavigate・cache・cleanup
     changedTargetIds: ["main"],
     changedStates: ["default"],
     tabs: { production: fixture.tab.id, prototype: prototype.tab.id },
-    baseUrls: { production: "http://localhost:3000", prototype: "http://127.0.0.1:3100" },
+    baseUrls: { production: "http://localhost:3000", prototype: "http://127.0.0.1:4001" },
     run: {
       runId: "run-multi-tab",
       goalSha256: digest,
@@ -555,7 +555,7 @@ test("IAB-01b production/prototypeを別tab contextでnavigate・cache・cleanup
   });
   assert.equal(fixture.state.navigation.length, 1);
   assert.equal(prototype.navigation.length, 1);
-  assert.equal(new URL(prototype.currentUrl()).origin, "http://127.0.0.1:3100");
+  assert.equal(new URL(prototype.currentUrl()).origin, "http://127.0.0.1:4001");
   assert.deepEqual(
     evidence.capabilities.surfaceContexts,
     [
@@ -571,7 +571,7 @@ test("IAB-01b production/prototypeを別tab contextでnavigate・cache・cleanup
         sessionId: "iab-fixture",
         tabId: "prototype",
         surface: "prototype",
-        origin: "http://127.0.0.1:3100",
+        origin: "http://127.0.0.1:4001",
         authorizationProfile: "none",
         authorizationProfileDigest: await sha256Digest("parity:authorization-profile:v1\0none"),
       },
@@ -605,8 +605,8 @@ test("IAB-01c parallel Browser sessionのcleanupは他sessionを変更しない"
   const firstAdapter = createInAppBrowserParityAdapter({ browser: first.browser, tab: first.tab });
   const secondAdapter = createInAppBrowserParityAdapter({ browser: second.browser, tab: second.tab });
   await Promise.all([
-    firstAdapter.navigate("comparison", "http://localhost:3142/fixture"),
-    secondAdapter.navigate("comparison", "http://localhost:3242/fixture"),
+    firstAdapter.navigate("comparison", "http://localhost:3002/fixture"),
+    secondAdapter.navigate("comparison", "http://localhost:3003/fixture"),
   ]);
   await Promise.all([
     firstAdapter.setViewport("comparison", { width: 390, height: 844 }),
@@ -635,7 +635,7 @@ test("IAB-02 390x844 DPR1 canary and cleanup", async () => {
       },
     },
   });
-  await adapter.navigate("comparison", "http://localhost:3142/fixture");
+  await adapter.navigate("comparison", "http://localhost:3002/fixture");
   await adapter.setViewport("comparison", { width: 390, height: 844 });
   assert.deepEqual(await adapter.measureViewport("comparison"), { width: 390, height: 844, dpr: 1 });
   const cleanup = await adapter.cleanup();
@@ -937,7 +937,7 @@ test("IAB-03 single-tab surface ordering and selection drift", async () => {
     tab: externalFailure.tab,
   });
   await assert.rejects(
-    guarded.navigate("comparison", "http://localhost:3142/fixture?theme=light"),
+    guarded.navigate("comparison", "http://localhost:3002/fixture?theme=light"),
     (error: unknown) => assertSanitizedParityError(error, "PARITY_UNEXPECTED_ERROR", [
       "Bearer",
       "Cookie",
@@ -958,7 +958,7 @@ test("IAB-03 single-tab surface ordering and selection drift", async () => {
   });
   await committedAdapter.navigate(
     "comparison",
-    "http://localhost:3142/fixture?theme=light",
+    "http://localhost:3002/fixture?theme=light",
   );
   assert.deepEqual(committedTimeout.state.loadStateOptions, {
     state: "load",
@@ -985,7 +985,7 @@ test("IAB-03a unresolved tab.gotoはbounded navigation deadlineで停止する",
     timeouts: { navigationMs: 5 },
   });
   await assert.rejects(
-    adapter.navigate("comparison", "http://localhost:3142/fixture?theme=light"),
+    adapter.navigate("comparison", "http://localhost:3002/fixture?theme=light"),
     (error: unknown) => {
       const value = error as { code?: string; evidence?: Record<string, unknown>; message?: string };
       assert.equal(value.code, "PARITY_NAVIGATION_TIMEOUT");
@@ -996,7 +996,7 @@ test("IAB-03a unresolved tab.gotoはbounded navigation deadlineで停止する",
   );
   assert.equal(fixture.state.navigation.length, 0);
   await assert.rejects(
-    adapter.navigate("comparison", "http://localhost:3142/another"),
+    adapter.navigate("comparison", "http://localhost:3002/another"),
     (error: unknown) => (error as { code?: string }).code === "PARITY_NAVIGATION_TIMEOUT",
   );
   await assert.rejects(
@@ -1087,7 +1087,7 @@ test("IAB-03b 実adapterのsurface context安定化はkeyごとに一度だけ�
     ...base,
     surface: "production",
     authorizationProfile: "auditor",
-    baseUrl: "http://localhost:3142/",
+    baseUrl: "http://localhost:3002/",
   });
   assert.equal(urlReadOperations, 7, "origin creates one new context");
   assert.equal(fixture.state.navigation.length, 4);
@@ -1096,7 +1096,7 @@ test("IAB-03b 実adapterのsurface context安定化はkeyごとに一度だけ�
     ...base,
     surface: "prototype",
     authorizationProfile: "auditor",
-    baseUrl: "http://127.0.0.1:4142/",
+    baseUrl: "http://127.0.0.1:4002/",
   });
   assert.equal(urlReadOperations, 9, "surface creates one new context");
   assert.equal(fixture.state.navigation.length, 5, "stabilization adds no navigation");
@@ -1180,19 +1180,19 @@ test("IAB-04 contextual theme setup and readback", async () => {
   const { createInAppBrowserParityAdapter } = await adapterModulePromise;
   const fixture = createFakeBrowser();
   const adapter = createInAppBrowserParityAdapter({ browser: fixture.browser, tab: fixture.tab });
-  await fixture.tab.goto("http://localhost:3142/fixture?theme=dark");
+  await fixture.tab.goto("http://localhost:3002/fixture?theme=dark");
   await adapter.setTheme("comparison", "dark", {
     targetId: "main",
     surface: "production",
     setup: { type: "query", parameter: "theme" },
-    url: "http://localhost:3142/fixture?theme=dark",
+    url: "http://localhost:3002/fixture?theme=dark",
   });
   fixture.state.theme = "light";
   await adapter.setTheme("comparison", "dark", {
     targetId: "main",
     surface: "production",
     setup: { type: "aria-switch", selector: "#theme-toggle", checkedTheme: "dark", readbackSelector: "html" },
-    url: "http://localhost:3142/fixture",
+    url: "http://localhost:3002/fixture",
   });
   assert.equal(fixture.state.elements.get("#theme-toggle")?.attributes?.["aria-checked"], "true");
   const missingControl = createFakeBrowser();
@@ -1205,7 +1205,7 @@ test("IAB-04 contextual theme setup and readback", async () => {
         targetId: "main",
         surface: "production",
         setup: { type: "aria-switch", selector: "#theme-toggle", checkedTheme: "dark", readbackSelector: "html" },
-        url: "http://localhost:3142/fixture",
+        url: "http://localhost:3002/fixture",
       },
     ),
     (error: unknown) => (error as { code?: string }).code === "PARITY_THEME_SETUP_FAILED",
@@ -1215,7 +1215,7 @@ test("IAB-04 contextual theme setup and readback", async () => {
       targetId: "main",
       surface: "prototype",
       setup: { type: "fixed", theme: "light" },
-      url: "http://127.0.0.1:4142/prototype.html",
+      url: "http://127.0.0.1:4002/prototype.html",
     }),
     (error: unknown) => (error as { code?: string }).code === "PARITY_THEME_SETUP_FAILED",
   );
@@ -1239,7 +1239,7 @@ test("IAB-05 action and probe mapping", async () => {
   }
   await assert.rejects(adapter.runAction("comparison", { type: "click", selector: "#multiple" }));
   await assert.rejects(adapter.runAction("comparison", { type: "click", selector: "#missing" }));
-  await adapter.navigate("comparison", "http://localhost:3142/fixture?theme=light");
+  await adapter.navigate("comparison", "http://localhost:3002/fixture?theme=light");
   const compactProbeResults: Record<string, unknown> = {};
   for (const probe of allProbes) {
     const result = await adapter.runProbe("comparison", probe, {
@@ -1298,11 +1298,11 @@ test("IAB-05 action and probe mapping", async () => {
     ),
   );
 
-  await adapter.navigate("comparison", "http://localhost:3142/fixture?theme=light");
+  await adapter.navigate("comparison", "http://localhost:3002/fixture?theme=light");
   fixture.state.logs.push({
     level: "error",
     message: "Bearer should-not-appear",
-    url: "http://localhost:3142/fixture?token=should-not-appear",
+    url: "http://localhost:3002/fixture?token=should-not-appear",
   });
   const consoleResult = await adapter.runProbe("comparison", allProbes.find(({ kind }) => kind === "console"), {
     surface: "production",
@@ -1363,7 +1363,7 @@ test("IAB-05 action and probe mapping", async () => {
       method: "Network.requestWillBeSent",
       params: {
         type: "Document",
-        request: { method: "GET", url: "http://localhost:3142/fixture?token=document-secret" },
+        request: { method: "GET", url: "http://localhost:3002/fixture?token=document-secret" },
       },
       sequence: 1,
       source: { tabId: 1 },
@@ -1372,7 +1372,7 @@ test("IAB-05 action and probe mapping", async () => {
       method: "Network.requestWillBeSent",
       params: {
         type: "Stylesheet",
-        request: { method: "GET", url: "http://localhost:3142/fixture.css?token=css-secret" },
+        request: { method: "GET", url: "http://localhost:3002/fixture.css?token=css-secret" },
       },
       sequence: 2,
       source: { tabId: 1 },
@@ -1381,7 +1381,7 @@ test("IAB-05 action and probe mapping", async () => {
       method: "Network.responseReceived",
       params: {
         type: "Stylesheet",
-        response: { status: 200, url: "http://localhost:3142/fixture.css?token=css-secret" },
+        response: { status: 200, url: "http://localhost:3002/fixture.css?token=css-secret" },
       },
       sequence: 3,
       source: { tabId: 1 },
@@ -1409,7 +1409,7 @@ test("IAB-05 action and probe mapping", async () => {
     method: "Network.requestWillBeSent",
     params: {
       type: "Script",
-      request: { method: "GET", url: "http://localhost:3142/old.js" },
+      request: { method: "GET", url: "http://localhost:3002/old.js" },
     },
     sequence: 10,
     source: { tabId: 1 },
@@ -1423,7 +1423,7 @@ test("IAB-05 action and probe mapping", async () => {
     method: "Network.requestWillBeSent",
     params: {
       type: "Script",
-      request: { method: "GET", url: "http://localhost:3142/current.js" },
+      request: { method: "GET", url: "http://localhost:3002/current.js" },
     },
     sequence: 11,
     source: { tabId: 1 },
@@ -1453,16 +1453,16 @@ test("IAB-05 action and probe mapping", async () => {
   });
   await originScopedNetworkAdapter.navigate(
     "comparison",
-    "http://localhost:3142/fixture",
+    "http://localhost:3002/fixture",
   );
   assert.deepEqual(await originScopedNetworkAdapter.networkEntries("comparison"), []);
   await originScopedNetworkAdapter.navigate(
     "comparison",
-    "http://127.0.0.1:4142/prototype.html",
+    "http://127.0.0.1:4002/prototype.html",
   );
   assert.deepEqual(originScopedNetwork.state.navigation, [
-    "http://localhost:3142/fixture",
-    "http://127.0.0.1:4142/prototype.html",
+    "http://localhost:3002/fixture",
+    "http://127.0.0.1:4002/prototype.html",
   ]);
   assert.equal(originScopedNetwork.state.cdpNetworkEnable, 2);
   assert.equal(originScopedNetwork.state.cdpNetworkDisable, 1);
@@ -1474,7 +1474,7 @@ test("IAB-05 action and probe mapping", async () => {
     method: "Network.requestWillBeSent",
     params: {
       type: "Script",
-      request: { method: "GET", url: `http://localhost:3142/event-${sequence}.js` },
+      request: { method: "GET", url: `http://localhost:3002/event-${sequence}.js` },
     },
     sequence,
     source: { tabId: 1 },
@@ -1560,7 +1560,7 @@ test("IAB-05 action and probe mapping", async () => {
       type: "Script",
       request: {
         method: "GET",
-        url: `http://localhost:3142/${"x".repeat(513)}?token=network-oversized-secret`,
+        url: `http://localhost:3002/${"x".repeat(513)}?token=network-oversized-secret`,
       },
     },
     sequence: 1,
@@ -1756,9 +1756,9 @@ test("IAB-07 cross-origin navigation reacquires CDP, reapplies DPR, and remains 
       return fixture.state.cdpGet === 1 ? firstCdp : freshCdp;
     };
     const adapter = createInAppBrowserParityAdapter({ browser: fixture.browser, tab: fixture.tab });
-    await adapter.navigate("comparison", "http://localhost:3142/fixture");
+    await adapter.navigate("comparison", "http://localhost:3002/fixture");
     await adapter.setViewport("comparison", { width: 390, height: 844 });
-    await adapter.navigate("comparison", "http://127.0.0.1:4142/prototype.html");
+    await adapter.navigate("comparison", "http://127.0.0.1:4002/prototype.html");
 
     assert.equal(fixture.state.cdpGet, 2);
     assert.equal(fixture.state.cdpNetworkEnable, 0);
@@ -1770,8 +1770,8 @@ test("IAB-07 cross-origin navigation reacquires CDP, reapplies DPR, and remains 
       dpr: 1,
     });
     assert.deepEqual(fixture.state.navigation, [
-      "http://localhost:3142/fixture",
-      "http://127.0.0.1:4142/prototype.html",
+      "http://localhost:3002/fixture",
+      "http://127.0.0.1:4002/prototype.html",
     ]);
     assert.equal((await adapter.cleanup()).status, "pass");
     assert.ok(freshCommands.includes("Emulation.clearDeviceMetricsOverride"));
@@ -1787,10 +1787,10 @@ test("IAB-07 cross-origin navigation reacquires CDP, reapplies DPR, and remains 
       throw new Error("Bearer fresh-cdp-secret Cookie: cdp=secret https://localhost/?token=fresh-cdp");
     };
     const adapter = createInAppBrowserParityAdapter({ browser: fixture.browser, tab: fixture.tab });
-    await adapter.navigate("comparison", "http://localhost:3142/fixture");
+    await adapter.navigate("comparison", "http://localhost:3002/fixture");
     await adapter.setViewport("comparison", { width: 390, height: 844 });
     await assert.rejects(
-      adapter.navigate("comparison", "http://127.0.0.1:4142/prototype.html"),
+      adapter.navigate("comparison", "http://127.0.0.1:4002/prototype.html"),
       (error: unknown) => assertSanitizedParityError(error, "PARITY_CDP_CAPABILITY_UNAVAILABLE", [
         "Bearer",
         "Cookie",
@@ -1831,10 +1831,10 @@ test("IAB-07 cross-origin navigation reacquires CDP, reapplies DPR, and remains 
       }
     };
     const adapter = createInAppBrowserParityAdapter({ browser: fixture.browser, tab: fixture.tab });
-    await adapter.navigate("comparison", "http://localhost:3142/fixture");
+    await adapter.navigate("comparison", "http://localhost:3002/fixture");
     await adapter.setViewport("comparison", { width: 390, height: 844 });
     await assert.rejects(
-      adapter.navigate("comparison", "http://127.0.0.1:4142/prototype.html"),
+      adapter.navigate("comparison", "http://127.0.0.1:4002/prototype.html"),
       (error: unknown) => assertSanitizedParityError(error, "PARITY_UNEXPECTED_ERROR", [
         "Bearer",
         "Cookie",
@@ -1942,7 +1942,7 @@ test("IAB-08 selection drift is checked between bootstrap/reload and waitForHidd
     };
     const adapter = createInAppBrowserParityAdapter({ browser: fixture.browser, tab: fixture.tab });
     await assert.rejects(
-      adapter.navigate("comparison", "http://localhost:3142/fixture"),
+      adapter.navigate("comparison", "http://localhost:3002/fixture"),
       (error: unknown) => (error as { code?: string }).code === "PARITY_SELECTED_TAB_DRIFT",
     );
     assert.equal(loadStateCalls, 0);
@@ -1964,15 +1964,15 @@ test("IAB-08 selection drift is checked between bootstrap/reload and waitForHidd
       return fixture.state.cdpGet === 1 ? firstCdp : freshCdp;
     };
     const adapter = createInAppBrowserParityAdapter({ browser: fixture.browser, tab: fixture.tab });
-    await adapter.navigate("comparison", "http://localhost:3142/fixture");
+    await adapter.navigate("comparison", "http://localhost:3002/fixture");
     await adapter.setViewport("comparison", { width: 390, height: 844 });
     await assert.rejects(
-      adapter.navigate("comparison", "http://127.0.0.1:4142/prototype.html"),
+      adapter.navigate("comparison", "http://127.0.0.1:4002/prototype.html"),
       (error: unknown) => (error as { code?: string }).code === "PARITY_SELECTED_TAB_DRIFT",
     );
     assert.deepEqual(fixture.state.navigation, [
-      "http://localhost:3142/fixture",
-      "http://127.0.0.1:4142/prototype.html",
+      "http://localhost:3002/fixture",
+      "http://127.0.0.1:4002/prototype.html",
     ]);
     fixture.state.selectedId = "comparison";
     assert.equal((await adapter.cleanup()).status, "pass");
@@ -2046,7 +2046,7 @@ test("IAB-09 coverage probeとanchor artifactはcompact recordだけを返す", 
     tab: fixture.tab,
     artifactSink,
   });
-  await adapter.navigate("comparison", "http://localhost:3142/fixture");
+  await adapter.navigate("comparison", "http://localhost:3002/fixture");
   await adapter.setViewport("comparison", { width: 390, height: 844 });
   const context = {
     row: {
@@ -2166,7 +2166,7 @@ test("bounded Browser execution rejects changed batches before operating and pre
     prototypeRevision: digest, validationProfileDigest: digest };
   const input = { definition, phase: "final", changedTargetIds: ["main"], changedStates: ["default"],
     tabs: { production: fixture.tab.id, prototype: prototype.tab.id },
-    baseUrls: { production: "http://localhost:3000", prototype: "http://127.0.0.1:3100" },
+    baseUrls: { production: "http://localhost:3000", prototype: "http://127.0.0.1:4001" },
     run: { runId: "bounded", goalSha256: digest, runtime: { owner: "fixture", checkout: "/fixture" }, sources: [] } };
   const batch = createBatches(contract.parityMatrix, { maxRows: 2, maxBytes: 131072 })[0];
   const runner = new BrowserParityRunner(adapter);

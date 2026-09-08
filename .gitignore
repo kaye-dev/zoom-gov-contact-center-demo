@@ -31,6 +31,8 @@
 /.codex/parity-runs/
 /.codex/runtime.local.env
 /.codex/runtime-session.local.json
+/.codex/port-migration.local.json
+/.codex/port-migration.lock/
 
 # debug
 npm-debug.log*

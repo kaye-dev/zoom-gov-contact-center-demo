@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
+import { artifactTestEnvironment, releaseArtifactTestPorts } from "./helpers/development-port-fixture";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { copyFile, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { type IncomingHttpHeaders, request } from "node:http";
 import { connect } from "node:net";
 import { tmpdir } from "node:os";
@@ -40,7 +41,7 @@ const reviewFiles = new Map<string, { body: string; contentType: string }>([
 ]);
 
 type HeaderSource = Headers | IncomingHttpHeaders;
-type TestRepository = { root: string; serverScript: string };
+type TestRepository = { root: string; serverScript: string; children: Set<ReturnType<typeof spawn>> };
 
 function headerValue(headers: HeaderSource, name: string): string | null {
   if (headers instanceof Headers) return headers.get(name);
@@ -60,13 +61,20 @@ function uniqueSlug(label: string) {
 }
 
 async function createTestRepository(context: TestContext): Promise<TestRepository> {
-  const repositoryRoot = await mkdtemp(path.join(tmpdir(), "serve-plan-artifact-test-"));
+  const repositoryRoot = await realpath(await mkdtemp(path.join(tmpdir(), "serve-plan-artifact-test-")));
   const scripts = path.join(repositoryRoot, "scripts");
   const serverScript = path.join(scripts, "serve-plan-artifact.mjs");
   await mkdir(scripts);
   await copyFile(sourceServerScript, serverScript);
-  context.after(async () => rm(repositoryRoot, { recursive: true, force: true }));
-  return { root: repositoryRoot, serverScript };
+  await copyFile(path.join(sourceRoot, "scripts/development-port-allocation.mjs"), path.join(scripts, "development-port-allocation.mjs"));
+  await mkdir(path.join(repositoryRoot, "common.git"));
+  const children = new Set<ReturnType<typeof spawn>>();
+  context.after(async () => {
+    for (const child of children) await stopServer(child);
+    await releaseArtifactTestPorts(repositoryRoot, path.join(repositoryRoot, "common.git"));
+    await rm(repositoryRoot, { recursive: true, force: true });
+  });
+  return { root: repositoryRoot, serverScript, children };
 }
 
 async function createArtifactDirectory(repository: TestRepository, relativeArtifact: string) {
@@ -115,10 +123,10 @@ async function stopServer(child: ReturnType<typeof spawn>) {
 async function startServer(context: TestContext, repository: TestRepository, relativeArtifact: string, env: NodeJS.ProcessEnv = process.env) {
   const child = spawn(process.execPath, [repository.serverScript, relativeArtifact], {
     cwd: repository.root,
-    env,
+    env: artifactTestEnvironment(repository.root, path.join(repository.root, "common.git"), env),
     stdio: ["ignore", "pipe", "pipe"],
   });
-  context.after(async () => stopServer(child));
+  repository.children.add(child);
 
   let stdout = "";
   let stderr = "";
@@ -434,4 +442,22 @@ test("artifact root/index symlinkと不正なCLI引数を起動前に拒否す�
     assert.equal(result.stdout, "", cliCase.label);
     assert.notEqual(result.stderr, "", cliCase.label);
   }
+});
+
+test("PORT-02/04/07: concurrent direct starts reuse one PID and restart keeps its paired slot", async context => {
+  const repository = await createTestRepository(context);
+  await createPrototypeFixture(repository, "plans/ports/prototype");
+  const [first, second] = await Promise.all([
+    startServer(context, repository, "plans/ports/prototype"),
+    startServer(context, repository, "plans/ports/prototype"),
+  ]);
+  assert.equal(first.url, second.url);
+  const port = Number(new URL(first.url).port);
+  assert.ok(port >= 4001 && port <= 4010);
+  const token = (await fetch(first.url, { method: "HEAD" })).headers.get("x-confirmation-session-token");
+  assert.ok(token);
+  for (const child of repository.children) await stopServer(child);
+  const restarted = await startServer(context, repository, "plans/ports/prototype");
+  assert.equal(restarted.url, first.url);
+  assert.notEqual((await fetch(restarted.url, { method: "HEAD" })).headers.get("x-confirmation-session-token"), token);
 });

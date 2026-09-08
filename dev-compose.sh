@@ -1019,7 +1019,9 @@ runtime_stop_services() {
     print -u2 "Usage: ./dev-compose.sh stop <web|studio|db> [...]"
     return 2
   }
-  dev_runtime_prepare
+  # Stopping a legacy runtime must not require migrating or rewriting it first.
+  dev_runtime_load
+  dev_runtime_resolve_volume_identity
   ensure_docker_daemon
   dev_runtime_capture_session_baseline
   runtime_validate_project_containers
@@ -1226,6 +1228,15 @@ main() {
         return 2
       }
       runtime_prepare_command
+      ;;
+    migrate-ports)
+      [[ $# -eq 0 || ( $# -eq 1 && "$1" == "--rollback" ) ]] || {
+        print -u2 "Usage: ./dev-compose.sh migrate-ports [--rollback]"
+        return 2
+      }
+      dev_runtime_load || return 1
+      dev_runtime_resolve_volume_identity || return 1
+      node "${DEV_RUNTIME_HELPER_DIRECTORY}/development-port-migration.mjs" "$@" --checkout "${RUNTIME_CHECKOUT_PATH}"
       ;;
     status)
       runtime_status_command "$@"

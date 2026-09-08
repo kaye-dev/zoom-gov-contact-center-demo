@@ -968,12 +968,22 @@ async function prepareRunWorkspace({
   }
 }
 
+function requireCurrentRunOrigins(manifest) {
+  try {
+    requireLoopbackBaseUrl(manifest.baseUrls.production, "production");
+    requireLoopbackBaseUrl(manifest.baseUrls.prototype, "prototype");
+  } catch {
+    ensure(false, "PARITY_CURRENT_STATE_DRIFT", "run uses retired ports; preserve its evidence and prepare a new run after explicit port migration");
+  }
+}
+
 async function nextRunBatch({ repositoryRootPath, runId }) {
   const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
   const { value: manifest } = await readManifest(path.join(paths.runRoot, "manifest.json"), {
     limit: maxManifestBytes,
     parentIdentity: paths.runIdentity,
   });
+  requireCurrentRunOrigins(manifest);
   ensure(manifest.schemaVersion === coverageWorkspaceSchemaVersion, "PARITY_BATCH_INVALID", "next-batch requires a coverage workspace");
   const checkpoint = await readCheckpoint(paths.runRoot, paths.runIdentity);
   const terminal = checkpoint.batches.find(({ status }) => status === "terminal");
@@ -1071,6 +1081,8 @@ async function executeBrowserBatch({ repositoryRootPath, runId, runner, tabs }) 
 
 async function resumeRunWorkspace({ repositoryRootPath, runId }) {
   const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
+  const { value: manifest } = await readManifest(path.join(paths.runRoot, "manifest.json"), { limit: maxManifestBytes, parentIdentity: paths.runIdentity });
+  requireCurrentRunOrigins(manifest);
   const checkpoint = await readCheckpoint(paths.runRoot, paths.runIdentity);
   checkpoint.resumed = true;
   for (const batch of checkpoint.batches) {
@@ -1437,6 +1449,7 @@ async function finalizeRunWorkspace({
     limit: maxManifestBytes,
     parentIdentity: paths.runIdentity,
   });
+  requireCurrentRunOrigins(manifest);
   const workspaceSchemaVersion = manifest.schemaVersion;
   ensure(
     workspaceSchemaVersion === legacyWorkspaceSchemaVersion || workspaceSchemaVersion === coverageWorkspaceSchemaVersion,

@@ -1,6 +1,7 @@
-typeset -gr DEV_RUNTIME_SCHEMA_VERSION="1"
+typeset -gr DEV_RUNTIME_HELPER_DIRECTORY="${${(%):-%x}:A:h}"
+typeset -gr DEV_RUNTIME_SCHEMA_VERSION="2"
 typeset -gr DEV_RUNTIME_SLOT_COUNT=800
-typeset -gr DEV_RUNTIME_WEB_PORT_BASE=3100
+typeset -gr DEV_RUNTIME_LEGACY_WEB_PORT_BASE=3100
 typeset -gr DEV_RUNTIME_POSTGRES_PORT_BASE=15432
 typeset -gr DEV_RUNTIME_STUDIO_PORT_BASE=25555
 
@@ -101,6 +102,9 @@ dev_runtime_resolve_identity() {
   RUNTIME_LOCK_PATH="${RUNTIME_STATE_ROOT}/allocation.lock"
   RUNTIME_CONFIG_DIGEST="$(dev_runtime_config_digest)"
   RUNTIME_CONFIG_CHANGED=0
+  RUNTIME_LOADED_SCHEMA=2
+  PORT_SLOT=""
+  PORT_ALLOCATION_SCHEMA=1
   RUNTIME_PREVIOUS_CONFIG_DIGEST=""
   RUNTIME_VOLUME_CONFIG_DIGEST=""
   RUNTIME_VOLUME_OWNER_SESSION_ID=""
@@ -135,12 +139,12 @@ dev_runtime_slot_from_ports() {
   local host_port="$1"
   local postgres_port="$2"
   local studio_port="$3"
-  local slot=$(( host_port - DEV_RUNTIME_WEB_PORT_BASE ))
+  local slot=$(( postgres_port - DEV_RUNTIME_POSTGRES_PORT_BASE ))
 
   if (( slot < 0 || slot >= DEV_RUNTIME_SLOT_COUNT )); then
     return 1
   fi
-  if (( postgres_port != DEV_RUNTIME_POSTGRES_PORT_BASE + slot )); then
+  if [[ "${RUNTIME_LOADED_SCHEMA:-1}" == "1" ]] && (( host_port != DEV_RUNTIME_LEGACY_WEB_PORT_BASE + slot )); then
     return 1
   fi
   if (( studio_port != DEV_RUNTIME_STUDIO_PORT_BASE + slot )); then
@@ -153,7 +157,9 @@ dev_runtime_assign_slot() {
   local slot="$1"
 
   RUNTIME_SLOT="${slot}"
-  HOST_PORT=$(( DEV_RUNTIME_WEB_PORT_BASE + slot ))
+  if [[ "${RUNTIME_LOADED_SCHEMA:-2}" == "1" ]]; then
+    HOST_PORT=$(( DEV_RUNTIME_LEGACY_WEB_PORT_BASE + slot ))
+  fi
   POSTGRES_PORT=$(( DEV_RUNTIME_POSTGRES_PORT_BASE + slot ))
   STUDIO_PORT=$(( DEV_RUNTIME_STUDIO_PORT_BASE + slot ))
   WEB_ORIGIN="http://localhost:${HOST_PORT}"
@@ -206,7 +212,7 @@ dev_runtime_write_lease() {
   lease_path="$(dev_runtime_lease_path "${slot}")"
   temporary_path="$(mktemp "${lease_path}.tmp.XXXXXX")"
   {
-    print -r -- "RUNTIME_SCHEMA_VERSION=${DEV_RUNTIME_SCHEMA_VERSION}"
+    print -r -- "RUNTIME_SCHEMA_VERSION=${RUNTIME_LOADED_SCHEMA:-${DEV_RUNTIME_SCHEMA_VERSION}}"
     print -r -- "RUNTIME_ID=${RUNTIME_ID}"
     print -r -- "RUNTIME_CHECKOUT_PATH=${RUNTIME_CHECKOUT_PATH}"
     print -r -- "RUNTIME_SLOT=${slot}"
@@ -244,7 +250,6 @@ dev_runtime_lease_is_reserved_by_other() {
   fi
 
   for port in \
-    $(( DEV_RUNTIME_WEB_PORT_BASE + slot )) \
     $(( DEV_RUNTIME_POSTGRES_PORT_BASE + slot )) \
     $(( DEV_RUNTIME_STUDIO_PORT_BASE + slot )); do
     if dev_runtime_port_is_listening "${port}"; then
@@ -266,7 +271,6 @@ dev_runtime_candidate_is_available() {
   fi
 
   for port in \
-    $(( DEV_RUNTIME_WEB_PORT_BASE + slot )) \
     $(( DEV_RUNTIME_POSTGRES_PORT_BASE + slot )) \
     $(( DEV_RUNTIME_STUDIO_PORT_BASE + slot )); do
     dev_runtime_port_is_listening "${port}" && probe_status=0 || probe_status=$?
@@ -318,7 +322,7 @@ dev_runtime_write_manifest() {
   mkdir -p "${RUNTIME_CHECKOUT_PATH}/.codex"
   temporary_path="$(mktemp "${RUNTIME_MANIFEST_PATH}.tmp.XXXXXX")"
   {
-    print -r -- "RUNTIME_SCHEMA_VERSION=${DEV_RUNTIME_SCHEMA_VERSION}"
+    print -r -- "RUNTIME_SCHEMA_VERSION=${RUNTIME_LOADED_SCHEMA:-${DEV_RUNTIME_SCHEMA_VERSION}}"
     print -r -- "RUNTIME_MODE=${RUNTIME_MODE}"
     print -r -- "RUNTIME_ID=${RUNTIME_ID}"
     print -r -- "RUNTIME_CHECKOUT_PATH=${RUNTIME_CHECKOUT_PATH}"
@@ -383,7 +387,7 @@ dev_runtime_load_manifest() {
   manifest_bind="$(dev_runtime_manifest_value "${RUNTIME_MANIFEST_PATH}" WEB_BIND_ADDRESS)" || return 1
   manifest_origin="$(dev_runtime_manifest_value "${RUNTIME_MANIFEST_PATH}" WEB_ORIGIN)" || return 1
 
-  if [[ "${manifest_schema}" != "${DEV_RUNTIME_SCHEMA_VERSION}" ||
+  if [[ ( "${manifest_schema}" != "1" && "${manifest_schema}" != "${DEV_RUNTIME_SCHEMA_VERSION}" ) ||
         "${manifest_mode}" != "${RUNTIME_MODE}" ||
         "${manifest_id}" != "${RUNTIME_ID}" ||
         "${manifest_checkout:A}" != "${RUNTIME_CHECKOUT_PATH}" ||
@@ -399,7 +403,10 @@ dev_runtime_load_manifest() {
     return 1
   fi
 
+  RUNTIME_LOADED_SCHEMA="${manifest_schema}"
+  PORT_ALLOCATION_SCHEMA=$(( manifest_schema == 1 ? 0 : 1 ))
   if [[ "${RUNTIME_MODE}" == "local" ]]; then
+    PORT_SLOT=0
     if [[ "${manifest_host_port}" != "3000" || "${manifest_postgres_port}" != "5432" || "${manifest_studio_port}" != "5555" || "${manifest_origin}" != "http://localhost:3000" ]]; then
       dev_runtime_error "Local runtime manifest must use ports 3000, 5432, and 5555."
       return 1
@@ -417,6 +424,14 @@ dev_runtime_load_manifest() {
       dev_runtime_error "Worktree runtime origin does not match its web port."
       return 1
     fi
+    if [[ "${manifest_schema}" == "2" ]]; then
+      if (( manifest_host_port < 3001 || manifest_host_port > 3010 )); then
+        dev_runtime_error "Worktree app port must be in 3001-3010."
+        return 1
+      fi
+      PORT_SLOT=$(( manifest_host_port - 3000 ))
+    fi
+    HOST_PORT="${manifest_host_port}"
     dev_runtime_assign_slot "${manifest_slot}"
   fi
 
@@ -424,7 +439,7 @@ dev_runtime_load_manifest() {
     RUNTIME_CONFIG_CHANGED=1
   fi
 
-  export HOST_PORT POSTGRES_PORT STUDIO_PORT WEB_ORIGIN
+  export HOST_PORT POSTGRES_PORT STUDIO_PORT WEB_ORIGIN PORT_SLOT PORT_ALLOCATION_SCHEMA
   export RUNTIME_CONFIG_CHANGED RUNTIME_PREVIOUS_CONFIG_DIGEST
   export RUNTIME_VOLUME_CONFIG_DIGEST RUNTIME_VOLUME_OWNER_SESSION_ID
   export RUNTIME_VOLUME_IDENTITY_PERSISTED
@@ -702,15 +717,49 @@ dev_runtime_close_session() {
   fi
 }
 
+dev_runtime_allocate_web_ports() {
+  local allocation
+  local values
+  local previous_port="${HOST_PORT:-}"
+  allocation="$(node "${DEV_RUNTIME_HELPER_DIRECTORY}/development-port-allocation.mjs" allocate --checkout "${RUNTIME_CHECKOUT_PATH}")" || return 1
+  values="$(print -rn -- "${allocation}" | node --input-type=module -e '
+    let text=""; for await (const chunk of process.stdin) text+=chunk;
+    const value=JSON.parse(text);
+    if (!Number.isInteger(value.slot) || value.slot<0 || value.slot>10 || value.appPort!==3000+value.slot || value.artifactPort!==4000+value.slot || value.schemaVersion!==1) process.exit(1);
+    console.log([value.slot,value.appPort,value.schemaVersion].join(" "));
+  ')" || return 1
+  local -a fields
+  fields=( ${(s: :)values} )
+  if [[ -f "${RUNTIME_MANIFEST_PATH}" && "${RUNTIME_LOADED_SCHEMA}" == "2" && "${previous_port}" != "${fields[2]}" ]]; then
+    dev_runtime_error "Port lease differs from the runtime manifest; refusing to change runtime URL."
+    return 1
+  fi
+  PORT_SLOT="${fields[1]}"
+  HOST_PORT="${fields[2]}"
+  PORT_ALLOCATION_SCHEMA="${fields[3]}"
+  WEB_ORIGIN="http://localhost:${HOST_PORT}"
+  export PORT_SLOT HOST_PORT PORT_ALLOCATION_SCHEMA WEB_ORIGIN
+}
+
 dev_runtime_prepare() {
   dev_runtime_resolve_identity || return 1
+  if [[ -e "${RUNTIME_CHECKOUT_PATH}/.codex/port-migration.lock" ]]; then
+    dev_runtime_error "PORT_MIGRATION_BUSY: inspect the migration lock before starting."
+    return 1
+  fi
 
   if [[ -f "${RUNTIME_MANIFEST_PATH}" ]]; then
     dev_runtime_load_manifest || return 1
-  elif [[ "${RUNTIME_MODE}" == "local" ]]; then
-    :
+    if [[ "${RUNTIME_LOADED_SCHEMA}" == "1" ]]; then
+      dev_runtime_error "PORT_MIGRATION_REQUIRED: ${WEB_ORIGIN}; stop the owned Web/artifact explicitly, then run ./dev-compose.sh migrate-ports. DB and volumes are preserved."
+      return 1
+    fi
+    dev_runtime_allocate_web_ports || return 1
   else
-    dev_runtime_allocate_slot || return 1
+    dev_runtime_allocate_web_ports || return 1
+    if [[ "${RUNTIME_MODE}" == "worktree" ]]; then
+      dev_runtime_allocate_slot || return 1
+    fi
   fi
 
   dev_runtime_write_manifest
@@ -771,6 +820,8 @@ dev_runtime_print_context() {
   print -r -- "RUNTIME_CONFIG_CHANGED=${RUNTIME_CONFIG_CHANGED}"
   print -r -- "COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}"
   print -r -- "HOST_PORT=${HOST_PORT}"
+  print -r -- "PORT_SLOT=${PORT_SLOT:-0}"
+  print -r -- "PORT_ALLOCATION_SCHEMA=${PORT_ALLOCATION_SCHEMA:-0}"
   print -r -- "POSTGRES_PORT=${POSTGRES_PORT}"
   print -r -- "STUDIO_PORT=${STUDIO_PORT}"
   print -r -- "WEB_BIND_ADDRESS=${WEB_BIND_ADDRESS}"

@@ -60,9 +60,9 @@ native Next.js processを手動で起動している場合、そのログは起�
 ./dev-compose.sh db
 ```
 
-Local checkoutは従来どおり[http://localhost:3000](http://localhost:3000)、PostgreSQL `5432`、Prisma Studio `5555`を使用します。同じcheckoutのhealthyなnative Next.js processまたは正しいCompose `web`が起動済みなら、PIDまたはcontainer IDを変えずに再利用します。別checkoutや所有権不明のprocessが`3000`を使っている場合は、そのprocessを停止せずエラーにします。
+Local checkoutは[http://localhost:3000](http://localhost:3000)を使用します。同じcheckoutのhealthyなnative Next.js processまたは所有権確認済みのCompose `web`は再利用し、別checkoutや所有権不明のprocessは停止しません。
 
-Codex worktreeはcanonical checkout pathから固有Compose projectとweb・PostgreSQL・Studio portを割り当てます。webは`3100-3899`、PostgreSQLは`15432-16231`、Studioは`25555-26354`のloopback portを使い、DB、volume、network、originもworktreeごとに分離します。割当値は追跡対象外の`.codex/runtime.local.env`に保存されるため、`HOST_PORT`や`COMPOSE_PROJECT_NAME`を手作業で指定しません。wrapperはworktreeだけ`compose.worktree.yaml`を自動適用し、保持するvolumeのcreation identityをsession間で固定するため、次回起動でdatabase再作成を要求しません。
+worktreeはcheckout固有のCompose project、DB、volume、network、originを使います。Browserで利用するポート、起動・停止・予約解放と移行手順は[開発用ポートの固定範囲](docs/development/development-ports.md)を参照してください。
 
 LocalでWebを新規起動する場合だけ、起動時にアクセス範囲を選択します。Enterのみ、または`1`を入力するとこのMacだけ、`2`は同一LAN、`3`はCloudflare Tunnelです。worktreeは常にloopback限定であり、LANとCloudflareには公開しません。
 
