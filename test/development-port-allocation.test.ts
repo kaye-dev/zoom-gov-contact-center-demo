@@ -28,7 +28,7 @@ test("PORT-01/03: fixed Local and paired worktree boundary slots; exhaustion nev
   const allocator = createPortAllocator({ stateRoot, inspect: free });
   const local = await allocator.allocate(identity("/fixture/local", "local"));
   assert.equal(local.appPort, 3000); assert.equal(local.artifactPort, 4000);
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 1; i <= 5; i++) {
     const lease = await allocator.allocate(identity(`/fixture/worktree-${i}`));
     assert.equal(lease.slot, i); assert.equal(lease.appPort, 3000 + i); assert.equal(lease.artifactPort, 4000 + i);
   }
@@ -111,9 +111,9 @@ test("PORT-11: allocator CLI returns stable JSON with verified Git identity", as
 
 test("PORT-11: documented policy and launcher ranges match exported bounds", async () => {
   const { PORT_POLICY } = await modulePromise;
-  assert.deepEqual(PORT_POLICY, { schemaVersion: 1, appBase: 3000, artifactBase: 4000, worktreeSlots: 10 });
+  assert.deepEqual(PORT_POLICY, { schemaVersion: 1, appBase: 3000, artifactBase: 4000, worktreeSlots: 5 });
   const doc = await readFile(new URL("../docs/development/development-ports.md", import.meta.url), "utf8");
-  for (const expected of ["3001–3010", "4001–4010", "15432–16231", "25555–26354", "migrate-ports --rollback", "GUI", "承認そのものを付与しません"]) assert.ok(doc.includes(expected), expected);
+  for (const expected of ["3001–3005", "4001–4005", "15432–16231", "25555–26354", "migrate-ports --rollback", "GUI", "承認そのものを付与しません"]) assert.ok(doc.includes(expected), expected);
 });
 
 test("PORT-05: a bind race cancels only the newly created lease and preserves the foreign listener", async context => {

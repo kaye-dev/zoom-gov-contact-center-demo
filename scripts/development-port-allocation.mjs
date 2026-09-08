@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 const exec = promisify(execFile);
-export const PORT_POLICY = Object.freeze({ schemaVersion: 1, appBase: 3000, artifactBase: 4000, worktreeSlots: 10 });
+export const PORT_POLICY = Object.freeze({ schemaVersion: 1, appBase: 3000, artifactBase: 4000, worktreeSlots: 5 });
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 function ensure(value, message) { if (!value) throw new Error(message); }
@@ -49,7 +49,7 @@ function validateIdentity(identity) {
 }
 function validateLease(lease, slot) {
   validateIdentity(lease);
-  ensure(lease.schemaVersion === PORT_POLICY.schemaVersion && lease.slot === slot && Number.isInteger(slot) && slot >= 0 && slot <= 10 &&
+  ensure(lease.schemaVersion === PORT_POLICY.schemaVersion && lease.slot === slot && Number.isInteger(slot) && slot >= 0 && slot <= PORT_POLICY.worktreeSlots &&
     (lease.mode === "local" ? slot === 0 : slot > 0) && lease.appPort === 3000 + slot && lease.artifactPort === 4000 + slot &&
     /^[a-f0-9-]{36}$/u.test(lease.allocationId), `invalid port lease for slot ${slot}; inspect it before any allocation`);
   if (lease.artifact !== null) {
@@ -99,7 +99,7 @@ export async function assertArtifactStartupAllowed(identity) {
   ensure(state.checkout === identity.checkout && state.gitCommonDirectory === identity.gitCommonDirectory, "retained artifact checkout identity mismatch");
   for (const artifact of Object.values(state.artifactServers ?? {})) {
     const port = Number(new URL(artifact.url).port);
-    ensure(port >= 4000 && port <= 4010,
+    ensure(port >= 4000 && port <= 4005,
       `PORT_MIGRATION_REQUIRED: retained artifact ${artifact.url}; run ./dev-confirmation.sh stop ${state.slug} before starting the new origin`);
   }
 }
@@ -193,7 +193,7 @@ export function createPortAllocator({ stateRoot = defaultPortStateRoot(), inspec
   }
   async function leases() {
     const values = [];
-    for (let slot = 0; slot <= 10; slot += 1) {
+    for (let slot = 0; slot <= PORT_POLICY.worktreeSlots; slot += 1) {
       const lease = await readPrivateJson(file(slot));
       if (lease) values.push(validateLease(lease, slot));
     }
@@ -216,7 +216,7 @@ export function createPortAllocator({ stateRoot = defaultPortStateRoot(), inspec
         return { ...existing, created: false };
       }
       const rejected = [];
-      for (const slot of identity.mode === "local" ? [0] : Array.from({ length: 10 }, (_, i) => i + 1)) {
+      for (const slot of identity.mode === "local" ? [0] : Array.from({ length: PORT_POLICY.worktreeSlots }, (_, i) => i + 1)) {
         const reserved = all.find((lease) => lease.slot === slot);
         if (reserved) { rejected.push(`slot ${slot}: ${reserved.checkout}`); continue; }
         const occupied = await inspect([3000 + slot, 4000 + slot], identity);
@@ -225,7 +225,7 @@ export function createPortAllocator({ stateRoot = defaultPortStateRoot(), inspec
         await atomicJson(file(slot), lease);
         return { ...lease, created: true };
       }
-      throw new Error(`PORT_SLOTS_EXHAUSTED: ${rejected.join("; ")}. Stop only the named owner and explicitly release its reservation with development-port-allocation.mjs release --checkout <checkout> --owner <owner>. No port outside 3000–3010/4000–4010 is used.`);
+      throw new Error(`PORT_SLOTS_EXHAUSTED: ${rejected.join("; ")}. Stop only the named owner and explicitly release its reservation with development-port-allocation.mjs release --checkout <checkout> --owner <owner>. No port outside 3000–3005/4000–4005 is used.`);
     });
   }
   async function release(identity, owner, allocationId, { rollback = false } = {}) {

@@ -1174,7 +1174,7 @@ test("runnerはLocal 3000と割当済みworktree portだけをproduction loopbac
     run,
   });
   for (const production of [
-    "http://localhost:3011/",
+    "http://localhost:3006/",
     "http://localhost:3099/",
     "http://localhost:3900/",
     "http://127.0.0.1:3142/",
@@ -1406,16 +1406,16 @@ test("production base URLs allow local tenant hosts without allowing external ho
 
 test("PORT-09: current origin boundaries and read-only legacy URLs are separate", async () => {
   const { requireLoopbackBaseUrl } = await import("../.agents/skills/plan/scripts/parity-runner-core.mjs");
-  for (const port of [3000, 3001, 3010]) {
+  for (const port of [3000, 3001, 3005]) {
     assert.equal(requireLoopbackBaseUrl(`http://univ.localhost:${port}`, "production").port, String(port));
   }
-  for (const port of [2999, 3011, 3100, 3899]) {
+  for (const port of [2999, 3006, 3100, 3899]) {
     assert.throws(() => requireLoopbackBaseUrl(`http://localhost:${port}`, "production"));
   }
-  for (const port of [4000, 4001, 4010]) {
+  for (const port of [4000, 4001, 4005]) {
     assert.equal(requireLoopbackBaseUrl(`http://127.0.0.1:${port}`, "prototype").port, String(port));
   }
-  for (const port of [3999, 4011, 60237]) {
+  for (const port of [3999, 4006, 60237]) {
     assert.throws(() => requireLoopbackBaseUrl(`http://127.0.0.1:${port}`, "prototype"));
   }
   assert.equal(requireLoopbackBaseUrl("http://localhost:3142", "production", { legacy: true }).port, "3142");

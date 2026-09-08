@@ -453,7 +453,7 @@ test("PORT-02/04/07: concurrent direct starts reuse one PID and restart keeps it
   ]);
   assert.equal(first.url, second.url);
   const port = Number(new URL(first.url).port);
-  assert.ok(port >= 4001 && port <= 4010);
+  assert.ok(port >= 4001 && port <= 4005);
   const token = (await fetch(first.url, { method: "HEAD" })).headers.get("x-confirmation-session-token");
   assert.ok(token);
   for (const child of repository.children) await stopServer(child);

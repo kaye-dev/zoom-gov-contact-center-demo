@@ -33,7 +33,7 @@ function parseManifest(text, identity) {
     result.RUNTIME_GIT_COMMON_DIR === identity.gitCommonDirectory && result.RUNTIME_ID === identity.runtimeId && result.RUNTIME_MODE === identity.mode &&
     result.WEB_BIND_ADDRESS === "127.0.0.1" && result.WEB_ORIGIN === `http://localhost:${result.HOST_PORT}`, "runtime manifest identity mismatch");
   const port = Number(result.HOST_PORT);
-  ensure(Number.isInteger(port) && (identity.mode === "local" ? port === 3000 : result.RUNTIME_SCHEMA_VERSION === "1" ? port >= 3100 && port <= 3899 : port >= 3001 && port <= 3010), "invalid runtime Web port");
+  ensure(Number.isInteger(port) && (identity.mode === "local" ? port === 3000 : result.RUNTIME_SCHEMA_VERSION === "1" ? port >= 3100 && port <= 3899 : port >= 3001 && port <= 3005), "invalid runtime Web port");
   const db = Number(result.POSTGRES_PORT), studio = Number(result.STUDIO_PORT);
   ensure(identity.mode === "local" ? db === 5432 && studio === 5555 :
     db >= 15432 && db <= 16231 && studio - db === 10123 && (result.RUNTIME_SCHEMA_VERSION !== "1" || db - port === 12332), "invalid legacy DB/Studio ports");

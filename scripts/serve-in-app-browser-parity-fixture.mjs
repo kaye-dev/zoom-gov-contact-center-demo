@@ -30,10 +30,10 @@ function parseArguments(argv) {
     else if (key === "--prototype-port") options.prototypePort = parsePort(value, key);
     else throw new Error(`unknown option: ${key}`);
   }
-  if (!(options.productionPort >= 3001 && options.productionPort <= 3010)) {
-    throw new Error("--production-port must use the worktree allocator range 3001-3010");
+  if (!(options.productionPort >= 3001 && options.productionPort <= 3005)) {
+    throw new Error("--production-port must use the worktree allocator range 3001-3005");
   }
-  if (!(options.prototypePort >= 4001 && options.prototypePort <= 4010) || options.prototypePort !== options.productionPort + 1000) {
+  if (!(options.prototypePort >= 4001 && options.prototypePort <= 4005) || options.prototypePort !== options.productionPort + 1000) {
     throw new Error("--prototype-port must use the paired artifact port (production + 1000)");
   }
   return options;

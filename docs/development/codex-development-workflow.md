@@ -213,7 +213,7 @@ plan中のsmokeはtargetedな代表desktopと390×844を基本とし、具体的
 
 基本方針は、契約・検証定義をファイルごとの上限内へ分割し、manifestからpathとdigestで参照すること。想定規模とメモリ使用量に根拠がある限定的な対応では、生成側・全読込側の上限を同時に引き上げてもよい。無制限化や比較ケースの削減はしない。自動分割は実装済みであり、総量・分割数の上限引き上げは必要性を確認して行う改善方針とする。
 
-詳細と検証条件は[Manifest size recovery policy](../../.agents/skills/plan/references/parity-runner.md#manifest-size-recovery-policy)を正本とする。ユーザーが検証基盤修正を明示した場合は、その依頼をscope拡張として扱い、元のfeature planの対象外という理由だけで再承認を求めない。文書方針の更新だけでrunner実装を始めず、修正時は既存証跡・checkpoint・無関係な変更を保全する。保存・読込の復旧とBrowser coverageの完了は別に報告する。
+詳細と検証条件は[Manifest size recovery policy](../../.agents/skills/plan/references/manifest-storage.md)を正本とする。ユーザーが検証基盤修正を明示した場合は、その依頼をscope拡張として扱い、元のfeature planの対象外という理由だけで再承認を求めない。文書方針の更新だけでrunner実装を始めず、修正時は既存証跡・checkpoint・無関係な変更を保全する。保存・読込の復旧とBrowser coverageの完了は別に報告する。
 
 ### 承認、ユーザー確認、final parity証跡
 

@@ -339,7 +339,7 @@ process.on("SIGTERM", () => { server.closeAllConnections(); server.close(() => p
     child.stdout.on("data", data => { clearTimeout(timer); resolve(values(String(data)).URL); });
     child.once("error", reject);
   });
-  assert.ok(Number(new URL(url).port) > 4010);
+  assert.ok(Number(new URL(url).port) > 4005);
   await mkdir(path.dirname(fixture.statePath), { recursive: true });
   await writeFile(fixture.statePath, JSON.stringify({
     schemaVersion: 1, sessionId: randomUUID(), checkout: fixture.root, gitCommonDirectory: path.join(fixture.root, ".git"),
@@ -349,7 +349,7 @@ process.on("SIGTERM", () => { server.closeAllConnections(); server.close(() => p
   }), { mode: 0o600 });
   await writeFile(serverPath, currentSource);
   assert.equal(values((await run(fixture, ["status", "alpha"])).stdout).PROTOTYPE_URL, url);
-  await assert.rejects(run(fixture, ["start", "alpha", "prototype"]), /4000-4010/);
+  await assert.rejects(run(fixture, ["start", "alpha", "prototype"]), /4000-4005/);
   await assert.rejects(execFileAsync(process.execPath, [serverPath, "plans/alpha/prototype"], {
     cwd: fixture.root, env: artifactTestEnvironment(fixture.root, path.join(fixture.root, ".git")),
   }), /PORT_MIGRATION_REQUIRED/);
@@ -358,5 +358,5 @@ process.on("SIGTERM", () => { server.closeAllConnections(); server.close(() => p
   const restarted = values((await run(fixture, ["start", "alpha", "prototype"])).stdout);
   fixture.ownedPids.add(Number(restarted.PROTOTYPE_PID));
   const port = Number(new URL(restarted.PROTOTYPE_URL).port);
-  assert.ok(port >= 4001 && port <= 4010);
+  assert.ok(port >= 4001 && port <= 4005);
 });

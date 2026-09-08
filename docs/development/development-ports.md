@@ -9,7 +9,7 @@ Browserで利用する範囲はslot 0〜5です。同じcheckoutにはアプリ�
 | アプリ | 3000 | 3001〜3005 |
 | prototype / HTML review | 4000 | 4001〜4005 |
 
-slot nはアプリ3000+n、artifact4000+nです。現在のallocatorはworktreeにslot 10まで（3001–3010／4001–4010）を割り当てるため、Browser利用範囲に収まる保証はありません。既存予約や外部のポート占有により、5 worktree以下でもslot 6以上を返す場合があります。出力URLが上表の範囲外ならBrowserを開かず作業を止め、予約状況を確認してください。HOST_PORTやleaseを手編集したり、他者のprocessを停止したり、権限を自動拡大したりしません。
+slot nはアプリ3000+n、artifact4000+nです。allocatorはworktreeにslot 1〜5（3001–3005／4001–4005）だけを割り当てます。5枠すべてが予約済み、または外部のポート占有で利用できない場合はエラーになり、範囲外へfallbackしません。HOST_PORTやleaseを手編集したり、他者のprocessを停止したり、権限を自動拡大したりしません。
 
 予約はユーザー単位の`~/.local/state/zoom-gov-contact-center-demo/development-ports`で共有し、停止後も保持します。別リポジトリの通常checkout同士は同じ組を同時に使えません。割り当て時はlock、IPv4/IPv6 listener、Compose公開portを確認します。枯渇・固定port競合・所有者不明・lease破損ではエラーになり、allocatorの範囲外へfallbackしません。
 
