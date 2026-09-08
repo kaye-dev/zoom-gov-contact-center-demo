@@ -57,7 +57,7 @@ The adapter performs exactly one navigation for each row/surface, captures the i
 
 ## Workspace, batch, checkpoint, and resume
 
-The ignored workspace is `.codex/parity-runs/<run-id>/`. Directories are `0700`; files are `0600`; all paths are repository-contained, non-symlink, exclusively created, and read back. The immutable manifest fixes selection, row order, batch size, byte limit, runtime/source/profile digests, and artifact policy.
+The ignored workspace is `.codex/parity-runs/<run-id>/`. Directories are `0700`; files are `0600`; all paths are repository-contained, non-symlink, exclusively created, and read back. The immutable manifest fixes selection, row order, batch size, byte limit, runtime/source/profile digests, and artifact policy. For storage limits, automatic splitting, and recovery, read [Manifest size recovery policy](manifest-storage.md).
 
 For normal UI `$implement` or an independently requested parity task, prepare only after approval, implementation, static checks, final diff review, and external runtime ownership/health readback:
 
