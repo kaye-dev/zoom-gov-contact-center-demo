@@ -316,6 +316,10 @@ function createFakeBrowser() {
   const browser = {
     browserId: "iab-fixture",
     tabs: {
+      async get(id: string): Promise<{ id: string }> {
+        if (id !== tab.id && id !== "prototype") throw new Error("tab closed");
+        return { id };
+      },
       async selected() {
         return state.selectedId === tab.id ? tab : { id: state.selectedId };
       },
@@ -578,8 +582,8 @@ test("IAB-01b production/prototypeを別tab contextでnavigate・cache・cleanup
     evidence.capabilities.cleanup.tabs.map(({ tabId }: { tabId: string }) => tabId),
     ["comparison", "prototype"],
   );
-  assert.ok(fixture.state.activations.includes("prototype"));
-  assert.equal(fixture.state.selectedId, "prototype");
+  assert.equal(fixture.state.activations.length, 0);
+  assert.equal(fixture.state.selectedId, "comparison");
   const reused = await new BrowserParityRunner(adapter).run(input);
   assert.equal(reused.capabilities.cleanup.status, "pass");
 
@@ -1595,20 +1599,20 @@ test("IAB-06 DOM and accessibility projections fail closed at every bounded limi
       forbidden: ["resident@example.jp", "projection-node-secret", "token="],
     },
     {
-      name: "serialized chars 131073",
+      name: "serialized chars 524289",
       snapshot: {
         overflow: false,
         nodeCount: 1,
-        serialized: `${"x".repeat(131_073)} token=projection-char-secret`,
+        serialized: `${"x".repeat(524_289)} token=projection-char-secret`,
       },
       forbidden: ["projection-char-secret", "token=", "x{64}"],
     },
     {
-      name: "UTF-8 bytes over 262144",
+      name: "UTF-8 bytes over 1048576",
       snapshot: {
         overflow: false,
         nodeCount: 1,
-        serialized: `${"界".repeat(87_382)} token=projection-byte-secret`,
+        serialized: `${"界".repeat(349_526)} token=projection-byte-secret`,
       },
       forbidden: ["projection-byte-secret", "token=", "界{32}"],
     },
@@ -1651,8 +1655,8 @@ test("IAB-06 DOM and accessibility projections fail closed at every bounded limi
             assert.deepEqual((error as { evidence?: unknown }).evidence, {
               source: kind === "dom" ? "dom-projection" : "accessibility-projection",
               nodeLimit: 1_000,
-              serializedCharLimit: 131_072,
-              serializedByteLimit: 262_144,
+              serializedCharLimit: 524_288,
+              serializedByteLimit: 1_048_576,
             });
             return true;
           },
@@ -1673,7 +1677,7 @@ test("IAB-06 DOM and accessibility projections fail closed at every bounded limi
         const marker = kind === "dom" ? "DOM selector drifted" : "accessibility selector drifted";
         if (!source.includes(marker)) return originalEvaluate(fn, arg);
         const rawText = {
-          length: 131_073,
+          length: 524_289,
           replace() {
             throw new Error("raw text normalization must not run after the budget is exhausted");
           },
@@ -2124,4 +2128,154 @@ test("IAB-09 coverage probeとanchor artifactはcompact recordだけを返す", 
     }, context),
     (error: unknown) => (error as { code?: string }).code === "PARITY_ARTIFACT_SINK_UNAVAILABLE",
   );
+});
+
+
+test("owned two-tab comparisons validate logical identity without changing the visible tab", async () => {
+  const { createInAppBrowserParityAdapter } = await adapterModulePromise;
+  const fixture = createFakeBrowser();
+  const prototype = { ...fixture.tab, id: "prototype" };
+  const adapter = createInAppBrowserParityAdapter({
+    browser: fixture.browser, tabs: { production: fixture.tab, prototype },
+  });
+  fixture.state.selectedId = "user-owned-tab";
+  await adapter.activateTab("comparison");
+  assert.equal(await adapter.activeTabId(), "comparison");
+  await adapter.measureViewport("comparison");
+  assert.equal(fixture.state.selectedId, "user-owned-tab");
+  await assert.rejects(adapter.measureViewport("prototype"),
+    (error: unknown) => assertSanitizedParityError(error, "PARITY_SELECTED_TAB_DRIFT"));
+  await assert.rejects(adapter.activateTab("unowned"),
+    (error: unknown) => assertSanitizedParityError(error, "PARITY_SELECTED_TAB_DRIFT"));
+  fixture.browser.tabs.get = async () => ({ id: "wrong-tab" });
+  await assert.rejects(adapter.activeTabId(),
+    (error: unknown) => assertSanitizedParityError(error, "PARITY_SELECTED_TAB_DRIFT"));
+  fixture.browser.tabs.get = async () => { throw new Error("tab closed"); };
+  await assert.rejects(adapter.activateTab("prototype"),
+    (error: unknown) => assertSanitizedParityError(error, "PARITY_SELECTED_TAB_DRIFT"));
+});
+
+test("bounded Browser execution rejects changed batches before operating and preserves real probes", async () => {
+  const { createInAppBrowserParityAdapter } = await adapterModulePromise;
+  const { BrowserParityRunner, createBatches } = await coreModulePromise;
+  const fixture = createFakeBrowser();
+  const prototype = createPrototypeTab(fixture);
+  const adapter = createInAppBrowserParityAdapter({browser: fixture.browser,
+    tabs: { production: fixture.tab, prototype: prototype.tab }});
+  const definition = { contract, spec: { ...spec, batchPolicy: { maxRows: 2, maxBytes: 131072 } },
+    prototypeRevision: digest, validationProfileDigest: digest };
+  const input = { definition, phase: "final", changedTargetIds: ["main"], changedStates: ["default"],
+    tabs: { production: fixture.tab.id, prototype: prototype.tab.id },
+    baseUrls: { production: "http://localhost:3000", prototype: "http://127.0.0.1:3100" },
+    run: { runId: "bounded", goalSha256: digest, runtime: { owner: "fixture", checkout: "/fixture" }, sources: [] } };
+  const batch = createBatches(contract.parityMatrix, { maxRows: 2, maxBytes: 131072 })[0];
+  const runner = new BrowserParityRunner(adapter);
+  await assert.rejects(runner.runWithoutCleanup({ ...input, batch: { ...batch, rows: [{ ...batch.rows[0], route: "/wrong" }] } }),
+    (error: unknown) => assertSanitizedParityError(error, "PARITY_BATCH_INVALID"));
+  assert.equal(fixture.state.navigation.length, 0);
+  const result = await runner.runWithoutCleanup({ ...input, batch });
+  assert.deepEqual(result.rows.map(({ rowId }: { rowId: string }) => rowId), batch.rowIds);
+  assert.equal(result.rows[0].status, "pass");
+  assert.equal((await adapter.cleanup()).status, "pass");
+});
+
+test("theme readiness tolerates a replaced navigation context but remains bounded", async () => {
+  const { createInAppBrowserParityAdapter } = await adapterModulePromise;
+  const fixture = createFakeBrowser();
+  fixture.state.url = "http://localhost:3000/?theme=light";
+  const evaluate = fixture.tab.playwright.evaluate;
+  let reads = 0;
+  let now = 0;
+  fixture.tab.playwright.evaluate = async (...args: Parameters<typeof evaluate>) => {
+    if (String(args[0]).includes("classes:")) {
+      reads += 1;
+      if (reads === 1) throw new Error("Execution context was destroyed");
+    }
+    return evaluate(...args);
+  };
+  const adapter = createInAppBrowserParityAdapter({ browser: fixture.browser, tab: fixture.tab,
+    timeouts: { actionMs: 200, cleanupPollMs: 100 },
+    clock: { now: () => now, sleep: async (ms: number) => { now += ms; } } });
+  await adapter.setTheme("comparison", "light", { setup: { type: "query", parameter: "theme" } });
+  assert.equal(reads, 2);
+  fixture.state.theme = "dark";
+  await assert.rejects(adapter.setTheme("comparison", "light", { setup: { type: "query", parameter: "theme" } }),
+    (error: unknown) => assertSanitizedParityError(error, "PARITY_THEME_SETUP_FAILED"));
+  assert.equal(now, 300);
+});
+
+test("DOM parity ignores opaque identifiers while detecting visible and accessible regressions", async () => {
+  const { createInAppBrowserParityAdapter } = await adapterModulePromise;
+  async function project({ attrs = {}, color = "black", value = "", label = "Name", disabled = false, text = "" }: {
+    attrs?: Record<string, string>; color?: string; value?: string; label?: string; disabled?: boolean; text?: string;
+  }) {
+    const fixture = createFakeBrowser();
+    const evaluate = fixture.tab.playwright.evaluate;
+    fixture.tab.playwright.evaluate = async (...args: Parameters<typeof evaluate>) => {
+      const source = String(args[0]);
+      if (!source.includes("DOM selector drifted")) return evaluate(...args);
+      class FakeElement {
+        tagName = "INPUT";
+        nodeType = 1;
+        value = value;
+        disabled = disabled;
+        childNodes = text ? [{ nodeType: 3, nodeValue: text }] : [];
+        getAttribute(name: string) { return attrs[name] ?? null; }
+        getBoundingClientRect() { return { width: 320, height: 40 }; }
+        contains() { return false; }
+      }
+      const root = new FakeElement();
+      return runInNewContext(`(${source})(args)`, { args: args[1], Element: FakeElement,
+        document: { querySelector: () => root, getElementById: () => ({ textContent: label }) },
+        getComputedStyle: () => ({ display: "block", visibility: "visible", opacity: "1", color }) });
+    };
+    const adapter = createInAppBrowserParityAdapter({ browser: fixture.browser, tab: fixture.tab });
+    return (await adapter.runProbe("comparison", { id: "dom", kind: "dom", mode: "equal", required: true,
+      productionSelector: "main", prototypeSelector: "main", options: {} }, { surface: "production" })).value.sha256;
+  }
+  const baseline = await project({ attrs: { id: "field-a", class: "a b", "aria-labelledby": "label-a" } });
+  assert.equal(await project({ attrs: { id: "field-b", class: "b a", "aria-labelledby": "label-b", maxlength: "40" } }), baseline);
+  for (const change of [{ color: "red" }, { value: "changed" }, { label: "Wrong label" }, { disabled: true }, { text: "Unexpected text" }]) {
+    assert.notEqual(await project({ attrs: { "aria-labelledby": "label-a" }, ...change }), baseline);
+  }
+});
+
+test("overflow measurement treats scrollbar space as zero but detects positive overflow", async () => {
+  const { createInAppBrowserParityAdapter } = await adapterModulePromise;
+  const fixture = createFakeBrowser();
+  const evaluate = fixture.tab.playwright.evaluate;
+  let scrollWidth = 1008;
+  fixture.tab.playwright.evaluate = async (...args: Parameters<typeof evaluate>) => {
+    const source = String(args[0]);
+    if (!source.includes("overflow selector drifted")) return evaluate(...args);
+    class FakeElement { getBoundingClientRect() { return { left: 0, right: 1008 }; } }
+    return runInNewContext(`(${source})(args)`, { args: args[1], Element: FakeElement,
+      document: { querySelector: () => new FakeElement(), documentElement: { scrollWidth } },
+      window: { innerWidth: 1023, scrollX: 0, scrollY: 0 } });
+  };
+  const adapter = createInAppBrowserParityAdapter({ browser: fixture.browser, tab: fixture.tab });
+  const probe = { id: "overflow", kind: "overflow", mode: "equal", required: true,
+    productionSelector: "main", prototypeSelector: "main", options: { tolerancePx: 0 } };
+  assert.deepEqual(JSON.parse(JSON.stringify((await adapter.runProbe("comparison", probe, { surface: "production" })).value)),
+    { matches: true, scrollX: 0, scrollY: 0, documentOverflow: 0, targetOverflow: 0 });
+  scrollWidth = 1030;
+  const overflowing = (await adapter.runProbe("comparison", probe, { surface: "production" })).value;
+  assert.equal(overflowing.matches, false);
+  assert.equal(overflowing.documentOverflow, 7);
+});
+
+test("lossy JPEG anchors retain visual evidence without claiming pixel equality", async () => {
+  const { createInAppBrowserParityAdapter } = await adapterModulePromise;
+  const fixture = createFakeBrowser();
+  const evaluate = fixture.tab.playwright.evaluate.bind(fixture.tab.playwright);
+  fixture.tab.playwright.evaluate = async (fn, arg) => fn.toString().includes('document.body.style.overflow === "hidden"') ? true : evaluate(fn, arg);
+  let captureOptions: unknown;
+  fixture.tab.screenshot = async (...args: unknown[]) => { captureOptions = args[0]; return new Uint8Array([255, 216, 255, 217]); };
+  const adapter = createInAppBrowserParityAdapter({ browser: fixture.browser, tab: fixture.tab,
+    artifactSink: async (input: Record<string, unknown>) => ({ path: ".codex/parity-runs/run/artifacts/image.jpg", sha256: digest, bytes: 4, kind: input.kind, mediaType: input.mediaType, surface: input.surface, rowId: input.rowId, probeId: input.probeId }) });
+  const result = await adapter.runProbe("comparison", { id: "jpeg", kind: "screenshot", mode: "equal", productionSelector: "main", prototypeSelector: "main", required: false, tier: "anchor", options: {} }, {row: {id: "main-default-mobile-light"}, surface: "production"});
+  assert.equal(result.unsupported, true);
+  assert.deepEqual(captureOptions, {});
+  assert.equal(result.artifact.mediaType, "image/jpeg");
+  assert.ok(result.artifact.path.endsWith(".jpg"));
 });

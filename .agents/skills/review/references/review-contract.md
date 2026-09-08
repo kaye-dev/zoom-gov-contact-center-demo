@@ -1,6 +1,6 @@
 # HTML review contract
 
-Copy every file from `assets/review-report/` to `plans/<slug>/review/`, then replace `review-data.json` completely. Do not persist raw reviewer responses, hashes, release gates, model routing, or additional review JSON files.
+Copy every file from `assets/review-report/` to `plans/<slug>/review/`, then replace `review-data.json` completely. Do not persist raw reviewer responses, hashes, release gates, model routing, or additional review JSON files. Execution mode belongs in `summary`: record parent-only or independent reviewers. The existing `blind`/`conformance` source labels classify perspectives; parent-only execution must not claim independence or history isolation.
 
 ## Data shape
 
@@ -55,7 +55,7 @@ Copy every file from `assets/review-report/` to `plans/<slug>/review/`, then rep
 - A group describes one intent, not one file. Rename/import follow-ups and similar mechanical edits belong with their purpose. `files` across all groups exactly equals `reviewedPaths`.
 - Locations use `path:line`, `path:start-end`, or `path@file`. If the intent cannot be explained, set the group summary to `要改善: 変更意図を説明できない` and assign an appropriate risk.
 - Validation status is `passed`, `failed`, `skipped`, or `unverified`, and records commands actually run or a reused command whose scope, passed status, and validated diff digest exactly match the reviewed snapshot.
-- For current UI work, use validation entries for the goal/prototype preflight, approval digest, schema-version-4 `implementation-parity.json`, automated state/viewport/theme coverage, risk rows, anchor rows, artifact digests, checkpoint history, terminal cleanup, and checklist contract. Missing, malformed, stale, incomplete, failed, or ambiguous evidence is a failed validation and a separate goal-conformance major finding.
+- For current UI work, use validation entries for the goal/prototype preflight, approval digest, schema-version-5 `implementation-parity.json`, automated state/viewport/theme coverage, risk rows, anchor rows, artifact digests, checkpoint history, terminal cleanup, and checklist contract. Missing, malformed, stale, incomplete, failed, or ambiguous evidence is a failed validation and a separate goal-conformance major finding.
 - Use separate validation entries for `automationCoverageStatus`, `humanVisualApprovalStatus`, and `fullParityStatus`; never collapse them into one pass/fail statement. Pending human approval and not-run full parity are valid alongside passing required coverage. Evidence lists may reference representative screenshot/URL and compact artifact records; do not copy raw screenshot bytes, raw DOM, accessibility trees, workspace fragments, or large runner JSON into `review-data.json`.
 - Screen all strings before writing. Never include credentials, tokens, environment values, private keys, cookies, or raw reviewer transcripts.
 - Replace every `UNREPLACED_TEMPLATE` value. `normalizeData` deliberately rejects a copied placeholder or malformed shape.

@@ -187,7 +187,7 @@ test("implementは静的検証後にUI final coverageを完了ゲートとする
   assert.match(implement, /build only for/);
   assert.match(implement, /`UI-CHECK-XX`/);
   assert.match(implement, /Final coverage run/);
-  assert.match(implement, /schema-version-4 `implementation-parity\.json`/);
+  assert.match(implement, /schema-version-5 `implementation-parity\.json`/);
   assert.match(implement, /automationCoverageStatus=pass/);
   assert.match(implement, /in-app-browser-parity-adapter\.mjs/);
   assert.match(implement, /prepare-run[\s\S]*next-batch[\s\S]*record-batch[\s\S]*record-failure[\s\S]*invalidate-run[\s\S]*resume-run[\s\S]*finalize-run/);
@@ -195,7 +195,7 @@ test("implementは静的検証後にUI final coverageを完了ゲートとする
   assert.match(implement, /A missing Browser capability[\s\S]*prevents an automated-coverage completion claim/);
   assert.match(implement, /do not delegate implementation to a custom agent/);
   assert.match(workflow, /Browser capability、runtime、prototype、parity lifecycleはUI実装と静的check後のfinal boundary/);
-  assert.match(workflow, /schema version 4のcoverage証跡を実装・通常review・shippingの完了条件/);
+  assert.match(workflow, /schema version 5のcoverage証跡を実装・通常review・shippingの完了条件/);
   assert.match(workflow, /全testは[\s\S]*場合[\s\S]*production buildは[\s\S]*場合/);
   assert.match(devServer, /UI変更の`\$implement`は実装・静的検証・diff確認が完了した後のfinal boundary/);
   assert.match(agents, /final Browser coverage/);
@@ -210,7 +210,7 @@ test("parity runnerはUI final coverageと独立検証で共有しlegacyをread-
     read(".agents/skills/plan/references/parity-runner.md"),
     read(".gitignore"),
   ]);
-  assert.match(plan, /parity-spec\.json` version 3/u);
+  assert.match(plan, /parity-spec\.json` version 4/u);
   assert.match(plan, /browserSetups/u);
   for (const contract of [reference]) {
     assert.match(contract, /prepare-run/u);
@@ -224,7 +224,7 @@ test("parity runnerはUI final coverageと独立検証で共有しlegacyをread-
   for (const required of [/prepare-run/u, /next-batch/u, /finalize-run/u, /in-app-browser-parity-adapter/u]) {
     assert.match(implement, required);
   }
-  assert.match(review, /schema-version-4 `implementation-parity\.json` before reviewer work/u);
+  assert.match(review, /schema-version-5 `implementation-parity\.json` before reviewer work/u);
   assert.match(review, /parity-runner\.mjs verify-run/u);
   assert.match(reference, /PARITY_DPR_OVERRIDE_UNAVAILABLE/u);
   assert.match(reference, /PARITY_CLEANUP_FAILED/u);
@@ -326,7 +326,7 @@ test("Local Environmentはworktree setupとcheckout-scoped actionだけを共有
   assert.match(parityReference, /3100-3899/u);
 });
 
-test("reviewは静的整合とchecklistを先に検証して二つのpassを並行実行する", async () => {
+test("reviewは静的整合とchecklistを先に検証し必要時のみ独立passを実行する", async () => {
   const review = await read(".agents/skills/review/SKILL.md");
   assert.match(review, /approval\.json/);
   assert.match(review, /implementation-parity\.json/);
@@ -335,15 +335,17 @@ test("reviewは静的整合とchecklistを先に検証して二つのpassを並�
   assert.match(review, /`sha256:` revision/);
   assert.match(review, /`## ユーザー動作確認`/);
   assert.match(review, /stable unchecked `UI-CHECK-XX`/);
-  assert.match(review, /schema-version-4 `implementation-parity\.json` before reviewer work/);
+  assert.match(review, /schema-version-5 `implementation-parity\.json` before reviewer work/);
   for (const evidenceDefect of [/malformed schema/, /stale digest/, /incomplete axis coverage/, /failed required\/risk\/anchor probe/, /missing artifact/, /failed cleanup/]) {
     assert.match(review, evidenceDefect);
   }
   assert.match(review, /automationCoverageStatus[\s\S]*humanVisualApprovalStatus[\s\S]*fullParityStatus/);
-  assert.match(review, /Run both passes in parallel/);
+  assert.match(review, /Review both perspectives/);
+  assert.match(review, /review both perspectives locally by default/);
+  assert.match(review, /Only when separate independent judgment is necessary under AGENTS.md/);
   assert.match(review, /concurrently/);
   assert.match(review, /two fresh no-history `independent_reviewer` custom agents/);
-  assert.match(review, /Stop if either custom agent or its configured model is unavailable/);
+  assert.match(review, /stop if either custom agent or its configured model is unavailable/);
   assert.match(review, /not the plan, conversation, evidence verdict, or prior review/);
   assert.match(review, /not the blind result or conversation/);
   assert.match(review, /source[\s\S]*severity[\s\S]*title[\s\S]*body[\s\S]*location[\s\S]*recommendation/);
@@ -518,7 +520,7 @@ test("親モデル既定を持たず3つのread-only custom agentへ限定routin
   for (const row of [
     "| `$plan` | `gpt-5.6-sol` | `high` |",
     "| `$implement` | `gpt-5.6-sol` | `high` |",
-    "| `$review` | `gpt-5.6-sol` | `high` |",
+    "| `$review` | `gpt-6-astra` | `low` |",
     "| `$git-commit-push-pr` | `gpt-5.6-luna` | `medium` |",
     "| `$plan-finalize` | `gpt-5.6-luna` | `medium` |",
     "| `$workflow-retrospective` | `gpt-5.6-terra` | `high` |",
@@ -760,4 +762,15 @@ test("plan finalizeはhandoff不一致とcleanup危険条件をfail closedにす
   assert.doesNotMatch(finalize, /\bgh\s+(?:pr|api|repo)/u);
   assert.match(shipping, /Only a verified `\$plan-finalize` continuation handoff permits/);
   assert.match(shipping, /Any mismatch, absent handoff, untracked plan artifact, or guard failure stops/);
+});
+
+
+test("NIST fidelity gates synchronize plan, implementation, review and shipping", async () => {
+  for (const skill of ["plan", "implement", "review", "git-commit-push-pr"]) {
+    assert.match(await read(`.agents/skills/${skill}/SKILL.md`), /fidelity-audit\.md/u);
+  }
+  const reference = await read(".agents/skills/plan/references/fidelity-audit.md");
+  for (const required of ["NIST", "equivalence", "boundaries", "interactionGroups", "strength", "runtimeChecks", "visualChecks", "auditStatus", "not-run", "five seconds", "Human approval"]) assert.ok(reference.includes(required), required);
+  const ui = await read(".agents/skills/plan/references/ui-prototype-quality.md");
+  assert.doesNotMatch(ui, /static verification only|static-only completion/u);
 });

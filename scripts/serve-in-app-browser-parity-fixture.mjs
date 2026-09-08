@@ -62,7 +62,7 @@ async function responseFor(pathname) {
   const fileName = pathname === "/fixture" || pathname === "/prototype.html" || pathname === "/"
     ? "index.html"
     : pathname.slice(1);
-  if (!["index.html", "fixture.css", "fixture.js", "manifest.json"].includes(fileName)) {
+  if (!["index.html", "fixture.css", "fixture.js", "manifest.json", "fidelity.html", "fidelity.js", "fidelity-copy.txt"].includes(fileName)) {
     return { status: 404, type: "text/plain; charset=utf-8", body: Buffer.from("Not found") };
   }
   const target = path.join(root, fileName);
@@ -73,11 +73,32 @@ async function responseFor(pathname) {
   };
 }
 
-function fixtureServer() {
+function fixtureServer(referenceCopy) {
+  // Managed test data is isolated per surface and disappears when this process stops.
+  const settings = new Map([["lg", "initial-lg"], ["univ", "initial-univ"]]);
   return createServer(async (request, response) => {
     try {
-      const pathname = new URL(request.url ?? "/", "http://fixture.invalid").pathname;
-      const result = await responseFor(pathname);
+      const url = new URL(request.url ?? "/", "http://fixture.invalid");
+      const pathname = url.pathname;
+      let result;
+      if (pathname === "/api/fidelity-settings") {
+        const site = url.searchParams.get("site");
+        if (!settings.has(site)) throw new Error("invalid fixture site");
+        if (request.method === "POST") {
+          if (request.headers.origin && request.headers.origin !== `http://${request.headers.host}`) throw new Error("cross-origin fixture write");
+          let body = "";
+          for await (const chunk of request) {
+            body += chunk;
+            if (Buffer.byteLength(body) > 1024) throw new Error("fixture request too large");
+          }
+          const value = JSON.parse(body).value;
+          if (typeof value !== "string" || value.length > 64) throw new Error("invalid fixture value");
+          settings.set(site, value);
+        } else if (request.method !== "GET") throw new Error("invalid fixture method");
+        result = { status: 200, type: mimeTypes[".json"], body: Buffer.from(JSON.stringify({ site, value: settings.get(site) })) };
+      } else if (pathname === "/fidelity-copy.txt" && referenceCopy !== undefined) {
+        result = { status: 200, type: "text/plain; charset=utf-8", body: referenceCopy };
+      } else result = await responseFor(pathname);
       response.writeHead(result.status, {
         "Content-Type": result.type,
         "Cache-Control": "no-store",
@@ -100,7 +121,8 @@ async function listen(server, port) {
 
 const options = parseArguments(process.argv.slice(2));
 const production = fixtureServer();
-const prototype = fixtureServer();
+// Freeze the approved reference before testing a production-only copy change.
+const prototype = fixtureServer(await readFile(path.join(root, "fidelity-copy.txt")));
 await listen(production, options.productionPort);
 try {
   await listen(prototype, options.prototypePort);
