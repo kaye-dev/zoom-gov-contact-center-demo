@@ -521,7 +521,7 @@ test("surface contextはsession・tab・surface・origin・authorizationごと�
   await runner.prepareSurface({ ...base, tabId: "tab-a", surface: "production", authorizationProfile: "admin", baseUrl: "http://localhost:3000/" });
   await runner.prepareSurface({ ...base, tabId: "tab-a", surface: "production", authorizationProfile: "admin", baseUrl: "http://localhost:3000/" });
   assert.equal(stabilizations, 1);
-  await runner.prepareSurface({ ...base, tabId: "tab-a", surface: "production", authorizationProfile: "admin", baseUrl: "http://localhost:3142/" });
+  await runner.prepareSurface({ ...base, tabId: "tab-a", surface: "production", authorizationProfile: "admin", baseUrl: "http://localhost:3002/" });
   await runner.prepareSurface({ ...base, tabId: "tab-b", surface: "production", authorizationProfile: "admin", baseUrl: "http://localhost:3000/" });
   await runner.prepareSurface({ ...base, tabId: "tab-a", surface: "prototype", authorizationProfile: "admin", baseUrl: "http://127.0.0.1:4000/" });
   await runner.prepareSurface({ ...base, tabId: "tab-a", surface: "production", authorizationProfile: "auditor", baseUrl: "http://localhost:3000/" });
@@ -1170,16 +1170,16 @@ test("runnerはLocal 3000と割当済みworktree portだけをproduction loopbac
     definition: { contract, spec, prototypeRevision: revision, validationProfileDigest: digest },
     phase: "smoke",
     tabs: { production: "production", prototype: "prototype" },
-    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4000/" },
+    baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4000/" },
     run,
   });
   for (const production of [
-    "http://localhost:3001/",
+    "http://localhost:3011/",
     "http://localhost:3099/",
     "http://localhost:3900/",
     "http://127.0.0.1:3142/",
-    "http://localhost:3142/path",
-    "http://localhost:3142/?query=1",
+    "http://localhost:3002/path",
+    "http://localhost:3002/?query=1",
   ]) {
     await assert.rejects(
       new BrowserParityRunner(createAdapter()).run({
@@ -1396,10 +1396,28 @@ test("ParityRunError preserves its identity across independently loaded module g
 
 test("production base URLs allow local tenant hosts without allowing external hosts", async () => {
   const core = await import("../.agents/skills/plan/scripts/parity-runner-core.mjs");
-  for (const url of ["http://localhost:3000", "http://univ.localhost:3000", "http://gov.localhost:3142"]) {
+  for (const url of ["http://localhost:3000", "http://univ.localhost:3000", "http://gov.localhost:3002"]) {
     assert.equal(core.requireLoopbackBaseUrl(url, "production").origin, url);
   }
   for (const url of ["http://univ.localhost.example.com:3000", "http://example.com:3000", "http://univ.localhost:4000", "http://name:pass@univ.localhost:3000"]) {
     assert.throws(() => core.requireLoopbackBaseUrl(url, "production"));
   }
+});
+
+test("PORT-09: current origin boundaries and read-only legacy URLs are separate", async () => {
+  const { requireLoopbackBaseUrl } = await import("../.agents/skills/plan/scripts/parity-runner-core.mjs");
+  for (const port of [3000, 3001, 3010]) {
+    assert.equal(requireLoopbackBaseUrl(`http://univ.localhost:${port}`, "production").port, String(port));
+  }
+  for (const port of [2999, 3011, 3100, 3899]) {
+    assert.throws(() => requireLoopbackBaseUrl(`http://localhost:${port}`, "production"));
+  }
+  for (const port of [4000, 4001, 4010]) {
+    assert.equal(requireLoopbackBaseUrl(`http://127.0.0.1:${port}`, "prototype").port, String(port));
+  }
+  for (const port of [3999, 4011, 60237]) {
+    assert.throws(() => requireLoopbackBaseUrl(`http://127.0.0.1:${port}`, "prototype"));
+  }
+  assert.equal(requireLoopbackBaseUrl("http://localhost:3142", "production", { legacy: true }).port, "3142");
+  assert.equal(requireLoopbackBaseUrl("http://127.0.0.1:60237", "prototype", { legacy: true }).port, "60237");
 });

@@ -66,7 +66,7 @@ function surfaceContexts(sessionId: string) {
       sessionId,
       tabId: "comparison",
       surface: "production",
-      origin: "http://localhost:3142",
+      origin: "http://localhost:3002",
       authorizationProfile,
       authorizationProfileDigest,
     },
@@ -74,7 +74,7 @@ function surfaceContexts(sessionId: string) {
       sessionId,
       tabId: "prototype",
       surface: "prototype",
-      origin: "http://127.0.0.1:4142",
+      origin: "http://127.0.0.1:4002",
       authorizationProfile,
       authorizationProfileDigest,
     },
@@ -147,6 +147,9 @@ async function allocateFixtureRuntime(
       DEV_RUNTIME_GIT_DIR_OVERRIDE: gitDirectory,
       DEV_RUNTIME_GIT_COMMON_DIR_OVERRIDE: commonGitDirectory,
       DEV_RUNTIME_STATE_ROOT: stateRoot,
+      NODE_ENV: "test",
+      DEVELOPMENT_PORT_STATE_ROOT: path.join(await realpath(path.dirname(commonGitDirectory)), "port-state"),
+      DEVELOPMENT_PORT_TEST_INSPECTION: "stub",
       PATH: `${stubDirectory}:${process.env.PATH ?? ""}`,
     },
   });
@@ -258,8 +261,8 @@ function rowEvidence(status: "pass" | "fail" = "pass") {
       viewport: "390x844",
       dpr: 1,
       urls: {
-        production: "http://localhost:3142/fixture",
-        prototype: "http://127.0.0.1:4142/index.html",
+        production: "http://localhost:3002/fixture",
+        prototype: "http://127.0.0.1:4002/index.html",
       },
       scroll: {
         production: { x: 0, y: 0, source: "window.scrollX/window.scrollY" },
@@ -329,7 +332,7 @@ async function prepare(
     definition,
     approval: fixture.approval,
     current: fixture.current,
-    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
     changedTargetIds: ["main"],
     changedStates: ["default"],
     changedViewports: ["390x844"],
@@ -471,8 +474,8 @@ function coverageFragment(
           viewport: row.viewport,
           dpr: 1,
           urls: {
-            production: `http://localhost:3142${row.route}`,
-            prototype: `http://127.0.0.1:4142/${row.entry}`,
+            production: `http://localhost:3002${row.route}`,
+            prototype: `http://127.0.0.1:4002/${row.entry}`,
           },
           scroll: {
             production: { x: 0, y: 0, source: "window.scrollX/window.scrollY" },
@@ -596,7 +599,7 @@ test("WS-01 bounded batch integrity", async (context) => {
       definition: { contract, spec, prototypeRevision: revision, validationProfileDigest: profileDigest },
       approval: unsafe.approval,
       current: unsafe.current,
-      baseUrls: { production: "https://example.com/", prototype: "http://127.0.0.1:4142/" },
+      baseUrls: { production: "https://example.com/", prototype: "http://127.0.0.1:4002/" },
       changedTargetIds: ["main"],
       changedStates: ["default"],
       changedViewports: ["390x844"],
@@ -729,7 +732,7 @@ test("WS-03 scoped abort and secret exclusion", async (context) => {
       definition: { contract, spec, prototypeRevision: revision, validationProfileDigest: profileDigest },
       approval: secretApproval,
       current: { ...first.current, runtime: { ...first.current.runtime, token: "should-not-be-recorded" } },
-      baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+      baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
       changedTargetIds: ["main"],
       changedStates: ["default"],
       changedViewports: ["390x844"],
@@ -887,7 +890,7 @@ test("WS-SEC-01 canary cleanup URL and secret fragment contract", async (context
     {
       id: "wrong-surface-origin",
       code: "PARITY_BATCH_INVALID",
-      mutate(value) { value.capabilities.surfaceContexts[1].origin = "http://127.0.0.1:4242"; },
+      mutate(value) { value.capabilities.surfaceContexts[1].origin = "http://127.0.0.1:4003"; },
     },
     {
       id: "same-surface-tab",
@@ -1157,8 +1160,8 @@ test("WS-CLI-01 new CLI runs reject historical profiles", async (context) => {
       "prepare-run",
       "plans/fixture/prototype",
       "--run-id", "cli-run",
-      "--production-url", "http://localhost:3142/",
-      "--prototype-url", "http://127.0.0.1:4142/",
+      "--production-url", "http://localhost:3002/",
+      "--prototype-url", "http://127.0.0.1:4002/",
       "--runtime-owner", "fixture",
       "--runtime-checkout", repositoryRoot,
       "--target", "main",
@@ -1183,7 +1186,7 @@ test("WS-COVERAGE-01 checkpointは成功batchを保持し未実行batchだけを
     definition,
     approval: fixture.approval,
     current: fixture.current,
-    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
     matrixScope: "coverage",
     validateApproval: fixture.runner.validateApprovalEvidence,
   });
@@ -1216,7 +1219,7 @@ test("WS-COVERAGE-02 transient failureは同じbatchだけを1回再試行して
     definition,
     approval: fixture.approval,
     current: fixture.current,
-    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
     matrixScope: "coverage",
     validateApproval: fixture.runner.validateApprovalEvidence,
   });
@@ -1259,7 +1262,7 @@ test("WS-CLI-02 coverage checkpoint commandは失敗batchだけを1回再開す�
     definition,
     approval: fixture.approval,
     current: fixture.current,
-    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
     matrixScope: "coverage",
     validateApproval: fixture.runner.validateApprovalEvidence,
   });
@@ -1333,7 +1336,7 @@ test("WS-COVERAGE-03 targetとsharedとglobal invalidationは非影響batchを�
     definition,
     approval: fixture.approval,
     current: fixture.current,
-    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
     matrixScope: "coverage",
     validateApproval: fixture.runner.validateApprovalEvidence,
   });
@@ -1390,7 +1393,7 @@ test("WS-COVERAGE-04 artifact sinkはprivate artifactだけを保存し秘密値
     definition,
     approval: fixture.approval,
     current: fixture.current,
-    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
     matrixScope: "coverage",
     validateApproval: fixture.runner.validateApprovalEvidence,
   });
@@ -1483,7 +1486,7 @@ test("WS-SEC-03 failure diagnosticは破棄しallowlist済み固定文だけをc
     definition,
     approval: fixture.approval,
     current: fixture.current,
-    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
     matrixScope: "coverage",
     validateApproval: fixture.runner.validateApprovalEvidence,
   });
@@ -1566,6 +1569,112 @@ test("WS-SEC-04 JSON readerはsymlink・byte超過・読取中のinode metadata�
   );
 });
 
+test("WS-MANIFEST-01 大きな契約は行やdigestを変えず読込可能なサイズで生成・更新する", async (context) => {
+  const workspace = await workspaceModulePromise;
+  const fixture = await createFixture(context, "ws-manifest-formatting");
+  const definition = createCoverageWorkspaceDefinition();
+  definition.contract.stateAndInteraction = Array.from({ length: 90_000 }, (_, index) => `interaction-${index}`);
+  const handshake = await workspace.prepareRunWorkspace({
+    repositoryRootPath: fixture.root, slug: "fixture", runId: "ws-manifest-formatting",
+    definition, approval: fixture.approval, current: fixture.current,
+    baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
+    matrixScope: "coverage", validateApproval: fixture.runner.validateApprovalEvidence,
+  });
+  const text = await readFile(handshake.manifestPath, "utf8");
+  const manifest = JSON.parse(text);
+  assert.ok(Buffer.byteLength(JSON.stringify(manifest, null, 2)) > 2 * 1024 * 1024);
+  assert.ok(Buffer.byteLength(text) <= 2 * 1024 * 1024);
+  assert.deepEqual(manifest.definition, definition);
+  assert.equal(handshake.manifestSha256, sha256(fixture.runner.stableStringify(manifest)));
+  const first = await workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId });
+  assert.equal(first.batch.batchId, "batch-0001");
+  const updatedSources = [{ path: "src/ui.ts", sha256: revision }];
+  await workspace.invalidateRunWorkspace({
+    repositoryRootPath: fixture.root, runId: handshake.runId,
+    scope: "global", currentSources: updatedSources,
+  });
+  const updated = JSON.parse(await readFile(handshake.manifestPath, "utf8"));
+  assert.deepEqual(updated.sources, updatedSources);
+  assert.deepEqual(updated.definition, definition);
+  assert.deepEqual(updated.rowIds, manifest.rowIds);
+  const next = await workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId });
+  assert.equal(next.batch.batchId, "batch-0001");
+});
+
+test("WS-MANIFEST-02 aggregate上限を超える契約はprepareで拒否し部分workspaceを残さない", async (context) => {
+  const workspace = await workspaceModulePromise;
+  const fixture = await createFixture(context, "ws-manifest-too-large");
+  const definition = createCoverageWorkspaceDefinition();
+  definition.contract.stateAndInteraction = ["界".repeat(12_000_000)];
+  await assert.rejects(workspace.prepareRunWorkspace({
+    repositoryRootPath: fixture.root, slug: "fixture", runId: "ws-manifest-too-large",
+    definition, approval: fixture.approval, current: fixture.current,
+    baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
+    matrixScope: "coverage", validateApproval: fixture.runner.validateApprovalEvidence,
+  }), /exceeds the aggregate byte limit/u);
+  await assert.rejects(access(path.join(fixture.root, ".codex/parity-runs/ws-manifest-too-large")));
+});
+
+test("WS-MANIFEST-03 分割契約の再開・更新と参照の改ざん・欠落・逸脱を検証する", async (context) => {
+  const workspace = await workspaceModulePromise;
+  const fixture = await createFixture(context, "ws-split-manifest");
+  const definition = createCoverageWorkspaceDefinition();
+  definition.contract.stateAndInteraction = ["界😀".repeat(400_000)];
+  const handshake = await workspace.prepareRunWorkspace({
+    repositoryRootPath: fixture.root, slug: "fixture", runId: "ws-split-manifest",
+    definition, approval: fixture.approval, current: fixture.current,
+    baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
+    matrixScope: "coverage", validateApproval: fixture.runner.validateApprovalEvidence,
+  });
+  const indexText = await readFile(handshake.manifestPath, "utf8");
+  const index = JSON.parse(indexText);
+  assert.equal(index.kind, "split-manifest");
+  assert.equal(index.sha256, handshake.manifestSha256);
+  assert.ok(index.bytes > 2 * 1024 * 1024);
+  for (const part of index.parts) {
+    const metadata = await stat(path.join(path.dirname(handshake.manifestPath), part.fileName));
+    assert.ok(metadata.size <= 2 * 1024 * 1024);
+    assert.equal(metadata.mode & 0o777, 0o600);
+  }
+  const next = await workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId });
+  await workspace.recordBatchResult({ repositoryRootPath: fixture.root, runId: handshake.runId,
+    batchId: next.batch.batchId, input: JSON.stringify(coverageFragment(handshake, next.batch, definition)) });
+  const resumed = await workspace.resumeRunWorkspace({ repositoryRootPath: fixture.root, runId: handshake.runId });
+  assert.equal(resumed.batch.batchId, "batch-0002");
+  await workspace.invalidateRunWorkspace({ repositoryRootPath: fixture.root, runId: handshake.runId,
+    scope: "global", currentSources: [{ path: "src/ui.ts", sha256: revision }] });
+  const updatedText = await readFile(handshake.manifestPath, "utf8");
+  const updated = JSON.parse(updatedText);
+  const partPath = path.join(path.dirname(handshake.manifestPath), updated.parts[0].fileName);
+  const original = await readFile(partPath, "utf8");
+  await writeFile(partPath, JSON.stringify({ text: "tampered" }));
+  await assert.rejects(workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId }), /digest/u);
+  await rm(partPath);
+  await assert.rejects(workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId }), /ENOENT/u);
+  const external = path.join(fixture.root, "external.json");
+  await writeFile(external, original, { mode: 0o600 });
+  await symlink(external, partPath);
+  await assert.rejects(workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId }), /regular file|mode 600/u);
+  await rm(partPath);
+  await writeFile(partPath, original, { mode: 0o600 });
+  updated.parts[0].fileName = "../external.json";
+  await writeFile(handshake.manifestPath, JSON.stringify(updated));
+  await assert.rejects(workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId }), /reference/u);
+  for (const invalid of [
+    { ...JSON.parse(updatedText), bytes: 33 * 1024 * 1024 },
+    { ...JSON.parse(updatedText), parts: Array(257).fill(JSON.parse(updatedText).parts[0]) },
+    { ...JSON.parse(updatedText), sha256: digest },
+    { ...JSON.parse(updatedText), parts: [...JSON.parse(updatedText).parts].reverse() },
+  ]) {
+    await writeFile(handshake.manifestPath, JSON.stringify(invalid));
+    await assert.rejects(workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId }),
+      /bounds|digest|JSON|byte mismatch/u);
+  }
+  await writeFile(handshake.manifestPath, updatedText);
+  const fresh = await workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId });
+  assert.equal(fresh.batch.batchId, "batch-0001");
+});
+
 test("WS-SEC-05 manifestとcheckpointの用途別byte上限を強制する", async (context) => {
   const workspace = await workspaceModulePromise;
   const definition = createCoverageWorkspaceDefinition();
@@ -1578,7 +1687,7 @@ test("WS-SEC-05 manifestとcheckpointの用途別byte上限を強制する", asy
     definition,
     approval: manifestFixture.approval,
     current: manifestFixture.current,
-    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
     matrixScope: "coverage",
     validateApproval: manifestFixture.runner.validateApprovalEvidence,
   });
@@ -1596,7 +1705,7 @@ test("WS-SEC-05 manifestとcheckpointの用途別byte上限を強制する", asy
     definition,
     approval: checkpointFixture.approval,
     current: checkpointFixture.current,
-    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
     matrixScope: "coverage",
     validateApproval: checkpointFixture.runner.validateApprovalEvidence,
   });
@@ -1620,7 +1729,7 @@ test("WS-SEC-06 runRootの外部symlink差替えはread・write・promote前に�
     definition,
     approval: readFixture.approval,
     current: readFixture.current,
-    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
     matrixScope: "coverage",
     validateApproval: readFixture.runner.validateApprovalEvidence,
   });
@@ -1643,7 +1752,7 @@ test("WS-SEC-06 runRootの外部symlink差替えはread・write・promote前に�
     definition,
     approval: writeFixture.approval,
     current: writeFixture.current,
-    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
     matrixScope: "coverage",
     validateApproval: writeFixture.runner.validateApprovalEvidence,
   });
@@ -1682,7 +1791,7 @@ test("WS-SEC-06 runRootの外部symlink差替えはread・write・promote前に�
     definition,
     approval: promoteFixture.approval,
     current: promoteFixture.current,
-    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
     matrixScope: "coverage",
     validateApproval: promoteFixture.runner.validateApprovalEvidence,
   });
@@ -1751,10 +1860,11 @@ test("WS-SEC-06 runRootの外部symlink差替えはread・write・promote前に�
   await assert.rejects(access(path.join(evidenceRunRoot, "implementation-parity.json")));
 });
 
-for (const version of [3, 4]) test(`WS-COVERAGE-05 finalize promotes artifacts only after profile ${version} requirements pass`, async (context) => {
+for (const storage of ["inline", "split"]) for (const version of [3, 4]) test(`WS-COVERAGE-05 ${storage} finalize promotes artifacts only after profile ${version} requirements pass`, async (context) => {
   const workspace = await workspaceModulePromise;
   const fixture = await createFixture(context, "ws-coverage-finalize");
   const definition = createCoverageWorkspaceDefinition();
+  if (storage === "split") definition.contract.stateAndInteraction = ["界😀".repeat(400_000)];
   const fidelity = {
     requirements: [{ id: "REQ-01", expected: "Both target layouts conform", probeIds: ["coverage"], runtimeCheckIds: [], visualCheckIds: [] as string[], staticCheckIds: ["types"], interactionGroupIds: ["themes"], noInteractionReason: null }],
     phaseComparisons: definition.spec.probes.map(probe => ({ probeId: probe.id, smoke: "equal", final: probe.kind === "screenshot" ? "capture" : "equal", expected: null })),
@@ -1785,7 +1895,7 @@ for (const version of [3, 4]) test(`WS-COVERAGE-05 finalize promotes artifacts o
     definition,
     approval: fixture.approval,
     current: fixture.current,
-    baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
     matrixScope: "coverage",
     validateApproval: fixture.runner.validateApprovalEvidence,
   });
@@ -1874,7 +1984,7 @@ test("workspace Browser executor checkpoints bounded rows and validates both cle
   const definition = createCoverageWorkspaceDefinition();
   const handshake = await workspace.prepareRunWorkspace({ repositoryRootPath: fixture.root,
     slug: "fixture", runId: "ws-browser-executor", definition, approval: fixture.approval,
-    current: fixture.current, baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    current: fixture.current, baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
     matrixScope: "coverage", validateApproval: fixture.runner.validateApprovalEvidence });
   const batchDescriptors = await Promise.all(handshake.batches.map(async (descriptor: { path: string }) => ({ ...descriptor, ...JSON.parse(await readFile(descriptor.path, "utf8")) })));
   const executed: string[] = [];
@@ -1912,7 +2022,7 @@ test("target invalidation removes only its verified artifacts and allows fresh c
   const definition = createCoverageWorkspaceDefinition();
   const handshake = await workspace.prepareRunWorkspace({ repositoryRootPath: fixture.root,
     slug: "fixture", runId: "ws-artifact-invalidate", definition, approval: fixture.approval,
-    current: fixture.current, baseUrls: { production: "http://localhost:3142/", prototype: "http://127.0.0.1:4142/" },
+    current: fixture.current, baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
     matrixScope: "coverage", validateApproval: fixture.runner.validateApprovalEvidence });
   const sink = await workspace.createWorkspaceArtifactSink({ repositoryRootPath: fixture.root, runId: handshake.runId });
   const anchors = definition.spec.coverage.anchorRows;
@@ -1927,4 +2037,109 @@ test("target invalidation removes only its verified artifacts and allows fresh c
   assert.equal(checkpoint.artifactIndex.length, 1);
   await sink({ kind: "dom", rowId: anchors[0].rowId, probeId: "anchor-dom", surface: "production",
     content: '{"recaptured":true}', mediaType: "application/json" });
+});
+
+test("DPR recovery preserves passed evidence, checks both origins, and reserves no batch", async (context) => {
+  const workspace = await workspaceModulePromise;
+  for (const scenario of ["pass", "wrong-code", "production-denied", "prototype-denied", "wrong-dpr", "cleanup-failed", "checkpoint-drift", "repeat"]) {
+    await context.test(scenario, async (child) => {
+      const fixture = await createFixture(child, `recover-${scenario}`);
+      const definition = createCoverageWorkspaceDefinition();
+      const handshake = await workspace.prepareRunWorkspace({ repositoryRootPath: fixture.root,
+        slug: "fixture", runId: `recover-${scenario}`, definition, approval: fixture.approval,
+        current: fixture.current, baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
+        matrixScope: "coverage", validateApproval: fixture.runner.validateApprovalEvidence });
+      const base = { repositoryRootPath: fixture.root, runId: handshake.runId };
+      const first = await workspace.nextRunBatch(base);
+      const descriptor = { ...handshake.batches[0], ...JSON.parse(await readFile(first.batch.path, "utf8")) };
+      await workspace.recordBatchResult({ ...base, batchId: first.batch.batchId,
+        input: JSON.stringify(coverageFragment(handshake, descriptor, definition)) });
+      const second = await workspace.nextRunBatch(base);
+      await workspace.recordBatchFailure({ ...base, batchId: second.batch.batchId,
+        code: scenario === "wrong-code" ? "PARITY_REQUIRED_PROBE_UNAVAILABLE" : "PARITY_DPR_OVERRIDE_UNAVAILABLE",
+        diagnostic: "test", transient: false });
+      const runRoot = path.dirname(handshake.manifestPath);
+      const checkpointPath = path.join(runRoot, "checkpoint.json");
+      const before = await readFile(checkpointPath, "utf8");
+      const fragmentPath = path.join(runRoot, `fragment-${first.batch.batchId}.json`);
+      const passedFragment = await readFile(fragmentPath, "utf8");
+      let active = "";
+      const visits: string[] = [];
+      const tabs = { production: "comparison", prototype: "prototype" };
+      const adapter = {
+        requiresBrowserSetups: true, comparisonTabIds: tabs, sessionId: "iab-recovery",
+        async activateTab(id: string) { active = id; }, async activeTabId() { return active; },
+        async navigate(_id: string, url: string) { visits.push(url); },
+        async setViewport() {
+          if ((scenario === "production-denied" && active === tabs.production) ||
+            (scenario === "prototype-denied" && active === tabs.prototype)) {
+            throw new fixture.runner.ParityRunError("PARITY_DPR_OVERRIDE_UNAVAILABLE", "denied");
+          }
+        },
+        async measureViewport() { return { width: 390, height: 844, dpr: scenario === "wrong-dpr" ? 2 : 1 }; },
+        async screenshotDigest() { return digest; },
+        async performanceEntries() { return []; },
+        async setTheme() {}, async runAction() {}, async runProbe() {}, async measureScroll() {},
+        async cleanup() {
+          if (scenario === "checkpoint-drift") {
+            const changed = JSON.parse(await readFile(checkpointPath, "utf8"));
+            changed.resumed = true;
+            await writeFile(checkpointPath, JSON.stringify(changed));
+          }
+          return { status: "pass", tabs: Object.values(tabs).map((tabId) => ({
+            status: "pass", tabId, cdpCleared: true, viewportReset: scenario !== "cleanup-failed",
+            baseline: { width: 1280, height: 720, dpr: 2 }, readback: { width: 1280, height: 720, dpr: 2 },
+          })) };
+        },
+      };
+      const recovery = { ...base, batchId: second.batch.batchId, adapter, tabs };
+      if (!["pass", "repeat"].includes(scenario)) {
+        await assert.rejects(workspace.recoverDprTerminalBatch(recovery));
+        if (scenario !== "checkpoint-drift") assert.equal(await readFile(checkpointPath, "utf8"), before);
+      } else {
+        const result = await workspace.recoverDprTerminalBatch(recovery);
+        assert.equal(result.status, "recovered");
+        assert.equal(result.batch, null);
+        assert.deepEqual(visits, ["http://localhost:3002/", "http://127.0.0.1:4002/"]);
+        const after = JSON.parse(await readFile(checkpointPath, "utf8"));
+        assert.deepEqual(after.batches[0], JSON.parse(before).batches[0]);
+        assert.equal(after.batches[1].status, "pending");
+        assert.equal(after.batches[1].attempts, 1);
+        assert.equal(after.batches[1].dprRecovery.previousErrorCode, "PARITY_DPR_OVERRIDE_UNAVAILABLE");
+        const next = await workspace.nextRunBatch(base);
+        assert.equal(next.batch.batchId, second.batch.batchId);
+        assert.equal(next.batch.attempt, 2);
+        if (scenario === "repeat") {
+          await workspace.recordBatchFailure({ ...base, batchId: second.batch.batchId,
+            code: "PARITY_DPR_OVERRIDE_UNAVAILABLE", diagnostic: "test", transient: false });
+          await assert.rejects(workspace.recoverDprTerminalBatch(recovery), /unrecovered DPR terminal/u);
+        }
+      }
+      assert.equal(await readFile(fragmentPath, "utf8"), passedFragment);
+    });
+  }
+});
+
+test("PORT-09: retired-origin workspace stays readable and resumption never rewrites checkpoint", async context => {
+  const workspace = await workspaceModulePromise;
+  const runId = "retired-port-workspace";
+  const fixture = await createFixture(context, runId);
+  const definition = createCoverageWorkspaceDefinition();
+  await workspace.prepareRunWorkspace({ repositoryRootPath: fixture.root, slug: "fixture", runId, definition,
+    approval: fixture.approval, current: fixture.current, matrixScope: "coverage",
+    baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
+    validateApproval: fixture.runner.validateApprovalEvidence });
+  const runRoot = path.join(fixture.root, ".codex/parity-runs", runId);
+  const manifestPath = path.join(runRoot, "manifest.json");
+  const stored = JSON.parse(await readFile(manifestPath, "utf8"));
+  stored.baseUrls = { production: "http://localhost:3142/", prototype: "http://127.0.0.1:60237/" };
+  await writeFile(manifestPath, JSON.stringify(stored));
+  const before = await readFile(path.join(runRoot, "checkpoint.json"), "utf8");
+  const data = await workspace.readJsonFile(manifestPath);
+  assert.equal(data.value.baseUrls.prototype, "http://127.0.0.1:60237/");
+  for (const operation of [workspace.nextRunBatch, workspace.resumeRunWorkspace]) {
+    await assert.rejects(operation({ repositoryRootPath: fixture.root, runId }),
+      (error: { code?: string }) => error.code === "PARITY_CURRENT_STATE_DRIFT");
+    assert.equal(await readFile(path.join(runRoot, "checkpoint.json"), "utf8"), before);
+  }
 });

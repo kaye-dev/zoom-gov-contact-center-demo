@@ -482,7 +482,7 @@ function validateMeasuredUrl(value, surface, expectedRoute, label) {
   } catch {
     throw new Error(`${label} must be an absolute URL`);
   }
-  const parsed = requireLoopbackBaseUrl(actual.origin, surface);
+  const parsed = requireLoopbackBaseUrl(actual.origin, surface, { legacy: true });
   ensure(actual.origin === parsed.origin, `${label} has an invalid origin`);
   ensure(actual.username === "" && actual.password === "", `${label} must not contain credentials`);
   ensure(actual.hash === "", `${label} must not contain a fragment`);
@@ -528,7 +528,7 @@ function validateSurfaceContextProvenance(capabilities, contract) {
     requireNonEmptyString(context.sessionId, `${label}.sessionId`);
     requireNonEmptyString(context.tabId, `${label}.tabId`);
     ensure(context.sessionId === capabilities.sessionId, `${label}.sessionId does not match the capability session`);
-    const parsedOrigin = requireLoopbackBaseUrl(context.origin, context.surface);
+    const parsedOrigin = requireLoopbackBaseUrl(context.origin, context.surface, { legacy: true });
     ensure(parsedOrigin.origin === context.origin, `${label}.origin must be canonical`);
     ensure(
       context.authorizationProfile === expectedAuthorizationProfile,
@@ -707,7 +707,7 @@ function validateRowEvidence(rowEvidence, manifestRow, contract, expectedProbes,
       const result = compareFidelityProbe(expectedProbe,
         { value: probe.production, artifact: probe.artifacts.find(item => item.surface === "production") },
         { value: probe.prototype, artifact: probe.artifacts.find(item => item.surface === "prototype") },
-        spec, phase, compareProbe);
+        spec, phase, compareProbe, sha256);
       ensure(result.status === probe.status, `${probeLabel} comparison result is not reproducible`);
     }
     if (probe.status === "skipped") {
@@ -985,7 +985,7 @@ function validateParityEvidence(evidence, contract, spec) {
     ensure(stableStringify(coverage) === stableStringify(evidence.interactionCoverage), "interaction coverage is not reproducible");
     if (evidence.phase === "final") {
       ensure(coverage.every(group => group.status === "pass"), "interaction coverage is incomplete");
-      const status = validateFidelityAudit(evidence.audit, evidence, spec);
+      const status = validateFidelityAudit(evidence.audit, evidence, spec, sha256);
       ensure(stableStringify(status) === stableStringify(evidence.auditStatus), "audit status is not reproducible");
     } else {
       ensure(evidence.audit === null && stableStringify(evidence.auditStatus) === stableStringify({ static: "not-run", runtime: "not-run", requirements: "not-run", visual: "not-run" }), "smoke must not claim implementation audit");

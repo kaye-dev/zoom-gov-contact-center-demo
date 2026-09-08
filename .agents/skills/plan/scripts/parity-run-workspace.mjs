@@ -14,6 +14,7 @@ import {
 import path from "node:path";
 
 import {
+  BrowserParityRunner,
   ParityRunError,
   createCoverageReport,
   createRunContext,
@@ -28,6 +29,9 @@ const coverageWorkspaceSchemaVersion = 2;
 const defaultMaxRows = 4;
 const defaultMaxBytes = 128 * 1024;
 const maxManifestBytes = 2 * 1024 * 1024;
+const maxLogicalManifestBytes = 32 * 1024 * 1024;
+const manifestPartChars = 128 * 1024;
+const maxManifestParts = 256;
 const maxCheckpointBytes = 512 * 1024;
 const maxFragmentBytes = 512 * 1024;
 const maxArtifactBytes = 2 * 1024 * 1024;
@@ -216,9 +220,17 @@ async function resolveWorkspacePaths(repositoryRootPath, runId, { createRoot = f
   return { repositoryRoot, workspaceRoot, runRoot, workspaceIdentity, runIdentity };
 }
 
-async function writeJsonExclusive(target, value, { parentIdentity } = {}) {
+function serializeWorkspaceJson(target, value, maxBytes) {
   assertSecretFree(value);
-  const text = `${JSON.stringify(value, null, 2)}\n`;
+  let text = `${JSON.stringify(value, null, 2)}\n`;
+  // Formatting must not make an otherwise readable manifest exceed its reader limit.
+  if (byteLength(text) > maxBytes) text = `${JSON.stringify(value)}\n`;
+  ensure(byteLength(text) <= maxBytes, "PARITY_BATCH_INVALID", `${target} exceeds the byte limit`);
+  return text;
+}
+
+async function writeJsonExclusive(target, value, { parentIdentity, maxBytes = Infinity } = {}) {
+  const text = serializeWorkspaceJson(target, value, maxBytes);
   const identity = parentIdentity ?? await captureDirectoryIdentity(path.dirname(target));
   await assertDirectoryIdentity(identity);
   try {
@@ -234,9 +246,8 @@ async function writeJsonExclusive(target, value, { parentIdentity } = {}) {
   return { text, bytes: byteLength(text), sha256: canonicalSha256(value) };
 }
 
-async function writeJsonAtomic(target, value, { parentIdentity } = {}) {
-  assertSecretFree(value);
-  const text = `${JSON.stringify(value, null, 2)}\n`;
+async function writeJsonAtomic(target, value, { parentIdentity, maxBytes = Infinity } = {}) {
+  const text = serializeWorkspaceJson(target, value, maxBytes);
   const temporary = `${target}.next`;
   const identity = parentIdentity ?? await captureDirectoryIdentity(path.dirname(target));
   await assertDirectoryIdentity(identity);
@@ -257,6 +268,82 @@ async function writeJsonAtomic(target, value, { parentIdentity } = {}) {
   ensure((metadata.mode & 0o777) === 0o600, "PARITY_BATCH_INVALID", `${target} must use mode 600`);
   await assertDirectoryIdentity(identity);
   return { text, bytes: byteLength(text), sha256: canonicalSha256(value) };
+}
+
+// Storage version is independent of the logical workspace/evidence schema.
+async function writeManifest(target, manifest, { parentIdentity, atomic = false } = {}) {
+  assertSecretFree(manifest);
+  const compact = `${JSON.stringify(manifest)}\n`;
+  const bytes = byteLength(compact);
+  ensure(bytes <= maxLogicalManifestBytes, "PARITY_BATCH_INVALID", "manifest exceeds the aggregate byte limit");
+  const writeIndex = atomic ? writeJsonAtomic : writeJsonExclusive;
+  if (bytes <= maxManifestBytes) {
+    return writeIndex(target, manifest, { parentIdentity, maxBytes: maxManifestBytes });
+  }
+  const count = Math.ceil(compact.length / manifestPartChars);
+  ensure(count <= maxManifestParts, "PARITY_BATCH_INVALID", "manifest exceeds the part count limit");
+  const parts = [];
+  for (let offset = 0; offset < compact.length; offset += manifestPartChars) {
+    const value = { text: compact.slice(offset, offset + manifestPartChars) };
+    const digest = canonicalSha256(value);
+    const fileName = `manifest-part-${digest.slice(7)}.json`;
+    const partPath = path.join(path.dirname(target), fileName);
+    try {
+      await writeJsonExclusive(partPath, value, { parentIdentity, maxBytes: maxManifestBytes });
+    } catch (error) {
+      // Repeated content and source updates reuse only verified immutable parts.
+      if (error?.code !== "PARITY_BATCH_INVALID" || !error.message.endsWith(" already exists")) throw error;
+    }
+    const metadata = await lstat(partPath);
+    ensure((metadata.mode & 0o777) === 0o600, "PARITY_BATCH_INVALID", "manifest part must use mode 600");
+    const readback = await readJsonFile(partPath, { limit: maxManifestBytes, parentIdentity });
+    ensure(readback.sha256 === digest, "PARITY_BATCH_INVALID", "manifest part digest mismatch");
+    parts.push({ fileName, sha256: digest });
+  }
+  const digest = canonicalSha256(manifest);
+  const result = await writeIndex(target, {
+    storageVersion: 1, kind: "split-manifest", bytes, sha256: digest, parts,
+  }, { parentIdentity, maxBytes: maxManifestBytes });
+  return { ...result, sha256: digest };
+}
+
+async function readManifest(target, options) {
+  const stored = await readJsonFile(target, options);
+  const index = stored.value;
+  if (index?.kind !== "split-manifest") return stored;
+  ensure(index.storageVersion === 1 && Object.keys(index).sort().join(",") === "bytes,kind,parts,sha256,storageVersion",
+    "PARITY_BATCH_INVALID", "invalid split manifest index");
+  ensure(Number.isSafeInteger(index.bytes) && index.bytes > 0 && index.bytes <= maxLogicalManifestBytes &&
+    Array.isArray(index.parts) && index.parts.length > 0 && index.parts.length <= maxManifestParts &&
+    /^sha256:[a-f0-9]{64}$/u.test(index.sha256), "PARITY_BATCH_INVALID", "invalid split manifest bounds");
+  const texts = [];
+  let totalChars = 0;
+  for (const part of index.parts) {
+    ensure(part && Object.keys(part).sort().join(",") === "fileName,sha256" &&
+      typeof part.sha256 === "string" && /^sha256:[a-f0-9]{64}$/u.test(part.sha256) &&
+      part.fileName === `manifest-part-${part.sha256.slice(7)}.json`,
+    "PARITY_BATCH_INVALID", "invalid manifest part reference");
+    const partPath = path.join(path.dirname(target), part.fileName);
+    const metadata = await lstat(partPath);
+    ensure((metadata.mode & 0o777) === 0o600, "PARITY_BATCH_INVALID", "manifest part must use mode 600");
+    const readback = await readJsonFile(partPath, options);
+    const value = readback.value;
+    ensure(readback.sha256 === part.sha256 && value && Object.keys(value).join(",") === "text" &&
+      typeof value.text === "string" && value.text.length > 0 && value.text.length <= manifestPartChars,
+    "PARITY_BATCH_INVALID", "manifest part digest or content mismatch");
+    totalChars += value.text.length;
+    ensure(totalChars <= index.bytes, "PARITY_BATCH_INVALID", "manifest exceeds declared size");
+    texts.push(value.text);
+  }
+  const text = texts.join("");
+  ensure(byteLength(text) === index.bytes, "PARITY_BATCH_INVALID", "manifest aggregate byte mismatch");
+  let value;
+  try { value = JSON.parse(text); }
+  catch { fail("PARITY_BATCH_INVALID", "invalid reconstructed manifest JSON"); }
+  assertSecretFree(value);
+  ensure(canonicalSha256(value) === index.sha256 && value?.kind !== "split-manifest",
+    "PARITY_BATCH_INVALID", "manifest aggregate digest mismatch");
+  return { value, bytes: index.bytes, sha256: index.sha256 };
 }
 
 function boundedDiagnostic(value) {
@@ -850,8 +937,9 @@ async function prepareRunWorkspace({
       rowIds: context.rowIds,
       batches: batchDescriptors,
     };
-    const writtenManifest = await writeJsonExclusive(path.join(paths.runRoot, "manifest.json"), manifest, {
+    const writtenManifest = await writeManifest(path.join(paths.runRoot, "manifest.json"), manifest, {
       parentIdentity: paths.runIdentity,
+      maxBytes: maxManifestBytes,
     });
     if (workspaceSchemaVersion === coverageWorkspaceSchemaVersion) {
       await writeJsonExclusive(
@@ -881,12 +969,22 @@ async function prepareRunWorkspace({
   }
 }
 
+function requireCurrentRunOrigins(manifest) {
+  try {
+    requireLoopbackBaseUrl(manifest.baseUrls.production, "production");
+    requireLoopbackBaseUrl(manifest.baseUrls.prototype, "prototype");
+  } catch {
+    ensure(false, "PARITY_CURRENT_STATE_DRIFT", "run uses retired ports; preserve its evidence and prepare a new run after explicit port migration");
+  }
+}
+
 async function nextRunBatch({ repositoryRootPath, runId }) {
   const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
-  const { value: manifest } = await readJsonFile(path.join(paths.runRoot, "manifest.json"), {
+  const { value: manifest } = await readManifest(path.join(paths.runRoot, "manifest.json"), {
     limit: maxManifestBytes,
     parentIdentity: paths.runIdentity,
   });
+  requireCurrentRunOrigins(manifest);
   ensure(manifest.schemaVersion === coverageWorkspaceSchemaVersion, "PARITY_BATCH_INVALID", "next-batch requires a coverage workspace");
   const checkpoint = await readCheckpoint(paths.runRoot, paths.runIdentity);
   const terminal = checkpoint.batches.find(({ status }) => status === "terminal");
@@ -929,7 +1027,7 @@ async function nextRunBatch({ repositoryRootPath, runId }) {
 // Only compact summaries cross the caller boundary; raw artifacts stay in the sink.
 async function executeBrowserBatch({ repositoryRootPath, runId, runner, tabs }) {
   const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
-  const { value: manifest } = await readJsonFile(path.join(paths.runRoot, "manifest.json"), {
+  const { value: manifest } = await readManifest(path.join(paths.runRoot, "manifest.json"), {
     limit: maxManifestBytes, parentIdentity: paths.runIdentity,
   });
   const next = await nextRunBatch({ repositoryRootPath, runId });
@@ -982,8 +1080,63 @@ async function executeBrowserBatch({ repositoryRootPath, runId, runner, tabs }) 
   }
 }
 
+// This is an explicit Browser recovery, not a general terminal retry or a batch reservation.
+async function recoverDprTerminalBatch({ repositoryRootPath, runId, batchId, adapter, tabs }) {
+  validateIdentifier(batchId, "batchId");
+  const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
+  const manifestPath = path.join(paths.runRoot, "manifest.json");
+  const stored = await readManifest(manifestPath, { limit: maxManifestBytes, parentIdentity: paths.runIdentity });
+  const manifest = stored.value;
+  requireCurrentRunOrigins(manifest);
+  const checkpoint = await readCheckpoint(paths.runRoot, paths.runIdentity);
+  const before = stableStringify(checkpoint);
+  const batch = checkpoint.batches.find((entry) => entry.batchId === batchId);
+  ensure(manifest.schemaVersion === coverageWorkspaceSchemaVersion && batch?.status === "terminal" &&
+    batch.errorCode === "PARITY_DPR_OVERRIDE_UNAVAILABLE" && !batch.dprRecovery && !batch.fragmentSha256,
+  "PARITY_BATCH_INVALID", "only an unrecovered DPR terminal batch without a result can recover");
+  ensure(!checkpoint.batches.some((entry) => entry.status === "running"),
+    "PARITY_BATCH_INVALID", "cannot recover while a batch is running");
+  ensure(adapter?.requiresBrowserSetups === true && tabs?.production && tabs?.prototype &&
+    tabs.production !== tabs.prototype &&
+    stableStringify(adapter.comparisonTabIds) === stableStringify(tabs),
+  "PARITY_COMPARISON_TAB_REQUIRED", "DPR recovery requires the two owned in-app Browser tabs");
+  const canaries = [];
+  let cleanup;
+  try {
+    for (const surface of ["production", "prototype"]) {
+      // A new runner prevents a cached canary (including the other origin's) from authorizing recovery.
+      const runner = new BrowserParityRunner(adapter);
+      const canary = await runner.capabilityCanary({ tabId: tabs[surface],
+        viewport: { width: 390, height: 844 }, dpr: 1,
+        requiresNetwork: selectedRowsRequireNetwork(manifest), url: manifest.baseUrls[surface] });
+      validateSha256(canary.screenshot, "recovery canary screenshot");
+      ensure(manifest.definition.contract.comparisonConditions.dpr === 1,
+        "PARITY_DPR_MISMATCH", "recovery cannot change the declared DPR");
+      canaries.push({ surface, origin: new URL(manifest.baseUrls[surface]).origin, ...canary });
+    }
+  } finally {
+    cleanup = await adapter.cleanup();
+    validateTerminalCleanup(cleanup, { surfaceContexts: Object.values(tabs).map((tabId) => ({ tabId })) });
+  }
+  const afterManifest = await readManifest(manifestPath, { limit: maxManifestBytes, parentIdentity: paths.runIdentity });
+  const afterCheckpoint = await readCheckpoint(paths.runRoot, paths.runIdentity);
+  ensure(afterManifest.sha256 === stored.sha256 && stableStringify(afterCheckpoint) === before,
+    "PARITY_CURRENT_STATE_DRIFT", "run changed during DPR recovery");
+  batch.dprRecovery = { at: new Date().toISOString(), previousStatus: batch.status,
+    previousErrorCode: batch.errorCode, previousAttempts: batch.attempts,
+    manifestSha256: stored.sha256, canaries, cleanup };
+  batch.status = "pending";
+  batch.errorCode = null;
+  batch.diagnostic = null;
+  checkpoint.resumed = true;
+  await writeJsonAtomic(path.join(paths.runRoot, "checkpoint.json"), checkpoint, { parentIdentity: paths.runIdentity });
+  return { runId, batchId, status: "recovered", batch: null, summary: compactRunSummary(checkpoint) };
+}
+
 async function resumeRunWorkspace({ repositoryRootPath, runId }) {
   const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
+  const { value: manifest } = await readManifest(path.join(paths.runRoot, "manifest.json"), { limit: maxManifestBytes, parentIdentity: paths.runIdentity });
+  requireCurrentRunOrigins(manifest);
   const checkpoint = await readCheckpoint(paths.runRoot, paths.runIdentity);
   checkpoint.resumed = true;
   for (const batch of checkpoint.batches) {
@@ -1040,7 +1193,7 @@ async function invalidateRunWorkspace({
   currentSources,
 }) {
   const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
-  const { value: manifest } = await readJsonFile(path.join(paths.runRoot, "manifest.json"), {
+  const { value: manifest } = await readManifest(path.join(paths.runRoot, "manifest.json"), {
     limit: maxManifestBytes,
     parentIdentity: paths.runIdentity,
   });
@@ -1117,8 +1270,10 @@ async function invalidateRunWorkspace({
   });
   if (currentSources !== undefined) {
     manifest.sources = currentSources;
-    await writeJsonAtomic(path.join(paths.runRoot, "manifest.json"), manifest, {
+    await writeManifest(path.join(paths.runRoot, "manifest.json"), manifest, {
+      atomic: true,
       parentIdentity: paths.runIdentity,
+      maxBytes: maxManifestBytes,
     });
   }
   return {
@@ -1204,7 +1359,7 @@ async function recordBatchResult({
 }) {
   validateIdentifier(batchId, "batchId");
   const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
-  const { value: manifest } = await readJsonFile(path.join(paths.runRoot, "manifest.json"), {
+  const { value: manifest } = await readManifest(path.join(paths.runRoot, "manifest.json"), {
     limit: maxManifestBytes,
     parentIdentity: paths.runIdentity,
   });
@@ -1321,7 +1476,7 @@ function mergeMetrics(manifest, fragments) {
 
 async function recordRunAudit({ repositoryRootPath, runId, audit }) {
   const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
-  const { value: manifest } = await readJsonFile(path.join(paths.runRoot, "manifest.json"), { limit: maxManifestBytes, parentIdentity: paths.runIdentity });
+  const { value: manifest } = await readManifest(path.join(paths.runRoot, "manifest.json"), { limit: maxManifestBytes, parentIdentity: paths.runIdentity });
   ensure(manifest.definition.spec.version === 4, "PARITY_BATCH_INVALID", "audit requires profile v4");
   const binding = Object.fromEntries(["goalSha256", "prototypeRevision", "validationProfileDigest", "sources"].map(key => [key, manifest[key]]));
   ensure(stableStringify(audit?.binding) === stableStringify(binding), "PARITY_CURRENT_STATE_DRIFT", "audit binding differs from run");
@@ -1344,10 +1499,11 @@ async function finalizeRunWorkspace({
 }) {
   validateIdentifier(slug, "slug", slugPattern);
   const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
-  const { value: manifest } = await readJsonFile(path.join(paths.runRoot, "manifest.json"), {
+  const { value: manifest } = await readManifest(path.join(paths.runRoot, "manifest.json"), {
     limit: maxManifestBytes,
     parentIdentity: paths.runIdentity,
   });
+  requireCurrentRunOrigins(manifest);
   const workspaceSchemaVersion = manifest.schemaVersion;
   ensure(
     workspaceSchemaVersion === legacyWorkspaceSchemaVersion || workspaceSchemaVersion === coverageWorkspaceSchemaVersion,
@@ -1450,7 +1606,7 @@ async function finalizeRunWorkspace({
     const observed = { ...manifest, rows, artifactIndex: checkpoint.artifactIndex };
     fidelityCoverage = interactionCoverage(definition.contract, definition.spec, rows);
     ensure(fidelityCoverage.every(group => group.status === "pass"), "PARITY_BATCH_INCOMPLETE", "t-way coverage incomplete");
-    fidelityStatus = validateFidelityAudit(fidelityAudit, observed, definition.spec);
+    fidelityStatus = validateFidelityAudit(fidelityAudit, observed, definition.spec, sha256);
   }
   let artifactIndex = [];
   let evidenceIdentity;
@@ -1588,6 +1744,7 @@ export {
   createWorkspaceArtifactSink,
   finalizeRunWorkspace,
   recordRunAudit,
+  recoverDprTerminalBatch,
   executeBrowserBatch,
   invalidateRunWorkspace,
   nextRunBatch,

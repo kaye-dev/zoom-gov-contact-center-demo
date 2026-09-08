@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
 
 const load = (name: string) => import(pathToFileURL(path.resolve(import.meta.dirname, name)).href);
@@ -173,4 +174,29 @@ test("REQ-07/09: runner executes normal-route actions and schema v5 audit is ind
   assert.equal(smoke.auditStatus.visual, "not-run");
   const promotedSmoke = { ...smoke, phase: "final" };
   assert.throws(() => facade.validateParityEvidence(promotedSmoke, contract, spec));
+});
+
+test("literal expectations match compact Browser text and attributes in execution and evidence replay", async () => {
+  const [core, fidelity, fixtures] = await modules;
+  const syncHash = (value: string) => `sha256:${createHash("sha256").update(value).digest("hex")}`;
+  for (const [kind, expected, normalized] of [
+    ["attribute", "image/svg+xml", "image/svg+xml"],
+    ["text", "  保存済み\n  完了  ", "保存済み 完了"],
+  ]) {
+    const { spec } = fixtures.createFidelityFixture();
+    const probe = { id: "copy", kind, options: { name: "type", normalizeWhitespace: true } };
+    const rule = spec.fidelity.phaseComparisons.find((item: {probeId:string}) => item.probeId === "copy");
+    rule.final = "expected"; rule.expected = { production: expected, prototype: expected };
+    const domain = kind === "attribute" ? "parity:attribute:v1\0type\0" : "parity:text:v1\0";
+    const observed = { value: { sha256: syncHash(domain + normalized), bytes: Buffer.byteLength(normalized) } };
+    const run = await fidelity.compareFidelityProbe(probe, observed, observed, spec, "final", core.compareProbe, core.sha256Digest);
+    const replay = fidelity.compareFidelityProbe(probe, observed, observed, spec, "final", core.compareProbe, syncHash);
+    assert.equal(run.status, "pass");
+    assert.deepEqual(run, replay);
+    assert.equal(JSON.stringify(run).includes(expected), false);
+    const wrong = { value: { ...observed.value, bytes: observed.value.bytes + 1 } };
+    assert.equal((await fidelity.compareFidelityProbe(probe, wrong, observed, spec, "final", core.compareProbe, core.sha256Digest)).status, "fail");
+    rule.expected.production = "different";
+    assert.equal(fidelity.compareFidelityProbe(probe, observed, observed, spec, "final", core.compareProbe, syncHash).status, "fail");
+  }
 });

@@ -57,11 +57,19 @@ The adapter performs exactly one navigation for each row/surface, captures the i
 
 ## Workspace, batch, checkpoint, and resume
 
-The ignored workspace is `.codex/parity-runs/<run-id>/`. Directories are `0700`; files are `0600`; all paths are repository-contained, non-symlink, exclusively created, and read back. The immutable manifest fixes selection, row order, batch size, byte limit, runtime/source/profile digests, and artifact policy.
+The ignored workspace is `.codex/parity-runs/<run-id>/`. Directories are `0700`; files are `0600`; all paths are repository-contained, non-symlink, exclusively created, and read back. The immutable manifest fixes selection, row order, batch size, byte limit, runtime/source/profile digests, and artifact policy. Manifest creation and source-invalidation updates share the reader's 2 MiB UTF-8 limit. They omit formatting whitespace when necessary without changing JSON values or canonical digests. Larger logical manifests use a storage-version-1 index with ordered path/digest references to immutable `manifest-part-<sha256>.json` files. Parts hold bounded JSON text segments of the complete logical manifest (including contract and validation definition); the reader reconstructs the original object before applying workspace/evidence validation. Each file remains at most 2 MiB. The aggregate logical JSON is bounded to 32 MiB and 256 parts of at most 128 Ki UTF-16 code units each. Part order, private mode, regular-file identity, content digest, aggregate UTF-8 size and logical digest are checked. Inline manifests remain readable; source updates atomically replace the index and reuse only verified parts. Obsolete parts stay in the owned workspace until terminal cleanup. Failed preparation removes its partial workspace.
+
+### Manifest size recovery policy
+
+The current 2 MiB limit belongs to the workspace reader/writer, not Browser capability or the supported number of acceptance rows. Compact serialization and automatic split storage are implemented; higher resource limits are not. If the aggregate size or part count exceeds its bound, record actual UTF-8 bytes and the failing operation, then resolve the storage constraint without dropping requirements, sources, rows, risks, anchors, probes, or artifacts. Do not treat rejection as the permanent resolution or rewrite an immutable run file by hand.
+
+Use the automatic split storage for contracts and validation definitions that exceed the inline limit. Preserve logical contract/profile digests and row identity; verify every referenced file, aggregate resource bounds, missing/tampered references, and existing private-path and cleanup guards. A measured, bounded limit increase is an acceptable smaller fix when justified by expected contract size and memory use: update writers and all readers together and test UTF-8 boundary values. Do not remove the limit or raise it repeatedly without assessing growth.
+
+Implement storage changes within explicitly authorized workflow work. A user's explicit request to fix the runner extends the task scope; do not stop solely because the original feature plan excluded it or ask again for that same authorization. A policy/documentation update alone does not authorize immediate runner implementation. Keep feature requirements and unrelated edits intact. Verify creation, reading, invalidation updates, resume/finalize compatibility, and failed-preparation cleanup with a representative oversized contract. Preserve supported existing evidence and checkpoints; if the storage change prevents resuming an old run safely, retain its diagnostic evidence and prepare a new run through the supported lifecycle. Report manifest recovery separately from Browser coverage completion.
 
 For normal UI `$implement` or an independently requested parity task, prepare only after approval, implementation, static checks, final diff review, and external runtime ownership/health readback:
 
-Local uses `http://localhost:3000` or an ownership-verified single-label tenant origin such as `http://univ.localhost:3000`; worktrees use the ownership-verified allocated port in `3100-3899`. Obtain owner, process/container, mount, health, and `PRODUCTION_URL` from one completed `./dev-compose.sh ensure`; do not wrap it in status polling, fixed sleep, or follow-log commands. Matching CLI arguments do not prove ownership.
+Local uses `http://localhost:3000` or an ownership-verified single-label tenant origin such as `http://univ.localhost:3000`; worktrees use the ownership-verified allocated port within the [Browser operating range](../../../../docs/development/development-ports.md#利用範囲と割り当て). Obtain owner, process/container, mount, health, and `PRODUCTION_URL` from one completed `./dev-compose.sh ensure`; do not wrap it in status polling, fixed sleep, or follow-log commands. Matching CLI arguments do not prove ownership.
 
 ```sh
 node .agents/skills/plan/scripts/parity-runner.mjs prepare-run plans/<slug>/prototype \
@@ -93,6 +101,8 @@ node .agents/skills/plan/scripts/parity-runner.mjs record-failure plans/<slug>/p
 ```
 
 A transient failure may retry the same batch once. The second failure is terminal. Required-probe failures are terminal immediately. There is no run-wide time cutoff. Never restart passed rows, rebuild the run with changing batch sizes, switch Browser, or rerun test/build solely because Browser failed.
+
+After an explicitly requested DPR recovery, the common Browser executor may call `recoverDprTerminalBatch({ repositoryRootPath, runId, batchId, adapter, tabs })` once for a terminal `PARITY_DPR_OVERRIDE_UNAVAILABLE` batch with no result fragment. Run current contract/source preflight and runtime ownership checks first. The function uses fresh `BrowserParityRunner` canaries on both manifest origins through the common two-tab adapter, requires 390×844 / DPR 1, screenshot digests, declared network capability, and validated cleanup. It checks manifest/checkpoint drift before writing. Failed canary or cleanup leaves the checkpoint untouched. Success retains previous attempts and failure provenance in that batch's `dprRecovery`, preserves all passed batches/fragments/artifacts, and makes only the named batch pending. It does not reserve work: call `executeBrowserBatch` next, without `resume-run` or `next-batch`. A repeated DPR failure, another terminal error, an existing result, or concurrent running work cannot use this recovery. Canary success authorizes only resumption, never coverage completion.
 
 After implementation fixes, invalidate by exact impact and resume:
 
@@ -143,3 +153,7 @@ Stable failure codes include `PARITY_SELECTED_TAB_DRIFT`, `PARITY_COMPARISON_TAB
 ## Legacy compatibility
 
 Profile versions 1, 2, and 3 and parity evidence schemas 1, 2, 3, and 4 remain read-only compatible. Validate existing evidence against its historical row, digest, runtime, and cleanup contract without migrating or adding fields. New Browser-enabled plans use profile version 4; independently requested new final runs use evidence schema 5. A migration changes workflow text, skills, profile, runner, evidence schema, tests, and evaluator together. Rollback must restore that entire compatible set; never roll back only a writer or reader.
+
+## Development origins
+
+Use the app and artifact origins in [Development ports](../../../../docs/development/development-ports.md). Check the reported allocation against the Browser operating range before opening either surface; stop the task if it is outside that range. The same document defines artifact reuse, explicit release, migration, data preservation, rollback, and evidence handling.

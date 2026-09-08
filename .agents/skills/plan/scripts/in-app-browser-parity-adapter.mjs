@@ -355,6 +355,8 @@ function createSingleTabParityAdapter({
     cdp: undefined,
     cdpOrigin: undefined,
     deviceMetricsApplied: false,
+    // Desired metrics belong to this tab; only the Browser viewport API is shared.
+    requestedViewport: undefined,
     consoleBaseline: undefined,
     currentOrigin: undefined,
     networkCursor: undefined,
@@ -364,7 +366,6 @@ function createSingleTabParityAdapter({
   };
   const viewportState = sharedViewportState ?? {
     viewport: undefined,
-    requestedViewport: undefined,
     viewportApplied: false,
     initialViewport: undefined,
   };
@@ -437,9 +438,9 @@ function createSingleTabParityAdapter({
     await selectedTab();
     if (state.cleanupResult?.status === "pass") {
       state.cleanupResult = undefined;
+      state.requestedViewport = undefined;
       if (!sharedViewportState || viewportState.needsRunReset === true) {
         viewportState.initialViewport = undefined;
-        viewportState.requestedViewport = undefined;
         viewportState.needsRunReset = false;
       }
     }
@@ -857,15 +858,15 @@ function createSingleTabParityAdapter({
   }
 
   async function assertRequestedViewport(requestedTabId) {
-    if (!viewportState.requestedViewport) return undefined;
+    if (!state.requestedViewport) return undefined;
     const measured = await measureViewport(requestedTabId);
     if (
-      measured?.width !== viewportState.requestedViewport.width ||
-      measured?.height !== viewportState.requestedViewport.height
+      measured?.width !== state.requestedViewport.width ||
+      measured?.height !== state.requestedViewport.height
     ) {
       fail(
         "PARITY_VIEWPORT_MISMATCH",
-        `viewport mismatch after navigation: expected ${viewportState.requestedViewport.width}x${viewportState.requestedViewport.height}`,
+        `viewport mismatch after navigation: expected ${state.requestedViewport.width}x${state.requestedViewport.height}`,
       );
     }
     if (measured.dpr !== expectedDpr) {
@@ -1093,7 +1094,7 @@ function createSingleTabParityAdapter({
       if (!viewportState.initialViewport) {
         viewportState.initialViewport = await measureViewport(requestedTabId);
       }
-      viewportState.requestedViewport = { width: viewport.width, height: viewport.height };
+      state.requestedViewport = { width: viewport.width, height: viewport.height };
       const viewportCapability = await getViewportCapability();
       // The capability may apply the override before rejecting its promise. Mark
       // cleanup as necessary before crossing that external API boundary.
@@ -1107,7 +1108,7 @@ function createSingleTabParityAdapter({
           { operation: "viewport.set" },
         );
       }
-      await applyDeviceMetricsOverride(viewportState.requestedViewport);
+      await applyDeviceMetricsOverride(state.requestedViewport);
     },
     measureViewport,
     async navigate(requestedTabId, url) {
@@ -1128,8 +1129,8 @@ function createSingleTabParityAdapter({
         state.currentOrigin = targetOrigin;
         state.cdp = undefined;
         state.cdpOrigin = undefined;
-        if (viewportState.requestedViewport) {
-          await applyDeviceMetricsOverride(viewportState.requestedViewport);
+        if (state.requestedViewport) {
+          await applyDeviceMetricsOverride(state.requestedViewport);
           await assertRequestedViewport(requestedTabId);
         }
         if (restoreNetworkObservation) await enableNetworkObservation();
@@ -1852,7 +1853,6 @@ function createInAppBrowserParityAdapter(options) {
 
   const sharedViewportState = {
     viewport: undefined,
-    requestedViewport: undefined,
     viewportApplied: false,
     initialViewport: undefined,
     needsRunReset: false,

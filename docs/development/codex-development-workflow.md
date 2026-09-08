@@ -207,6 +207,14 @@ node .agents/skills/plan/scripts/parity-runner.mjs preflight plans/<slug>/protot
 
 plan中のsmokeはtargetedな代表desktopと390×844を基本とし、具体的なtheme、breakpoint、dialog、menu、keyboard、focusリスクだけを追加する。coverageとfullは`$plan`では実行しない。
 
+### Manifestのサイズ超過への対応
+
+現行runnerの2 MiBはworkspace JSONの生成・読込上限であり、Browserの制約や要件数の上限ではない。整形用空白を省いても収まらない場合は、契約・検証定義を含む論理manifestを自動分割し、索引から順序付きのpath・digestで参照する。各ファイルは2 MiB以内、論理JSON全体は32 MiB以内・最大256分割とし、読込時に復元と整合性検証を行う。今後の超過は拒否だけで解決済みにせず、要件・source・比較行・risk・anchor・probeを維持して保存形式を改善する。
+
+基本方針は、契約・検証定義をファイルごとの上限内へ分割し、manifestからpathとdigestで参照すること。想定規模とメモリ使用量に根拠がある限定的な対応では、生成側・全読込側の上限を同時に引き上げてもよい。無制限化や比較ケースの削減はしない。自動分割は実装済みであり、総量・分割数の上限引き上げは必要性を確認して行う改善方針とする。
+
+詳細と検証条件は[Manifest size recovery policy](../../.agents/skills/plan/references/parity-runner.md#manifest-size-recovery-policy)を正本とする。ユーザーが検証基盤修正を明示した場合は、その依頼をscope拡張として扱い、元のfeature planの対象外という理由だけで再承認を求めない。文書方針の更新だけでrunner実装を始めず、修正時は既存証跡・checkpoint・無関係な変更を保全する。保存・読込の復旧とBrowser coverageの完了は別に報告する。
+
 ### 承認、ユーザー確認、final parity証跡
 
 `$implement`はfreshな`plans/<slug>/evidence/<run-id>/approval.json`へgoal digest、prototype revision、profile digestを記録する。`evidence/`とrun directoryはumaskに依存せず`0700`、canonical JSONは`0600`で排他的に作成し、既存pathのtype、symlink、realpath、mode不一致では修復せず停止する。runtimeと人間判断が必要な項目はgoalの`## ユーザー動作確認`へ未チェックで残し、shipping時にPRへ転記する。
@@ -227,7 +235,7 @@ UIの最終的な視覚品質はCodexが承認済みprototypeとの画像比較�
 4. final coverageの完了直前に`./dev-compose.sh ensure`を1回実行し、同commandの最終出力にある`RUNTIME_OWNERSHIP=verified`、`ACTIVE_RUNTIME_HEALTH=healthy`、`RUNTIME_RESTART_REQUIRED=0`、PID/container、cwd、mount、Compose project、port、`PRODUCTION_URL`をauthoritative readbackとして使う。進行中に外側status、固定sleep、30秒poll、`docker logs -f`を発行せず、`finalize-run`直前だけdriftを1回読む。ensure失敗時だけ同じprojectのstatus、process state、直近logのbounded diagnosticを各1回取得する。
 5. 最終確認後はworktreeだけ`./dev-compose.sh cleanup`を使い、baselineとの差分だけをcleanupする。
 
-Localでは同じcheckoutのhealthyなnative Next.jsまたは正しいCompose `web`を`http://localhost:3000`で再利用する。worktreeではcanonical checkout pathから固有Compose projectとweb・PostgreSQL・Studio portを割り当て、DB、named volume、network、originを他checkoutと分離する。保持するnamed volumeのcreation identityはsession間で固定し、可変なcurrent session labelを理由にdatabase再作成を要求しない。worktreeはloopbackだけにbindし、LANとCloudflareはLocal専用とする。
+Localでは同じcheckoutのhealthyなnative Next.jsまたは正しいCompose `web`を`http://localhost:3000`で再利用する。worktreeではcanonical checkout pathから固有Compose projectとweb・PostgreSQL・Studio portを割り当て、DB、named volume、network、originを他checkoutと分離する。worktreeはloopbackだけにbindし、LANとCloudflareはLocal専用とする。
 
 記録にはPID、command、cwd、Compose project、checkout mount、container ID、URL、fixture、authorizationを含める。`prepare-run`の`--runtime-owner`と`--runtime-checkout`はこの外部readback値をcontract、current checkout、manifest、evidenceへ結び付ける宣言値であり、CLI自身はprocess、container、listener、mount、healthを検査しない。引数同士やcontractとの一致だけを実runtime所有権の確認として扱わない。
 
@@ -260,3 +268,7 @@ active confirmation sessionのslugが削除候補に含まれる場合、apply�
 schema v5は`interactionCoverage`を実行成功probeから再計算し、`auditStatus`のstatic/runtime/requirements/visualがすべてpassの場合だけ完了する。`$review`とshippingも同じ条件を使う。旧profile v1〜3/evidence v1〜4は履歴のread-only互換であり、新しい監査へ合格した証拠として扱わない。製品API/DBと二段階Git出荷は変更しない。
 
 CDP capability／DPRのterminal failureでは、設定無効やセッション不調と断定せず、新規Codexタスクで同条件を再検証することを案内し、対象goal・証跡・成功済みcheck/digest・未実施項目・cleanupを埋めたコピー可能な継続プロンプトを必ず返す。現在タスクのIDが取得できる場合は `codex://threads/<current-thread-id>` をプロンプト内に記載し、不明な場合のみ「前タスクのディープリンク: ［ユーザーが入力］」を用意する。詳細は `.agents/skills/plan/references/fidelity-audit.md` のfresh-task handoffに従う。新規タスクの自動作成、権限拒否の回避、繰り返しのセッション切替、直接CDP成功だけによる全体完了は行わない。
+
+## 開発用ポート
+
+Browserの利用範囲と出力URLを照合し、範囲外ならBrowserを開かず作業を止める。起動・保持・予約解放、権限登録、移行・保全・rollbackは[開発用ポートの固定範囲](development-ports.md)に従う。非UIの起動ツール変更ではgoalが要求する限定runtime確認だけを行い、BrowserやUI parityは開始しない。

@@ -210,17 +210,41 @@ export function interactionCoverage(contract, spec, evidenceRows) {
   });
 }
 
-export function compareFidelityProbe(probe, production, prototype, spec, phase, legacyCompare) {
+// Browser text/attribute observations are domain-separated fingerprints. Keep
+// expected literals private too, and apply the same representation during replay.
+// The Browser supplies WebCrypto; synchronous evidence readers supply Node SHA-256.
+export function normalizeExpectedProbeValue(probe, expected, observed, hashString) {
+  if (!["text", "attribute"].includes(probe.kind)) return expected;
+  if (expected === null && observed?.isNull === true) return { isNull: true };
+  if (typeof expected !== "string" || typeof observed?.sha256 !== "string" || !hashString) return expected;
+  const value = probe.kind === "text" && probe.options?.normalizeWhitespace
+    ? expected.replace(/\s+/gu, " ").trim() : expected;
+  const domain = probe.kind === "attribute"
+    ? `parity:attribute:v1\0${probe.options.name}\0` : "parity:text:v1\0";
+  const digest = hashString(`${domain}${value}`);
+  const compact = sha256 => ({ sha256, bytes: new TextEncoder().encode(value).byteLength });
+  return digest && typeof digest.then === "function" ? digest.then(compact) : compact(digest);
+}
+
+export function compareFidelityProbe(probe, production, prototype, spec, phase, legacyCompare, hashString) {
   const rule = spec.fidelity.phaseComparisons.find(item => item.probeId === probe.id);
   const mode = phase === "final" ? rule.final : rule.smoke;
   if (mode === "capture") return { status: production?.artifact && prototype?.artifact ? "pass" : "fail", production: "visual-capture", prototype: "visual-capture" };
   if (phase !== "final") return legacyCompare(probe, production, prototype);
   if (rule.final === "equal") return legacyCompare({ ...probe, mode: "equal" }, production, prototype);
-  const pass = !production?.unsupported && !prototype?.unsupported && canonical(production?.value) === canonical(rule.expected.production) && canonical(prototype?.value) === canonical(rule.expected.prototype);
-  return { status: pass ? "pass" : "fail", production: production?.value, prototype: prototype?.value, ...(pass ? {} : { reason: "surface expected value mismatch" }) };
+  const expected = [
+    normalizeExpectedProbeValue(probe, rule.expected.production, production?.value, hashString),
+    normalizeExpectedProbeValue(probe, rule.expected.prototype, prototype?.value, hashString),
+  ];
+  const compare = ([left, right]) => {
+    const pass = !production?.unsupported && !prototype?.unsupported && canonical(production?.value) === canonical(left) && canonical(prototype?.value) === canonical(right);
+    return { status: pass ? "pass" : "fail", production: production?.value, prototype: prototype?.value, ...(pass ? {} : { reason: "surface expected value mismatch" }) };
+  };
+  return expected.some(value => value && typeof value.then === "function")
+    ? Promise.all(expected).then(compare) : compare(expected);
 }
 
-export function validateRuntimeResults(spec, evidenceRows) {
+export function validateRuntimeResults(spec, evidenceRows, hashString) {
   const observed = evidenceRows.flatMap(row => (row.runtimeChecks ?? []).map(result => ({ ...result, rowId: row.rowId })));
   const indexed = index(observed, "runtime results", spec.fidelity.runtimeChecks.length === 0);
   check(indexed.size === spec.fidelity.runtimeChecks.length, "runtime results incomplete or extra");
@@ -233,13 +257,13 @@ export function validateRuntimeResults(spec, evidenceRows) {
       const actual = result.steps[i];
       check(canonical(actual.action) === canonical(step.action) && actual.status === "pass", "runtime action drift or failure");
       check(actual.assertions.length === step.assertions.length, "runtime assertions incomplete");
-      step.assertions.forEach((assertion, j) => check(actual.assertions[j].probeId === assertion.probeId && actual.assertions[j].status === "pass" && canonical(actual.assertions[j].value) === canonical(assertion.expected), "runtime expected result mismatch"));
+      step.assertions.forEach((assertion, j) => check(actual.assertions[j].probeId === assertion.probeId && actual.assertions[j].status === "pass" && canonical(actual.assertions[j].value) === canonical(normalizeExpectedProbeValue(spec.probes.find(probe => probe.id === assertion.probeId), assertion.expected, actual.assertions[j].value, hashString)), "runtime expected result mismatch"));
     });
   }
   return "pass";
 }
 
-export function validateFidelityAudit(audit, evidence, spec) {
+export function validateFidelityAudit(audit, evidence, spec, hashString) {
   keys(audit, ["binding", "staticChecks", "requirements", "visualChecks"], "audit");
   const expectedBinding = Object.fromEntries(["goalSha256", "prototypeRevision", "validationProfileDigest", "sources"].map(key => [key, evidence[key]]));
   check(canonical(audit.binding) === canonical(expectedBinding), "audit binding is stale");
@@ -249,7 +273,7 @@ export function validateFidelityAudit(audit, evidence, spec) {
     const actual = statics.get(expected.id);
     check(actual?.exitCode === 0 && actual.command === expected.command && canonical(actual.scope) === canonical(expected.scope) && /^sha256:[a-f0-9]{64}$/.test(actual.logDigest), "static check not successful or command/scope/log missing");
   }
-  validateRuntimeResults(spec, evidence.rows);
+  validateRuntimeResults(spec, evidence.rows, hashString);
   const visual = index(audit.visualChecks, "visual evidence");
   check(visual.size === spec.fidelity.visualChecks.length, "visual evidence incomplete or extra");
   for (const expected of spec.fidelity.visualChecks) {

@@ -1,4 +1,4 @@
-import { validateFidelityProfile, supplementInteractionRows, compareFidelityProbe, interactionCoverage } from "./parity-fidelity.mjs";
+import { validateFidelityProfile, supplementInteractionRows, compareFidelityProbe, normalizeExpectedProbeValue, interactionCoverage } from "./parity-fidelity.mjs";
 
 const phases = new Set(["smoke", "pre-edit", "affected", "final"]);
 const fullMatrixPhases = new Set(["pre-edit", "final"]);
@@ -1090,7 +1090,7 @@ function appendQuery(url, query) {
   return parsed.toString();
 }
 
-function requireLoopbackBaseUrl(value, surface) {
+function requireLoopbackBaseUrl(value, surface, { legacy = false } = {}) {
   let parsed;
   try {
     parsed = new URL(value);
@@ -1105,11 +1105,12 @@ function requireLoopbackBaseUrl(value, surface) {
     const port = Number(parsed.port);
     ensure(
       (parsed.hostname === "localhost" || /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.localhost$/u.test(parsed.hostname)) &&
-        (port === 3000 || (port >= 3100 && port <= 3899)),
-      "production base URL must use localhost or a tenant .localhost host on Local port 3000 or an allocated worktree port in 3100-3899",
+        ((port >= 3000 && port <= 3010) || (legacy && port >= 3100 && port <= 3899)),
+      "production base URL must use localhost or a tenant .localhost host on Local port 3000 or an allocated worktree port in 3001-3010",
     );
   } else {
     ensure(parsed.hostname === "127.0.0.1" && parsed.port !== "", "prototype base URL must use 127.0.0.1 with an explicit port");
+    ensure(legacy || (Number(parsed.port) >= 4000 && Number(parsed.port) <= 4010), "prototype base URL must use an allocated artifact port in 4000-4010");
   }
   return parsed;
 }
@@ -1437,7 +1438,7 @@ class BrowserParityRunner {
           let actual, pass;
           do {
             actual = await this.runProbe({ tabId: tabs.production, row, surface: "production", probe, networkSource: canary.networkSource });
-            pass = !actual.unsupported && stableStringify(actual.value) === stableStringify(assertion.expected);
+            pass = !actual.unsupported && stableStringify(actual.value) === stableStringify(await normalizeExpectedProbeValue(probe, assertion.expected, actual.value, sha256Digest));
             if (pass || actual.unsupported || Date.now() >= deadline) break;
             await new Promise(resolve => setTimeout(resolve, 50));
           } while (Date.now() < deadline);
@@ -1685,7 +1686,7 @@ class BrowserParityRunner {
           const production = productionProbeResults.get(probeId);
           const prototype = prototypeProbeResults.get(probeId);
           const comparison = spec.version === 4
-            ? compareFidelityProbe(probe, production, prototype, spec, phase, compareProbe)
+            ? await compareFidelityProbe(probe, production, prototype, spec, phase, compareProbe, sha256Digest)
             : compareProbe(probe, production, prototype);
           if (comparison.status === "fail" && (probe.kind === "setup" || probe.kind === "state")) {
             const productionMatches = production?.value?.matches === true;
