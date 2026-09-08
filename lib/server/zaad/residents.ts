@@ -102,12 +102,12 @@ export async function listZaadResidents(
     : undefined;
   const [rows, total, consented, synced, failed] = await Promise.all([
     prisma.disasterRadioSubscription.findMany({
-      where,
+      where: { siteKey: tenantKey, ...where },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: PAGE_SIZE + 1,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     }),
-    prisma.disasterRadioSubscription.count({ where }),
+    prisma.disasterRadioSubscription.count({ where: { siteKey: tenantKey, ...where } }),
     prisma.disasterRadioSubscription.count({ where: { siteKey: tenantKey, ...where, consentStatus: "CONSENTED" } }),
     prisma.disasterRadioSubscription.count({ where: { siteKey: tenantKey, ...where, syncStatus: "SYNCED" } }),
     prisma.disasterRadioSubscription.count({ where: { siteKey: tenantKey, ...where, syncStatus: "FAILED" } }),
@@ -165,7 +165,7 @@ export async function importZaadResidents(prisma: PrismaClient, tenantKey: Tenan
     return { insertedCount: inserted.count, candidateIds: candidates.map(({ id }) => id) };
   });
   const createdRows = await prisma.disasterRadioSubscription.findMany({
-    where: { id: { in: result.candidateIds } },
+    where: { siteKey: tenantKey, id: { in: result.candidateIds } },
     select: {
       id: true,
       name: true,

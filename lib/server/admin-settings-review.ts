@@ -12,7 +12,7 @@ export async function getSettingsReview(state: unknown) {
   const hostname = normalizeRequestHostname(requestHeaders.get("host")) ?? "";
   if (
     process.env.NODE_ENV === "production" ||
-    !["localhost", "127.0.0.1", "[::1]"].includes(hostname)
+    !["localhost", "127.0.0.1", "[::1]", "univ.localhost", "lg.localhost"].includes(hostname)
   )
     return undefined;
   let optedIn = false;

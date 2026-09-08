@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { createElement, type ComponentType, type PropsWithChildren } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { createElement } from "react";
+import { renderAdmin } from "./admin-ui-render";
 import { ZaadView, buildResidentRowActions } from "../app/admin/zaad/ZaadView";
 import { activateRowAction } from "../app/components/admin/table-row-actions";
-import { LanguageProvider } from "../app/i18n/LanguageProvider";
 
 import {
   getZaadCsvFieldLabel,
@@ -15,7 +14,6 @@ import {
 } from "../app/i18n/zaad-error-messages";
 import { zaadDictionaries } from "../app/i18n/zaad-dictionaries";
 import { ZAAD_ERROR_CODES } from "../lib/zaad/contracts";
-import { DEFAULT_TENANT_KEY, type TenantKey } from "../lib/tenants";
 
 const viewSource = readFileSync(
   new URL("../app/admin/zaad/ZaadView.tsx", import.meta.url),
@@ -57,21 +55,16 @@ test("ROW-ZAAD: retry eligibility, disabled count, row identity and revision are
 });
 
 function renderResidents(reviewState?: string, canViewDeveloperApi = true) {
-  const Provider = LanguageProvider as ComponentType<
-    PropsWithChildren<{ availableLocales: readonly ["ja"]; tenantKey: TenantKey }>
-  >;
-  return renderToStaticMarkup(createElement(Provider, { availableLocales: ["ja"], tenantKey: DEFAULT_TENANT_KEY },
-    createElement(ZaadView, {
-      initialView: "residents", reviewState, canViewDeveloperApi,
-      permissions: { create: false, update: false, delete: false },
-    }),
-  ));
+  return renderAdmin(createElement(ZaadView, {
+    initialView: "residents", reviewState, canViewDeveloperApi,
+    permissions: { create: false, update: false, delete: false },
+  }), "/admin/zaad");
 }
 
 test("ZAAD-HELP-01 / ZAAD-HEADER-04/05: title help and responsive API action column", () => {
   const html = renderResidents("ready", false);
   assert.match(html, /role="tooltip" class="sr-only"/);
-  assert.match(html, /aria-label="ZAADについて"/);
+  assert.match(html, /aria-label="オートリーチについて"/);
   assert.match(html, /lg:grid-cols-\[minmax\(0,1fr\)_auto\]/);
   assert.match(html, /flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:flex-nowrap/);
   assert.match(html, /aria-describedby="zaad-developer-api-permission-reason"/);

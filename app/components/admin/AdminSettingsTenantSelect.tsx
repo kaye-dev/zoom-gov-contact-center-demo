@@ -7,6 +7,7 @@ import {
 import { isTenantKey, type TenantKey } from "@/lib/tenants";
 import type { IndustrySettingsDictionary } from "@/app/i18n/dictionaries";
 import { ModalDialog } from "./ModalDialog";
+import { AdminFieldHelp } from "./AdminFieldHelp";
 import { Select } from "../Select";
 import { InvalidSettingsTenant } from "@/app/admin/InvalidSettingsTenant";
 type Control = {
@@ -29,10 +30,20 @@ export function AdminSettingsTenantSelect({
   const cancel = useRef<HTMLButtonElement>(null);
   return (
     <>
-      <div id="tenant-control" className="ml-1 mr-0 max-w-5xl space-y-2 pb-2">
-        <label htmlFor="tenant" className="block text-sm font-semibold">
-          {c.copy.label}
-        </label>
+      <div
+        id="tenant-control"
+        className="flex w-full min-w-0 items-center gap-3 md:ml-auto md:w-auto md:shrink-0"
+      >
+        <div className="flex shrink-0 items-center gap-1">
+          <label htmlFor="tenant" className="block text-sm font-semibold">
+            {c.copy.label}
+          </label>
+          <AdminFieldHelp
+            id="tenant-help"
+            label={c.copy.label}
+            description={c.copy.help}
+          />
+        </div>
         <Select
           id="tenant"
           aria-describedby="tenant-help"
@@ -41,7 +52,7 @@ export function AdminSettingsTenantSelect({
           onChange={(e) => {
             if (isTenantKey(e.target.value)) c.select(e.target.value);
           }}
-          containerClassName="md:w-80"
+          containerClassName="min-w-0 flex-1 md:w-64 md:flex-none"
         >
           {settingsTenantOptions(resource).map((key) => (
             <option key={key} value={key}>
@@ -49,9 +60,6 @@ export function AdminSettingsTenantSelect({
             </option>
           ))}
         </Select>
-        <p id="tenant-help" className="text-xs leading-5 text-fg-muted">
-          {c.copy.help}
-        </p>
       </div>
       {c.pending && (
         <ModalDialog

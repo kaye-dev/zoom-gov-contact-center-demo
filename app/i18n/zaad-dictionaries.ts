@@ -236,10 +236,10 @@ export const zaadDictionaries: Record<
   ZaadDictionary
 > = {
   ja: {
-    navLabel: "ZAAD",
+    navLabel: "オートリーチ",
     eyebrow: "Zoom Agentless Auto Dialer",
-    title: "ZAAD",
-    infoLabel: "ZAADについて",
+    title: "オートリーチ",
+    infoLabel: "オートリーチについて",
     description:
       "防災行政無線の登録住民、TTS発信メッセージ、Zoom Contact Centerの連絡先リスト、定型キャンペーンと単発キャンペーンを管理します。",
     apiSettings: "Developer API設定",
@@ -303,7 +303,7 @@ export const zaadDictionaries: Record<
       editTitle: "住民情報を編集",
       deleteTitle: "住民情報を削除",
       deleteDescription:
-        "Zoomの連絡先を先に削除してから、ZAADの住民情報を削除します。",
+        "Zoomの連絡先を先に削除してから、オートリーチの住民情報を削除します。",
       email: "メールアドレス",
       phone: "電話番号",
       consentedValue: "同意済み",
@@ -319,7 +319,7 @@ export const zaadDictionaries: Record<
       syncPending: "同期中",
       syncSynced: "同期済み",
       syncFailed: "同期失敗",
-      syncNotAssigned: "ZAADのみ",
+      syncNotAssigned: "オートリーチのみ",
       syncNotEligible: "同期対象外",
       sourceWeb: "Web",
       sourceAdmin: "管理画面",
@@ -391,7 +391,7 @@ export const zaadDictionaries: Record<
       heading: "公開フォームの登録設定",
       description: "同意済みの新規住民を同期するZoom連絡先リストを選択します。",
       assignment: "新規登録先",
-      noAssignment: "割り当てなし（ZAADのみに登録）",
+      noAssignment: "割り当てなし（オートリーチのみに登録）",
       save: "登録設定を保存",
       futureOnly:
         "変更は今後の新規登録と、未同意から同意済みへ変更した住民だけに適用されます。",
@@ -484,7 +484,7 @@ export const zaadDictionaries: Record<
       conflict:
         "別の更新が反映されています。最新情報を再読み込みしてからやり直してください。",
       resultUnknown:
-        "Zoom側の処理結果を確認できません。操作を再送せず、Zoom WebポータルとZAADの最新状態を照合してください。",
+        "Zoom側の処理結果を確認できません。操作を再送せず、Zoom Webポータルとオートリーチの最新状態を照合してください。",
       notFound: "対象が見つかりません。最新情報を再読み込みしてください。",
       invalid: "入力または選択内容を確認してからやり直してください。",
       resourceInUse:
@@ -497,10 +497,10 @@ export const zaadDictionaries: Record<
     },
   },
   en: {
-    navLabel: "ZAAD",
+    navLabel: "AutoReach",
     eyebrow: "Zoom Agentless Auto Dialer",
-    title: "ZAAD",
-    infoLabel: "About ZAAD",
+    title: "AutoReach",
+    infoLabel: "About AutoReach",
     description:
       "Manage disaster radio residents, TTS outbound messages, Zoom Contact Center contact lists, recurring campaigns, and one-time campaigns.",
     apiSettings: "Developer API settings",
@@ -564,7 +564,7 @@ export const zaadDictionaries: Record<
       editTitle: "Edit resident",
       deleteTitle: "Delete resident",
       deleteDescription:
-        "The Zoom contact is deleted before the resident record in ZAAD.",
+        "The Zoom contact is deleted before the resident record in AutoReach.",
       email: "Email address",
       phone: "Phone number",
       consentedValue: "Consented",
@@ -581,7 +581,7 @@ export const zaadDictionaries: Record<
       syncPending: "Syncing",
       syncSynced: "Synced",
       syncFailed: "Sync failed",
-      syncNotAssigned: "ZAAD only",
+      syncNotAssigned: "AutoReach only",
       syncNotEligible: "Not eligible",
       sourceWeb: "Web",
       sourceAdmin: "Admin",
@@ -655,7 +655,7 @@ export const zaadDictionaries: Record<
       description:
         "Choose the Zoom contact list used for newly consented residents.",
       assignment: "New registration target",
-      noAssignment: "No assignment (register in ZAAD only)",
+      noAssignment: "No assignment (register in AutoReach only)",
       save: "Save registration settings",
       futureOnly:
         "Changes apply only to new registrations and residents changing from not consented to consented.",
@@ -746,7 +746,7 @@ export const zaadDictionaries: Record<
       conflict:
         "Another update was applied. Reload the latest data, then try again.",
       resultUnknown:
-        "The Zoom result is unknown. Do not resubmit the operation; reconcile the latest state in the Zoom web portal and ZAAD.",
+        "The Zoom result is unknown. Do not resubmit the operation; reconcile the latest state in the Zoom web portal and AutoReach.",
       notFound: "The requested item was not found. Reload the latest data.",
       invalid: "Review the input or selection, then try again.",
       resourceInUse:
@@ -759,10 +759,10 @@ export const zaadDictionaries: Record<
     },
   },
   "zh-Hans": {
-    navLabel: "ZAAD",
+    navLabel: "AutoReach",
     eyebrow: "Zoom Agentless Auto Dialer",
-    title: "ZAAD",
-    infoLabel: "关于ZAAD",
+    title: "AutoReach",
+    infoLabel: "关于AutoReach",
     description:
       "管理防灾行政无线登记居民、TTS外呼消息、Zoom Contact Center联系人列表、定期活动和单次活动。",
     apiSettings: "Developer API设置",
@@ -824,7 +824,7 @@ export const zaadDictionaries: Record<
       createTitle: "登记居民",
       editTitle: "编辑居民信息",
       deleteTitle: "删除居民信息",
-      deleteDescription: "先删除Zoom联系人，再删除ZAAD居民信息。",
+      deleteDescription: "先删除Zoom联系人，再删除AutoReach居民信息。",
       email: "电子邮件地址",
       phone: "电话号码",
       consentedValue: "已同意",
@@ -840,7 +840,7 @@ export const zaadDictionaries: Record<
       syncPending: "同步中",
       syncSynced: "已同步",
       syncFailed: "同步失败",
-      syncNotAssigned: "仅ZAAD",
+      syncNotAssigned: "仅AutoReach",
       syncNotEligible: "非同步对象",
       sourceWeb: "网页",
       sourceAdmin: "管理页面",
@@ -908,7 +908,7 @@ export const zaadDictionaries: Record<
       heading: "公开表单登记设置",
       description: "选择用于同步新登记且已同意居民的Zoom联系人列表。",
       assignment: "新登记目标",
-      noAssignment: "未分配（仅登记到ZAAD）",
+      noAssignment: "未分配（仅登记到AutoReach）",
       save: "保存登记设置",
       futureOnly: "变更仅适用于今后的新登记，以及从未同意变为已同意的居民。",
     },
@@ -990,7 +990,7 @@ export const zaadDictionaries: Record<
       transient: "Zoom API暂时无法使用。请稍后重试。",
       conflict: "其他更新已生效。请重新加载最新信息后再试。",
       resultUnknown:
-        "无法确认Zoom端的处理结果。请勿重新发送操作，并在Zoom Web门户和ZAAD中核对最新状态。",
+        "无法确认Zoom端的处理结果。请勿重新发送操作，并在Zoom Web门户和AutoReach中核对最新状态。",
       notFound: "找不到指定对象。请重新加载最新信息。",
       invalid: "请检查输入或选择内容后再试。",
       resourceInUse: "Zoom正在使用此对象。请先在Zoom Web门户中解除引用后再试。",
@@ -1001,10 +1001,10 @@ export const zaadDictionaries: Record<
     },
   },
   "zh-Hant": {
-    navLabel: "ZAAD",
+    navLabel: "AutoReach",
     eyebrow: "Zoom Agentless Auto Dialer",
-    title: "ZAAD",
-    infoLabel: "關於ZAAD",
+    title: "AutoReach",
+    infoLabel: "關於AutoReach",
     description:
       "管理防災行政無線登記居民、TTS外撥訊息、Zoom Contact Center聯絡人清單、定期活動與單次活動。",
     apiSettings: "Developer API設定",
@@ -1066,7 +1066,7 @@ export const zaadDictionaries: Record<
       createTitle: "登記居民",
       editTitle: "編輯居民資訊",
       deleteTitle: "刪除居民資訊",
-      deleteDescription: "先刪除Zoom聯絡人，再刪除ZAAD居民資訊。",
+      deleteDescription: "先刪除Zoom聯絡人，再刪除AutoReach居民資訊。",
       email: "電子郵件地址",
       phone: "電話號碼",
       consentedValue: "已同意",
@@ -1082,7 +1082,7 @@ export const zaadDictionaries: Record<
       syncPending: "同步中",
       syncSynced: "已同步",
       syncFailed: "同步失敗",
-      syncNotAssigned: "僅ZAAD",
+      syncNotAssigned: "僅AutoReach",
       syncNotEligible: "非同步對象",
       sourceWeb: "網頁",
       sourceAdmin: "管理頁面",
@@ -1150,7 +1150,7 @@ export const zaadDictionaries: Record<
       heading: "公開表單登記設定",
       description: "選擇用於同步新登記且已同意居民的Zoom聯絡人清單。",
       assignment: "新登記目標",
-      noAssignment: "未分配（僅登記至ZAAD）",
+      noAssignment: "未分配（僅登記至AutoReach）",
       save: "儲存登記設定",
       futureOnly: "變更僅適用於今後的新登記，以及從未同意改為已同意的居民。",
     },
@@ -1233,7 +1233,7 @@ export const zaadDictionaries: Record<
       transient: "Zoom API暫時無法使用。請稍後再試。",
       conflict: "其他更新已生效。請重新載入最新資訊後再試。",
       resultUnknown:
-        "無法確認Zoom端的處理結果。請勿重新傳送操作，並在Zoom Web入口網站與ZAAD中核對最新狀態。",
+        "無法確認Zoom端的處理結果。請勿重新傳送操作，並在Zoom Web入口網站與AutoReach中核對最新狀態。",
       notFound: "找不到指定項目。請重新載入最新資訊。",
       invalid: "請檢查輸入或選擇內容後再試。",
       resourceInUse:
@@ -1245,10 +1245,10 @@ export const zaadDictionaries: Record<
     },
   },
   ko: {
-    navLabel: "ZAAD",
+    navLabel: "AutoReach",
     eyebrow: "Zoom Agentless Auto Dialer",
-    title: "ZAAD",
-    infoLabel: "ZAAD 정보",
+    title: "AutoReach",
+    infoLabel: "AutoReach 정보",
     description:
       "방재 행정 무선 등록 주민, TTS 발신 메시지, Zoom Contact Center 연락처 목록, 정기 캠페인과 단발 캠페인을 관리합니다.",
     apiSettings: "Developer API 설정",
@@ -1312,7 +1312,7 @@ export const zaadDictionaries: Record<
       editTitle: "주민 정보 편집",
       deleteTitle: "주민 정보 삭제",
       deleteDescription:
-        "Zoom 연락처를 먼저 삭제한 후 ZAAD 주민 정보를 삭제합니다.",
+        "Zoom 연락처를 먼저 삭제한 후 AutoReach 주민 정보를 삭제합니다.",
       email: "이메일 주소",
       phone: "전화번호",
       consentedValue: "동의함",
@@ -1328,7 +1328,7 @@ export const zaadDictionaries: Record<
       syncPending: "동기화 중",
       syncSynced: "동기화 완료",
       syncFailed: "동기화 실패",
-      syncNotAssigned: "ZAAD만",
+      syncNotAssigned: "AutoReach만",
       syncNotEligible: "동기화 대상 아님",
       sourceWeb: "웹",
       sourceAdmin: "관리 화면",
@@ -1399,7 +1399,7 @@ export const zaadDictionaries: Record<
       heading: "공개 양식 등록 설정",
       description: "새로 동의한 주민을 동기화할 Zoom 연락처 목록을 선택합니다.",
       assignment: "신규 등록 대상",
-      noAssignment: "할당 없음(ZAAD에만 등록)",
+      noAssignment: "할당 없음(AutoReach에만 등록)",
       save: "등록 설정 저장",
       futureOnly:
         "변경은 이후 신규 등록과 미동의에서 동의함으로 바뀐 주민에게만 적용됩니다.",
@@ -1493,7 +1493,7 @@ export const zaadDictionaries: Record<
       conflict:
         "다른 업데이트가 반영되었습니다. 최신 정보를 다시 불러온 후 시도해 주세요.",
       resultUnknown:
-        "Zoom 측 처리 결과를 확인할 수 없습니다. 작업을 다시 보내지 말고 Zoom 웹 포털과 ZAAD의 최신 상태를 대조해 주세요.",
+        "Zoom 측 처리 결과를 확인할 수 없습니다. 작업을 다시 보내지 말고 Zoom 웹 포털과 AutoReach의 최신 상태를 대조해 주세요.",
       notFound: "대상을 찾을 수 없습니다. 최신 정보를 다시 불러와 주세요.",
       invalid: "입력 또는 선택 내용을 확인한 후 다시 시도해 주세요.",
       resourceInUse:

@@ -29,7 +29,8 @@ for (const [id, path, maxWidth, description] of pages) {
       assert.ok(classes.includes("mr-0"));
       assert.ok(!classes.includes("mx-auto"));
       assert.ok(!classes.includes("w-full"));
-      if (maxWidth) assert.ok(classes.includes(maxWidth));
+      if (maxWidth && !(marker === "header" && ["PHONE", "CHAT"].includes(id))) assert.ok(classes.includes(maxWidth));
+      if (marker === "header" && ["PHONE", "CHAT"].includes(id)) { assert.ok(classes.includes("flex")); assert.ok(classes.includes("md:items-start")); }
     }
     const navigation = id === "DEV" ? "<DeveloperApiSectionTabs" : ["PHONE", "CHAT"].includes(id) ? "<AdminSettingsTabs" : "<AdminSectionNavigation";
     assert.ok(text.indexOf("data-admin-page-header") < text.indexOf(navigation));

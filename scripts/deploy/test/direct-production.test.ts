@@ -423,6 +423,14 @@ test("reviewed migration manifest exactly classifies the current SHA-verified ch
         name: "20260907070000_add_online_consultation_memo",
         classification: "destructive-reviewed",
       },
+      {
+        name: "20260908060000_university_outreach",
+        classification: "destructive-reviewed",
+      },
+      {
+        name: "20260908063000_university_outreach_action_receipts",
+        classification: "destructive-reviewed",
+      },
     ],
   );
 });

@@ -35,6 +35,7 @@ type AdminShellProps = {
   visibleItems: AdminNavigationItemKey[];
   currentUserName: string;
   allowSettingsReview?: boolean;
+  outreach?: { allowedTenants: ("lg" | "univ")[]; hostTenant: "lg" | "univ" };
 };
 
 type AdminNavigationContextValue = {
@@ -70,10 +71,13 @@ export function AdminShell({
   visibleItems,
   currentUserName,
   allowSettingsReview = false,
+  outreach,
 }: AdminShellProps) {
   const { t } = useI18n();
   const pathname = usePathname();
-  const reviewState = useSearchParams()?.get("state");
+  const searchParams = useSearchParams();
+  const reviewState = searchParams?.get("state");
+  const selectedTenant = searchParams?.get("tenant") ?? null;
   const settingsReview = allowSettingsReview && ["/admin/phone-settings", "/admin/chat-settings", "/admin/online-consultation-settings"].includes(pathname);
   const router = useRouter();
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -90,8 +94,8 @@ export function AdminShell({
   const previousPathnameRef = useRef(pathname);
 
   const model = useMemo(
-    () => buildAdminNavigation(visibleItems, t),
-    [t, visibleItems],
+    () => buildAdminNavigation(visibleItems, t, outreach ? { ...outreach, selectedTenant } : undefined),
+    [t, visibleItems, outreach, selectedTenant],
   );
   const navigationState = useMemo(
     () => resolveAdminNavigationState(pathname),

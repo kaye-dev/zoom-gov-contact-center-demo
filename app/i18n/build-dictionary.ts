@@ -1,3 +1,4 @@
+import { universityOutreachDictionaries } from "./university-outreach";
 import { DEFAULT_TENANT_KEY, type TenantKey } from '@/lib/tenants';
 
 import { lgContent } from '../tenants/lg/content';
@@ -49,6 +50,7 @@ export function buildDictionary(
 
   const dictionary: Dictionary = {
     ...chrome,
+    universityOutreach: universityOutreachDictionaries[locale],
     siteName: content.siteName,
     siteNameRoman: content.siteNameRoman,
     findInfo: {

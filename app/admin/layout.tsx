@@ -1,3 +1,6 @@
+import { withPrisma } from "@/lib/server/prisma";
+import { getRequestTenant } from "@/lib/server/tenant";
+import { outreachTenants } from "@/lib/server/zaad/university/permissions";
 import { getSettingsReview } from "@/lib/server/admin-settings-review";
 import type { ReactNode } from "react";
 
@@ -40,12 +43,15 @@ export default async function AdminLayout({
   if (canAdminAccess(actor, "roles", "VIEW")) visibleItems.push("roles");
   if (canAdminAccess(actor, "reservations", "VIEW"))
     visibleItems.push("reservations");
-  if (canAdminAccess(actor, "zaad", "VIEW")) visibleItems.push("zaad");
+  const tenant = await getRequestTenant();
+  const allowedOutreachTenants = await withPrisma((db) => outreachTenants(db, actor));
+  if (allowedOutreachTenants.length > 0) visibleItems.push("zaad");
 
   return (
     <AdminShell
       allowSettingsReview={Boolean(await getSettingsReview("default"))}
       visibleItems={visibleItems}
+      outreach={{ allowedTenants: allowedOutreachTenants, hostTenant: tenant.key }}
       currentUserName={getSessionUser(session)!.name}
     >
       {children}

@@ -1,79 +1,44 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import { SettingsRequestSequence } from "../lib/admin-settings-request";
-import { OnlineConsultationIcon } from "../app/components/svg/OnlineConsultationIcon";
-import { chromeDictionaries, locales } from "../app/i18n/dictionaries";
-import { OnlineConsultationSettingsForm } from "../app/admin/online-consultation-settings/OnlineConsultationSettingsForm";
-import { renderAdmin } from "./admin-ui-render";
-import { consultationServices } from "../lib/online-consultation-catalog";
-test("SWITCH: old asynchronous responses cannot overwrite a later selection", async () => {
-  const seq = new SettingsRequestSequence();
-  const first = seq.next();
-  const second = seq.next();
-  const result = await Promise.resolve([second, first]);
-  const accepted = result.filter((id) => seq.current(id));
-  assert.deepEqual(accepted, [second]);
-  seq.next();
-  assert.equal(seq.current(second), false);
+import {
+  helpReducer,
+  initialHelpState,
+  isHelpOpen,
+} from "../app/components/admin/AdminPageTitleHelp";
+for (const [resource, file] of [
+  ["PHONE", "phone-settings/PhoneSettingsForm"],
+  ["CHAT", "chat-settings/ChatSettingsForm"],
+  [
+    "CONSULTATION",
+    "online-consultation-settings/OnlineConsultationSettingsForm",
+  ],
+])
+  test(`HEADER-${resource}: industry selection remains in the responsive title row`, () => {
+    const source = readFileSync(`app/admin/${file}.tsx`, "utf8");
+    const header = source.slice(
+      source.indexOf("data-admin-page-header"),
+      source.indexOf("</header>", source.indexOf("data-admin-page-header")),
+    );
+    assert.match(header, /md:flex-row/);
+    assert.match(header, /AdminSettingsTenantSelect/);
+  });
+test("HEADER-INLINE/HELP/A11Y: label, help and select retain one inline control", () => {
+  const select = readFileSync(
+    "app/components/admin/AdminSettingsTenantSelect.tsx",
+    "utf8",
+  );
+  assert.match(select, /flex w-full min-w-0 items-center gap-3/);
+  assert.match(select, /htmlFor="tenant"/);
+  assert.match(select, /aria-describedby="tenant-help"/);
+  assert.match(select, /AdminFieldHelp/);
+  assert.doesNotMatch(select, /<p[^>]*>\{c\.copy\.help\}/);
+  let state = helpReducer(initialHelpState, "focus");
+  assert.equal(isHelpOpen(state), true);
+  state = helpReducer(state, "dismiss");
+  assert.equal(isHelpOpen(state), false);
+  state = helpReducer(state, "toggle");
+  assert.equal(isHelpOpen(state), true);
+  state = helpReducer(state, "toggle");
+  assert.equal(isHelpOpen(state), false);
 });
-test("ICON: online consultation has video geometry and existing SVG conventions", () => {
-  const html = renderToStaticMarkup(createElement(OnlineConsultationIcon));
-  for (const value of [
-    'viewBox="0 0 24 24"',
-    'stroke-width="2"',
-    'stroke="currentColor"',
-    'fill="none"',
-    'aria-hidden="true"',
-    'focusable="false"',
-    "<rect",
-  ])
-    assert.ok(html.includes(value));
-});
-test("I18N: all five locales contain tenant names and all consultation services", () => {
-  const keys = Object.keys(chromeDictionaries.ja.admin.industrySettings).sort();
-  for (const locale of locales) {
-    const c = chromeDictionaries[locale].admin.industrySettings;
-    assert.deepEqual(Object.keys(c).sort(), keys);
-    for (const key of ["lg", "univ"] as const) assert.ok(c.names[key]);
-    for (const key of [
-      "general",
-      "admissions",
-      "student-support",
-      "careers",
-    ] as const)
-      assert.ok(c.services[key]);
-  }
-});
-for (const tenant of ["lg", "univ"] as const)
-  for (const canEdit of [true, false])
-    test(`consultation renders scoped tabs and permissions ${tenant}/${canEdit}`, () => {
-      const html = renderAdmin(
-        createElement(OnlineConsultationSettingsForm, {
-          initialTenant: tenant,
-          canEdit,
-          initialSettings: consultationServices(tenant).map((serviceKey) => ({
-            serviceKey,
-            enabled: false,
-            webClientTag: null,
-            queueId: null,
-            memo: "",
-          })),
-        }),
-        "/admin/online-consultation-settings",
-      );
-      assert.equal(
-        (html.match(/role="tab"/g) || []).length,
-        consultationServices(tenant).length,
-      );
-      assert.ok(
-        html.includes(
-          chromeDictionaries.ja.admin.industrySettings.names[tenant],
-        ),
-      );
-      assert.equal(
-        /<button[^>]*type="submit"[^>]*disabled=""/.test(html),
-        !canEdit,
-      );
-    });

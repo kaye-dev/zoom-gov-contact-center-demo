@@ -1,3 +1,5 @@
+import { outreachTenants } from "./university/permissions";
+import { registerUniversityApiRoutes } from "./university/api-routes";
 import { Hono, type Context } from "hono";
 
 import type { AppAuth } from "@/lib/auth";
@@ -59,6 +61,7 @@ export type ZaadApiEnvironment = {
 type ZaadContext = Context<ZaadApiEnvironment>;
 
 export function registerZaadApiRoutes(app: Hono<ZaadApiEnvironment>) {
+  registerUniversityApiRoutes(app);
   app.post("/disaster-radio-subscriptions", async (c) => {
     try {
       const payload = await readJson(c);
@@ -183,9 +186,13 @@ async function withZaadAuth(
     const prisma = c.get("prisma");
     const authorization = await authorizeAdminApi(c.get("auth"), prisma, c.req.raw.headers, "zaad", action);
     if (!authorization.ok) return c.json({ error: authorization.error }, authorization.status);
+    const tenantValues = c.req.queries("tenant") ?? [];
+    if (tenantValues.length > 1 || (tenantValues.length && tenantValues[0] !== "lg")) return c.json({ error: ZAAD_ERROR_CODES.invalidRequest }, 400);
+    const tenantKey = tenantValues.length ? "lg" : c.get("tenantKey");
+    if (tenantKey !== "lg" || !(await outreachTenants(prisma, authorization.actor)).includes("lg")) return c.json({ error: "NOT_FOUND" }, 404);
     return await run({
       prisma,
-      tenantKey: c.get("tenantKey"),
+      tenantKey,
       actorUserId: authorization.actor.id,
     });
   } catch (error) {

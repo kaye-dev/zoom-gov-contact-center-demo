@@ -457,7 +457,7 @@ async function resolveSnapshot(
   }
 
   const residents = await prisma.disasterRadioSubscription.findMany({
-    where: { id: { in: input.residentSelections.map(({ id }) => id) } },
+    where: { siteKey: tenantKey, id: { in: input.residentSelections.map(({ id }) => id) } },
   });
   const byId = new Map(residents.map((resident) => [resident.id, resident]));
   for (const selection of input.residentSelections) {

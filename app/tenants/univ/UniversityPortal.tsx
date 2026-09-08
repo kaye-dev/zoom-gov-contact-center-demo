@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useI18n } from "@/app/i18n/LanguageProvider";
 import { localeNames } from "@/app/i18n/dictionaries";
 import { setStoredTheme, useIsDarkTheme } from "@/app/components/theme-store";
@@ -19,7 +19,7 @@ import {
   type UniversitySectionKey,
 } from "./content";
 
-type Page = "home" | UniversitySectionKey | "faq" | "news" | "consultation";
+type Page = "home" | "registration" | UniversitySectionKey | "faq" | "news" | "consultation";
 
 const paths: Record<UniversitySectionKey, string> = {
   admissions: "/admissions",
@@ -50,7 +50,7 @@ function UniversityMark({ compact = false }: { compact?: boolean }) {
   );
 }
 
-export function UniversityPortal({ page }: { page: Page }) {
+export function UniversityPortal({ page, children }: { page: Page; children?: ReactNode }) {
   const { locale } = useI18n();
   const c = univContent[locale];
   const state = useSearchParams().get("state") ?? "default";
@@ -84,6 +84,7 @@ export function UniversityPortal({ page }: { page: Page }) {
         setMenuOpen={setMenuOpen}
       />
       <main id="main-content" className="flex-1">
+        {children}
         {page === "home" && <Home content={c} />}
         {page === "consultation" && <Consultation content={c} state={state} />}
         {page === "faq" && <Faq content={c} openFirst={state === "faq-open"} />}
@@ -239,6 +240,7 @@ function UniversityHeader({
                     </Link>
                   </li>
                 ))}
+                <li><NotificationRegistrationLink onNavigate={() => setMenuOpen(false)} /></li>
               </ul>
               <Link
                 onClick={() => setMenuOpen(false)}
@@ -256,6 +258,7 @@ function UniversityHeader({
 }
 
 function UniversityFooter({ content }: { content: UniversityContent }) {
+  const { t } = useI18n();
   return (
     <footer className="mt-auto border-t border-line bg-primary-50 text-fg dark:bg-surface-raised">
       <div className="mx-auto max-w-7xl px-5 py-10 md:px-8">
@@ -303,11 +306,12 @@ function UniversityFooter({ content }: { content: UniversityContent }) {
               <li>
                 <Link
                   href="/consultation"
-                  className="hover:text-accent hover:underline"
+                  className="font-bold text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
                 >
                   {content.nav.consultation}
                 </Link>
               </li>
+              <li><Link href="/notifications/register" className="font-bold text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent">{t.universityOutreach.registerLink}</Link></li>
               <li>
                 <Link
                   href="/admin"
@@ -437,6 +441,7 @@ function Home({ content }: { content: UniversityContent }) {
             </li>
           ))}
         </ul>
+        <NotificationEntry />
       </section>
       <section className="border-t border-line bg-surface-raised">
         <div className="mx-auto max-w-7xl px-5 py-12 md:px-8">
@@ -1090,4 +1095,13 @@ function HomeNewsRows({ content }: { content: UniversityContent }) {
       ))}
     </ul>
   );
+}
+
+function NotificationRegistrationLink({ onNavigate }: { onNavigate?: () => void }) {
+  const { t } = useI18n();
+  return <Link onClick={onNavigate} href="/notifications/register" className="flex min-h-12 items-center py-3 font-semibold text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">{t.universityOutreach.registerLink}</Link>;
+}
+function NotificationEntry() {
+  const { t } = useI18n(), c = t.universityOutreach;
+  return <div id="phone-notice-entry" className="mt-8 flex flex-col gap-4 border-y border-line py-6 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-lg font-bold">{c.homeTitle}</h2><p className="mt-2 text-sm leading-7 text-fg-muted">{c.homeLead}</p></div><Link href="/notifications/register" className="inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">{c.registerLink}<Icon name="arrow" /></Link></div>;
 }

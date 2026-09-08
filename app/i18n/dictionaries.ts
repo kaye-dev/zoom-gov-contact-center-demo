@@ -1,3 +1,4 @@
+import type { UniversityOutreachDictionary } from "./university-outreach";
 // 対応ロケールと UI 文言の辞書。
 // ルーティングを使わず、クライアント側で言語を切り替えるシンプルな構成。
 
@@ -47,7 +48,7 @@ export const localeNames: Record<Locale, string> = {
  * 画面が参照する完成した辞書。共通クロームと業種コンテンツの合成結果であり、
  * 利用側（useI18n().t）から見た形はテナント軸の導入前と変わらない。
  */
-export type Dictionary = ChromeDictionary & TenantContentDictionary;
+export type Dictionary = ChromeDictionary & TenantContentDictionary & { universityOutreach: UniversityOutreachDictionary };
 
 export type IndustrySettingsDictionary = {
   label: string;
@@ -2572,7 +2573,7 @@ export const chromeDictionaries: Record<Locale, ChromeDictionary> = {
           "maintenance-settings": "メンテナンス設定",
           "developer-api": "Developer API",
           reservations: "予約システム",
-          zaad: "ZAAD",
+          zaad: "AutoReach",
         },
         resourceDescriptions: {
           users:
@@ -3227,7 +3228,7 @@ export const chromeDictionaries: Record<Locale, ChromeDictionary> = {
           "maintenance-settings": "Maintenance settings",
           "developer-api": "Developer API",
           reservations: "Reservation system",
-          zaad: "ZAAD",
+          zaad: "AutoReach",
         },
         resourceDescriptions: {
           users:
@@ -3872,7 +3873,7 @@ export const chromeDictionaries: Record<Locale, ChromeDictionary> = {
           "maintenance-settings": "维护设置",
           "developer-api": "Developer API",
           reservations: "预约系统",
-          zaad: "ZAAD",
+          zaad: "AutoReach",
         },
         resourceDescriptions: {
           users: "管理用户列表、详情、创建、权限、状态、密码和访问摘要。",
@@ -4481,7 +4482,7 @@ export const chromeDictionaries: Record<Locale, ChromeDictionary> = {
           "maintenance-settings": "維護設定",
           "developer-api": "Developer API",
           reservations: "預約系統",
-          zaad: "ZAAD",
+          zaad: "AutoReach",
         },
         resourceDescriptions: {
           users: "管理使用者清單、詳細資料、建立、權限、狀態、密碼及存取摘要。",
@@ -5105,7 +5106,7 @@ export const chromeDictionaries: Record<Locale, ChromeDictionary> = {
           "maintenance-settings": "점검 설정",
           "developer-api": "Developer API",
           reservations: "예약 시스템",
-          zaad: "ZAAD",
+          zaad: "AutoReach",
         },
         resourceDescriptions: {
           users:

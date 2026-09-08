@@ -30,7 +30,7 @@ export function resolveSettingsReview(
   if (
     !optedIn ||
     environment === "production" ||
-    !["localhost", "127.0.0.1", "[::1]"].includes(hostname)
+    !["localhost", "127.0.0.1", "[::1]", "univ.localhost", "lg.localhost"].includes(hostname)
   )
     return undefined;
   return typeof state === "string" &&

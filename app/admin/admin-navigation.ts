@@ -74,6 +74,7 @@ const settingsPaths: Record<
 export function buildAdminNavigation(
   visibleItems: AdminNavigationItemKey[],
   t: Dictionary,
+  outreach?: { allowedTenants: readonly string[]; hostTenant: string; selectedTenant: string | null },
 ): AdminNavigationModel {
   const visible = new Set(visibleItems);
   const users = (
@@ -117,10 +118,17 @@ export function buildAdminNavigation(
       label: t.admin.reservations,
     });
   }
-  if (visible.has("zaad")) {
+  const outreachTenant = outreach
+    ? [outreach.selectedTenant, outreach.hostTenant, ...outreach.allowedTenants].find(
+        (tenant) => tenant !== null && outreach.allowedTenants.includes(tenant),
+      )
+    : undefined;
+  if (visible.has("zaad") && (!outreach || outreachTenant)) {
     primaryItems.push({
       key: "zaad",
-      href: "/admin/zaad",
+      href: outreach && outreachTenant !== outreach.hostTenant
+        ? `/admin/zaad?tenant=${outreachTenant}`
+        : "/admin/zaad",
       label: t.admin.zaad.navLabel,
     });
   }

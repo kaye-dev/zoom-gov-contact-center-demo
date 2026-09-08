@@ -141,7 +141,7 @@ export function OnlineConsultationSettingsForm({
       data-industry-state={control.pending ? "confirm-switch" : invalidField ? "validation" : control.invalid ? "invalid" : control.loading ? "loading" : control.loadError ? "load-error" : control.isSubmitting ? "saving" : feedback === "saved" ? "saved" : feedback === "error" ? "save-error" : control.dirty ? "dirty" : control.reviewIdentity ?? "default"}
     >
       <div data-admin-page-chrome className="space-y-4">
-        <div data-admin-page-header className="ml-1 mr-0 max-w-5xl space-y-2">
+        <div data-admin-page-header className="ml-1 mr-0 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <AdminPageTitleHelp
             title={copy.consultationTitle}
             description={copy.consultationDescription}
@@ -150,11 +150,11 @@ export function OnlineConsultationSettingsForm({
               copy.consultationTitle,
             )}
           />
-        </div>
         <AdminSettingsTenantSelect
           control={control}
           resource="online-consultation-settings"
         />
+        </div>
         {!control.invalid && !control.loading && !control.loadError && (
           <AdminSettingsTabs
             activeSection={active}

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   useEffect,
   useRef,
@@ -166,6 +167,7 @@ const SECTION_ORDER: ZaadViewKey[] = [
 ];
 
 export function ZaadView({
+  allowedTenants = ["lg"],
   initialView,
   reviewState,
   reviewSurface,
@@ -175,6 +177,7 @@ export function ZaadView({
   permissions: actualPermissions,
   canViewDeveloperApi,
 }: {
+  allowedTenants?: ("lg" | "univ")[];
   initialView: ZaadViewKey;
   reviewState?: string;
   reviewSurface?: string;
@@ -185,6 +188,7 @@ export function ZaadView({
   canViewDeveloperApi: boolean;
 }) {
   const { locale, t } = useI18n();
+  const router = useRouter();
   const copy = t.admin.zaad;
   const reviewMode = Boolean(
     reviewState ||
@@ -550,6 +554,7 @@ export function ZaadView({
         </div>
       </header>
 
+      <div className="mt-5 flex flex-wrap items-center gap-3"><label htmlFor="zaad-tenant" className="text-sm font-semibold">{t.admin.industrySettings.label}</label><Select id="zaad-tenant" value="lg" onChange={e => { if (allowedTenants.includes(e.target.value as "lg" | "univ")) router.push(`/admin/zaad?tenant=${e.target.value}`); }} containerClassName="w-64">{allowedTenants.map(key => <option key={key} value={key}>{t.admin.industrySettings.names[key]}</option>)}</Select></div>
       <nav
         aria-label={copy.title}
         className="mt-7 overflow-x-auto border-b border-line"
@@ -4122,7 +4127,9 @@ async function requestJson<T = unknown>(
   url: string,
   init: RequestInit = {},
 ): Promise<T> {
-  const response = await fetch(url, {
+  const scopedUrl = new URL(url, window.location.origin);
+  scopedUrl.searchParams.set("tenant", "lg");
+  const response = await fetch(scopedUrl, {
     cache: "no-store",
     ...init,
     headers: {

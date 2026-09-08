@@ -66,7 +66,7 @@ test("review fixtures require an explicit state, loopback and non-production", (
   );
   for (const [host, env] of [
     ["localhost", "production"],
-    ["univ.localhost", "development"],
+    ["univ.example.com", "development"],
     ["example.com", "development"],
   ]) {
     assert.equal(resolveSettingsReview("saving", host!, env, true), undefined);

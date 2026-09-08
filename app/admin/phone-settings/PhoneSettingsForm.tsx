@@ -106,15 +106,15 @@ export function PhoneSettingsForm({
       <div data-admin-page-chrome className="space-y-4">
         <div
           data-admin-page-header
-          className="ml-1 mr-0 max-w-4xl space-y-2"
+          className="ml-1 mr-0 flex flex-col gap-4 md:flex-row md:items-start md:justify-between"
         >
           <AdminPageTitleHelp
             title={t.admin.phoneManagement.title}
             description={t.admin.phoneManagement.description}
             label={t.admin.pageDescriptionLabel.replace("{title}", t.admin.phoneManagement.title)}
           />
-        </div>
         <AdminSettingsTenantSelect control={control} resource="phone-settings" />
+        </div>
         {!control.invalid && !control.loading && !control.loadError && <AdminSettingsTabs
           activeSection={activeSection}
           onSelect={setActiveSection}

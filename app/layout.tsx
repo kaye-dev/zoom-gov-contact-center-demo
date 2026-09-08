@@ -24,6 +24,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title: tenant.metadata.title,
     description: tenant.metadata.description,
     robots: NOINDEX_ROBOTS_METADATA,
+    icons: { icon: { url: `/favicons/${tenant.key}.svg`, type: "image/svg+xml", sizes: "any" } },
   };
 }
 
@@ -58,10 +59,9 @@ export default async function RootLayout({
       <head>
         <script
           id="theme-init"
-          suppressHydrationWarning
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var q=${reviewThemeEnabled ? "new URLSearchParams(location.search).getAll('theme')" : "[]"};var l=location.hostname==='localhost'||location.hostname==='127.0.0.1'||location.hostname==='[::1]'||/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.localhost$/.test(location.hostname);var r=l&&q.length===1&&(q[0]==='dark'||q[0]==='light')?q[0]:null;var t=r||localStorage.getItem('theme');var d=t==='dark';document.documentElement.classList.toggle('review-theme',r!==null);document.documentElement.classList.toggle('dark',d);document.documentElement.classList.toggle('light',!d);}catch(e){document.documentElement.classList.remove('review-theme','dark');document.documentElement.classList.add('light');}})();`,
-          }}
+          async
+          blocking="render"
+          src={reviewThemeEnabled ? "/theme-init.js?review=1" : "/theme-init.js"}
         />
       </head>
       <body className="min-h-full flex flex-col">

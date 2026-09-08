@@ -358,10 +358,10 @@ export async function updateZaadContactList(prisma: PrismaClient, tenantKey: Ten
 
 export async function deleteZaadContactList(prisma: PrismaClient, tenantKey: TenantKey, actorUserId: string, id: string) {
   const [settingReferences, residentReferences, dispatchReferences, sourceReferences] = await Promise.all([
-    prisma.zaadRegistrationSetting.count({ where: { contactListId: id } }),
+    prisma.zaadRegistrationSetting.count({ where: { siteKey: tenantKey, contactListId: id } }),
     prisma.disasterRadioSubscription.count({ where: { siteKey: tenantKey, zoomContactListId: id } }),
     prisma.zaadOneTimeDispatch.count({ where: { siteKey: tenantKey, zoomContactListId: id } }),
-    prisma.zaadOneTimeDispatchSourceList.count({ where: { contactListId: id } }),
+    prisma.zaadOneTimeDispatchSourceList.count({ where: { contactListId: id, dispatch: { siteKey: tenantKey } } }),
   ]);
   if (settingReferences + residentReferences + dispatchReferences + sourceReferences > 0) {
     await writeZaadAudit(prisma, tenantKey, {

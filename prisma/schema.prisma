@@ -564,7 +564,7 @@ model ZaadOutboundMessage {
 model ZaadOneTimeDispatch {
   id                    String                   @id @default(cuid())
   siteKey               String
-  operationKey          String                   @unique
+  operationKey          String
   name                  String
   body                  String
   languageCode          String                   @default("ja-JP")
@@ -592,6 +592,7 @@ model ZaadOneTimeDispatch {
 
   @@index([siteKey, createdAt, id])
   @@index([siteKey, state, updatedAt])
+  @@unique([siteKey, operationKey])
   @@map("zaad_one_time_dispatches")
 }
 
@@ -641,4 +642,275 @@ model ZaadAdminAudit {
   @@index([siteKey, actorUserId, createdAt])
   @@index([siteKey, resourceKind, createdAt])
   @@map("zaad_admin_audits")
+}
+
+// University outreach is opt-in and department scoped. Existing municipal rows are not migrated.
+model UniversityZaadGrant {
+  id            String @id @default(cuid())
+  siteKey       String
+  userId        String
+  departmentKey String
+  liveExecution Boolean @default(false)
+  @@unique([siteKey, userId, departmentKey])
+  @@map("university_zaad_grants")
+}
+
+model UniversityContact {
+  id                   String @id @default(cuid())
+  siteKey              String
+  departmentKey        String
+  name                 String
+  phone                String
+  facultyCode          String?
+  admissionYear        Int?
+  serial               String?
+  displayStudentNumber String?
+  registrationSource   String
+  identityVerified     Boolean @default(false)
+  phoneVerified        Boolean @default(false)
+  phoneEligible        Boolean @default(false)
+  priorNoticeAt        DateTime? @db.Timestamptz(3)
+  selectionReason      String @default("")
+  externalReference    String?
+  version              Int @default(1)
+  createdAt            DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime @updatedAt @db.Timestamptz(3)
+  preferences          UniversityNotificationPreference[]
+  registrations        UniversityStudentRegistration[]
+  representedGroups    UniversityContactGroup[] @relation("GroupRepresentative")
+  groupMemberships     UniversityGroupMembership[]
+  @@unique([siteKey, id])
+  @@unique([siteKey, facultyCode, admissionYear, serial])
+  @@index([siteKey, departmentKey, id])
+  @@map("university_contacts")
+}
+
+model UniversityStudentRegistration {
+  id                String @id @default(cuid())
+  siteKey           String
+  requestKey        String
+  requestDigest     String
+  name              String
+  facultyCode       String
+  admissionYear     Int
+  serial            String
+  phone             String
+  topicIds          String[]
+  source            String
+  status            String @default("PENDING_REVIEW")
+  consentVersion    String
+  consentedAt       DateTime @db.Timestamptz(3)
+  receivedAt        DateTime @default(now()) @db.Timestamptz(3)
+  reviewedName      String?
+  reviewedPhone     String?
+  reviewedTopicIds  String[] @default([])
+  reviewerId        String?
+  reviewedAt        DateTime? @db.Timestamptz(3)
+  note              String @default("")
+  identityConfirmed Boolean @default(false)
+  phoneConfirmed    Boolean @default(false)
+  contactId         String?
+  contact           UniversityContact? @relation(fields: [siteKey, contactId], references: [siteKey, id], onDelete: Restrict)
+  version           Int @default(1)
+  @@unique([siteKey, id])
+  @@unique([siteKey, requestKey])
+  @@index([siteKey, status, id])
+  @@map("university_student_registrations")
+}
+
+model UniversityNotificationPreference {
+  id              String @id @default(cuid())
+  siteKey         String
+  contactId       String
+  topicId         String
+  enabled         Boolean @default(true)
+  sourceRequestId String
+  confirmedBy     String
+  confirmedAt     DateTime @db.Timestamptz(3)
+  withdrawnAt     DateTime? @db.Timestamptz(3)
+  contact         UniversityContact @relation(fields: [siteKey, contactId], references: [siteKey, id], onDelete: Restrict)
+  @@unique([siteKey, contactId, topicId])
+  @@map("university_notification_preferences")
+}
+
+model UniversityContactGroup {
+  id                      String @id @default(cuid())
+  siteKey                 String
+  departmentKey           String
+  name                    String
+  representativeContactId String
+  memberCount             Int
+  version                 Int @default(1)
+  memberships             UniversityGroupMembership[]
+  representative          UniversityContact @relation("GroupRepresentative", fields: [siteKey, representativeContactId], references: [siteKey, id], onDelete: Restrict)
+  @@unique([siteKey, id])
+  @@index([siteKey, departmentKey])
+  @@map("university_contact_groups")
+}
+
+model UniversityGroupMembership {
+  id        String @id @default(cuid())
+  siteKey   String
+  groupId   String
+  contactId String
+  contact   UniversityContact @relation(fields: [siteKey, contactId], references: [siteKey, id], onDelete: Restrict)
+  group     UniversityContactGroup @relation(fields: [siteKey, groupId], references: [siteKey, id], onDelete: Restrict)
+  @@unique([siteKey, groupId, contactId])
+  @@map("university_group_memberships")
+}
+
+model UniversityOutreachBatch {
+  id             String @id @default(cuid())
+  siteKey        String
+  departmentKey  String
+  purpose        String
+  mode           String @default("DEMO")
+  trigger        String
+  config         Json
+  questionVersion Int @default(1)
+  status         String @default("PREPARED")
+  operationKey   String
+  requestDigest  String
+  executeKey     String?
+  providerAccountKey String?
+  providerResourceId String?
+  version        Int @default(1)
+  createdBy      String
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  deadline       DateTime? @db.Timestamptz(3)
+  targets        UniversityOutreachTarget[]
+  reserves       UniversityVenueReserve[]
+  @@unique([siteKey, id])
+  @@unique([siteKey, operationKey])
+  @@index([siteKey, departmentKey, id])
+  @@map("university_outreach_batches")
+}
+
+model UniversityOutreachTarget {
+  id              String @id @default(cuid())
+  siteKey         String
+  batchId         String
+  contactId       String?
+  groupId         String?
+  sourceKey       String
+  name            String
+  maskedContact   String
+  contactVersion  Int?
+  eligible        Boolean
+  exclusionReason String
+  priorNoticeAt   DateTime? @db.Timestamptz(3)
+  groupMemberCount Int @default(1)
+  snapshot        Json
+  batch           UniversityOutreachBatch @relation(fields: [siteKey, batchId], references: [siteKey, id], onDelete: Restrict)
+  attempts        UniversityCallAttempt[]
+  cases           UniversitySupportCase[]
+  @@unique([siteKey, id])
+  @@unique([siteKey, batchId, sourceKey])
+  @@map("university_outreach_targets")
+}
+
+model UniversityCallAttempt {
+  id              String @id @default(cuid())
+  siteKey         String
+  targetId        String
+  attemptNo       Int
+  operationKey    String
+  callState       String
+  identityState   String
+  ackState        String
+  recognitionState String
+  requestDigest   String?
+  occurredAt      DateTime @default(now()) @db.Timestamptz(3)
+  target          UniversityOutreachTarget @relation(fields: [siteKey, targetId], references: [siteKey, id], onDelete: Restrict)
+  responses       UniversityResponse[]
+  @@unique([siteKey, id])
+  @@unique([siteKey, targetId, attemptNo])
+  @@unique([siteKey, operationKey])
+  @@map("university_call_attempts")
+}
+
+model UniversityResponse {
+  id                 String @id @default(cuid())
+  siteKey            String
+  attemptId          String
+  providerAccountKey String
+  providerEventId    String
+  eventVersion       Int
+  answers            Json
+  occurredAt         DateTime @db.Timestamptz(3)
+  receivedAt         DateTime @default(now()) @db.Timestamptz(3)
+  attempt            UniversityCallAttempt @relation(fields: [siteKey, attemptId], references: [siteKey, id], onDelete: Restrict)
+  @@unique([siteKey, providerAccountKey, providerEventId])
+  @@index([siteKey, attemptId, eventVersion])
+  @@map("university_responses")
+}
+
+model UniversityIntake {
+  id              String @id @default(cuid())
+  siteKey         String
+  departmentKey   String
+  direction       String @default("INBOUND")
+  place           String
+  issue           String
+  support         String
+  callback        String
+  identityState   String @default("UNVERIFIED")
+  receivedAt      DateTime @default(now()) @db.Timestamptz(3)
+  cases           UniversitySupportCase[]
+  @@unique([siteKey, id])
+  @@index([siteKey, departmentKey, id])
+  @@map("university_intakes")
+}
+
+model UniversitySupportCase {
+  id                    String @id @default(cuid())
+  siteKey               String
+  departmentKey         String
+  targetId              String?
+  intakeId              String?
+  assigneeId            String?
+  status                String @default("OPEN")
+  procedureStatus       String @default("UNKNOWN")
+  verificationAt        DateTime? @db.Timestamptz(3)
+  verificationReference String?
+  dueAt                 DateTime? @db.Timestamptz(3)
+  version               Int @default(1)
+  target                UniversityOutreachTarget? @relation(fields: [siteKey, targetId], references: [siteKey, id], onDelete: Restrict)
+  intake                UniversityIntake? @relation(fields: [siteKey, intakeId], references: [siteKey, id], onDelete: Restrict)
+  actions               UniversityCaseAction[]
+  @@unique([siteKey, id])
+  @@unique([siteKey, targetId])
+  @@unique([siteKey, intakeId])
+  @@index([siteKey, departmentKey, id])
+  @@map("university_support_cases")
+}
+
+model UniversityCaseAction {
+  id         String @id @default(cuid())
+  siteKey    String
+  caseId     String
+  actorId    String
+  actionKind String
+  handoffRecipient String?
+  handoffAt DateTime? @db.Timestamptz(3)
+  note       String
+  minutes    Int
+  occurredAt DateTime @default(now()) @db.Timestamptz(3)
+  supportCase UniversitySupportCase @relation(fields: [siteKey, caseId], references: [siteKey, id], onDelete: Restrict)
+  @@index([siteKey, caseId, occurredAt])
+  @@map("university_case_actions")
+}
+
+model UniversityVenueReserve {
+  id          String @id @default(cuid())
+  siteKey     String
+  batchId     String
+  personRef   String
+  venue       String
+  note        String
+  recordedBy  String
+  recordedAt  DateTime @default(now()) @db.Timestamptz(3)
+  batch       UniversityOutreachBatch @relation(fields: [siteKey, batchId], references: [siteKey, id], onDelete: Restrict)
+  @@unique([siteKey, batchId, personRef])
+  @@map("university_venue_reserves")
 }

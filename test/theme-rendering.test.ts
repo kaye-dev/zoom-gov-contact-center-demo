@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
 import { fileURLToPath } from "node:url";
 import { resolveReviewTheme } from "../app/components/ThemeSync";
 
@@ -108,14 +109,40 @@ test("theme defaults to light without following the operating system", () => {
   assert.doesNotMatch(uiFoundationSource, /prefers-color-scheme/);
 });
 
-test("the pre-paint script restores dark only for an explicit dark preference", () => {
-  assert.match(layoutSource, /localStorage\.getItem\('theme'\)/);
-  assert.match(layoutSource, /new URLSearchParams\(location\.search\)\.getAll\('theme'\)/);
-  assert.match(layoutSource, /location\.hostname==='localhost'/);
-  assert.match(layoutSource, /var d=t==='dark'/);
-  assert.match(layoutSource, /classList\.toggle\('dark',d\)/);
-  assert.match(layoutSource, /classList\.toggle\('light',!d\)/);
-  assert.match(layoutSource, /classList\.toggle\('review-theme',r!==null\)/);
+test("theme bootstrap executes before reveal with stored preferences, review constraints and blocked storage", () => {
+  const source = readFileSync(new URL("../public/theme-init.js", import.meta.url), "utf8");
+  assert.match(layoutSource, /async\s+blocking="render"/);
+  assert.match(layoutSource, /reviewThemeEnabled \? "\/theme-init.js\?review=1" : "\/theme-init.js"/);
+  assert.doesNotMatch(layoutSource, /dangerouslySetInnerHTML/);
+  for (const input of [
+    { stored: "dark", search: "", expected: "dark" },
+    { stored: "light", search: "", expected: "light" },
+    { stored: null, search: "", expected: "light" },
+    { stored: "invalid", search: "", expected: "light" },
+    { stored: "dark", search: "?theme=light", expected: "light", review: true },
+    { stored: "dark", search: "?theme=light", expected: "dark" },
+    { stored: "dark", search: "?theme=light&theme=dark", expected: "dark", review: true },
+    { stored: "dark", search: "?theme=light", expected: "dark", review: true, hostname: "example.test" },
+    { stored: "dark", search: "", expected: "light", blocked: true },
+  ]) {
+    const classes = new Set(["theme-loading"]);
+    runInNewContext(source, {
+      URL, URLSearchParams,
+      location: { hostname: input.hostname ?? "univ.localhost", search: input.search },
+      localStorage: { getItem: () => { if (input.blocked) throw Error("blocked"); return input.stored; } },
+      document: {
+        currentScript: { src: "http://univ.localhost/theme-init.js" + (input.review ? "?review=1" : "") },
+        documentElement: { classList: {
+          toggle: (name: string, enabled: boolean) => enabled ? classes.add(name) : classes.delete(name),
+          remove: (...names: string[]) => names.forEach(name => classes.delete(name)),
+          add: (name: string) => classes.add(name),
+        } },
+      },
+    });
+    assert.equal(classes.has(input.expected), true);
+    assert.equal(classes.has(input.expected === "dark" ? "light" : "dark"), false);
+    assert.equal(classes.has("theme-loading"), true);
+  }
 });
 
 test("review theme query is development-only, loopback-only, and non-persistent", () => {
