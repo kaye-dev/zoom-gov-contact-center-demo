@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
+import { artifactTestEnvironment, releaseArtifactTestPorts } from "./helpers/development-port-fixture";
+import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
   chmod,
@@ -62,6 +63,7 @@ async function createFixture(context: TestContext): Promise<Fixture> {
   await mkdir(scripts, { recursive: true });
   await Promise.all([
     copyFile(sourceManager, manager),
+    copyFile(path.join(sourceRoot, "scripts/development-port-allocation.mjs"), path.join(scripts, "development-port-allocation.mjs")),
     copyFile(sourceServer, path.join(scripts, "serve-plan-artifact.mjs")),
     createArtifact(root, "alpha", "prototype"),
     createArtifact(root, "alpha", "review"),
@@ -71,8 +73,9 @@ async function createFixture(context: TestContext): Promise<Fixture> {
   await execFileAsync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.com", "commit", "--allow-empty", "-qm", "fixture"], { cwd: root });
   context.after(async () => {
     for (const pid of ownedPids) {
-      if (processIsAlive(pid)) process.kill(pid, "SIGTERM");
+      if (processIsAlive(pid)) { process.kill(pid, "SIGTERM"); await waitUntilStopped(pid); }
     }
+    await releaseArtifactTestPorts(root, path.join(root, ".git"));
     await rm(root, { recursive: true, force: true });
   });
   return { root, manager, statePath, ownedPids };
@@ -91,7 +94,7 @@ async function run(fixture: Fixture, args: string[], env: NodeJS.ProcessEnv = pr
   return execFileAsync(process.execPath, [fixture.manager, ...args], {
     cwd: fixture.root,
     encoding: "utf8",
-    env,
+    env: artifactTestEnvironment(fixture.root, path.join(fixture.root, ".git"), env),
   });
 }
 
@@ -103,7 +106,7 @@ async function waitUntilStopped(pid: number) {
   assert.fail(`PID ${pid} remained alive`);
 }
 
-test("CS-01/CS-02/CS-05: start, reuse, multi-surface status, and stop use one 0600 session", async (context) => {
+test("CS-01/CS-02/CS-05: start, reuse, exclusive-surface status, and stop use one 0600 session", async (context) => {
   const fixture = await createFixture(context);
   const first = values((await run(fixture, ["start", "alpha", "prototype"])).stdout);
   const prototypePid = Number(first.PROTOTYPE_PID);
@@ -132,14 +135,10 @@ test("CS-01/CS-02/CS-05: start, reuse, multi-surface status, and stop use one 06
   assert.equal(reused.PROTOTYPE_PID, first.PROTOTYPE_PID);
   assert.equal(reused.CONFIRMATION_SESSION_ID, first.CONFIRMATION_SESSION_ID);
 
-  const withReview = values((await run(fixture, ["start", "alpha", "review"])).stdout);
-  const reviewPid = Number(withReview.REVIEW_PID);
-  fixture.ownedPids.add(reviewPid);
-  assert.equal(withReview.PROTOTYPE_PID, first.PROTOTYPE_PID);
-  assert.notEqual(withReview.REVIEW_PID, "none");
+  await assert.rejects(run(fixture, ["start", "alpha", "review"]), /PORT_ARTIFACT_IN_USE/);
   const status = values((await run(fixture, ["status", "alpha"])).stdout);
   assert.equal(status.PROTOTYPE_PID, first.PROTOTYPE_PID);
-  assert.equal(status.REVIEW_PID, withReview.REVIEW_PID);
+  assert.equal(status.REVIEW_PID, "none");
 
   await assert.rejects(
     run(fixture, ["start", "beta", "prototype"]),
@@ -149,13 +148,11 @@ test("CS-01/CS-02/CS-05: start, reuse, multi-surface status, and stop use one 06
     },
   );
   assert.ok(processIsAlive(prototypePid));
-  assert.ok(processIsAlive(reviewPid));
 
   const stopped = values((await run(fixture, ["stop", "alpha"])).stdout);
   assert.equal(stopped.APP_STOP_RESULT, "none");
   assert.equal(stopped.CONFIRMATION_STATE, "removed");
   await waitUntilStopped(prototypePid);
-  await waitUntilStopped(reviewPid);
   fixture.ownedPids.clear();
   await assert.rejects(lstat(fixture.statePath), { code: "ENOENT" });
 });
@@ -223,7 +220,7 @@ test("CS-RT-01/CS-RT-02: exact worktree app hold skips cleanup and exact stop se
   await writeFile(
     composeScript,
     `#!/bin/sh
-if [ "$1" = "status" ] && [ "$2" = "--url" ]; then printf 'http://localhost:3100\\n'; exit 0; fi
+if [ "$1" = "status" ] && [ "$2" = "--url" ]; then printf 'http://localhost:3001\\n'; exit 0; fi
 if [ "$1" = "status" ]; then
   printf 'RUNTIME_MODE=worktree\\nRUNTIME_ID=${runtimeId}\\nRUNTIME_CHECKOUT_PATH=${fixture.root}\\nCOMPOSE_PROJECT_NAME=${project}\\nCODEX_RUNTIME_SESSION_ID=${runtimeSessionId}\\nACTIVE_RUNTIME_KIND=compose\\nACTIVE_RUNTIME_IDENTIFIER=${containerId}\\nACTIVE_RUNTIME_HEALTH=healthy\\nACTIVE_RUNTIME_MOUNT=${fixture.root}\\nRUNTIME_OWNERSHIP=verified\\n'
   exit 0
@@ -301,4 +298,65 @@ exit 2
   const stopped = values((await run(fixture, ["stop", "alpha"])).stdout);
   assert.equal(stopped.APP_STOP_RESULT, "preserved");
   fixture.ownedPids.clear();
+});
+
+
+test("PORT-07: direct and retained entry points share the existing owner and stable URL", async context => {
+  const fixture = await createFixture(context);
+  const first = values((await run(fixture, ["start", "alpha", "prototype"])).stdout);
+  fixture.ownedPids.add(Number(first.PROTOTYPE_PID));
+  await rm(fixture.statePath);
+  const direct = await execFileAsync(process.execPath, [path.join(fixture.root, "scripts/serve-plan-artifact.mjs"), "plans/alpha/prototype"], {
+    cwd: fixture.root, env: artifactTestEnvironment(fixture.root, path.join(fixture.root, ".git")),
+  });
+  assert.equal(values(direct.stdout).PID, first.PROTOTYPE_PID);
+  assert.equal(values(direct.stdout).REUSED, "1");
+  const retained = values((await run(fixture, ["start", "alpha", "prototype"])).stdout);
+  assert.equal(retained.PROTOTYPE_PID, first.PROTOTYPE_PID);
+  await run(fixture, ["stop", "alpha"]);
+  const restarted = values((await run(fixture, ["start", "alpha", "prototype"])).stdout);
+  fixture.ownedPids.add(Number(restarted.PROTOTYPE_PID));
+  assert.equal(restarted.PROTOTYPE_URL, first.PROTOTYPE_URL);
+});
+
+test("PORT-09/10: legacy retained origin remains readable and stoppable before bounded restart", async context => {
+  const fixture = await createFixture(context);
+  const serverPath = path.join(fixture.root, "scripts/serve-plan-artifact.mjs");
+  const currentSource = await readFile(serverPath, "utf8");
+  // Reproduce the old server's ephemeral binding with the same owner token protocol.
+  await writeFile(serverPath, currentSource.split("const portIdentity =")[0] + `
+server.listen(0, "127.0.0.1", () => console.log("URL=http://127.0.0.1:" + server.address().port + "/"));
+process.on("SIGTERM", () => { server.closeAllConnections(); server.close(() => process.exit(0)); });
+`);
+  const token = randomUUID();
+  const child = spawn(process.execPath, [serverPath, "plans/alpha/prototype"], {
+    cwd: fixture.root, env: { ...process.env, PLAN_ARTIFACT_SESSION_TOKEN: token }, stdio: ["ignore", "pipe", "pipe"],
+  });
+  assert.ok(child.pid);
+  fixture.ownedPids.add(child.pid);
+  const url = await new Promise<string>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("legacy startup timeout")), 5000);
+    child.stdout.on("data", data => { clearTimeout(timer); resolve(values(String(data)).URL); });
+    child.once("error", reject);
+  });
+  assert.ok(Number(new URL(url).port) > 4005);
+  await mkdir(path.dirname(fixture.statePath), { recursive: true });
+  await writeFile(fixture.statePath, JSON.stringify({
+    schemaVersion: 1, sessionId: randomUUID(), checkout: fixture.root, gitCommonDirectory: path.join(fixture.root, ".git"),
+    slug: "alpha", createdAt: new Date().toISOString(), appRuntime: null,
+    artifactServers: { prototype: { surface: "prototype", artifactRealpath: path.join(fixture.root, "plans/alpha/prototype"),
+      url, pid: child.pid, processToken: token, startedAt: new Date().toISOString() } },
+  }), { mode: 0o600 });
+  await writeFile(serverPath, currentSource);
+  assert.equal(values((await run(fixture, ["status", "alpha"])).stdout).PROTOTYPE_URL, url);
+  await assert.rejects(run(fixture, ["start", "alpha", "prototype"]), /4000-4005/);
+  await assert.rejects(execFileAsync(process.execPath, [serverPath, "plans/alpha/prototype"], {
+    cwd: fixture.root, env: artifactTestEnvironment(fixture.root, path.join(fixture.root, ".git")),
+  }), /PORT_MIGRATION_REQUIRED/);
+  assert.ok(processIsAlive(child.pid));
+  await run(fixture, ["stop", "alpha"]);
+  const restarted = values((await run(fixture, ["start", "alpha", "prototype"])).stdout);
+  fixture.ownedPids.add(Number(restarted.PROTOTYPE_PID));
+  const port = Number(new URL(restarted.PROTOTYPE_URL).port);
+  assert.ok(port >= 4001 && port <= 4005);
 });

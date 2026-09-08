@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { once } from "node:events";
 import { spawnSync } from "node:child_process";
 import { accessSync, constants } from "node:fs";
 import {
@@ -256,4 +257,46 @@ test("repository外のcwdからでもscript自身のrepositoryにあるprototype
   const result = runLauncher(fixture, ["cwd-independent"], { cwd: otherCwd });
 
   assertServed(result, "plans/cwd-independent/prototype");
+});
+
+test("PORT-06: real prototype wrapper starts without starting Docker, app or database", async context => {
+  const { spawn } = await import("node:child_process");
+  const { realpath, readFile } = await import("node:fs/promises");
+  const { artifactTestEnvironment, releaseArtifactTestPorts } = await import("./helpers/development-port-fixture");
+  const fixture = await createRepositoryFixture(context);
+  const root = await realpath(fixture.root);
+  const common = path.join(root, "common.git");
+  await mkdir(common);
+  await Promise.all(["serve-plan-artifact.mjs", "development-port-allocation.mjs"].map(name =>
+    copyFile(path.join(repositoryRoot, "scripts", name), path.join(root, "scripts", name))));
+  await rm(path.join(fixture.bin, "node"));
+  const dockerLog = path.join(root, "docker.log");
+  await writeFile(path.join(fixture.bin, "docker"), `#!/bin/sh\nprintf '%s\\n' "$*" >> '${dockerLog}'\n[ "$1" = ps ] && exit 0\nexit 99\n`, { mode: 0o755 });
+  await writeFile(path.join(root, "dev-compose.sh"), "#!/bin/sh\nexit 99\n", { mode: 0o755 });
+  await createPrototype(root, "standalone", new Date());
+  const child = spawn(zshExecutable, [path.join(root, "dev-prototype.sh"), "standalone"], {
+    cwd: root, env: artifactTestEnvironment(root, common, { ...process.env, PATH: `${fixture.bin}${path.delimiter}${process.env.PATH}` }),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  try {
+    const url = await new Promise<string>((resolve, reject) => {
+      let output = "";
+      const timer = setTimeout(() => reject(new Error("prototype startup timeout")), 5000);
+      child.stdout.on("data", data => {
+        output += String(data);
+        const match = /URL=(http:\/\/127\.0\.0\.1:\d+\/)/u.exec(output);
+        if (match) { clearTimeout(timer); resolve(match[1]); }
+      });
+      child.once("exit", code => { clearTimeout(timer); reject(new Error(`prototype exit ${code}`)); });
+      child.once("error", reject);
+    });
+    assert.ok(Number(new URL(url).port) >= 4001 && Number(new URL(url).port) <= 4005);
+    assert.equal((await fetch(url)).status, 200);
+    assert.ok((await readFile(dockerLog, "utf8")).trim().split("\n").every(line => line === "ps -q"));
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) {
+      const exited = once(child, "exit"); child.kill("SIGTERM"); await exited;
+    }
+    await releaseArtifactTestPorts(root, common);
+  }
 });

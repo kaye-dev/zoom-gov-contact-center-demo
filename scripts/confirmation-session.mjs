@@ -2,6 +2,7 @@
 
 import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { createPortAllocator, resolvePortIdentity, verifyArtifactProcess, processStart } from "./development-port-allocation.mjs";
 import { realpathSync } from "node:fs";
 import {
   chmod,
@@ -166,7 +167,7 @@ export function validateSlug(slug) {
   return slug;
 }
 
-function validateLoopbackUrl(value, label, { app = false } = {}) {
+function validateLoopbackUrl(value, label, { app = false, legacy = true } = {}) {
   let parsed;
   try {
     parsed = new URL(nonEmptyString(value, label));
@@ -175,11 +176,12 @@ function validateLoopbackUrl(value, label, { app = false } = {}) {
   }
   ensure(parsed.username === "" && parsed.password === "" && parsed.search === "" && parsed.hash === "", `${label} must not contain credentials, query, or fragment`);
   if (app) {
-    ensure(parsed.protocol === "http:" && parsed.hostname === "localhost", `${label} must use http://localhost`);
+    ensure(parsed.protocol === "http:" && /^(?:[a-z0-9-]+\.)?localhost$/u.test(parsed.hostname), `${label} must use http://localhost or a tenant .localhost host`);
     const port = Number(parsed.port || "80");
-    ensure(port === 3000 || (port >= 3100 && port <= 3899), `${label} uses an unavailable app port`);
+    ensure((port >= 3000 && port <= 3005) || (legacy && port >= 3100 && port <= 3899), `${label} uses an unavailable app port`);
   } else {
     ensure(parsed.protocol === "http:" && parsed.hostname === "127.0.0.1" && parsed.port !== "", `${label} must use an explicit 127.0.0.1 port`);
+    ensure(legacy || (Number(parsed.port) >= 4000 && Number(parsed.port) <= 4005), `${label} must use an artifact port in 4000-4005`);
   }
   return parsed.toString();
 }
@@ -398,20 +400,23 @@ async function startArtifactProcess(identity, slug, surface, artifactRealpath) {
   });
   try {
     const startup = await waitForStartup(child, surface);
-    ensure(startup.pid === child.pid, `${surface} server reported an unexpected PID`);
+    const portIdentity = await resolvePortIdentity(identity.checkout);
+    const allocation = await createPortAllocator().status(portIdentity);
+    const processRecord = await verifyArtifactProcess(allocation);
+    ensure(processRecord?.pid === startup.pid && processRecord.artifactRealpath === artifactRealpath, `${surface} server reported an unexpected owner/PID`);
     const artifact = {
       surface,
       artifactRealpath,
-      url: validateLoopbackUrl(startup.url, `${surface} startup URL`),
+      url: validateLoopbackUrl(startup.url, `${surface} startup URL`, { legacy: false }),
       pid: startup.pid,
-      processToken,
-      startedAt: new Date().toISOString(),
+      processToken: processRecord.processToken,
+      startedAt: processRecord.startedAt,
     };
     await probeArtifact({ ...identity, slug }, artifact);
     child.stdout?.destroy();
     child.stderr?.destroy();
     child.unref();
-    return artifact;
+    return { artifact, created: artifact.pid === child.pid };
   } catch (error) {
     if (child.pid && processIsAlive(child.pid)) process.kill(child.pid, "SIGTERM");
     throw error;
@@ -445,18 +450,25 @@ export async function startArtifact({ repositoryRoot = defaultRepositoryRoot, sl
   const state = existing ?? createState(identity, slug);
   assertRequestedSlug(state, slug);
   await ensureStateDirectory(identity);
+  const other = [...surfaces].find(value => value !== surface && state.artifactServers[value]);
+  ensure(!other, `PORT_ARTIFACT_IN_USE: ${other} is active; stop it with ./dev-confirmation.sh stop ${slug}`);
   const current = state.artifactServers[surface];
   if (current) {
+    validateLoopbackUrl(current.url, "retained artifact URL", { legacy: false });
     ensure(current.artifactRealpath === artifactRealpath, `${surface} artifact path changed after the session started`);
     await probeArtifact({ ...identity, slug }, current);
+    const allocation = await createPortAllocator().status(await resolvePortIdentity(identity.checkout));
+    const registered = await verifyArtifactProcess(allocation);
+    ensure(registered?.pid === current.pid && registered.processToken === current.processToken,
+      "retained artifact no longer matches its allocation");
     return state;
   }
-  const artifact = await startArtifactProcess(identity, slug, surface, artifactRealpath);
+  const { artifact, created } = await startArtifactProcess(identity, slug, surface, artifactRealpath);
   state.artifactServers[surface] = artifact;
   try {
     await writeConfirmationState(identity, state);
   } catch (error) {
-    if (processIsAlive(artifact.pid)) process.kill(artifact.pid, "SIGTERM");
+    if (created && processIsAlive(artifact.pid)) process.kill(artifact.pid, "SIGTERM");
     throw error;
   }
   return state;
@@ -471,14 +483,14 @@ function parseKeyValues(output) {
   return result;
 }
 
-async function composeStatus(identity) {
+async function composeStatus(identity, { legacy = false } = {}) {
   const composeScript = path.join(identity.checkout, "dev-compose.sh");
   const statusResult = await execFileAsync(composeScript, ["status"], { cwd: identity.checkout, encoding: "utf8" });
   const values = parseKeyValues(statusResult.stdout);
   ensure(values.ACTIVE_RUNTIME_HEALTH === "healthy" && values.RUNTIME_OWNERSHIP === "verified", "app runtime is not healthy and ownership-verified");
   ensure(values.RUNTIME_CHECKOUT_PATH === identity.checkout, "app runtime checkout does not match the confirmation checkout");
   const urlResult = await execFileAsync(composeScript, ["status", "--url"], { cwd: identity.checkout, encoding: "utf8" });
-  const url = validateLoopbackUrl(urlResult.stdout.trim(), "app runtime URL", { app: true });
+  const url = validateLoopbackUrl(urlResult.stdout.trim(), "app runtime URL", { app: true, legacy });
   return { values, url };
 }
 
@@ -535,7 +547,7 @@ export async function statusSession({ repositoryRoot = defaultRepositoryRoot, sl
     if (state.artifactServers[surface]) await probeArtifact({ ...identity, slug }, state.artifactServers[surface]);
   }
   if (state.appRuntime) {
-    const { values, url } = await composeStatus(identity);
+    const { values, url } = await composeStatus(identity, { legacy: true });
     ensure(url === state.appRuntime.url, "attached app URL no longer matches the verified runtime");
     ensure(values.RUNTIME_ID === state.appRuntime.runtimeId && values.CODEX_RUNTIME_SESSION_ID === state.appRuntime.runtimeSessionId, "attached app runtime identity is stale");
   }
@@ -546,6 +558,14 @@ async function stopArtifact(identity, state, surface) {
   const artifact = state.artifactServers[surface];
   if (!artifact) return;
   await probeArtifact({ ...identity, slug: state.slug }, artifact);
+  const port = Number(new URL(artifact.url).port);
+  if (port >= 4000 && port <= 4005) {
+    const allocation = await createPortAllocator().status(await resolvePortIdentity(identity.checkout));
+    const registered = await verifyArtifactProcess(allocation);
+    ensure(registered?.pid === artifact.pid && registered.processToken === artifact.processToken,
+      "artifact process no longer matches its allocation; no process will be stopped");
+    ensure(await processStart(artifact.pid) === registered.processStart, "artifact PID changed before stop");
+  }
   process.kill(artifact.pid, "SIGTERM");
   for (let attempt = 0; attempt < 50; attempt += 1) {
     if (!processIsAlive(artifact.pid)) {
@@ -574,7 +594,21 @@ async function stopOwnedApp(identity, state) {
 
 export async function stopSession({ repositoryRoot = defaultRepositoryRoot, slug }) {
   validateSlug(slug);
-  const { identity, state } = await readConfirmationState(repositoryRoot, { required: true });
+  const { identity, state } = await readConfirmationState(repositoryRoot);
+  if (!state) {
+    const portIdentity = await resolvePortIdentity(identity.checkout);
+    const allocator = createPortAllocator();
+    const allocation = await allocator.status(portIdentity);
+    const artifact = await verifyArtifactProcess(allocation);
+    ensure(artifact?.slug === slug, "no matching owned artifact session exists");
+    ensure(await processStart(artifact.pid) === artifact.processStart, "artifact PID changed before stop");
+    process.kill(artifact.pid, "SIGTERM");
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      if (!processIsAlive(artifact.pid)) return { state: null, appResult: "none" };
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    throw new Error("owned artifact did not stop after SIGTERM");
+  }
   assertRequestedSlug(state, slug);
   await stopArtifact(identity, state, "prototype");
   await stopArtifact(identity, state, "review");

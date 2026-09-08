@@ -63,6 +63,9 @@ function fixtureEnv(fixture: RuntimeFixture): NodeJS.ProcessEnv {
     DEV_RUNTIME_GIT_DIR_OVERRIDE: fixture.gitDirectory,
     DEV_RUNTIME_GIT_COMMON_DIR_OVERRIDE: fixture.gitCommonDirectory,
     DEV_RUNTIME_STATE_ROOT: fixture.stateRoot,
+    NODE_ENV: "test",
+    DEVELOPMENT_PORT_STATE_ROOT: join(realpathSync(dirname(fixture.gitCommonDirectory)), "port-state"),
+    DEVELOPMENT_PORT_TEST_INSPECTION: "stub",
     PATH: `${fixture.stubDirectory}:${process.env.PATH ?? ""}`,
   };
 }
@@ -173,8 +176,8 @@ test("RT-02: worktrees receive stable and distinct projects and port slots", (co
   assert.notEqual(firstRuntime.RUNTIME_ID, secondRuntime.RUNTIME_ID);
   assert.notEqual(firstRuntime.COMPOSE_PROJECT_NAME, secondRuntime.COMPOSE_PROJECT_NAME);
   assert.notEqual(firstRuntime.HOST_PORT, secondRuntime.HOST_PORT);
-  assert.equal(Number(firstRuntime.POSTGRES_PORT) - Number(firstRuntime.HOST_PORT), 12332);
-  assert.equal(Number(firstRuntime.STUDIO_PORT) - Number(firstRuntime.HOST_PORT), 22455);
+  assert.equal(Number(firstRuntime.STUDIO_PORT) - Number(firstRuntime.POSTGRES_PORT), 10123);
+  assert.ok(Number(firstRuntime.HOST_PORT) >= 3001 && Number(firstRuntime.HOST_PORT) <= 3005);
 
   const repeated = runHelper(first, "dev_runtime_prepare; dev_runtime_print_context");
   assert.equal(repeated.status, 0, repeated.stderr);
@@ -282,8 +285,8 @@ test("RT-09: active leases are preserved and stopped stale leases are reclaimed"
   );
   assert.equal(activeResult.status, 0, activeResult.stderr);
   assert.equal(
-    Number(parseContext(activeResult.stdout).HOST_PORT),
-    3100 + ((activeSlot + 1) % 800),
+    Number(parseContext(activeResult.stdout).POSTGRES_PORT),
+    15432 + ((activeSlot + 1) % 800),
   );
   assert.match(readFileSync(activeLease, "utf8"), /RUNTIME_ID=foreign-active/u);
 
@@ -308,7 +311,7 @@ test("RT-09: active leases are preserved and stopped stale leases are reclaimed"
   );
   assert.equal(staleResult.status, 0, staleResult.stderr);
   const staleRuntime = parseContext(staleResult.stdout);
-  assert.equal(Number(staleRuntime.HOST_PORT), 3100 + staleSlot);
+  assert.equal(Number(staleRuntime.POSTGRES_PORT), 15432 + staleSlot);
   const reclaimedLease = readFileSync(staleLease, "utf8");
   assert.match(reclaimedLease, new RegExp(`RUNTIME_ID=${staleRuntime.RUNTIME_ID}`, "u"));
   assert.match(
@@ -1042,4 +1045,92 @@ test("RT-12: web health wait has an explicit attempt cap and monotonic deadline"
   assert.match(waitFunction, /\(\( SECONDS < deadline \)\) \|\| break\s+sleep 1/u);
   assert.equal((waitFunction.match(/sleep 1/gu) ?? []).length, 1);
   assert.match(waitFunction, /did not become healthy[\s\S]*return 1/u);
+});
+
+// PORT-08 uses a real Git identity and isolated allocation state; no Docker or
+// running development environment is changed by these migration cases.
+test("PORT-08: explicit port migration preserves DB identity and supports guarded rollback", async (context) => {
+  const { migrateRuntimePorts } = await import("../scripts/development-port-migration.mjs");
+  const { createPortAllocator, resolvePortIdentity } = await import("../scripts/development-port-allocation.mjs");
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "port-migration-")));
+  context.after(() => rmSync(root, { recursive: true, force: true }));
+  const source = join(root, "source"), checkout = join(root, "checkout");
+  await execFileAsync("git", ["init", "-q", source]);
+  await execFileAsync("git", ["-C", source, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.com", "commit", "--allow-empty", "-qm", "fixture"]);
+  await execFileAsync("git", ["-C", source, "worktree", "add", "-q", "-b", "fixture", checkout]);
+  const identity = await resolvePortIdentity(checkout);
+  mkdirSync(join(checkout, ".codex"));
+  const manifestPath = join(checkout, ".codex/runtime.local.env");
+  const original = [
+    "RUNTIME_SCHEMA_VERSION=1", "RUNTIME_MODE=worktree", `RUNTIME_ID=${identity.runtimeId}`,
+    `RUNTIME_CHECKOUT_PATH=${checkout}`, `RUNTIME_GIT_COMMON_DIR=${identity.gitCommonDirectory}`,
+    `COMPOSE_PROJECT_NAME=zoom-gov-demo-wt-${identity.runtimeId}`,
+    "HOST_PORT=3107", "POSTGRES_PORT=15439", "STUDIO_PORT=25562", "WEB_BIND_ADDRESS=127.0.0.1", "WEB_ORIGIN=http://localhost:3107",
+    "RUNTIME_CONFIG_DIGEST=sha256:fixture", "RUNTIME_VOLUME_CONFIG_DIGEST=sha256:persistent", "RUNTIME_VOLUME_OWNER_SESSION_ID=original-volume-owner", "",
+  ].join("\n");
+  writeFileSync(manifestPath, original, { mode: 0o600 });
+  let running = true;
+  let inspections = 0;
+  let drift = false;
+  const inspect = async (ports: number[]) => ports.map(port => ({ port, free: !running && !(drift && ++inspections > 1), owned: running, detail: "fixture" }));
+  const allocator = createPortAllocator({ stateRoot: join(root, "state"), inspect: async (ports: number[]) => ports.map(port => ({port,free:true,owned:false,detail:"fixture"})), assertStopped: async () => {} });
+  const options = { checkout, allocator, inspect, assertStopped: async () => {} };
+  await assert.rejects(migrateRuntimePorts(options), /PORT_MIGRATION_REQUIRED/);
+  assert.equal(readFileSync(manifestPath, "utf8"), original);
+  running = false;
+  const migrated = await migrateRuntimePorts(options);
+  assert.equal(migrated.status, "migrated"); assert.equal(migrated.newUrl, "http://localhost:3001");
+  const updated = readFileSync(manifestPath, "utf8");
+  assert.match(updated, /POSTGRES_PORT=15439\nSTUDIO_PORT=25562/u);
+  assert.match(updated, /RUNTIME_VOLUME_OWNER_SESSION_ID=original-volume-owner/u);
+  assert.match(updated, /RUNTIME_VOLUME_CONFIG_DIGEST=sha256:persistent/u);
+  assert.equal((await migrateRuntimePorts(options)).status, "current");
+  assert.equal((await migrateRuntimePorts({ ...options, rollback: true })).status, "rolled-back");
+  assert.equal(readFileSync(manifestPath, "utf8"), original);
+  assert.equal(await allocator.status(identity), null);
+
+  drift = true; inspections = 0;
+  await assert.rejects(migrateRuntimePorts(options), /PORT_MIGRATION_DRIFT/);
+  assert.equal(readFileSync(manifestPath, "utf8"), original);
+  assert.equal(await allocator.status(identity), null);
+});
+
+test("PORT-08: schema 1 stays readable but prepare never migrates it implicitly", (context) => {
+  const fixture = createRuntimeFixture("worktree");
+  context.after(() => rmSync(fixture.root, { recursive: true, force: true }));
+  const prepared = runHelper(fixture, "dev_runtime_prepare; dev_runtime_print_context");
+  assert.equal(prepared.status, 0, prepared.stderr);
+  const runtime = parseContext(prepared.stdout);
+  const oldPort = 3100 + Number(runtime.POSTGRES_PORT) - 15432;
+  const manifestPath = join(fixture.checkout, ".codex/runtime.local.env");
+  const legacy = readFileSync(manifestPath, "utf8").replace("RUNTIME_SCHEMA_VERSION=2", "RUNTIME_SCHEMA_VERSION=1")
+    .replace(`HOST_PORT=${runtime.HOST_PORT}`, `HOST_PORT=${oldPort}`)
+    .replace(`WEB_ORIGIN=${runtime.WEB_ORIGIN}`, `WEB_ORIGIN=http://localhost:${oldPort}`);
+  writeFileSync(manifestPath, legacy);
+  const status = runHelper(fixture, "dev_runtime_load; dev_runtime_print_context");
+  assert.equal(status.status, 0, status.stderr); assert.equal(parseContext(status.stdout).HOST_PORT, String(oldPort));
+  const restart = runHelper(fixture, "dev_runtime_prepare");
+  assert.notEqual(restart.status, 0); assert.match(restart.stderr, /PORT_MIGRATION_REQUIRED/);
+  assert.equal(readFileSync(manifestPath, "utf8"), legacy);
+});
+
+test("PORT-08: scoped stop can load a legacy manifest without preparing or migrating it", context => {
+  const fixture = createRuntimeFixture("worktree");
+  context.after(() => rmSync(fixture.root, { recursive: true, force: true }));
+  const wrapper = readFileSync(wrapperPath, "utf8");
+  const stopFunction = wrapper.slice(wrapper.indexOf("runtime_stop_services() {"), wrapper.indexOf("runtime_cleanup_label_matches() {"));
+  const result = runHelper(fixture, `${stopFunction}
+    dev_runtime_prepare() { print -u2 unexpected-prepare; return 99; }
+    dev_runtime_load() { print LEGACY_LOADED; }
+    dev_runtime_resolve_volume_identity() { return 0; }
+    ensure_docker_daemon() { return 0; }
+    dev_runtime_capture_session_baseline() { return 0; }
+    runtime_validate_project_containers() { return 0; }
+    runtime_compose() { if [[ "$1" == stop ]]; then print "STOP=$2"; fi; }
+    dev_runtime_record_session_resources() { return 0; }
+    runtime_stop_services web
+  `);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /LEGACY_LOADED\nSTOP=web/u);
+  assert.doesNotMatch(result.stderr, /unexpected-prepare/u);
 });

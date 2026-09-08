@@ -1090,7 +1090,7 @@ function appendQuery(url, query) {
   return parsed.toString();
 }
 
-function requireLoopbackBaseUrl(value, surface) {
+function requireLoopbackBaseUrl(value, surface, { legacy = false } = {}) {
   let parsed;
   try {
     parsed = new URL(value);
@@ -1105,11 +1105,12 @@ function requireLoopbackBaseUrl(value, surface) {
     const port = Number(parsed.port);
     ensure(
       (parsed.hostname === "localhost" || /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.localhost$/u.test(parsed.hostname)) &&
-        (port === 3000 || (port >= 3100 && port <= 3899)),
-      "production base URL must use localhost or a tenant .localhost host on Local port 3000 or an allocated worktree port in 3100-3899",
+        ((port >= 3000 && port <= 3005) || (legacy && port >= 3100 && port <= 3899)),
+      "production base URL must use localhost or a tenant .localhost host on Local port 3000 or an allocated worktree port in 3001-3005",
     );
   } else {
     ensure(parsed.hostname === "127.0.0.1" && parsed.port !== "", "prototype base URL must use 127.0.0.1 with an explicit port");
+    ensure(legacy || (Number(parsed.port) >= 4000 && Number(parsed.port) <= 4005), "prototype base URL must use an allocated artifact port in 4000-4005");
   }
   return parsed;
 }

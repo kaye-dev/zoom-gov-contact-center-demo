@@ -482,7 +482,7 @@ function validateMeasuredUrl(value, surface, expectedRoute, label) {
   } catch {
     throw new Error(`${label} must be an absolute URL`);
   }
-  const parsed = requireLoopbackBaseUrl(actual.origin, surface);
+  const parsed = requireLoopbackBaseUrl(actual.origin, surface, { legacy: true });
   ensure(actual.origin === parsed.origin, `${label} has an invalid origin`);
   ensure(actual.username === "" && actual.password === "", `${label} must not contain credentials`);
   ensure(actual.hash === "", `${label} must not contain a fragment`);
@@ -528,7 +528,7 @@ function validateSurfaceContextProvenance(capabilities, contract) {
     requireNonEmptyString(context.sessionId, `${label}.sessionId`);
     requireNonEmptyString(context.tabId, `${label}.tabId`);
     ensure(context.sessionId === capabilities.sessionId, `${label}.sessionId does not match the capability session`);
-    const parsedOrigin = requireLoopbackBaseUrl(context.origin, context.surface);
+    const parsedOrigin = requireLoopbackBaseUrl(context.origin, context.surface, { legacy: true });
     ensure(parsedOrigin.origin === context.origin, `${label}.origin must be canonical`);
     ensure(
       context.authorizationProfile === expectedAuthorizationProfile,

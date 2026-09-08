@@ -323,7 +323,9 @@ test("Local Environmentはworktree setupとcheckout-scoped actionだけを共有
   assert.match(gitignore, /^\/\.codex\/runtime-session\.local\.json$/mu);
   assert.match(gitignore, /^\/\.codex\/confirmation-session\.local\.json$/mu);
   assert.match(parityReference, /\.\/dev-compose\.sh ensure/u);
-  assert.match(parityReference, /3100-3899/u);
+  assert.match(parityReference, /development-ports\.md/u);
+  const ports = await read("docs/development/development-ports.md");
+  assert.match(ports, /3001–3005／4001–4005/u);
 });
 
 test("reviewは静的整合とchecklistを先に検証し必要時のみ独立passを実行する", async () => {

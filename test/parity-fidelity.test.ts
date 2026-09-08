@@ -146,7 +146,7 @@ test("REQ-07/09: runner executes normal-route actions and schema v5 audit is ind
     cleanup: async () => ({ status: "pass", tabs: ["production", "prototype"] }),
   };
   const run = { runId: "fidelity-test", goalSha256: digest, sources: [{ path: "src/ui.ts", sha256: digest }], runtime: { owner: "fixture", checkout: "/fixture", commit: "1".repeat(40), fixture: "fidelity-fixture", authorization: "admin", query: "none" } };
-  const result = await new core.BrowserParityRunner(adapter).run({ definition, phase: "final", tabs: { production: "production", prototype: "prototype" }, baseUrls: { production: "http://localhost:3000", prototype: "http://127.0.0.1:4100" }, run });
+  const result = await new core.BrowserParityRunner(adapter).run({ definition, phase: "final", tabs: { production: "production", prototype: "prototype" }, baseUrls: { production: "http://localhost:3000", prototype: "http://127.0.0.1:4000" }, run });
   assert.equal(result.schemaVersion, 5);
   assert.equal(fidelity.validateRuntimeResults(spec, result.rows), "pass");
   assert.deepEqual(actions, ["click", "reload"]);
@@ -167,7 +167,7 @@ test("REQ-07/09: runner executes normal-route actions and schema v5 audit is ind
   forged.rows[0].probes.find((probe: {probeId:string}) => probe.probeId === "copy").production = "Old";
   assert.throws(() => facade.validateParityEvidence(forged, contract, spec), /not reproducible/);
   baselineMode = true;
-  const smoke = await new core.BrowserParityRunner(adapter).run({ definition, phase: "smoke", tabs: { production: "production", prototype: "prototype" }, baseUrls: { production: "http://localhost:3000", prototype: "http://127.0.0.1:4100" }, run });
+  const smoke = await new core.BrowserParityRunner(adapter).run({ definition, phase: "smoke", tabs: { production: "production", prototype: "prototype" }, baseUrls: { production: "http://localhost:3000", prototype: "http://127.0.0.1:4000" }, run });
   facade.validateParityEvidence(smoke, contract, spec);
   assert.equal(smoke.audit, null);
   assert.equal(smoke.auditStatus.visual, "not-run");

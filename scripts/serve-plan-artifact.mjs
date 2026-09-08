@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 import { createServer } from "node:http";
+import { randomUUID } from "node:crypto";
+import { createPortAllocator, resolvePortIdentity, processStart, verifyArtifactProcess, assertArtifactStartupAllowed } from "./development-port-allocation.mjs";
 import { lstat, readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
@@ -30,7 +32,7 @@ const CSP = [
   "frame-ancestors 'none'",
   "form-action 'none'",
 ].join("; ");
-const confirmationSessionToken = process.env.PLAN_ARTIFACT_SESSION_TOKEN ?? "";
+const confirmationSessionToken = process.env.PLAN_ARTIFACT_SESSION_TOKEN ?? randomUUID();
 
 if (confirmationSessionToken !== "" && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(confirmationSessionToken)) {
   console.error("PLAN_ARTIFACT_SESSION_TOKEN must be a UUID when provided");
@@ -43,6 +45,7 @@ function fail(message) {
 }
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+process.chdir(repositoryRoot);
 const requested = process.argv[2];
 if (!requested || process.argv.length !== 3) {
   fail("usage: node scripts/serve-plan-artifact.mjs plans/<slug>/<prototype|review>");
@@ -149,17 +152,78 @@ const server = createServer({ requireHostHeader: false }, async (request, respon
   }
 });
 
-server.listen(0, "127.0.0.1", () => {
-  const address = server.address();
-  if (!address || typeof address === "string") fail("failed to resolve loopback port");
-  console.log(`URL=http://127.0.0.1:${address.port}/`);
-  console.log(`PID=${process.pid}`);
-});
+const portIdentity = await resolvePortIdentity(repositoryRoot);
+const portAllocator = createPortAllocator();
+let allocation;
+let registered = false;
+
+function outputStartup(pid, reused = false) {
+  console.log(`URL=http://127.0.0.1:${allocation.artifactPort}/`);
+  console.log(`PID=${pid}`);
+  console.log(`PORT_SLOT=${allocation.slot}`);
+  console.log(`PORT_ALLOCATION_SCHEMA=${allocation.schemaVersion}`);
+  console.log(`REUSED=${reused ? "1" : "0"}`);
+  console.log(`OWNER=${portIdentity.owner}`);
+  console.log(`STOP_COMMAND=./dev-confirmation.sh stop ${segments[1]}`);
+}
+
+async function existingArtifact() {
+  const current = await portAllocator.status(portIdentity);
+  if (!current?.artifact) return null;
+  if (await processStart(current.artifact.pid) === null) return null;
+  if (current.artifact.artifactRealpath !== canonicalRoot) {
+    throw new Error(`PORT_ARTIFACT_IN_USE: http://127.0.0.1:${current.artifactPort}/ serves ${current.artifact.slug}/${current.artifact.surface}; stop it with ./dev-confirmation.sh stop ${current.artifact.slug}`);
+  }
+  // A concurrent starter registers its owner before binding the socket.
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    try { return await verifyArtifactProcess(current); }
+    catch (error) {
+      if (attempt === 9) throw error;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+  }
+}
+
+try {
+  await assertArtifactStartupAllowed(portIdentity);
+  allocation = await portAllocator.allocate(portIdentity);
+  let existing = await existingArtifact();
+  if (existing) {
+    outputStartup(existing.pid, true);
+  } else {
+    try {
+      await portAllocator.updateArtifact(portIdentity, allocation.allocationId, {
+        pid: process.pid, processStart: await processStart(process.pid), processToken: confirmationSessionToken,
+        slug: segments[1], surface: artifactType, artifactRealpath: canonicalRoot, startedAt: new Date().toISOString(),
+      });
+      registered = true;
+    } catch (error) {
+      existing = await existingArtifact();
+      if (!existing) throw error;
+      outputStartup(existing.pid, true);
+    }
+    if (registered) {
+      await new Promise((resolve, reject) => {
+        server.once("error", reject);
+        server.listen(allocation.artifactPort, "127.0.0.1", resolve);
+      });
+      outputStartup(process.pid);
+    }
+  }
+} catch (error) {
+  if (registered) await portAllocator.clearArtifact(portIdentity, allocation.allocationId, confirmationSessionToken);
+  if (allocation?.created) {
+    await portAllocator.release(portIdentity, portIdentity.owner, allocation.allocationId, { rollback: true }).catch(() => {});
+  }
+  fail(`Artifact startup failed: ${error.message}. No fallback port was selected.`);
+}
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, () => {
+  process.on(signal, async () => {
     if (signal === "SIGINT" && process.stdout.isTTY) process.stdout.write("\n");
-    server.close(() => process.exit(0));
     server.closeAllConnections();
+    await new Promise(resolve => server.close(resolve));
+    if (registered) await portAllocator.clearArtifact(portIdentity, allocation.allocationId, confirmationSessionToken);
+    process.exit(0);
   });
 }

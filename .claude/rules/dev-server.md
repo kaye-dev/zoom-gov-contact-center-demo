@@ -4,7 +4,7 @@
 
 - UI変更の`$implement`は実装・静的検証・diff確認が完了した後のfinal boundaryでだけ実アプリ、prototype、Codexアプリ内Browser、parity lifecycleを起動し、coverageを検証する。authoring中のBrowser反復、pre-edit parity、追加manual sweepは行わない。非UI変更とfull parityには、それぞれgoal固有の静的検証とrelease、CI、定期、明示要求の独立taskを適用する。
 - preflightのprocess起動・再利用より前に`./dev-compose.sh status`とread-onlyなprocess・Docker inspectionでbaselineを採る。Localはport 3000、worktreeは`.codex/runtime.local.env`の割当portについて、LISTEN address、PIDまたはcontainer ID、cwd、command、runtime owner、Compose project、checkout mount、service、volume、network、dependency artifactのstable IDまたはpathを記録する。各項目が既存か今回起動・生成かを区別し、この完全なbaselineを所有権判断とcleanupの正本にする。
-- 正しい既存serverは再利用する。Localでは同じcheckoutのhealthyなnative Next.js processまたは正しいCompose project・mountの`web`を`http://localhost:3000`で再利用する。worktreeでは`./dev-compose.sh prepare`が割り当てた固有Compose project、DB、volume、networkと、`3100-3899`内の`http://localhost:<allocated-port>`を使い、別checkoutの3000を使わない。起動が必要な場合だけ`./dev-compose.sh ensure`を使う。通常変更はHMRに任せ、自動的な`web`再起動はpending migration適用後にwrapperが所有するCompose runtimeへ反映する場合だけとする。migration以外のstale cache・package・設定変更では理由を報告し、明示的な`./dev-compose.sh restart web`操作なしに再起動しない。
+- 正しい既存serverは再利用する。Localでは同じcheckoutのhealthyなnative Next.js processまたは正しいCompose project・mountの`web`を`http://localhost:3000`で再利用する。worktreeでは`./dev-compose.sh prepare`が割り当てた固有Compose project、DB、volume、networkと、[利用範囲と割り当て](../../docs/development/development-ports.md#利用範囲と割り当て)に従う`http://localhost:<allocated-port>`を使い、別checkoutの3000を使わない。起動が必要な場合だけ`./dev-compose.sh ensure`を使う。通常変更はHMRに任せ、自動的な`web`再起動はpending migration適用後にwrapperが所有するCompose runtimeへ反映する場合だけとする。migration以外のstale cache・package・設定変更では理由を報告し、明示的な`./dev-compose.sh restart web`操作なしに再起動しない。
 - 独立runtime検証では、`./dev-compose.sh ensure`を1回実行し、その最終出力が返した所有権検証済みURLと必要なprototype URLを開く。runtime owner・checkout・commit・mount・route、fixture・authorization・query、`window.scrollX`/`window.scrollY`実測値、その他のBrowser条件と選択rowを確認する。ensure進行中の外側status、固定sleep、poll、追尾logは禁止し、失敗時だけ同じprojectのbounded diagnosticを各1回取得する。
 - checkoutまたはruntime outputを共有・置換し得るbuildの前には、preflightで今回のagentが起動・所有したと確認できる実アプリだけを、PID・cwd・command・container identity・service identityを再照合して停止する。対象checkoutまたはoutputを使うユーザー所有のdev serverとbuildを同時実行せず、そのserverも停止しない。現在の変更を正確に含む安全な隔離buildを使うか、ユーザーへ停止を依頼し、どちらもできなければbuildはblockedと報告する。
 - buildを実行した場合の最終確認では、agent所有の実アプリを`./dev-compose.sh ensure`で同じcheckout固有runtimeへ戻す。ユーザー所有serverを再利用する場合も含め、同commandの最終statusにある割当portのLISTEN address、PIDまたはcontainer ID、cwd、command、runtime owner、Compose project、checkout mount、`PRODUCTION_URL`、fixture・authorizationなどの比較条件を再確認してからparityを実行する。`finalize-run`直前のdrift readback以外に外側statusを重ねない。
@@ -59,7 +59,7 @@ node scripts/serve-plan-artifact.mjs plans/<slug>/review
 - prototype確認、HTML review、独立runtime検証は別の証拠として扱う。
 - Browserを利用できない場合は未検証と報告する。
 - 新規UI`$implement`は承認境界で`plans/<slug>/evidence/<run-id>/approval.json`を作り、final coverageとcleanupがpassした場合だけ同runへschema-version-5 `implementation-parity.json`を作成する。最終fileはcoverage/full scope、exact row、全軸coverage、risk、anchor、checkpoint、artifact、cleanupと自動coverage・人間承認・fullの独立statusを持つ。既存schema version 1から4はread-only互換として扱い、task固有adapterやruntime shimをfeature実装中に作らない。
-- 終了時は完全なbaselineとの差分だけをcleanupする。worktreeは`./dev-compose.sh cleanup`でsession baseline差分とruntime/session labelが一致するcontainer・networkだけを削除し、named volumeを保持する。exact runtimeをactive confirmation sessionが保持している間のenvironment cleanupは削除0件でskipし、`./dev-confirmation.sh stop <slug>`から一致するsession IDが渡された場合だけ通常のownership guardを通す。保持するvolumeはcreation sessionとconfig digestを安定した所有identityとしてmanifestへ残し、次sessionの可変labelで再作成対象にしない。Local cleanupはno-opとする。広域な`docker compose down`、`docker compose down -v`、project全体のstop、volume削除は実行せず、既存またはユーザー所有のprocess、container、service、volume、network、dependencyを停止・削除しない。
+- 終了時は完全なbaselineとの差分だけをcleanupする。worktreeは`./dev-compose.sh cleanup`でsession baseline差分とruntime/session labelが一致するcontainer・networkだけを削除し、named volumeを保持する。exact runtimeをactive confirmation sessionが保持している間のenvironment cleanupは削除0件でskipし、`./dev-confirmation.sh stop <slug>`から一致するsession IDが渡された場合だけ通常のownership guardを通す。Local cleanupはno-opとする。広域な`docker compose down`、`docker compose down -v`、project全体のstop、volume削除は実行せず、既存またはユーザー所有のprocess、container、service、volume、network、dependencyを停止・削除しない。
 
 Codexのproject-local設定は`.codex/config.toml`を参照する。`.mcp.json`はClaude Code用である。
 
@@ -68,3 +68,9 @@ Codexのproject-local設定は`.codex/config.toml`を参照する。`.mcp.json`�
 UI final検証ではprofile v4の実操作・t-way組合せ・Codex目視を含める。確認用queryで状態を表示したことを保存や再読込の検証と混同しない。実操作は所有権確認済みのローカルruntimeと管理下の検証データで行う。Codexは選定された安全な画像を閲覧し、欠落や白紙は未検証として扱う。非UIの開発ツール変更でも、goalがrunnerの実Browser受け入れテストを要求する場合はその限定検証を実施できる。
 
 CDP capability／DPRのterminal failureでは、設定無効やセッション不調と断定せず、新規Codexタスクで同条件を再検証することを案内し、対象goal・証跡・成功済みcheck/digest・未実施項目・cleanupを埋めたコピー可能な継続プロンプトを必ず返す。現在タスクのIDが取得できる場合は `codex://threads/<current-thread-id>` をプロンプト内に記載し、不明な場合のみ「前タスクのディープリンク: ［ユーザーが入力］」を用意する。詳細は `.agents/skills/plan/references/fidelity-audit.md` のfresh-task handoffに従う。新規タスクの自動作成、権限拒否の回避、繰り返しのセッション切替、直接CDP成功だけによる全体完了は行わない。
+
+## 開発用ポート
+
+利用範囲、起動・再利用・停止、予約解放、Browser権限、移行・保全・rollbackは[開発用ポートの固定範囲](../../docs/development/development-ports.md)に従う。出力URLがBrowser利用範囲外ならBrowserを開かず作業を止める。
+
+非UIの起動ツール変更でgoalが限定runtime確認を要求する場合は、所有権baselineを採り、隔離fixtureまたは所有slotで起動・再利用・cleanupを検証できる。BrowserやUI parityは起動しない。
