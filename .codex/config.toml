@@ -1,6 +1,13 @@
 [mcp_servers."openaiDeveloperDocs"]
 url = "https://developers.openai.com/mcp"
 
+[features]
+multi_agent_v2.min_wait_timeout_ms = 120000
+multi_agent_v2.default_wait_timeout_ms = 120000
+
+[features.context_management]
+experimental_mode = true
+
 [agents.product_advisor]
 description = "Read-only product and engineering advisor for explicit kabeuchi sessions."
 config_file = "./agents/product_advisor.toml"

@@ -1384,3 +1384,22 @@ test("approvalとphase evidenceを同じfresh run directoryへ一度ずつ保存
     /EEXIST/u,
   );
 });
+
+test("ParityRunError preserves its identity across independently loaded module graphs", async () => {
+  const original = await import('../.agents/skills/plan/scripts/parity-runner-core.mjs');
+  const reloadedUrl = new URL('../.agents/skills/plan/scripts/parity-runner-core.mjs?identity-test', import.meta.url).href;
+  const reloaded = await import(reloadedUrl);
+  const failure = new original.ParityRunError('PARITY_THEME_SETUP_FAILED', 'theme readback failed');
+  assert.ok(failure instanceof reloaded.ParityRunError);
+  assert.equal(new Error('ordinary error') instanceof reloaded.ParityRunError, false);
+});
+
+test("production base URLs allow local tenant hosts without allowing external hosts", async () => {
+  const core = await import("../.agents/skills/plan/scripts/parity-runner-core.mjs");
+  for (const url of ["http://localhost:3000", "http://univ.localhost:3000", "http://gov.localhost:3142"]) {
+    assert.equal(core.requireLoopbackBaseUrl(url, "production").origin, url);
+  }
+  for (const url of ["http://univ.localhost.example.com:3000", "http://example.com:3000", "http://univ.localhost:4000", "http://name:pass@univ.localhost:3000"]) {
+    assert.throws(() => core.requireLoopbackBaseUrl(url, "production"));
+  }
+});

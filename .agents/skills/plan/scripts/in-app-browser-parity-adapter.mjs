@@ -18,8 +18,8 @@ const performanceEntryLimits = Object.freeze({
 });
 const projectionLimits = Object.freeze({
   nodes: 1_000,
-  serializedChars: 131_072,
-  serializedBytes: 262_144,
+  serializedChars: 524_288,
+  serializedBytes: 1_048_576,
 });
 const networkEventMethods = Object.freeze([
   "Network.requestWillBeSent",
@@ -327,6 +327,7 @@ function createSingleTabParityAdapter({
   clock = defaultClock,
   artifactSink,
   sharedViewportState,
+  logicalTabState,
 }) {
   requireObject(browser, "browser");
   requireObject(tab, "tab");
@@ -396,7 +397,22 @@ function createSingleTabParityAdapter({
     return record;
   }
 
+  async function ownedTab() {
+    try {
+      return requireTabId(await browser.tabs.get(comparisonTabId), comparisonTabId);
+    } catch (error) {
+      if (error instanceof ParityRunError) throw error;
+      fail("PARITY_SELECTED_TAB_DRIFT", "owned comparison tab is no longer available", {
+        operation: "browser.tabs.get",
+      });
+    }
+  }
+
   async function selectedTab() {
+    if (logicalTabState) {
+      requireTabId({ id: logicalTabState.activeTabId }, comparisonTabId);
+      return ownedTab();
+    }
     return requireTabId(await browser.tabs.selected(), comparisonTabId);
   }
 
@@ -870,6 +886,23 @@ function createSingleTabParityAdapter({
     }, selector);
   }
 
+  async function waitForTheme(selector, theme) {
+    const deadline = resolvedClock.now() + resolvedTimeouts.actionMs;
+    do {
+      let readback;
+      try { readback = await readTheme(selector); }
+      catch (error) {
+        if (error instanceof ParityRunError) throw error;
+        // Navigation can replace the read-only evaluation context during hydration.
+      }
+      if (readback?.classes.includes(theme) && readback.colorScheme.includes(theme)) return readback;
+      const remaining = deadline - resolvedClock.now();
+      if (remaining <= 0) break;
+      await resolvedClock.sleep(Math.min(resolvedTimeouts.cleanupPollMs, remaining));
+    } while (resolvedClock.now() <= deadline);
+    fail("PARITY_THEME_SETUP_FAILED", `theme readback did not stabilize as ${theme}`);
+  }
+
   async function setTheme(requestedTabId, theme, context = {}) {
     await comparisonTab(requestedTabId);
     const setup = context.setup;
@@ -904,7 +937,7 @@ function createSingleTabParityAdapter({
         fail("PARITY_THEME_SETUP_FAILED", `theme query ${setup.parameter} did not match ${theme}`);
       }
     }
-    const readback = await readTheme("html");
+    const readback = await waitForTheme("html", theme);
     if (!readback.classes.includes(theme) || !readback.colorScheme.includes(theme)) {
       fail("PARITY_THEME_SETUP_FAILED", `theme readback did not match ${theme}`);
     }
@@ -1021,6 +1054,14 @@ function createSingleTabParityAdapter({
           `adapter is bound to ${comparisonTabId}, received ${requestedTabId}`,
         );
       }
+      // Background tab handles are independent of the tab shown in the app.
+      // Validate the owned handle before routing; Page.bringToFront does not
+      // update the in-app Browser tab selector.
+      if (logicalTabState) {
+        await ownedTab();
+        logicalTabState.activeTabId = comparisonTabId;
+        return;
+      }
       const selected = await browser.tabs.selected();
       if (selected?.id !== comparisonTabId) {
         const cdp = await getCdpCapability();
@@ -1040,6 +1081,7 @@ function createSingleTabParityAdapter({
       await comparisonTab(requestedTabId);
     },
     async activeTabId() {
+      if (logicalTabState) return (await selectedTab()).id;
       return (await browser.tabs.selected())?.id;
     },
     stabilizeContext,
@@ -1100,6 +1142,12 @@ function createSingleTabParityAdapter({
     setTheme,
     async runAction(requestedTabId, action) {
       await comparisonTab(requestedTabId);
+      if (action.type === "reload") {
+        await advanceNetworkCursor();
+        await navigateAndVerify(requestedTabId, await tab.url());
+        await comparisonTab(requestedTabId);
+        return;
+      }
       const locator = tab.playwright.locator(action.selector);
       const count = await locator.count();
       if (action.type === "waitForHidden") {
@@ -1208,7 +1256,7 @@ function createSingleTabParityAdapter({
           const element = document.querySelector(targetSelector);
           if (!(element instanceof Element)) throw new Error("overflow selector drifted");
           const rect = element.getBoundingClientRect();
-          const documentOverflow = document.documentElement.scrollWidth - window.innerWidth;
+          const documentOverflow = Math.max(0, document.documentElement.scrollWidth - window.innerWidth);
           const targetOverflow = Math.max(0, -rect.left, rect.right - window.innerWidth);
           return {
             matches: window.scrollX === 0 && documentOverflow <= tolerancePx && targetOverflow <= tolerancePx,
@@ -1227,16 +1275,19 @@ function createSingleTabParityAdapter({
           const box = element.getBoundingClientRect();
           return { x: box.x, y: box.y, width: box.width, height: box.height };
         }, selector);
-        const bytes = await tab.screenshot({ clip: rect });
+        const overlayOpen = probe.tier === "anchor" && await tab.playwright.evaluate(() =>
+          document.body.style.overflow === "hidden");
+        const bytes = await tab.screenshot(probe.tier === "anchor" ? (overlayOpen ? {} : { fullPage: true }) : { clip: rect });
+        const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8;
         const artifact = probe.tier === "anchor"
-          ? await storeArtifact({ probe, context, content: bytes, mediaType: "image/png" })
+          ? await storeArtifact({ probe, context, content: bytes,
+              mediaType: isJpeg ? "image/jpeg" : "image/png" })
           : undefined;
+        // The Browser API returns lossy JPEG on some backends. Retain it for
+        // visual review, but never claim a lossless pixel-equality comparison.
         return {
-          value: {
-            sha256: await sha256Digest(bytes),
-            width: rect.width,
-            height: rect.height,
-          },
+          ...(isJpeg ? { unsupported: true, reason: "lossless screenshot comparison unavailable; full-page JPEG retained for visual review" } : {}),
+          value: { sha256: artifact?.sha256 ?? await sha256Digest(bytes), width: rect.width, height: rect.height },
           ...(artifact ? { artifact, artifactPath: artifact.path } : {}),
         };
       }
@@ -1290,15 +1341,61 @@ function createSingleTabParityAdapter({
               return null;
             }
             nodeCount += 1;
-            const attributeEntries = [];
-            for (const attribute of node.attributes) {
-              if (/^(?:nonce|data-reactroot|data-nextjs)/u.test(attribute.name)) continue;
-              if (!reserve(16 + attribute.name.length + attribute.value.length)) return null;
-              attributeEntries.push([attribute.name, attribute.value]);
-            }
-            attributeEntries.sort(([left], [right]) => left.localeCompare(right));
+            // Compare rendered semantics, not framework IDs, class ordering or
+            // transport metadata. Constraints remain covered by application tests.
             const attributes = {};
-            for (const [name, value] of attributeEntries) attributes[name] = value;
+            for (const name of ["role", "aria-label", "aria-expanded", "aria-checked", "aria-selected",
+              "aria-pressed", "aria-disabled", "aria-invalid", "type", "placeholder", "title", "alt"]) {
+              const value = node.getAttribute(name);
+              if (!value || ((name === "aria-invalid" || name === "aria-disabled") && value === "false")) continue;
+              if (!reserve(16 + name.length + value.length)) return null;
+              attributes[name] = value;
+            }
+            for (const name of ["aria-labelledby", "for"]) {
+              const ids = node.getAttribute(name);
+              if (!ids) continue;
+              if (!reserve(ids.length)) return null;
+              const labels = [];
+              for (const id of ids.split(/\s+/u)) {
+                const target = document.getElementById(id);
+                if (!target) throw new Error("DOM label reference is missing");
+                if (name === "for" && node.contains(target)) continue;
+                const rawLabel = target.textContent ?? "";
+                if (!reserve(32 + rawLabel.length)) return null;
+                const referencePath = [];
+                if (root.contains(target)) {
+                  let cursor = target;
+                  while (cursor !== root) {
+                    const parent = cursor.parentElement;
+                    if (!parent) throw new Error("DOM label reference moved");
+                    referencePath.unshift(Array.from(parent.children).indexOf(cursor));
+                    cursor = parent;
+                  }
+                }
+                labels.push(`${referencePath.join(".")}:${rawLabel.replace(/\s+/gu, " ").trim()}`);
+              }
+              if (labels.length) attributes[name] = labels.join(" ");
+            }
+            for (const name of ["disabled", "readOnly", "checked", "selected"]) {
+              if (name in node) attributes[name] = Boolean(node[name]);
+            }
+            if (["input", "textarea", "select"].includes(tag)) {
+              const value = String(node.value ?? "");
+              if (!reserve(32 + value.length)) return null;
+              attributes.value = value;
+            }
+            const computedStyle = { display, visibility, opacity };
+            for (const property of ["color", "backgroundColor", "fontFamily", "fontSize", "fontWeight",
+              "lineHeight", "letterSpacing", "textAlign", "textDecorationLine", "borderTopWidth",
+              "borderRightWidth", "borderBottomWidth", "borderLeftWidth", "borderTopColor",
+              "borderRightColor", "borderBottomColor", "borderLeftColor", "borderRadius", "boxShadow",
+              "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "marginTop", "marginRight",
+              "marginBottom", "marginLeft", "gap", "alignItems", "justifyContent", "flexDirection",
+              "gridTemplateColumns", "whiteSpace", "overflowX", "overflowY"]) {
+              const value = String(style[property] ?? "");
+              if (!reserve(16 + property.length + value.length)) return null;
+              computedStyle[property] = value;
+            }
             const children = [];
             for (const child of node.childNodes) {
               if (overflow) break;
@@ -1309,11 +1406,7 @@ function createSingleTabParityAdapter({
               type: "element",
               tag,
               attributes,
-              computedStyle: {
-                display,
-                visibility,
-                opacity,
-              },
+              computedStyle,
               rect: { width: rect.width, height: rect.height },
               children,
             };
@@ -1623,7 +1716,7 @@ function createSingleTabParityAdapter({
       }
       return { unsupported: true, reason: `unsupported optional probe: ${probe.kind}` };
       } catch (error) {
-        if (!probe.required) {
+        if (!probe.required && !(probe.tier === "anchor" && ["screenshot", "dom", "accessibility"].includes(probe.kind))) {
           return { unsupported: true, reason: `optional ${probe.kind} probe unavailable` };
         }
         throw error;
@@ -1764,6 +1857,7 @@ function createInAppBrowserParityAdapter(options) {
     initialViewport: undefined,
     needsRunReset: false,
   };
+  const logicalTabState = { activeTabId: undefined };
   const tabAdapters = new Map(
     [productionTab, prototypeTab].map((surfaceTab) => [
       surfaceTab.id,
@@ -1772,10 +1866,10 @@ function createInAppBrowserParityAdapter(options) {
         tab: surfaceTab,
         ...sharedOptions,
         sharedViewportState,
+        logicalTabState,
       }),
     ]),
   );
-  let activeTabId;
 
   function activeAdapter(requestedTabId) {
     const selected = tabAdapters.get(requestedTabId);
@@ -1785,10 +1879,10 @@ function createInAppBrowserParityAdapter(options) {
         `comparison tab is not owned by this adapter: ${requestedTabId}`,
       );
     }
-    if (activeTabId !== requestedTabId) {
+    if (logicalTabState.activeTabId !== requestedTabId) {
       fail(
         "PARITY_SELECTED_TAB_DRIFT",
-        `logical tab mismatch; expected ${activeTabId ?? "none"}, received ${requestedTabId}`,
+        `logical tab mismatch; expected ${logicalTabState.activeTabId ?? "none"}, received ${requestedTabId}`,
       );
     }
     return selected;
@@ -1811,10 +1905,11 @@ function createInAppBrowserParityAdapter(options) {
         );
       }
       await selected.activateOwnedTab(requestedTabId);
-      activeTabId = requestedTabId;
+      logicalTabState.activeTabId = requestedTabId;
     },
     async activeTabId() {
-      return (await browser.tabs.selected())?.id;
+      const selected = tabAdapters.get(logicalTabState.activeTabId);
+      return selected ? selected.activeTabId() : undefined;
     },
     async cleanup() {
       const results = [];
@@ -1822,12 +1917,13 @@ function createInAppBrowserParityAdapter(options) {
       for (const [tabId, selected] of tabAdapters) {
         try {
           await selected.activateOwnedTab(tabId);
-          activeTabId = tabId;
+          logicalTabState.activeTabId = tabId;
           results.push(await selected.cleanup());
         } catch (error) {
           failedTabIds.push({
             tabId,
             code: error instanceof ParityRunError ? error.code : "PARITY_UNEXPECTED_ERROR",
+            ...(error instanceof ParityRunError && error.evidence ? { cleanup: error.evidence } : {}),
           });
         }
       }

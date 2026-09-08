@@ -126,7 +126,7 @@ async function assertRetryableFailure(
   assert.doesNotMatch(`${failure.stdout}\n${failure.stderr}\n${manifestText}`, new RegExp(privateMarker, "u"));
 }
 
-test("plan skill behavioral evalは実promptの12 scenarioを公開する", async () => {
+test("plan skill behavioral evalは実promptの13 scenarioを公開する", async () => {
   const { stdout } = await execFileAsync(process.execPath, [evaluator, "--list"], { cwd: root });
   assert.deepEqual(stdout.trim().split("\n"), [
     "plan-canonical",
@@ -137,6 +137,7 @@ test("plan skill behavioral evalは実promptの12 scenarioを公開する", asyn
     "implement-related-source-drift",
     "ui-final-browser-gate",
     "ui-browser-capability-failure",
+    "ui-fidelity-audit-gate",
     "review-ui-evidence-required",
     "workflow-performance-audit-bottleneck",
     "workflow-performance-audit-no-bottleneck",
@@ -199,6 +200,7 @@ test("plan skill behavioral evalはsymlink経由のCLI起動でもmainを実行�
     "implement-related-source-drift",
     "ui-final-browser-gate",
     "ui-browser-capability-failure",
+    "ui-fidelity-audit-gate",
     "review-ui-evidence-required",
     "workflow-performance-audit-bottleneck",
     "workflow-performance-audit-no-bottleneck",
@@ -333,7 +335,7 @@ test("plan skill behavioral evalのartifact graderはpositive/negative control�
     cwd: root,
     timeout: 180_000,
   });
-  assert.match(stdout, /self-test passed: 12 scenarios/);
+  assert.match(stdout, /self-test passed: 13 scenarios/);
 });
 
 test("version 3のUI eval fixtureは各rowでcontract IDと同名のrequired probeを対応する", async (context) => {

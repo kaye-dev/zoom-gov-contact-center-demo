@@ -1,3 +1,5 @@
+import { validateFidelityProfile, supplementInteractionRows, compareFidelityProbe, interactionCoverage } from "./parity-fidelity.mjs";
+
 const phases = new Set(["smoke", "pre-edit", "affected", "final"]);
 const fullMatrixPhases = new Set(["pre-edit", "final"]);
 const matrixScopes = new Set(["targeted", "coverage", "full"]);
@@ -448,7 +450,7 @@ function validateCoverageProfile(spec, contract, { probeById, probeIdsByRow, set
 
 function validateParitySpec(spec, contract) {
   ensure(isPlainObject(spec), "parity-spec.json must be an object");
-  ensure([1, 2, 3].includes(spec.version), "parity-spec.json version must be 1, 2, or 3");
+  ensure([1, 2, 3, 4].includes(spec.version), "parity-spec.json version must be 1, 2, or 3");
   requireExactKeys(
     spec,
     [
@@ -456,8 +458,9 @@ function validateParitySpec(spec, contract) {
       "stateSetups",
       "probes",
       "rowProbeMap",
-      ...([2, 3].includes(spec.version) ? ["browserSetups"] : []),
-      ...(spec.version === 3 ? ["coverage", "sourceImpactMap", "batchPolicy", "artifactPolicy"] : []),
+      ...([2, 3, 4].includes(spec.version) ? ["browserSetups"] : []),
+      ...(spec.version >= 3 ? ["coverage", "sourceImpactMap", "batchPolicy", "artifactPolicy"] : []),
+      ...(spec.version === 4 ? ["fidelity"] : []),
     ],
     "parity-spec.json",
   );
@@ -479,7 +482,7 @@ function validateParitySpec(spec, contract) {
     const label = `stateSetups[${index}]`;
     requireExactKeys(
       setup,
-      ["targetId", "state", "production", "prototype", ...(spec.version === 3 ? ["assertionProbeIds"] : [])],
+      ["targetId", "state", "production", "prototype", ...(spec.version >= 3 ? ["assertionProbeIds"] : [])],
       label,
     );
     requireNonEmptyString(setup.targetId, `${label}.targetId`);
@@ -511,7 +514,7 @@ function validateParitySpec(spec, contract) {
         "prototypeSelector",
         "required",
         "options",
-        ...(spec.version === 3 ? ["tier"] : []),
+        ...(spec.version >= 3 ? ["tier"] : []),
       ],
       label,
     );
@@ -524,13 +527,13 @@ function validateParitySpec(spec, contract) {
     requireNonEmptyString(probe.productionSelector, `${label}.productionSelector`);
     requireNonEmptyString(probe.prototypeSelector, `${label}.prototypeSelector`);
     requireBoolean(probe.required, `${label}.required`);
-    if (spec.version === 3) {
+    if (spec.version >= 3) {
       ensure(probeTiers.has(probe.tier), `${label}.tier must be coverage or anchor`);
       if (probe.tier === "coverage") {
         ensure(coverageProbeKinds.has(probe.kind), `${label}.kind is not allowed for coverage tier`);
         ensure(probe.required === true, `${label} coverage probes must be required`);
       } else {
-        ensure(anchorProbeKinds.has(probe.kind), `${label}.kind is not allowed for anchor tier`);
+        ensure(anchorProbeKinds.has(probe.kind) || (spec.version === 4 && ["text", "attribute", "visibility"].includes(probe.kind)), `${label}.kind is not allowed for anchor tier`);
       }
     }
     validateProbeOptions(probe, label);
@@ -555,7 +558,7 @@ function validateParitySpec(spec, contract) {
       ensure(probeIds.has(probeId), `${label} references an unknown probe: ${probeId}`);
       usedProbeIds.add(probeId);
     }
-    if (spec.version === 3) {
+    if (spec.version >= 3) {
       const contractRow = contractRowById.get(rowId);
       const mappedProbeIdSet = new Set(mappedProbeIds);
       for (const [field, expectedMode] of [
@@ -593,8 +596,8 @@ function validateParitySpec(spec, contract) {
     JSON.stringify([...usedProbeIds].sort()) === JSON.stringify([...probeIds].sort()),
     "every probe must be used by rowProbeMap",
   );
-  if ([2, 3].includes(spec.version)) validateBrowserSetups(spec.browserSetups, contract);
-  if (spec.version === 3) {
+  if ([2, 3, 4].includes(spec.version)) validateBrowserSetups(spec.browserSetups, contract);
+  if (spec.version >= 3) {
     for (const [rowId, mappedProbeIds] of probeIdsByRow) {
       const mappedKinds = new Set(
         mappedProbeIds
@@ -608,6 +611,7 @@ function validateParitySpec(spec, contract) {
     }
     validateCoverageProfile(spec, contract, { probeById, probeIdsByRow, setupTuples });
   }
+  if (spec.version === 4) validateFidelityProfile(spec, contract, { validateAction, validateQuery: requireQuery });
   return spec;
 }
 
@@ -628,7 +632,7 @@ function selectedScope(contract, changedTargetIds, changedStates) {
 }
 
 function coverageRows(contract, spec) {
-  ensure(spec?.version === 3, "coverage matrix scope requires parity-spec.json version 3");
+  ensure(spec?.version >= 3, "coverage matrix scope requires parity-spec.json version 3");
   validateParitySpec(spec, contract);
   const rowByCoordinate = new Map(contract.parityMatrix.map((row) => [rowCoordinate(row), row]));
   const selected = [];
@@ -730,7 +734,7 @@ function createCoverageReport(contract, rows) {
 }
 
 function resolveInvalidationTargets({ spec, contract, scope, targetIds = [], source }) {
-  ensure(spec?.version === 3, "invalidation requires parity-spec.json version 3");
+  ensure(spec?.version >= 3, "invalidation requires parity-spec.json version 3");
   const declaredTargets = contract.comparisonTargets.map(({ id }) => id);
   if (scope === "global") return { targetIds: declaredTargets, failClosed: false };
   if (scope === "target") {
@@ -754,18 +758,18 @@ function selectRows({
   changedStates = [],
   changedViewports = [],
   risks = ["normal"],
-  matrixScope = spec?.version === 3 && phase !== "smoke" ? "coverage" : "targeted",
+  matrixScope = spec?.version >= 3 && phase !== "smoke" ? "coverage" : "targeted",
   executionContext,
 }) {
   ensure(phases.has(phase), `phase must be one of: ${[...phases].join(", ")}`);
   ensure(matrixScopes.has(matrixScope), `matrixScope must be one of: ${[...matrixScopes].join(", ")}`);
-  if (spec?.version === 3) {
+  if (spec?.version >= 3) {
     if (matrixScope === "targeted") {
       ensure(phase === "smoke", "parity-spec.json version 3 targeted scope is allowed only for plan smoke");
     } else {
       ensure(coverageMatrixScopes.has(matrixScope), "parity-spec.json version 3 supports coverage or full matrix scope");
     }
-    if (matrixScope === "coverage") return coverageRows(contract, spec);
+    if (matrixScope === "coverage") return supplementInteractionRows(contract, spec, coverageRows(contract, spec));
     if (matrixScope === "full") {
       ensure(fullMatrixPhases.has(phase), "full matrix scope is allowed only for pre-edit or final");
       ensure(fullExecutionContexts.has(executionContext), "full matrix scope requires release, ci, scheduled, or explicit execution context");
@@ -818,7 +822,7 @@ function selectRows({
       result.add(desktop.row.id);
     }
   }
-  if (spec?.version === 3) {
+  if (spec?.version >= 3) {
     const rowByCoordinate = new Map(contract.parityMatrix.map((row) => [rowCoordinate(row), row]));
     for (const risk of spec.coverage.riskRows) {
       const row = rowByCoordinate.get(JSON.stringify([
@@ -903,7 +907,7 @@ function createRunContext({
   changedStates = [],
   changedViewports = [],
   risks = ["normal"],
-  matrixScope = definition?.spec?.version === 3 ? "coverage" : "targeted",
+  matrixScope = definition?.spec?.version >= 3 ? "coverage" : "targeted",
   executionContext,
   maxRows,
   maxBytes,
@@ -921,21 +925,21 @@ function createRunContext({
     matrixScope,
     executionContext,
   });
-  const coverageMetadata = definition.spec.version === 3
+  const coverageMetadata = definition.spec.version >= 3
     ? coverageSelectionMetadata(definition.spec, rows)
     : undefined;
   return {
     runId,
     phase,
     matrixScope,
-    selection: definition.spec.version === 3
+    selection: definition.spec.version >= 3
       ? { executionContext: executionContext ?? "feature", ...coverageMetadata }
       : { changedTargetIds, changedStates, changedViewports, risks },
     rowIds: rows.map(({ id }) => id),
     batches: createBatches(rows, {
       maxRows,
       maxBytes,
-      preserveTargetBoundaries: definition.spec.version === 3,
+      preserveTargetBoundaries: definition.spec.version >= 3,
     }),
   };
 }
@@ -1100,9 +1104,9 @@ function requireLoopbackBaseUrl(value, surface) {
   if (surface === "production") {
     const port = Number(parsed.port);
     ensure(
-      parsed.hostname === "localhost" &&
+      (parsed.hostname === "localhost" || /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.localhost$/u.test(parsed.hostname)) &&
         (port === 3000 || (port >= 3100 && port <= 3899)),
-      "production base URL must use Local localhost:3000 or an allocated worktree localhost port in 3100-3899",
+      "production base URL must use localhost or a tenant .localhost host on Local port 3000 or an allocated worktree port in 3100-3899",
     );
   } else {
     ensure(parsed.hostname === "127.0.0.1" && parsed.port !== "", "prototype base URL must use 127.0.0.1 with an explicit port");
@@ -1132,6 +1136,12 @@ function requireAdapter(adapter) {
 }
 
 class ParityRunError extends Error {
+  // REPL module reloads may give the adapter and executor separate class objects.
+  // Keep fail-closed diagnostics recognizable across those module instances.
+  static [Symbol.hasInstance](value) {
+    return value?.[Symbol.for("codex.parity.error")] === true;
+  }
+
   constructor(code, message, evidence) {
     if (typeof message !== "string") {
       evidence = message;
@@ -1140,6 +1150,7 @@ class ParityRunError extends Error {
     }
     super(message);
     this.name = "ParityRunError";
+    Object.defineProperty(this, Symbol.for("codex.parity.error"), { value: true });
     this.code = code;
     this.evidence = evidence;
   }
@@ -1404,6 +1415,42 @@ class BrowserParityRunner {
     }
   }
 
+  async runRuntimeChecks({ definition, row, tabs, baseUrls, canary }) {
+    const { spec, contract } = definition;
+    const results = [];
+    for (const runtimeCheck of spec.fidelity.runtimeChecks.filter(item => item.rowId === row.id)) {
+      const browserSetup = spec.browserSetups.find(item => item.targetId === row.targetId).production;
+      await this.prepareSurface({ tabId: tabs.production, row, surface: "production",
+        setup: { query: runtimeCheck.query, actions: [], browser: browserSetup },
+        authorizationProfile: contract.comparisonConditions.authorization, baseUrl: baseUrls.production,
+        dpr: contract.comparisonConditions.dpr, expectedScroll: contract.comparisonConditions.scroll });
+      const result = { id: runtimeCheck.id, status: "pass", query: runtimeCheck.query, steps: [] };
+      for (const step of runtimeCheck.steps) {
+        await this.assertActiveTab(tabs.production, `runtime ${runtimeCheck.id}`);
+        await this.call("runAction", tabs.production, step.action);
+        const observed = { action: step.action, status: "pass", assertions: [] };
+        for (const assertion of step.assertions) {
+          const probe = spec.probes.find(item => item.id === assertion.probeId);
+          // UI event handlers may finish their real request after click/reload returns.
+          // Bound the readback wait; never treat a pending or unsupported result as success.
+          const deadline = Date.now() + 5_000;
+          let actual, pass;
+          do {
+            actual = await this.runProbe({ tabId: tabs.production, row, surface: "production", probe, networkSource: canary.networkSource });
+            pass = !actual.unsupported && stableStringify(actual.value) === stableStringify(assertion.expected);
+            if (pass || actual.unsupported || Date.now() >= deadline) break;
+            await new Promise(resolve => setTimeout(resolve, 50));
+          } while (Date.now() < deadline);
+          observed.assertions.push({ probeId: assertion.probeId, value: actual.value, status: pass ? "pass" : "fail" });
+          ensure(pass, `runtime ${runtimeCheck.id}: expected result mismatch`);
+        }
+        result.steps.push(observed);
+      }
+      results.push(result);
+    }
+    return results;
+  }
+
   async runWithoutCleanup({
     definition,
     phase,
@@ -1416,22 +1463,23 @@ class BrowserParityRunner {
     matrixScope,
     executionContext,
     run,
+    batch,
   }) {
     const { contract, spec } = definition;
-    const resolvedMatrixScope = matrixScope ?? (spec.version === 3 && phase === "final" ? "coverage" : "targeted");
+    const resolvedMatrixScope = matrixScope ?? (spec.version >= 3 && phase === "final" ? "coverage" : "targeted");
     ensure(
       phase === "smoke" || phase === "final",
       "new Browser runs support only final-boundary smoke or final phases",
     );
     requireLoopbackBaseUrl(baseUrls.production, "production");
     requireLoopbackBaseUrl(baseUrls.prototype, "prototype");
-    if (this.adapter.requiresBrowserSetups === true && ![2, 3].includes(spec.version)) {
+    if (this.adapter.requiresBrowserSetups === true && ![2, 3, 4].includes(spec.version)) {
       throwParityError(
         "PARITY_BROWSER_SETUP_REQUIRED",
         "in-app Browser execution requires parity-spec.json version 2 or 3 browserSetups",
       );
     }
-    const rows = selectRows({
+    let rows = selectRows({
       phase,
       contract,
       spec,
@@ -1442,6 +1490,18 @@ class BrowserParityRunner {
       matrixScope: resolvedMatrixScope,
       executionContext,
     });
+    if (batch !== undefined) {
+      requireExactKeys(batch, ["batchId", "rowIds", "rows"], "execution batch");
+      const expected = createBatches(rows, {
+        maxRows: spec.batchPolicy.maxRows,
+        maxBytes: spec.batchPolicy.maxBytes,
+        preserveTargetBoundaries: spec.version >= 3,
+      }).find(({ batchId }) => batchId === batch.batchId);
+      if (!expected || stableStringify(expected) !== stableStringify(batch)) {
+        throwParityError("PARITY_BATCH_INVALID", "execution batch differs from the canonical selection");
+      }
+      rows = expected.rows;
+    }
     const probeById = new Map(spec.probes.map((probe) => [probe.id, probe]));
     const probeIdsByRow = new Map(spec.rowProbeMap.map(({ rowId, probeIds }) => [rowId, probeIds]));
     const setupByTuple = new Map(
@@ -1476,7 +1536,9 @@ class BrowserParityRunner {
     const firstViewport = inAppBrowserRun ? { width: 390, height: 844 } : parseViewport(rows[0].viewport);
     const requiresNetwork = rows.some((row) =>
       probeIdsByRow.get(row.id).some((probeId) => probeById.get(probeId).kind === "network"),
-    );
+    ) || (phase === "final" && spec.version === 4 && spec.fidelity.runtimeChecks.some(check =>
+      rows.some(row => row.id === check.rowId) && check.steps.some(step =>
+        step.assertions.some(assertion => probeById.get(assertion.probeId).kind === "network"))));
     const startedAt = new Date().toISOString();
     const startedMs = Date.now();
     const canary = await this.capabilityCanary({
@@ -1485,14 +1547,14 @@ class BrowserParityRunner {
       dpr: contract.comparisonConditions.dpr,
       requiresNetwork,
     });
-    const selection = spec.version === 3
+    const selection = spec.version >= 3
       ? {
           executionContext: executionContext ?? (phase === "smoke" ? "plan-smoke" : "feature"),
           ...coverageSelectionMetadata(spec, rows),
         }
       : { changedTargetIds, changedStates, changedViewports, risks };
     const evidence = {
-      schemaVersion: spec.version === 3 ? 4 : 3,
+      schemaVersion: spec.version === 4 ? 5 : spec.version >= 3 ? 4 : 3,
       phase,
       runId: run.runId,
       generatedAt: startedAt,
@@ -1506,7 +1568,7 @@ class BrowserParityRunner {
       capabilities: { ...canary, surfaceContexts: [] },
       rows: [],
       metrics: undefined,
-      ...(spec.version === 3
+      ...(spec.version >= 3
         ? {
             coverage: createCoverageReport(contract, rows),
             riskRows: spec.coverage.riskRows.map((risk) => ({
@@ -1616,13 +1678,15 @@ class BrowserParityRunner {
           },
           probes: [],
           artifactPaths: [],
-          ...(spec.version === 3 ? { artifacts: [] } : {}),
+          ...(spec.version >= 3 ? { artifacts: [] } : {}),
         };
         for (const probeId of probeIdsByRow.get(row.id)) {
           const probe = probeById.get(probeId);
           const production = productionProbeResults.get(probeId);
           const prototype = prototypeProbeResults.get(probeId);
-          const comparison = compareProbe(probe, production, prototype);
+          const comparison = spec.version === 4
+            ? compareFidelityProbe(probe, production, prototype, spec, phase, compareProbe)
+            : compareProbe(probe, production, prototype);
           if (comparison.status === "fail" && (probe.kind === "setup" || probe.kind === "state")) {
             const productionMatches = production?.value?.matches === true;
             const prototypeMatches = prototype?.value?.matches === true;
@@ -1639,7 +1703,7 @@ class BrowserParityRunner {
             prototype?.artifactPath ?? prototype?.artifact?.path,
           ].filter(Boolean);
           rowEvidence.artifactPaths.push(...artifacts);
-          if (spec.version === 3) {
+          if (spec.version >= 3) {
             rowEvidence.artifacts.push(...artifactRecords);
             evidence.artifactIndex.push(...artifactRecords);
           }
@@ -1648,9 +1712,13 @@ class BrowserParityRunner {
             kind: probe.kind,
             ...comparison,
             artifactPaths: artifacts,
-            ...(spec.version === 3 ? { tier: probe.tier, artifacts: artifactRecords } : {}),
+            ...(spec.version >= 3 ? { tier: probe.tier, artifacts: artifactRecords } : {}),
           });
           if (comparison.status === "fail") rowEvidence.status = "fail";
+        }
+        if (spec.version === 4) {
+          rowEvidence.runtimeChecks = phase === "final" && rowEvidence.status === "pass"
+            ? await this.runRuntimeChecks({ definition, row, tabs, baseUrls, canary }) : [];
         }
         evidence.rows.push(rowEvidence);
         if (rowEvidence.status === "fail") {
@@ -1672,7 +1740,8 @@ class BrowserParityRunner {
           actualConditions: null,
           probes: [],
           artifactPaths: [],
-          ...(spec.version === 3 ? { artifacts: [] } : {}),
+          ...(spec.version >= 3 ? { artifacts: [] } : {}),
+          ...(spec.version === 4 ? { runtimeChecks: [] } : {}),
           error: "PARITY_UNEXPECTED_ERROR",
         });
         evidence.metrics = {
@@ -1698,7 +1767,7 @@ class BrowserParityRunner {
       browserOperations: this.operations,
       fullMatrixRuns: resolvedMatrixScope === "full" ? 1 : 0,
     };
-    if (spec.version === 3) {
+    if (spec.version >= 3) {
       evidence.riskRows = evidence.riskRows.map((risk) => ({
         ...risk,
         status: evidence.rows.find(({ rowId }) => rowId === risk.rowId)?.status ?? "fail",
@@ -1714,6 +1783,11 @@ class BrowserParityRunner {
       evidence.fullParityStatus = resolvedMatrixScope === "full" && evidence.automationCoverageStatus === "pass"
         ? "pass"
         : evidence.fullParityStatus;
+    }
+    if (spec.version === 4) {
+      evidence.audit = null;
+      evidence.auditStatus = { static: "not-run", runtime: "not-run", requirements: "not-run", visual: "not-run" };
+      evidence.interactionCoverage = interactionCoverage(contract, spec, evidence.rows);
     }
     return evidence;
   }
@@ -1733,9 +1807,9 @@ class BrowserParityRunner {
       try {
         const cleanup = await this.call("cleanup");
         if (result?.capabilities) result.capabilities.cleanup = cleanup;
-        if (result?.schemaVersion === 4) result.cleanup = cleanup;
+        if (result?.schemaVersion >= 4) result.cleanup = cleanup;
         if (failure?.evidence?.capabilities) failure.evidence.capabilities.cleanup = cleanup;
-        if (failure?.evidence?.schemaVersion === 4) failure.evidence.cleanup = cleanup;
+        if (failure?.evidence?.schemaVersion >= 4) failure.evidence.cleanup = cleanup;
       } catch (error) {
         throw new ParityRunError(
           "PARITY_CLEANUP_FAILED",

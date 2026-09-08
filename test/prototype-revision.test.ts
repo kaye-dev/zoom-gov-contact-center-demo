@@ -187,6 +187,7 @@ async function createRepositoryFixture(context: test.TestContext): Promise<Repos
   await mkdir(path.dirname(script), { recursive: true });
   await copyFile(sourceScript, script);
   await copyFile(sourceCore, path.join(path.dirname(script), "parity-runner-core.mjs"));
+  await copyFile(path.join(path.dirname(sourceCore), "parity-fidelity.mjs"), path.join(path.dirname(script), "parity-fidelity.mjs"));
   await mkdir(path.join(root, "src"), { recursive: true });
   await writeFile(path.join(root, "src/ui.ts"), "export const ui = true;\n");
   return { root, script };
