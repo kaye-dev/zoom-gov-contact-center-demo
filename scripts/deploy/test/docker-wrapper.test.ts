@@ -31,6 +31,7 @@ const setupDeployAwsScript = join(projectRoot, "setup-deploy-aws.sh");
 test("deployment runner includes the Linux quality-gate tools", () => {
   const source = readFileSync(deployDockerfile, "utf8");
   assert.match(source, /procps=2:4\.0\.2-3/);
+  assert.match(source, /lsof=4\.95\.0-1/);
   assert.match(source, /zsh=5\.9-4\+b15/);
 });
 

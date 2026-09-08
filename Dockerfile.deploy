@@ -6,6 +6,7 @@ RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
         ca-certificates=20250419~deb12u1 \
         git=1:2.39.5-0+deb12u3 \
+        lsof=4.95.0-1 \
         procps=2:4.0.2-3 \
         zsh=5.9-4+b15 \
     && rm -rf /var/lib/apt/lists/*
