@@ -1,3 +1,4 @@
+import { validateVerificationSchema } from "./parity-verification-model.mjs";
 import { classifyBrowserError } from "./browser-api-bootstrap.mjs";
 import { validateFidelityProfile, supplementInteractionRows, compareFidelityProbe, interactionCoverage } from "./parity-fidelity.mjs";
 
@@ -449,7 +450,11 @@ function validateCoverageProfile(spec, contract, { probeById, probeIdsByRow, set
   }
 }
 
-function validateParitySpec(spec, contract) {
+function validateParitySpec(spec, contract, requirements) {
+  if (spec?.version === 5 || contract?.version === 3) {
+    validateVerificationSchema(contract, spec, requirements);
+    return spec;
+  }
   ensure(isPlainObject(spec), "parity-spec.json must be an object");
   ensure([1, 2, 3, 4].includes(spec.version), "parity-spec.json version must be 1, 2, or 3");
   requireExactKeys(

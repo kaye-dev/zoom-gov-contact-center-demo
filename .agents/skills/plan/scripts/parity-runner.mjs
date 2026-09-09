@@ -1078,6 +1078,7 @@ function parseCliArguments(argv) {
   const [command, target, ...rest] = argv;
   ensure(
     [
+      "estimate",
       "validate",
       "preflight",
       "select",
@@ -1121,10 +1122,14 @@ function parseCliArguments(argv) {
   };
   for (let index = 0; index < rest.length; index += 1) {
     const argument = rest[index];
+    if (argument === "--legacy-analysis") { options.legacyAnalysis = true; continue; }
     const value = rest[index + 1];
     ensure(value, `${argument} requires a value`);
     if (argument === "--phase") options.phase = value;
     else if (argument === "--context") options.context = value;
+    else if (argument === "--format") { ensure(value === "json", "Only JSON estimate output is supported"); options.format = value; }
+    else if (argument === "--baseline-report") options.baselineReport = value;
+    else if (argument === "--changed-source") (options.changedSources ??= []).push(value);
     else if (argument === "--target") options.changedTargetIds.push(value);
     else if (argument === "--state") options.changedStates.push(value);
     else if (argument === "--viewport") options.changedViewports.push(value);
@@ -1323,6 +1328,14 @@ async function runCli({
 } = {}) {
   const root = await realpath(repositoryRootPath);
   const { command, target, options } = parseCliArguments(argv);
+  if (command === "estimate") {
+    const { estimateFromFiles } = await import("./parity-model-files.mjs");
+    ensure(options.phase === "final", "estimate requires --phase final");
+    const report = await estimateFromFiles({ target, repositoryRoot: root, context: options.context ?? "plan", baselineReport: options.baselineReport, changedSources: options.changedSources ?? [], legacyAnalysis: options.legacyAnalysis ?? false });
+    stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    if (report.status && report.status !== "complete") process.exitCode = 1;
+    return report;
+  }
   if (command === "abort-run" || command === "cleanup-run") {
     planSlugFromTarget(target);
     ensure(options.runId, "--run-id is required");

@@ -145,3 +145,22 @@ Stable failure codes include `BROWSER_DOCUMENTATION_REQUIRED`, `BROWSER_PERMISSI
 ## Legacy compatibility
 
 Profile versions 1, 2, and 3 and parity evidence schemas 1, 2, 3, and 4 remain read-only compatible. Validate existing evidence against its historical row, digest, runtime, and cleanup contract without migrating or adding fields. New Browser-enabled plans use profile version 4; independently requested new final runs use evidence schema 5. A migration changes workflow text, skills, profile, runner, evidence schema, tests, and evaluator together. Rollback must restore that entire compatible set; never roll back only a writer or reader.
+
+## 機能別モデルの見積もり（contract 3 / profile 5）
+
+新規モデルは `parity-verification-model.mjs` の純粋compilerを共用する。`requirementsBundle.path/digest` で承認入力を独立に固定し、profileの削減済み一覧だけから要件を再定義しない。targetは `states`（`id/when/identity/scenarioIds`）と `applicableStateIds` を持つ。groupは有限factor、宣言的constraints、理由付き1〜4次interaction、回帰seed、scenarioとobligationへの参照を持つ。任意JavaScript・default stateへの代入は受理しない。
+
+`scenario.conditions` は両surface、fixture seed/data digest、認可profile/role/tenant、locale/timezone、setup/reset/isolation、viewport/DPR/scroll/theme、環境を省略しない。ordered checkpointごとにaction/waitとassertionを結び、snapshotをflowへ昇格させない。純粋な同時点assertionのみ共有し、元obligationとexpectedの対応を保存する。観測や副作用の独立性が不明なら分離する。
+
+```sh
+node .agents/skills/plan/scripts/parity-runner.mjs estimate plans/<slug>/prototype --phase final --context plan --format json
+node .agents/skills/plan/scripts/parity-runner.mjs estimate plans/<slug>/prototype --phase final --context implement --baseline-report plans/<slug>/prototype/verification-estimate.json --changed-source src/example.ts --format json
+```
+
+estimateはstdoutのみを書き、Browser・DB・run workspaceを操作しない。作者が最終authoring後、smoke前にstdoutを `verification-estimate.json` へ保存し、その後prototype revisionを計算する。report自身、goal、revisionをreportの入力digestへ含めない。`--legacy-analysis` はcontract 1/2とprofile 1〜4を読む診断専用で、旧runを移行・再選択しない。新schemaでのBrowser実行は共通runnerの対応経路だけを使う。
+
+`sourceInventory` は `id/digest/dependencies` と未解決依存を持ち、`sourceImpactMap` は同じID集合を持つ。scopeは実際の推移的consumerからtarget/shared/global/unknownへ分類する。globalには全consumerの根拠を付ける。境界の値・軸・適用state/consumerと期待する両側は、当該goalのsourceから解決し、固定の製品名・幅・state数を生成器へ入れない。
+
+候補数はBigIntで集計し、機能ごとの和を取る。candidate評価100万、選択10万、推定working set 256 MiBはcompiler資源上限であり、cost overrideでは緩和しない。超過は未算出の件数をnullとしてモデル分割へ戻す。通常の15分/unit、90分/全体、64 MiB/証跡、承認時比20%かつ10件等の運用閾値は `parity-estimate.mjs` の共通評価で判定する。overrideにはmetric/value/reason/evidence/unitIdsを全て宣言する。要件・期待値・riskを削って費用に合わせない。
+
+原観点は全文とhash、条件、REQ、全子obligationを保持する。代表化証明は元条件、能力、source依存閉包、正確な代替test、consumer接続、残存risk、fallback、失効条件を全て持つ。未実行のtest/calibrationはpendingとし追加費用へ加算する。source-textやSSRの成功を実Browserのlayout/focus/eventへ代用しない。pendingの証明で元条件を省略しない。

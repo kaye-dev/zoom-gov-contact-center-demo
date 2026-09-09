@@ -187,6 +187,9 @@ async function createRepositoryFixture(context: test.TestContext): Promise<Repos
   await mkdir(path.dirname(script), { recursive: true });
   await copyFile(sourceScript, script);
   await copyFile(sourceCore, path.join(path.dirname(script), "parity-runner-core.mjs"));
+  for (const dependency of ["browser-api-bootstrap.mjs", "parity-verification-model.mjs", "parity-estimate.mjs", "parity-model-files.mjs"]) {
+    await copyFile(path.join(path.dirname(sourceCore), dependency), path.join(path.dirname(script), dependency));
+  }
   await copyFile(path.join(path.dirname(sourceCore), "parity-fidelity.mjs"), path.join(path.dirname(script), "parity-fidelity.mjs"));
   await mkdir(path.join(root, "src"), { recursive: true });
   await writeFile(path.join(root, "src/ui.ts"), "export const ui = true;\n");
@@ -972,4 +975,17 @@ test("symlink経由のCLI起動でもrevisionを出力する", async (context) =
       timeout: 10_000,
     }),
   );
+});
+
+test("MODEL-04 contract 2 keeps target-local state applicability", async (context) => {
+  const fixture = await createRepositoryFixture(context);
+  const contract = { ...structuredClone(defaultContractObject), version: 2, comparisonTargets: defaultContractObject.comparisonTargets.map((target) => ({ ...target, states: ["default"] })) };
+  const prototype = await createPrototype(fixture, "legacy-applicable", [
+    ["index.html", "<main>Fixture</main>"],
+    ["ui-contract.json", JSON.stringify(contract)],
+  ]);
+  revisionFrom(runRevision(fixture, [prototype.relative]));
+  contract.comparisonTargets[0].states = ["other"];
+  await writeFile(path.join(prototype.absolute, "ui-contract.json"), JSON.stringify(contract));
+  assertRejected(runRevision(fixture, [prototype.relative]), /state/i);
 });
