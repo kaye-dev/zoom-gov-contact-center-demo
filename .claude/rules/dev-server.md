@@ -67,7 +67,9 @@ Codexのproject-local設定は`.codex/config.toml`を参照する。`.mcp.json`�
 
 UI final検証ではprofile v4の実操作・t-way組合せ・Codex目視を含める。確認用queryで状態を表示したことを保存や再読込の検証と混同しない。実操作は所有権確認済みのローカルruntimeと管理下の検証データで行う。Codexは選定された安全な画像を閲覧し、欠落や白紙は未検証として扱う。非UIの開発ツール変更でも、goalがrunnerの実Browser受け入れテストを要求する場合はその限定検証を実施できる。
 
-CDP capability／DPRのterminal failureでは、設定無効やセッション不調と断定せず、新規Codexタスクで同条件を再検証することを案内し、対象goal・証跡・成功済みcheck/digest・未実施項目・cleanupを埋めたコピー可能な継続プロンプトを必ず返す。現在タスクのIDが取得できる場合は `codex://threads/<current-thread-id>` をプロンプト内に記載し、不明な場合のみ「前タスクのディープリンク: ［ユーザーが入力］」を用意する。詳細は `.agents/skills/plan/references/fidelity-audit.md` のfresh-task handoffに従う。新規タスクの自動作成、権限拒否の回避、繰り返しのセッション切替、直接CDP成功だけによる全体完了は行わない。
+Browser操作前には[Browser APIの事前確認と同task復旧](../../.agents/skills/plan/references/browser-api-bootstrap.md)に従い、現在の公開規約を全文提示した後、別呼出しで確認する。未読は`BROWSER_DOCUMENTATION_REQUIRED`として同taskで文書確認・共通canary・正規checkpoint復旧を行い、権限拒否は実際の確認手順に従う。未読や権限拒否を新規taskで回避しない。
+
+bootstrap完了後にも残るCDP capability／DPRのterminal failureでは、設定無効やセッション不調と断定せず、新規Codexタスクで同条件を再検証することを案内し、対象goal・証跡・成功済みcheck/digest・未実施項目・cleanupを埋めたコピー可能な継続プロンプトを必ず返す。現在タスクのIDが取得できる場合は `codex://threads/<current-thread-id>` をプロンプト内に記載し、不明な場合のみ「前タスクのディープリンク: ［ユーザーが入力］」を用意する。詳細は `.agents/skills/plan/references/fidelity-audit.md` のfresh-task handoffに従う。新規タスクの自動作成、権限拒否の回避、繰り返しのセッション切替、直接CDP成功だけによる全体完了は行わない。
 
 ## 開発用ポート
 

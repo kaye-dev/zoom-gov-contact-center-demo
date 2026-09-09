@@ -1,3 +1,4 @@
+import { classifyBrowserError } from "./browser-api-bootstrap.mjs";
 import { validateFidelityProfile, supplementInteractionRows, compareFidelityProbe, interactionCoverage } from "./parity-fidelity.mjs";
 
 const phases = new Set(["smoke", "pre-edit", "affected", "final"]);
@@ -1249,7 +1250,8 @@ class BrowserParityRunner {
       try {
         const entries = await this.call("performanceEntries", tabId);
         if (Array.isArray(entries)) networkSource = "performance-resource-timing";
-      } catch {
+      } catch (error) {
+        if (["documentation", "permission"].includes(classifyBrowserError(error).category)) throw error;
         networkSource = undefined;
       }
     }
@@ -1257,7 +1259,8 @@ class BrowserParityRunner {
       try {
         const entries = await this.call("networkEntries", tabId);
         if (Array.isArray(entries)) networkSource = "browser-network-log";
-      } catch {
+      } catch (error) {
+        if (["documentation", "permission"].includes(classifyBrowserError(error).category)) throw error;
         networkSource = undefined;
       }
     }
@@ -1812,6 +1815,10 @@ class BrowserParityRunner {
         if (failure?.evidence?.capabilities) failure.evidence.capabilities.cleanup = cleanup;
         if (failure?.evidence?.schemaVersion >= 4) failure.evidence.cleanup = cleanup;
       } catch (error) {
+        const accessFailure = [failure, error].find((candidate) =>
+          ["documentation", "permission"].includes(classifyBrowserError(candidate).category));
+        if (accessFailure) throw new ParityRunError(accessFailure.code, accessFailure.message,
+          { ...accessFailure.evidence, cleanup: { status: "fail", operation: "cleanup" } });
         throw new ParityRunError(
           "PARITY_CLEANUP_FAILED",
           "Browser cleanup did not complete",

@@ -138,7 +138,9 @@ The invocation-bound `approval.json` remains schema version 1. Current final evi
 
 Coverage evidence sets full parity to `not-run`; only a complete full run may set it to `pass`. Codex visual/requirement audit, real actions, static checks and t-way coverage are required by schema v5; human approval is independent and optional. Missing/duplicate/extra/failed rows, stale digest, condition drift, missing artifact, or failed cleanup prevents automated completion.
 
-Stable failure codes include `PARITY_SELECTED_TAB_DRIFT`, `PARITY_COMPARISON_TAB_REQUIRED`, `PARITY_VIEWPORT_CAPABILITY_UNAVAILABLE`, `PARITY_CDP_CAPABILITY_UNAVAILABLE`, `PARITY_DPR_OVERRIDE_UNAVAILABLE`, `PARITY_VIEWPORT_MISMATCH`, `PARITY_DPR_MISMATCH`, `PARITY_BROWSER_SETUP_REQUIRED`, `PARITY_THEME_SETUP_FAILED`, `PARITY_REQUIRED_PROBE_UNAVAILABLE`, `PARITY_ARTIFACT_SINK_UNAVAILABLE`, `PARITY_BATCH_INVALID`, `PARITY_BATCH_INCOMPLETE`, `PARITY_CURRENT_STATE_DRIFT`, and `PARITY_CLEANUP_FAILED`.
+Before Browser operations, use [Browser documentation bootstrap](browser-api-bootstrap.md); static CLI work does not require it. The guarded `recoverDocumentationFailure` API reopens only a proven unread batch after a fresh common canary and preserves passed fragments.
+
+Stable failure codes include `BROWSER_DOCUMENTATION_REQUIRED`, `BROWSER_PERMISSION_DENIED`, `PARITY_SELECTED_TAB_DRIFT`, `PARITY_COMPARISON_TAB_REQUIRED`, `PARITY_VIEWPORT_CAPABILITY_UNAVAILABLE`, `PARITY_CDP_CAPABILITY_UNAVAILABLE`, `PARITY_DPR_OVERRIDE_UNAVAILABLE`, `PARITY_VIEWPORT_MISMATCH`, `PARITY_DPR_MISMATCH`, `PARITY_BROWSER_SETUP_REQUIRED`, `PARITY_THEME_SETUP_FAILED`, `PARITY_REQUIRED_PROBE_UNAVAILABLE`, `PARITY_ARTIFACT_SINK_UNAVAILABLE`, `PARITY_BATCH_INVALID`, `PARITY_BATCH_INCOMPLETE`, `PARITY_CURRENT_STATE_DRIFT`, and `PARITY_CLEANUP_FAILED`.
 
 ## Legacy compatibility
 

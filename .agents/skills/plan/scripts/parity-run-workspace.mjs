@@ -1,3 +1,5 @@
+import { requireBrowserAdapterRuntime } from "./in-app-browser-parity-adapter.mjs";
+import { requireBrowserDocumentation, classifyBrowserError } from "./browser-api-bootstrap.mjs";
 import { interactionCoverage, validateFidelityAudit } from "./parity-fidelity.mjs";
 import { createHash } from "node:crypto";
 import { constants as fsConstants } from "node:fs";
@@ -15,6 +17,7 @@ import path from "node:path";
 
 import {
   ParityRunError,
+  BrowserParityRunner,
   createCoverageReport,
   createRunContext,
   mergeBatchResults,
@@ -52,6 +55,8 @@ const sensitiveValuePatterns = [
   /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/iu,
 ];
 const failureDiagnostics = new Map([
+  ["BROWSER_DOCUMENTATION_REQUIRED", "Browser documentation must be read in the current runtime"],
+  ["BROWSER_PERMISSION_DENIED", "Browser permission was explicitly denied"],
   ["PARITY_ARTIFACT_SINK_UNAVAILABLE", "artifact capture is unavailable"],
   ["PARITY_AUTHORIZATION_PROFILE_REQUIRED", "authorization profile provenance is unavailable"],
   ["PARITY_BATCH_INCOMPLETE", "batch execution is incomplete"],
@@ -1063,7 +1068,8 @@ async function executeBrowserBatch({ repositoryRootPath, runId, runner, tabs }) 
       cleanup = cleanupError instanceof ParityRunError && cleanupError.evidence
         ? cleanupError.evidence : { status: "fail" };
     }
-    const code = cleanup.status === "pass"
+    const access = ["documentation", "permission"].includes(classifyBrowserError(error).category);
+    const code = access ? error.code : cleanup.status === "pass"
       ? (error instanceof ParityRunError ? error.code : "PARITY_UNEXPECTED_ERROR")
       : "PARITY_CLEANUP_FAILED";
     const failedProbes = (error?.evidence?.rows ?? []).flatMap((row) =>
@@ -1096,6 +1102,58 @@ async function resumeRunWorkspace({ repositoryRootPath, runId }) {
     parentIdentity: paths.runIdentity,
   });
   return nextRunBatch({ repositoryRootPath, runId });
+}
+
+// Recovery is deliberately an in-process API: a CLI boolean or a serialized
+// receipt cannot authorize a Browser. Revalidate the current runtime and run
+// the common canary before changing exactly one failed checkpoint entry.
+async function recoverDocumentationFailure({ repositoryRootPath, runId, batchId, browser, runner, tabId, legacyDiagnosticFile }) {
+  validateIdentifier(batchId, "batchId");
+  const documentation = requireBrowserDocumentation(browser);
+  const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
+  const { value: manifest } = await readManifest(path.join(paths.runRoot, "manifest.json"), {
+    limit: maxManifestBytes, parentIdentity: paths.runIdentity,
+  });
+  requireCurrentRunOrigins(manifest);
+  const checkpoint = await readCheckpoint(paths.runRoot, paths.runIdentity);
+  const batch = checkpoint.batches.find((item) => item.batchId === batchId);
+  let legacyProof;
+  if (legacyDiagnosticFile !== undefined) {
+    ensure(typeof legacyDiagnosticFile === "string" &&
+      legacyDiagnosticFile.startsWith(`failure-${batchId}-`) &&
+      /^[0-9]+\.json$/u.test(legacyDiagnosticFile.slice(`failure-${batchId}-`.length)),
+      "PARITY_BATCH_INVALID", "legacy recovery requires a workspace failure record");
+    const record = await readJsonFile(path.join(paths.runRoot, legacyDiagnosticFile), {
+      limit: maxDiagnosticBytes, parentIdentity: paths.runIdentity,
+    });
+    const diagnosis = classifyBrowserError({ code: record.value.evidence?.causeCode, message: record.value.diagnostic });
+    ensure(["PARITY_DPR_OVERRIDE_UNAVAILABLE", "PARITY_CDP_CAPABILITY_UNAVAILABLE"].includes(batch?.errorCode) &&
+      record.value.code === batch.errorCode && diagnosis.category === "documentation",
+      "PARITY_BATCH_INVALID", "legacy failure does not prove an unread documentation cause");
+    legacyProof = { file: legacyDiagnosticFile, sha256: record.sha256, priorCode: batch.errorCode };
+  }
+  ensure(batch?.status === "terminal" && (batch.errorCode === "BROWSER_DOCUMENTATION_REQUIRED" || legacyProof),
+    "PARITY_BATCH_INVALID", "only a proven documentation failure can be recovered");
+  ensure(!batch.documentationRecovery, "PARITY_BATCH_INVALID", "documentation recovery already attempted");
+  ensure(runner instanceof BrowserParityRunner && runner.adapter?.sessionId === documentation.sessionId,
+    "PARITY_BATCH_INVALID", "recovery requires the current common runner session");
+  requireBrowserAdapterRuntime(runner.adapter, browser);
+  runner.canary = undefined;
+  const canary = await runner.capabilityCanary({ tabId, viewport: { width: 390, height: 844 },
+    dpr: manifest.definition.contract.comparisonConditions.dpr, requiresNetwork: true,
+    url: manifest.baseUrls.production });
+  requireBrowserDocumentation(browser);
+  ensure(canary?.status === "pass" && canary.sessionId === documentation.sessionId,
+    "PARITY_BATCH_INVALID", "recovery canary did not pass in the current session");
+  const current = await readCheckpoint(paths.runRoot, paths.runIdentity);
+  ensure(stableStringify(current) === stableStringify(checkpoint), "PARITY_CURRENT_STATE_DRIFT", "checkpoint changed during recovery");
+  batch.documentationRecovery = { sessionId: documentation.sessionId, generation: documentation.generation,
+    documents: documentation.documents, priorAttempts: batch.attempts, canary, ...(legacyProof ? { legacyProof } : {}) };
+  batch.status = "pending";
+  batch.errorCode = null;
+  batch.diagnostic = null;
+  await writeJsonAtomic(path.join(paths.runRoot, "checkpoint.json"), checkpoint, { parentIdentity: paths.runIdentity });
+  return { runId, batchId, status: "recovered", summary: compactRunSummary(checkpoint) };
 }
 
 async function recordBatchFailure({
@@ -1696,6 +1754,7 @@ export {
   prepareRunWorkspace,
   readJsonFile,
   recordBatchFailure,
+  recoverDocumentationFailure,
   recordBatchResult,
   resumeRunWorkspace,
   sha256,

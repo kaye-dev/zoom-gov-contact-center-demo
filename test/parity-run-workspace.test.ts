@@ -2062,3 +2062,84 @@ test("PORT-09: retired-origin workspace stays readable and resumption never rewr
     assert.equal(await readFile(path.join(runRoot, "checkpoint.json"), "utf8"), before);
   }
 });
+
+test("BOOT-RECOVER: current documentation and common canary recover only the proven failed batch", async (context) => {
+  const workspace = await workspaceModulePromise;
+  const bootstrap = await import("../.agents/skills/plan/scripts/browser-api-bootstrap.mjs");
+  const { createInAppBrowserParityAdapter } = await import("../.agents/skills/plan/scripts/in-app-browser-parity-adapter.mjs");
+  const { BrowserParityRunner } = await import("../.agents/skills/plan/scripts/parity-runner-core.mjs");
+  const fixture = await createFixture(context, "boot-recover");
+  const definition = createCoverageWorkspaceDefinition();
+  const handshake = await workspace.prepareRunWorkspace({ repositoryRootPath: fixture.root, slug: "fixture",
+    runId: "boot-recover", definition, approval: fixture.approval, current: fixture.current,
+    baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
+    matrixScope: "coverage", validateApproval: fixture.runner.validateApprovalEvidence });
+  const first = await workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId });
+  await workspace.recordBatchResult({ repositoryRootPath: fixture.root, runId: handshake.runId,
+    batchId: first.batch.batchId, input: JSON.stringify(coverageFragment(handshake, first.batch, definition)) });
+  const second = await workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId });
+  await workspace.recordBatchFailure({ repositoryRootPath: fixture.root, runId: handshake.runId,
+    batchId: second.batch.batchId, code: "BROWSER_DOCUMENTATION_REQUIRED", transient: false });
+  const browser = { browserId: "boot-recover" };
+  const adapter = createInAppBrowserParityAdapter({ browser, tab: { id: "owned" } });
+  const runner = new BrowserParityRunner(adapter);
+  const args = { repositoryRootPath: fixture.root, runId: handshake.runId,
+    batchId: second.batch.batchId, browser, runner, tabId: "owned" };
+  await assert.rejects(workspace.recoverDocumentationFailure(args), { code: "BROWSER_DOCUMENTATION_REQUIRED" });
+  bootstrap.beginBrowserBootstrap(browser, { sessionId: browser.browserId, generation: "one", requiredDocumentIds: ["mock"] });
+  const receipt = await bootstrap.publishBrowserDocumentation(browser, { invocationId: "publish",
+    documents: [{ id: "mock", text: "Full mock Browser documentation", complete: true }], publish: () => {} });
+  bootstrap.acknowledgeBrowserDocumentation(browser, { receipt, invocationId: "acknowledge", displayedDocumentDigests: receipt.documents });
+  const canary = context.mock.method(runner, "capabilityCanary", async () => { throw new Error("canary failed"); });
+  await assert.rejects(workspace.recoverDocumentationFailure(args), /canary failed/u);
+  assert.equal((await workspace.nextRunBatch(args)).status, "terminal");
+  canary.mock.mockImplementation(async (input: { viewport: object; dpr: number }) => {
+    assert.deepEqual(input.viewport, { width: 390, height: 844 });
+    assert.equal(input.dpr, 1);
+    return { status: "pass", sessionId: browser.browserId, tabId: "owned", viewport: input.viewport, networkSource: "browser-network-log" };
+  });
+  const result = await workspace.recoverDocumentationFailure(args);
+  assert.equal(result.status, "recovered");
+  assert.equal(result.summary.passedRows, 2);
+  const resumed = await workspace.nextRunBatch(args);
+  assert.equal(resumed.batch.batchId, second.batch.batchId);
+  assert.equal(resumed.batch.attempt, 2);
+  assert.equal(resumed.summary.passedRows, 2);
+  await workspace.recordBatchFailure({ ...args, code: "PARITY_DPR_OVERRIDE_UNAVAILABLE", transient: false });
+  await assert.rejects(workspace.recoverDocumentationFailure(args), /proven documentation failure/u);
+  await assert.rejects(workspace.recoverDocumentationFailure({ ...args, legacyDiagnosticFile: "../foreign.json" }), /workspace failure record/u);
+});
+
+test("BOOT-LEGACY: old DPR terminal needs a digest-bound workspace record proving unread documentation", async (context) => {
+  const workspace = await workspaceModulePromise;
+  const { createInAppBrowserParityAdapter, browserBootstrap } = await import("../.agents/skills/plan/scripts/in-app-browser-parity-adapter.mjs");
+  const { BrowserParityRunner } = await import("../.agents/skills/plan/scripts/parity-runner-core.mjs");
+  const fixture = await createFixture(context, "boot-legacy");
+  const handshake = await workspace.prepareRunWorkspace({ repositoryRootPath: fixture.root, slug: "fixture",
+    runId: "boot-legacy", definition: createCoverageWorkspaceDefinition(), approval: fixture.approval, current: fixture.current,
+    baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
+    matrixScope: "coverage", validateApproval: fixture.runner.validateApprovalEvidence });
+  const next = await workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId });
+  const args = { repositoryRootPath: fixture.root, runId: handshake.runId, batchId: next.batch.batchId };
+  await workspace.recordBatchFailure({ ...args, code: "PARITY_DPR_OVERRIDE_UNAVAILABLE", transient: false });
+  const browser = { browserId: "boot-legacy" };
+  const runner = new BrowserParityRunner(createInAppBrowserParityAdapter({ browser, tab: { id: "owned" } }));
+  browserBootstrap.beginBrowserBootstrap(browser, { sessionId: browser.browserId, generation: "one", requiredDocumentIds: ["mock"] });
+  const receipt = await browserBootstrap.publishBrowserDocumentation(browser, { invocationId: "read",
+    documents: [{ id: "mock", text: "Complete mock documentation", complete: true }], publish: () => {} });
+  browserBootstrap.acknowledgeBrowserDocumentation(browser, { receipt, invocationId: "next", displayedDocumentDigests: receipt.documents });
+  context.mock.method(runner, "capabilityCanary", async () => ({ status: "pass", sessionId: browser.browserId,
+    tabId: "owned", viewport: { width: 390, height: 844, dpr: 1 }, networkSource: "browser-network-log" }));
+  const legacyDiagnosticFile = `failure-${args.batchId}-1.json`;
+  const proofPath = path.join(path.dirname(next.batch.path), legacyDiagnosticFile);
+  await writeFile(proofPath, JSON.stringify({ code: "PARITY_DPR_OVERRIDE_UNAVAILABLE", diagnostic: "Unknown failure" }), { mode: 0o600 });
+  const recovery = { ...args, browser, runner, tabId: "owned", legacyDiagnosticFile };
+  await assert.rejects(workspace.recoverDocumentationFailure(recovery), /does not prove/u);
+  await writeFile(proofPath, JSON.stringify({ code: "PARITY_DPR_OVERRIDE_UNAVAILABLE",
+    diagnostic: 'Required documentation has not been read: "confirmations"' }), { mode: 0o600 });
+  const before = await readFile(proofPath);
+  assert.equal((await workspace.recoverDocumentationFailure(recovery)).status, "recovered");
+  assert.deepEqual(await readFile(proofPath), before);
+  const checkpoint = JSON.parse(await readFile(path.join(path.dirname(proofPath), "checkpoint.json"), "utf8"));
+  assert.equal(checkpoint.batches[0].documentationRecovery.legacyProof.sha256, sha256(before.toString()));
+});
