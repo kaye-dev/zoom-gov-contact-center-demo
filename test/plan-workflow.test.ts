@@ -434,9 +434,11 @@ test("CI guardはローカル資料やarchive履歴を出荷gateにしない", a
 
 test("workflow scenario登録は全採用要件の行動評価へ接続する", async () => {
   const { scenarios } = await import("../scripts/eval-plan-skills.mjs");
-  for (const name of ["smoke-plan-default", "smoke-implement-default", "smoke-unavailable-and-defect", "smoke-legacy-and-review", "ui-design-feedback", "ui-minor-feedback-direct"]) {
-    assert.ok(scenarios[name], `missing scenario: ${name}`);
-    assert.equal(typeof scenarios[name].grade, "function");
-    assert.ok(scenarios[name].affectedPaths.includes(".agents/skills/implement/"));
+  // The JavaScript registry adds workflow scenarios with Object.assign.
+  const registered = scenarios as Record<string, { grade?: unknown; affectedPaths?: string[] }>;
+  for (const name of ["smoke-plan-default", "smoke-implement-default", "smoke-implement-prototype-variant", "smoke-unavailable-and-defect", "smoke-legacy-and-review", "ui-design-feedback", "ui-minor-feedback-direct"]) {
+    assert.ok(registered[name], `missing scenario: ${name}`);
+    assert.equal(typeof registered[name].grade, "function");
+    assert.ok(registered[name].affectedPaths?.includes(".agents/skills/implement/"));
   }
 });

@@ -4,9 +4,13 @@ This is the shared verification contract for plan, implementation, review, and s
 
 ## Scope and evidence
 
-Choose normally 1–3 representative scenarios in total. Observe major visual breakage and the main happy path through visible completion. Use the prototype for visual intent and the latest user instruction for accepted local differences. A scenario may contain several operations; do not turn each click into a separate validation requirement.
+Choose normally 1–3 representative scenarios in total. Check prototype conformance, major visual breakage, and the main happy path through visible completion within that same selection. A scenario may contain several operations; do not turn each click or comparison into a separate validation requirement.
 
-Plan checks the completed prototype. Implementation checks the completed real app after static validation. Review and shipping reuse valid implementation results. A screenshot or fixture state does not prove a real save or API operation. Report only what was observed.
+Before implementation, read the adopted prototype HTML/CSS and referenced assets. Carry its major regions, components, order, placement, width, spacing, color roles, and typography hierarchy into the implementation, including visual details omitted from the goal. Apply the latest direct user correction to its specific scope. Do not rewrite the prototype to justify implementation drift.
+
+Plan checks the completed prototype. After static validation, implementation displays the adopted prototype and real app at the same representative viewport, theme, and corresponding state, and visually compares those design features. Reuse a matching prototype server or serve it through the existing non-retaining prototype entrypoint; follow runtime ownership and cleanup rules. Unrequested region additions/removals, reordering, card wrappers, or changes to these visual features are defects even when the page is usable and saving succeeds. Ignore minor pixel and browser-rendering differences.
+
+Report the compared screen/conditions, observed matches, differences authorized by direct instructions, and unverified items concisely in the implementation result. If either surface cannot be displayed, explicitly report `prototypeとの視覚照合は未確認`; source inspection alone does not establish visual conformance. Review and shipping reuse valid results, including this limitation. When matching implementation observations already exist, review them against the current source without reopening either surface. Moving to review or shipping is not a reason to rerun Browser. A screenshot or fixture state does not prove a real save or API operation.
 
 The Browser scope excludes exhaustive failure/state/consumer/boundary combinations and strict DOM/style/geometry/pixel comparisons. Responsive/theme representatives belong in the same small selection when they are the subject of the change. Keep product requirements covered by affected unit/integration tests and diff inspection.
 

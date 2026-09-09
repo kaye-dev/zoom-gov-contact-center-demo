@@ -2,7 +2,7 @@
 
 ## 確認範囲
 
-UIはCodexアプリ内Browserで通常1〜3シナリオのsmokeを行い、大きなUI崩れと主要な正常系操作の完了を確認する。planは完成prototype、implementは静的検証後の実アプリを確認する。reviewと出荷は有効な結果を再利用する。非UI変更は採用goalの限定検証を行う。
+UIはCodexアプリ内Browserで通常1〜3シナリオのsmokeを行い、prototypeの構成・主要な見た目との照合、大きなUI崩れと主要な正常系操作の完了を確認する。planは完成prototype、implementは静的検証後に同じ代表条件でprototypeと実アプリを表示して照合する。[共通検証契約](../../.agents/skills/plan/references/workflow-verification-contract.md)に従い、片方を表示できなければ視覚照合は未確認とする。reviewと出荷は有効な結果を再利用する。非UI変更は採用goalの限定検証を行う。
 
 Browserを操作する前に、現在の公開API文書を読む。初期化・既読確認が必要ならtoolの手順に従い、reset後は文書とhandleを更新する。詳細は[Browser文書確認](../../.agents/skills/plan/references/browser-api-bootstrap.md)を参照する。公開APIによる通常操作を使い、未読を権限エラーと断定しない。権限拒否を別Browserや新taskで回避しない。
 
@@ -39,6 +39,8 @@ node scripts/serve-plan-artifact.mjs plans/<slug>/review
 ```
 
 返されたloopback URLを使い、`file://`、外部CDN/API/analytics、repository全体の公開は行わない。prototypeには通常のHTML/CSSがあればよく、parity manifestやrevision helperの実行を前提にしない。
+
+implementの照合では一致する既存prototype serverを再利用するか、`./dev-prototype.sh <slug>`で一時配信する。照合のためにprototypeを編集せず、新たな保持sessionを作らない。今回起動した一時配信processだけを終了し、planで保持済みのserverは残す。
 
 planは返却直前のsmoke後に`./dev-prototype.sh --retain <slug>`で保持し、URL、PID、owner、確認結果、`./dev-confirmation.sh stop <slug>`を返す。確認セッションはcheckoutごとに同時に1 slugだけで、他slugを暗黙停止しない。
 

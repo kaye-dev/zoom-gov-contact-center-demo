@@ -127,7 +127,7 @@ async function assertRetryableFailure(
   assert.doesNotMatch(`${failure.stdout}\n${failure.stderr}\n${manifestText}`, new RegExp(privateMarker, "u"));
 }
 
-test("plan skill behavioral evalは実promptの41 scenarioを公開する", async () => {
+test("plan skill behavioral evalは登録済みscenarioの実promptを公開する", async () => {
   const { stdout } = await execFileAsync(process.execPath, [evaluator, "--list"], { cwd: root });
   assert.deepEqual(stdout.trim().split("\n"), [
     "plan-canonical",
@@ -340,7 +340,8 @@ test("plan skill behavioral evalのartifact graderはpositive/negative control�
     cwd: root,
     timeout: 180_000,
   });
-  assert.match(stdout, /self-test passed: 41 scenarios/);
+  const scenarioCount = Object.keys((await evaluatorModulePromise).scenarios).length;
+  assert.ok(stdout.includes(`self-test passed: ${scenarioCount} scenarios`));
 });
 
 test("version 3のUI eval fixtureは各rowでcontract IDと同名のrequired probeを対応する", async (context) => {
@@ -413,6 +414,7 @@ test("SMOKE-EVAL: 保存成功の報告は実際の公開API操作traceを必要
   await fixture.scenario.simulate(fixture.repo);
   const commands = [
     "node workflow-fixture.mjs docs",
+    "node workflow-fixture.mjs browser open prototype",
     "node --test fixture.test.mjs",
     "node workflow-fixture.mjs browser open app",
     "node workflow-fixture.mjs browser save",
@@ -437,6 +439,140 @@ test("SMOKE-EVAL: 保存成功の報告は実際の公開API操作traceを必要
     evaluatorModule.gradePreparedScenario(fixture, final, commands, captured.slice(0, -1)),
     /actual public operations do not match/u,
   );
+});
+
+async function observeSmokeFixture(fixture: PreparedFixture, comparePrototype = true) {
+  const evaluatorModule = await evaluatorModulePromise;
+  const operations = [
+    ["workflow-fixture.mjs", "docs"],
+    ["--test", "fixture.test.mjs"],
+    ...(comparePrototype ? [["workflow-fixture.mjs", "browser", "open", "prototype"]] : []),
+    ["workflow-fixture.mjs", "browser", "open", "app"],
+    ["workflow-fixture.mjs", "browser", "save"],
+  ];
+  const observations: Array<Record<string, unknown>> = [];
+  const environment = { ...process.env };
+  for (const key of Object.keys(environment)) if (key.startsWith("NODE_TEST_")) delete environment[key];
+  for (const args of operations) {
+    const { stdout } = await evaluatorModule.run(process.execPath, args, {
+      cwd: fixture.repo,
+      env: environment,
+    });
+    if (args[0] !== "workflow-fixture.mjs") continue;
+    for (const line of stdout.split("\n")) {
+      try {
+        const value = JSON.parse(line);
+        if (["docs", "open", "save", "browser-unavailable"].includes(value.action)) observations.push(value);
+      } catch { /* The docs operation also prints the public API document. */ }
+    }
+  }
+  return { commands: operations.map(args => `node ${args.join(" ")}`), observations };
+}
+
+test("SMOKE-EVAL: identical requirements need different implementations for different prototypes", async (context) => {
+  const evaluatorModule = await evaluatorModulePromise;
+  const names = ["smoke-implement-default", "smoke-implement-prototype-variant"];
+  const fixtures = await Promise.all(names.map(name => evaluatorModule.prepareScenario(name, `prototype-pair-${name}-${process.pid}`)));
+  context.after(() => Promise.all(fixtures.map(fixture => rm(fixture.fixtureRoot, { recursive: true, force: true }))));
+  assert.equal(evaluatorModule.scenarios[names[0]].prompt, evaluatorModule.scenarios[names[1]].prompt);
+  for (const file of ["AGENTS.md", "plans/smoke-settings/goal.md", "app/screen.json", "browser-api.md", "workflow-fixture.mjs", "fixture.test.mjs"]) {
+    assert.equal(await readFile(path.join(fixtures[0].repo, file), "utf8"), await readFile(path.join(fixtures[1].repo, file), "utf8"), file);
+  }
+  assert.ok((await readFile(path.join(fixtures[0].repo, "AGENTS.md"), "utf8")).includes(".agents/skills/plan/references/workflow-verification-contract.md"));
+  for (const file of ["index.html", "design.css"]) {
+    assert.notEqual(await readFile(path.join(fixtures[0].repo, "plans/smoke-settings/prototype", file), "utf8"), await readFile(path.join(fixtures[1].repo, "plans/smoke-settings/prototype", file), "utf8"));
+  }
+  const outputs = [];
+  for (const fixture of fixtures) {
+    await fixture.scenario.simulate(fixture.repo);
+    await evaluatorModule.gradePreparedScenario(fixture, fixture.scenario.simulatedFinal!);
+    const output = await readFile(path.join(fixture.repo, "app/screen.json"), "utf8");
+    outputs.push(output);
+    // Independently read the prototype: the evaluator's expected values must
+    // actually be recoverable from the candidate's HTML and linked CSS.
+    const app = JSON.parse(output);
+    const html = await readFile(path.join(fixture.repo, "plans/smoke-settings/prototype/index.html"), "utf8");
+    const css = await readFile(path.join(fixture.repo, "plans/smoke-settings/prototype/design.css"), "utf8");
+    assert.ok(html.includes('href="design.css"'));
+    assert.deepEqual(app.regions, [...html.matchAll(/data-region="([^"]+)"/gu)].map(match => match[1]));
+    assert.equal(app.contentWidth, Number(/max-width: (\d+)px/u.exec(css)?.[1]));
+    assert.equal(app.gap, Number(/gap: (\d+)px/u.exec(css)?.[1]));
+    assert.equal(app.titleSize, Number(/font-size: (\d+)px/u.exec(css)?.[1]));
+    assert.equal(app.titleWeight, Number(/font-weight: (\d+)/u.exec(css)?.[1]));
+    assert.equal(app.actionsPlacement, /justify-content: flex-(\w+)/u.exec(css)?.[1]);
+    assert.equal(app.accent, /button \{ background: var\(--(\w+)\)/u.exec(css)?.[1]);
+    assert.equal(app.surface, css.includes('.panel { background: transparent; border: 0;') ? 'plain' : 'card');
+  }
+  assert.notEqual(outputs[0], outputs[1]);
+  await writeFile(path.join(fixtures[1].repo, "app/screen.json"), outputs[0]);
+  await assert.rejects(evaluatorModule.gradePreparedScenario(fixtures[1], fixtures[1].scenario.simulatedFinal!), /prototype design mismatch/u);
+});
+
+test("SMOKE-EVAL: saving unchanged or visually divergent implementations cannot pass", async (context) => {
+  const evaluatorModule = await evaluatorModulePromise;
+  const reference = await evaluatorModule.prepareScenario("smoke-implement-default", `prototype-reference-${process.pid}`);
+  context.after(() => rm(reference.fixtureRoot, { recursive: true, force: true }));
+  await reference.scenario.simulate(reference.repo);
+  const correct = JSON.parse(await readFile(path.join(reference.repo, "app/screen.json"), "utf8"));
+  const changes = [
+    {}, // No implementation change: the original false-positive regression.
+    { regions: ["details", "summary"] },
+    { regions: ["details"] },
+    { regions: ["summary", "details", "extra"] },
+    { actionsPlacement: "start" }, { contentWidth: 880 }, { gap: 32 },
+    { surface: "card" }, { accent: "danger" }, { titleSize: 20 }, { titleWeight: 400 },
+  ];
+  for (const [index, change] of changes.entries()) {
+    const fixture = await evaluatorModule.prepareScenario("smoke-implement-default", `prototype-drift-${index}-${process.pid}`);
+    try {
+      if (index > 0) await writeFile(path.join(fixture.repo, "app/screen.json"), JSON.stringify({ ...correct, ...change }) + "\n");
+      const { commands, observations } = await observeSmokeFixture(fixture, index > 0);
+      assert.ok(observations.some(event => event.action === "open" && event.surface === "app" && event.majorBreakage === false));
+      assert.ok(observations.some(event => event.action === "save" && event.result === "Saved"));
+      await assert.rejects(evaluatorModule.gradePreparedScenario(fixture, fixture.scenario.simulatedFinal!, commands, observations), /prototype design mismatch/u);
+    } finally {
+      await rm(fixture.fixtureRoot, { recursive: true, force: true });
+    }
+  }
+});
+
+test("SMOKE-EVAL: prototype and operation-log tampering cannot authorize a design difference", async (context) => {
+  const evaluatorModule = await evaluatorModulePromise;
+  const fixture = await evaluatorModule.prepareScenario("smoke-implement-default", `prototype-tamper-${process.pid}`);
+  context.after(() => rm(fixture.fixtureRoot, { recursive: true, force: true }));
+  await fixture.scenario.simulate(fixture.repo);
+  for (const file of ["index.html", "design.css"]) {
+    const target = path.join(fixture.repo, "plans/smoke-settings/prototype", file);
+    const original = await readFile(target, "utf8");
+    await writeFile(target, original + "\n/* changed reference */\n");
+    await assert.rejects(evaluatorModule.gradePreparedScenario(fixture, fixture.scenario.simulatedFinal!), /rewrote prototype/u);
+    await writeFile(target, original);
+  }
+  const log = path.join(fixture.repo, "observed-actions.jsonl");
+  const actual = (await readFile(log, "utf8")).trim().split("\n").map(line => JSON.parse(line));
+  const altered = structuredClone(actual);
+  altered.find(event => event.action === "open" && event.surface === "prototype").title = "forged comparison";
+  await writeFile(log, altered.map(event => JSON.stringify(event)).join("\n") + "\n");
+  const commands = ["node workflow-fixture.mjs docs", "node workflow-fixture.mjs browser open prototype", "node --test fixture.test.mjs", "node workflow-fixture.mjs browser open app", "node workflow-fixture.mjs browser save"];
+  await assert.rejects(evaluatorModule.gradePreparedScenario(fixture, fixture.scenario.simulatedFinal!, commands, actual), /actual public operations do not match/u);
+});
+
+test("SMOKE-EVAL: plan may name its own prototype assets while source files and symlinks remain protected", async (context) => {
+  const evaluatorModule = await evaluatorModulePromise;
+  const fixture = await evaluatorModule.prepareScenario("smoke-plan-default", `prototype-assets-${process.pid}`);
+  context.after(() => rm(fixture.fixtureRoot, { recursive: true, force: true }));
+  await fixture.scenario.simulate(fixture.repo);
+  const prototype = path.join(fixture.repo, "plans/smoke-settings/prototype");
+  const htmlPath = path.join(prototype, "index.html");
+  await writeFile(htmlPath, (await readFile(htmlPath, "utf8")).replace('</head>', '<link rel="stylesheet" href="screen.css"></head>'));
+  await writeFile(path.join(prototype, "screen.css"), "input { min-width: 0; }\n");
+  await evaluatorModule.gradePreparedScenario(fixture, fixture.scenario.simulatedFinal!);
+  const source = path.join(fixture.repo, "app/screen.css");
+  await writeFile(source, "input { min-width: 0; }\n");
+  await assert.rejects(evaluatorModule.gradePreparedScenario(fixture, fixture.scenario.simulatedFinal!), /unexpected fixture changes: app\/screen.css/u);
+  await rm(source);
+  await symlink(path.join(fixture.repo, "app/screen.json"), path.join(prototype, "linked.json"));
+  await assert.rejects(evaluatorModule.gradePreparedScenario(fixture, fixture.scenario.simulatedFinal!), /unexpected fixture changes|symbolic link|symlink/u);
 });
 
 test("eval fixtureは外部MCPなしで必要なcustom agent定義を読み込める", async (context) => {

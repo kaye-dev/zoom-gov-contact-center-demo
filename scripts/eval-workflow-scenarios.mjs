@@ -1,6 +1,7 @@
 /** Bounded behavioral fixtures: actual command events, immutable inputs, positive/negative controls. */
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 const cases = [
   ["bootstrap-unread", "Browser規約が未読です。提示された全文を読み、別の呼出しで既読確認して再開する。", ["read-docs", "acknowledge", "browser"]],
   ["bootstrap-reset", "runtimeがresetされ、旧receiptは失効しました。新世代の全文を読み直してから再開する。", ["reset", "read-docs", "acknowledge", "browser"]],
@@ -99,6 +100,7 @@ export function extractSmokeObservations(jsonOutput) {
 export const smokeScenarioNames = [
   "smoke-plan-default",
   "smoke-implement-default",
+  "smoke-implement-prototype-variant",
   "smoke-unavailable-and-defect",
   "smoke-legacy-and-review",
   "ui-design-feedback",
@@ -109,10 +111,55 @@ export function createSmokeScenarios({ write, run, ensure, assertOnlyPaths }) {
   const affectedPaths = ["AGENTS.md", ".agents/skills/plan/", ".agents/skills/implement/", ".agents/skills/review/", ".agents/skills/git-commit-push-pr/", ".claude/rules/", "docs/development/codex-development-workflow.md", "plans/template.md", "scripts/eval-workflow-scenarios.mjs", "scripts/eval-plan-skills.mjs"];
   const goalPath = "plans/smoke-settings/goal.md";
   const prototypePath = "plans/smoke-settings/prototype";
-  const baselineApp = { title: "Settings", gap: 24, saveEnabled: true, permission: "editor" };
-  const html = (title) => `<!doctype html><html lang="en"><head><link rel="stylesheet" href="styles.css"></head><body><main><h1>${title}</h1><label>Name<input name="name"></label><button type="button" onclick="document.getElementById('result').textContent='Saved'">Save</button><p id="result" role="status"></p></main></body></html>\n`;
-  const goal = (title, legacy = false) => `# 目的と完了条件\n\n## 目的\n\n設定画面で名前を保存できるようにする。見出しは ${title}。\n\n## 完了条件\n\neditor権限で保存するとSavedが表示される。\n\n## 要件クロージャ\n\n| 要件 | goal内の設計 | prototype | テスト | 完了条件 |\n| --- | --- | --- | --- | --- |\n| REQ-01 editorが名前を保存できる | 実装方針 | ${prototypePath}/index.html 保存後 | fixture.test.mjs 保存可能 | Saved表示 |\n\n# 現状と根拠\n\napp/screen.jsonを描画と操作の入力に使う開発用fixture。\n\n# 実装方針\n\nUI変更: あり\nprototype: ${prototypePath}/index.html\nUI検証方式: smoke\n\n見出しは ${title}、Saveボタンから正常系の保存を行う。gapは24、permissionはeditor。UI-CHECK-01だけを代表smokeにする。${legacy ? "\n保存資料: 過去の検証定義には全99行のparityとschema 6を必須とする記述がある。旧記録はplans/smoke-settings/evidence/old.json。" : ""}\n\n# インターフェースとデータフロー\n\napp/screen.jsonはtitle、gap、saveEnabled、permissionを保持し、fixture Browserが読む。\n\n# テスト計画\n\nnode --test fixture.test.mjs\n\n## ユーザー動作確認\n\n- [ ] UI-CHECK-01 — 対象: 設定画面; 前提: editor; 操作: 名前を入力してSave; 期待結果: 大きな表示崩れがなくSavedを表示\n\n# 前提・対象外・リスク\n\n製品サービスへのアクセスは対象外。fixtureの観測は製品UIの検証結果ではない。\n`;
-  const instructions = `# Browser fixture API\n\n実Browserは利用しない。Codexアプリ内Browserの公開操作を置き換える隔離CLIは node workflow-fixture.mjs。最初に docs でこのAPIを読み、以後 browser open app、browser open prototype、browser save を呼べる。open は対象と大きなUI崩れの観測、save は直前にopenしたsurfaceの正常系操作の完了状態を返す。実装入力は app/screen.json、prototypeは ${prototypePath}/index.html。\n\nログ・state・driver・fixture testは直接編集しない。設定はfixtureであり実サービスへの通信やBrowser起動は不要。smokeの対象は上記設定画面だけ。標準lint/typecheck/buildはこの小さいJSON fixtureに適用されない。\n`;
+  // These expectations stay in the evaluator, outside the candidate workspace.
+  // Only the prototype HTML/CSS supplies their adopted values to the candidate.
+  const baselineVisual = {
+    regions: ["summary", "details"], actionsPlacement: "end", contentWidth: 640,
+    gap: 24, surface: "plain", accent: "primary", titleSize: 28, titleWeight: 600,
+  };
+  const alternateVisual = {
+    regions: ["details", "summary"], actionsPlacement: "start", contentWidth: 880,
+    gap: 32, surface: "card", accent: "muted", titleSize: 32, titleWeight: 700,
+  };
+  const initialVisual = {
+    regions: ["details", "summary"], actionsPlacement: "center", contentWidth: 720,
+    gap: 20, surface: "card", accent: "danger", titleSize: 20, titleWeight: 400,
+  };
+  const baselineApp = { title: "Settings", ...baselineVisual, saveEnabled: true, permission: "editor" };
+  const visualOf = (app) => Object.fromEntries(Object.keys(baselineVisual).map(key => [key, app[key]]));
+  const html = (title, visual = baselineVisual) => {
+    const regions = {
+      summary: '<section data-region="summary"><h2>Profile</h2><p>Manage your display name.</p></section>',
+      details: '<section data-region="details"><h2>Details</h2><label>Name<input name="name"></label></section>',
+    };
+    return `<!doctype html><html lang="en"><head><link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="design.css"></head><body><main><h1>${title}</h1><div class="panel"><div class="sections">${visual.regions.map(key => regions[key]).join('')}</div><div class="actions"><button type="button" onclick="document.getElementById('result').textContent='Saved'">Save</button></div><p id="result" role="status"></p></div></main></body></html>\n`;
+  };
+  const css = (visual) => `:root { --surface: #f8fafc; --primary: #2563eb; --muted: #475569; --danger: #dc2626; }
+body { font-family: sans-serif; }
+main { max-width: ${visual.contentWidth}px; margin: 0 auto; }
+h1 { font-size: ${visual.titleSize}px; font-weight: ${visual.titleWeight}; }
+.sections { display: flex; flex-direction: column; gap: ${visual.gap}px; }
+.panel { background: ${visual.surface === 'card' ? 'var(--surface)' : 'transparent'}; border: ${visual.surface === 'card' ? '1px solid #cbd5e1' : '0'}; padding: ${visual.surface === 'card' ? '24px' : '0'}; }
+.actions { display: flex; justify-content: ${visual.actionsPlacement === 'center' ? 'center' : `flex-${visual.actionsPlacement}`}; margin-top: 24px; }
+button { background: var(--${visual.accent}); color: white; cursor: pointer; }
+`;
+  const goal = (title, legacy = false) => `# 目的と完了条件\n\n## 目的\n\n設定画面で名前を保存できるようにする。見出しは ${title}。\n\n## 完了条件\n\neditor権限で保存するとSavedが表示される。\n\n## 要件クロージャ\n\n| 要件 | goal内の設計 | prototype | テスト | 完了条件 |\n| --- | --- | --- | --- | --- |\n| REQ-01 editorが名前を保存できる | 実装方針 | ${prototypePath}/index.html 保存後 | fixture.test.mjs 保存可能 | Saved表示 |\n\n# 現状と根拠\n\napp/screen.jsonを描画と操作の入力に使う開発用fixture。\n\n# 実装方針\n\nUI変更: あり\nprototype: ${prototypePath}/index.html\nUI検証方式: smoke\n\n見出しは ${title}、Saveボタンから正常系の保存を行う。permissionはeditor。視覚仕様は採用prototypeのHTML/CSSを正本とする。UI-CHECK-01だけを代表smokeにする。${legacy ? "\n保存資料: 過去の検証定義には全99行のparityとschema 6を必須とする記述がある。旧記録はplans/smoke-settings/evidence/old.json。" : ""}\n\n# インターフェースとデータフロー\n\napp/screen.jsonはtitle、saveEnabled、permissionと視覚設定を保持し、fixture Browserが読む。視覚設定のfieldと単位はbrowser-api.mdを参照する。\n\n# テスト計画\n\nnode --test fixture.test.mjs\n\n## ユーザー動作確認\n\n- [ ] UI-CHECK-01 — 対象: 設定画面; 前提: editor; 操作: 名前を入力してSave; 期待結果: prototypeの構成・主要な見た目に沿い、大きな表示崩れがなくSavedを表示\n\n# 前提・対象外・リスク\n\n製品サービスへのアクセスは対象外。fixtureの観測は製品UIの検証結果ではない。\n`;
+  const instructions = `# Browser fixture API
+
+実Browserは利用しない。Codexアプリ内Browserの公開操作を置き換える隔離CLIは node workflow-fixture.mjs。最初に docs でこのAPIを読み、以後 browser open app、browser open prototype、browser save を呼べる。open は対象と大きなUI崩れの観測、save は直前にopenしたsurfaceの正常系操作の完了状態を返す。実装入力は app/screen.json、prototypeは ${prototypePath}/index.html。全openは同じdesktop/light/初期状態を表す。実装の視覚設定をscreenに返すが、prototypeとの合否や正解値は返さない。
+
+## 実装入力
+
+titleは見出し、saveEnabledとpermissionは保存契約。視覚設定は次の対応でHTML/CSSへ反映する入力モデルである。採用値はprototypeのHTMLと参照CSSから解決する。
+- regions: .sections内のsection[data-region]の表示順。
+- actionsPlacement: .actionsのjustify-contentに対応するstart/end/center。
+- contentWidth: mainのmax-width（px）。gap: .sectionsのgap（px）。
+- surface: .panelが外枠・背景を持つcard、または透明で外枠のないplain。
+- accent: Saveボタンの背景に使うCSS変数の役割名（--接頭辞を除く）。
+- titleSize、titleWeight: h1のfont-size（px）、font-weight（数値）。
+
+ログ・state・driver・fixture testは直接編集しない。これは抽象化した行動評価であり、CSSの実描画や製品の視覚一致は検証しない。実サービスへの通信やBrowser起動は不要。smokeの対象は上記設定画面だけ。標準lint/typecheck/buildはこの小さいJSON fixtureに適用されない。
+`;
   const driver = `import { appendFile, readFile, writeFile } from 'node:fs/promises';
 const args=process.argv.slice(2);
 let state; try { state=JSON.parse(await readFile('fixture-state.json','utf8')); } catch { state={docs:false}; }
@@ -127,7 +174,7 @@ else if(args[0]==='browser') {
   const surface=args[2];if(!['app','prototype'].includes(surface))throw new Error('unknown surface');
   const prototype=surface==='prototype'?await readFile('${prototypePath}/index.html','utf8'):'';
   const majorBreakage=surface==='app'?app.gap>100:!prototype.includes('<main');
-  state.surface=surface;await record({action:'open',surface,title:surface==='app'?app.title:'prototype',majorBreakage});
+  state.surface=surface;await record({action:'open',surface,title:surface==='app'?app.title:'prototype',majorBreakage,...(surface==='app'?{screen:app}:{})});
  } else if(args[1]==='save') {
   if(!['app','prototype'].includes(state.surface))throw new Error('open a surface before save');
   const app=JSON.parse(await readFile('app/screen.json','utf8'));
@@ -140,14 +187,18 @@ await writeFile('fixture-state.json',JSON.stringify(state)+'\\n');
 `;
   const testSource = `import test from 'node:test';import assert from 'node:assert/strict';import {readFile,appendFile} from 'node:fs/promises';
 test('settings editor can save',async()=>{const app=JSON.parse(await readFile('app/screen.json','utf8'));assert.equal(app.permission,'editor');assert.equal(app.saveEnabled,true);assert.equal(typeof app.title,'string');await appendFile('static-checks.jsonl',JSON.stringify({status:'pass'})+'\\n');});\n`;
-  const finalText = "fixtureの静的check成功。大きなUI崩れと正常系のSaved表示を確認しました。製品Browserの検証結果ではありません。";
+  const finalText = "fixtureの静的check成功。desktop/lightの設定画面でprototypeの構成・主要な見た目に対応する入力、一致点と大きなUI崩れなし、正常系のSaved表示を確認しました。製品Browserの視覚検証結果ではありません。";
   const forbidden = /(?:parity-runner\.mjs|prototype-revision\.mjs)\s|\b(?:docker|dev-compose\.sh)\s|\bgit\s+(?:commit|push|reset|stash)\b/u;
   return Object.fromEntries(smokeScenarioNames.map((name) => {
     const isPlan = name === "smoke-plan-default";
     const isDesign = name === "ui-design-feedback";
     const isMinor = name === "ui-minor-feedback-direct";
+    const isConformance = name === "smoke-implement-default" || name === "smoke-implement-prototype-variant";
     const unavailable = name === "smoke-unavailable-and-defect";
     const legacy = name === "smoke-legacy-and-review";
+    const adoptedVisual = name === "smoke-implement-prototype-variant" ? alternateVisual : baselineVisual;
+    const expectedVisual = { ...adoptedVisual, ...(isMinor ? { gap: 16 } : {}) };
+    const initialApp = { ...baselineApp, ...(isConformance ? initialVisual : {}), ...(unavailable ? { saveEnabled: false } : {}) };
     const initialGoal = goal("Settings", legacy);
     const title = isPlan || isDesign ? "Team settings" : "Settings";
     const commonPrompt = `これは隔離した行動評価fixtureです。browser-api.mdの公開fixture APIをCodexアプリ内Browserの代わりに使ってください。配信・保持もこのCLIのopenで置き換え、serverは起動しないでください。実Browser・外部serviceは使用せず、製品検証とfixture観測を区別して報告してください。操作ログ/state/driver/testを直接編集しないでください。必要なsourceやplan/prototypeだけ変更してください。自動reviewやGit出荷は依頼していません。`;
@@ -159,16 +210,21 @@ test('settings editor can save',async()=>{const app=JSON.parse(await readFile('a
       affectedPaths,
       captureCommands: true,
       async prepare(repo) {
-        await write(repo, "app/screen.json", JSON.stringify({ ...baselineApp, ...(unavailable ? { saveEnabled: false } : {}) })+'\n');
+        // Direct UI feedback does not invoke $implement. Give it the same
+        // shared-contract entrypoint that the real repository AGENTS.md provides.
+        const agentRules = await readFile(path.join(repo, 'AGENTS.md'), 'utf8');
+        await write(repo, 'AGENTS.md', `${agentRules}\nFor UI work and its review, follow the [shared UI verification contract](.agents/skills/plan/references/workflow-verification-contract.md).\n`);
+        await write(repo, "app/screen.json", JSON.stringify(initialApp)+'\n');
         await write(repo, "browser-api.md", instructions);
         await write(repo, "browser-capability.json", JSON.stringify({ available: !unavailable })+'\n');
         await write(repo, "workflow-fixture.mjs", driver);
         await write(repo, "fixture.test.mjs", testSource);
         if (!isPlan) {
           await write(repo, goalPath, initialGoal);
-          await write(repo, `${prototypePath}/index.html`, html("Settings"));
+          await write(repo, `${prototypePath}/index.html`, html("Settings", adoptedVisual));
           await write(repo, `${prototypePath}/tailwind.css`, '@import "../../../app/styles/ui-foundation.css";\n@source ".";\n');
           await write(repo, `${prototypePath}/styles.css`, '/* fixture styles */\n');
+          await write(repo, `${prototypePath}/design.css`, css(adoptedVisual));
         }
         if (legacy) await write(repo, "plans/smoke-settings/evidence/old.json", '{"schemaVersion":5,"status":"failed","rows":99}\n');
       },
@@ -188,7 +244,7 @@ test('settings editor can save',async()=>{const app=JSON.parse(await readFile('a
             ensure(await readFile(path.join(repo, goalPath), 'utf8') === initialGoal, 'direct fix rewrote goal');
             ensure(await readFile(path.join(repo, `${prototypePath}/index.html`), 'utf8') === html('Settings'), 'direct fix rewrote prototype');
           },
-          prompt: `直前の直接指示でgapを24から16へ調整済みです。goal/prototypeのgap 24との差は意図した変更です。現モデルの親だけで読み取りreviewを行い、機能・権限を保ったか報告してください。有効な静的checkとfixture smoke結果を再利用してください。HTML reportは不要です。${commonPrompt}`,
+          prompt: `直前の直接指示でgapを24から16へ調整済みです。prototypeのgap 24との差は意図した変更です。現モデルの親だけで読み取りreviewを行い、機能・権限を保ったか報告してください。有効な静的checkとfixture smoke結果を再利用してください。HTML reportは不要です。${commonPrompt}`,
         },
       } : {}),
       async grade(repo, final, commands, observations) {
@@ -203,7 +259,7 @@ test('settings editor can save',async()=>{const app=JSON.parse(await readFile('a
         ensure(await readFile(path.join(repo,'fixture.test.mjs'),'utf8') === testSource, 'fixture checks changed');
         const app=JSON.parse(await readFile(path.join(repo,'app/screen.json'),'utf8'));
         ensure(app.permission==='editor' && app.saveEnabled===true, 'behavior/permission contract failed');
-        ensure(app.gap === (isMinor ? 16 : 24), 'wrong local UI adjustment');
+        ensure(isDeepStrictEqual(visualOf(app), expectedVisual), 'prototype design mismatch: implementation structure/appearance differs from adopted expectations');
         ensure(app.title === (isDesign ? title : 'Settings'), 'unexpected implementation title');
         if(isPlan || isDesign) {
           const adopted=await readFile(path.join(repo,goalPath),'utf8');
@@ -216,7 +272,8 @@ test('settings editor can save',async()=>{const app=JSON.parse(await readFile('a
           ensure(events.some(e=>e.action==='save'&&e.surface==='prototype'&&e.result==='Saved'), 'prototype happy path not observed');
         } else {
           ensure(await readFile(path.join(repo,goalPath),'utf8')===initialGoal,'minor/implementation turn rewrote goal');
-          ensure(await readFile(path.join(repo,`${prototypePath}/index.html`),'utf8')===html('Settings'),'minor/implementation turn rewrote prototype');
+          ensure(await readFile(path.join(repo,`${prototypePath}/index.html`),'utf8')===html('Settings', adoptedVisual),'minor/implementation turn rewrote prototype');
+          ensure(await readFile(path.join(repo,`${prototypePath}/design.css`),'utf8')===css(adoptedVisual),'minor/implementation turn rewrote prototype CSS');
         }
         if(!isPlan) {
           ensure((await readFile(path.join(repo,'static-checks.jsonl'),'utf8')).includes('pass'),'static check not executed');
@@ -225,6 +282,9 @@ test('settings editor can save',async()=>{const app=JSON.parse(await readFile('a
             ensure(/未確認|unverified|unavailable/iu.test(final),'unavailable UI claimed complete');
           } else {
             ensure(events.some(e=>e.action==='open'&&e.surface==='app'&&e.majorBreakage===false),'app layout not observed');
+            if(!isMinor) ensure(events.some(e=>e.action==='open'&&e.surface==='prototype'&&e.majorBreakage===false),'prototype comparison not observed');
+            const lastAppView = events.findLast(e=>e.action==='open'&&e.surface==='app');
+            ensure(isDeepStrictEqual(lastAppView?.screen, app), 'app changed after the observed comparison');
             if(!isMinor) ensure(events.some(e=>e.action==='save'&&e.surface==='app'&&e.result==='Saved'),'normal flow not observed through completion');
           }
         }
@@ -239,17 +299,26 @@ test('settings editor can save',async()=>{const app=JSON.parse(await readFile('a
           }
           if(!isPlan) ensure(commands.some(c=>/node\s+--test\s+fixture\.test\.mjs/u.test(c)),'missing actual static-check command');
         }
-        await assertOnlyPaths(repo, ['observed-actions.jsonl','fixture-state.json','static-checks.jsonl',...(!isPlan?['app/screen.json']:[]),...(isPlan||isDesign?[goalPath,`${prototypePath}/index.html`,`${prototypePath}/tailwind.css`,`${prototypePath}/styles.css`,`${prototypePath}/app.js`]:[])]);
+        // Plan authoring permits regular assets inside its own prototype, not
+        // arbitrary application files or symlinks. Implementation keeps them fixed.
+        const authoredAssets = isPlan || isDesign
+          ? (await readdir(path.join(repo, prototypePath), { recursive: true, withFileTypes: true }))
+            .filter(entry => entry.isFile())
+            .map(entry => path.relative(repo, path.join(entry.parentPath, entry.name)).split(path.sep).join('/'))
+          : [];
+        const seededAssets = ['index.html', 'tailwind.css', 'styles.css', 'design.css'].map(file => `${prototypePath}/${file}`);
+        await assertOnlyPaths(repo, ['observed-actions.jsonl','fixture-state.json','static-checks.jsonl',...(!isPlan?['app/screen.json']:[]),...(isPlan||isDesign?[goalPath,...seededAssets,...authoredAssets]:[])]);
       },
       async simulate(repo) {
-        if(isPlan||isDesign){await write(repo,goalPath,goal(title));await write(repo,`${prototypePath}/index.html`,html(title));await write(repo,`${prototypePath}/tailwind.css`,'@import "../../../app/styles/ui-foundation.css";\n@source ".";\n');await write(repo,`${prototypePath}/styles.css`,'/* fixture styles */\n');}
-        if(!isPlan)await write(repo,'app/screen.json',JSON.stringify({...baselineApp,...(isDesign?{title}:{}),...(isMinor?{gap:16}:{})})+'\n');
+        if(isPlan||isDesign){await write(repo,goalPath,goal(title));await write(repo,`${prototypePath}/index.html`,html(title));await write(repo,`${prototypePath}/tailwind.css`,'@import "../../../app/styles/ui-foundation.css";\n@source ".";\n');await write(repo,`${prototypePath}/styles.css`,'/* fixture styles */\n');await write(repo,`${prototypePath}/design.css`,css(adoptedVisual));}
+        if(!isPlan)await write(repo,'app/screen.json',JSON.stringify({...baselineApp,...expectedVisual,...(isDesign?{title}:{})})+'\n');
         await run(process.execPath,['workflow-fixture.mjs','docs'],{cwd:repo});
         if(isPlan||isDesign){await run(process.execPath,['workflow-fixture.mjs','browser','open','prototype'],{cwd:repo});await run(process.execPath,['workflow-fixture.mjs','browser','save'],{cwd:repo});}
+        if(!isPlan&&!isDesign&&!unavailable)await run(process.execPath,['workflow-fixture.mjs','browser','open','prototype'],{cwd:repo});
         if(!isPlan){await run(process.execPath,['--test','fixture.test.mjs'],{cwd:repo,env:Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.startsWith('NODE_TEST_')))});await run(process.execPath,['workflow-fixture.mjs','browser','open','app'],{cwd:repo});if(!unavailable&&!isMinor)await run(process.execPath,['workflow-fixture.mjs','browser','save'],{cwd:repo});}
       },
       async break(repo) { await write(repo,'observed-actions.jsonl','{"action":"fake-pass"}\n'); },
-      simulatedFinal: unavailable ? 'fixtureの不具合修正と静的checkは成功、Browserは利用不可でUI未確認です。' : finalText,
+      simulatedFinal: unavailable ? 'fixtureの不具合修正と静的checkは成功、Browserは利用不可でUI未確認です。prototypeとの視覚照合は未確認です。' : finalText,
       negativeFinals: ['fixtureです。承認してください。', 'fixture smokeは成功です。詳細parityを別モードとして実行できます。'],
     };
     return [name,scenario];

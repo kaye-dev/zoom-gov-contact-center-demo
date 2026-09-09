@@ -19,8 +19,8 @@ Create a reviewable specification. Write only `plans/<slug>/goal.md` and, for UI
 
 Read [ui-prototype-quality.md](references/ui-prototype-quality.md) for UI work. Use the closest source, shared shell/components, `DESIGN.md`, semantic tokens, and production Tailwind foundation. Mock only data, persistence, authorization, and backend side effects.
 
-- Create the affected UI under `plans/<slug>/prototype/` and build its CSS with `build-prototype-css.mjs`. Identify the adopted prototype by its path and actual contents.
-- Set `UI検証方式: smoke`. Select normally 1–3 representative scenarios in total: major visual breakage and the main happy path. One scenario is an operation sequence through its visible completion, not each individual click.
+- Create the affected UI under `plans/<slug>/prototype/` and build its CSS with `build-prototype-css.mjs`. Identify the adopted prototype by its path and actual contents; its HTML/CSS/assets supply visual requirements even where the goal omits detail.
+- Set `UI検証方式: smoke`. Select normally 1–3 representative scenarios in total for major visual breakage and the main happy path; implementation also compares prototype structure and appearance within that selection. One scenario is an operation sequence through its visible completion, not each individual click.
 - Finish authoring and static checks before one final prototype smoke. Follow [workflow-verification-contract.md](references/workflow-verification-contract.md) and `.claude/rules/dev-server.md`; use the Codex in-app Browser public API. Report unavailable Browser as unverified without blocking a reviewable plan.
 - Return a live prototype with `./dev-prototype.sh --retain <slug>`. Reuse a matching active session; never replace another slug implicitly. Report URL, PID, owner, smoke result, unverified items, and `./dev-confirmation.sh stop <slug>`.
 

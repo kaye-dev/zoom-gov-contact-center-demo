@@ -4,7 +4,7 @@
 
 設計を定める`$plan`、実装と検証を行う`$implement`、明示依頼でcommit・push・PRを完了する`$git-commit-push-pr`を基本とする。`$review`は任意である。実装の判断はgoal、prototypeとユーザーの最新の修正指示に基づく。custom agentは、壁打ち、広範な読み取り探索、独立reviewという限定されたread-onlyロールだけに使う。
 
-UIはCodexアプリ内Browserで大きなUI崩れと主要な正常系操作を確認する。詳細parityは開発手順、完了条件、別モードやrelease/CI/定期への案内に含めない。スキル本文と必要な用途別参照に責務を分ける構成は[OpenAIのskill設計ガイド](https://learn.chatgpt.com/docs/build-skills)を参考とする。
+UIはCodexアプリ内Browserでprototypeの構成・主要な見た目との照合、大きなUI崩れと主要な正常系操作を確認する。詳細parityは開発手順、完了条件、別モードやrelease/CI/定期への案内に含めない。スキル本文と必要な用途別参照に責務を分ける構成は[OpenAIのskill設計ガイド](https://learn.chatgpt.com/docs/build-skills)を参考とする。
 
 ## 成果物
 
@@ -100,6 +100,8 @@ pathと実際の内容で採用prototypeを特定し、live URL、PID、owner、
 
 明示呼出しで選択goalとprototypeを承認し、未解決の製品仕様がなければ実装を進める。実装中はfocused check、完成時は対象test、適用lint/typecheck、diff checkを行う。full testは具体的なcross-suite影響、buildはroute/configuration/bundling/server boundary等に理由がある場合に行う。
 
+採用prototypeのHTML/CSSと参照資産を実装前に読み、goalに省略された視覚仕様も引き継ぐ。最新の直接修正指示を対象箇所へ優先し、実装の差を正当化するためにprototypeを書き換えない。
+
 成功済み結果は対象path・内容・実行時点で有効性を判断して再利用する。digestは補助情報であり、欠落だけで全checkを再実行しない。修正後は影響checkだけを再実行する。
 
 UIは完成した実アプリを所有権確認済みURLで開き、代表smokeを実施する。既知のscope内不具合は限定修正して継続する。Browser利用不可は`UI未確認`として実装を保持し、PRにも明記して出荷できる。失敗を未確認や成功へ置き換えない。時間経過は範囲見直しの判断材料であり、延長承認のための停止条件にしない。
@@ -108,7 +110,7 @@ UIは完成した実アプリを所有権確認済みURLで開き、代表smoke�
 
 `UI検証方式: smoke`を使い、通常は合計1〜3代表シナリオを選ぶ。
 
-- 大きなUI崩れ: 主要領域の欠落、重なり、切れ、重大な横はみ出し、操作を妨げる配置を確認する。prototypeは構成と意図の参照とする。
+- prototypeとの照合と大きなUI崩れ: [共通検証契約](../../.agents/skills/plan/references/workflow-verification-contract.md)に従い、同じ代表条件でprototypeと実アプリを表示し、構成・主要な見た目を照合する。操作可能でも意図しない領域・配置・スタイルの差は修正する。主要領域の欠落、重なり、切れ、重大な横はみ出し、操作を妨げる配置も確認する。結果に条件・一致点・指示による差・未確認を記載し、片方を表示できなければ`prototypeとの視覚照合は未確認`とする。
 - 正常系: 主要な操作の流れを実アプリで通し、画面上の完了状態を観測する。保存が対象なら成功表示や画面反映までを1シナリオとする。prototype/fixture表示だけでは実アプリの保存成功としない。
 
 responsive/themeが主題ならその代表条件を同じ選択に含める。全state、異常系、全境界、全consumer、各ボタンの総当たりや厳密なDOM/geometry/pixel比較は範囲外である。機能・権限・保存・APIの正しさは変更に応じた静的・統合testで支える。確認は数分を目安とし、同じツール障害の反復は打ち切って未確認を報告する。

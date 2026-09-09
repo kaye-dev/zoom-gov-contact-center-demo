@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
-test("DOC-01 design source, entry and final coverage workflow stay synchronized", () => {
+test("DOC-01 design rules share the current UI verification contract", () => {
   const design = read("DESIGN.md");
   const rule = read(".claude/rules/ui.md");
   assert.match(rule, /DESIGN\.md.*必ず読む/);
@@ -11,9 +11,12 @@ test("DOC-01 design source, entry and final coverage workflow stay synchronized"
   assert.match(design, /app\/styles\/ui-foundation\.css.*正本/);
   assert.match(design, /外枠・影・別背景を持たない/);
   assert.match(design, /fieldset.*legend/);
-  assert.match(rule, /UI変更の`\$implement`では静的検証後のfinal boundaryでproductionとprototypeのcoverage/);
-  assert.match(design, /非表示タブを含むページ全体/);
-  assert.match(design, /Developer APIは各セクション/);
+  // Verify the shared entrypoint here; fixture behavior tests cover conformance.
+  const contract = ".agents/skills/plan/references/workflow-verification-contract.md";
+  for (const entrypoint of [rule, design, read(".claude/rules/dev-server.md")]) {
+    assert.ok(entrypoint.includes(contract), "UI rules must link the shared verification contract");
+  }
+  assert.ok(read(contract).length > 0);
   assert.doesNotMatch(design, /フォームは必ずカード|管理画面は中央寄せ/);
 });
 test("DOC-02 adopted administration layout and safety contracts remain discoverable", () => {

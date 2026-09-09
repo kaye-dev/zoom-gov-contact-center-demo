@@ -10,7 +10,7 @@ Use production Tailwind utilities and `app/styles/ui-foundation.css`, with the p
 node .agents/skills/plan/scripts/build-prototype-css.mjs plans/<slug>/prototype
 ```
 
-Include the affected screen and meaningful states in HTML. Use existing icons/components and accessible controls. Avoid placeholder content that hides layout problems. Keep assets local; do not add external APIs, analytics, or expose the repository root. Identify the adopted version by the prototype path and current contents.
+Include the affected screen and meaningful states in HTML. Use existing icons/components and accessible controls. Avoid placeholder content that hides layout problems. Keep assets local; do not add external APIs, analytics, or expose the repository root. Identify the adopted version by the prototype path and current contents. Its HTML/CSS/assets are implementation requirements, including details omitted from the goal; keep them readable enough to reproduce the major structure and appearance under the shared verification contract.
 
 ## Final smoke and feedback
 

@@ -386,7 +386,7 @@ Zoom AI、Zoom Virtual Agent、Zoom Contact Center、Zoom Phone への導線は�
 ### 11.1 実装前
 
 1. 変更する画面種別と主要利用者を明確にする。
-2. 現在のsourceと承認済み参照から、最も近い画面、コンポーネント、トークンを特定する。Browserの時点と範囲は`.claude/rules/dev-server.md`に従う。
+2. 現在のsourceと承認済み参照から、最も近い画面、コンポーネント、トークンを特定する。採用prototypeのHTML/CSS・参照資産を読み、goalに省略された視覚仕様も実装へ引き継ぐ。Browserの時点と範囲は`.claude/rules/dev-server.md`に従う。
 3. 通常、ホバー、フォーカス、押下、無効、処理中、成功、エラー、空状態を洗い出す。
 4. デスクトップ、モバイル、多言語、ダークモードで変わる点を整理する。
 5. `docs/development/codex-development-workflow.md`を正本とする。`$plan`で忠実なprototypeと代表確認項目を作り、明示`$implement`で実装する。完成時はfocused test・適用lint/typecheck・必要時だけfull test/build・diff checkと、Codexアプリ内Browserの短いsmokeを行う。
@@ -409,7 +409,7 @@ prototypeは見た目だけでなく、次を確認できる状態にする。
 
 ### 11.3 実装後
 
-`.claude/rules/dev-server.md`に従い、通常1〜3代表シナリオで大きなUI崩れと主要な正常系操作を確認する。画面の欠落・重なり・切れ・重大なはみ出しを見て、主要フローを画面上の完了状態まで操作する。responsiveやthemeが変更の主題なら代表条件に含める。
+`.claude/rules/dev-server.md`と[共通検証契約](.agents/skills/plan/references/workflow-verification-contract.md)に従い、通常1〜3代表シナリオでprototypeの構成・主要な見た目との照合、大きなUI崩れと主要な正常系操作を確認する。prototypeと実アプリを同じ代表条件で表示して比較し、画面の欠落・重なり・切れ・重大なはみ出しを見て、主要フローを画面上の完了状態まで操作する。responsiveやthemeが変更の主題なら代表条件に含める。操作可能でも意図しないデザイン差は修正し、実装に合わせてprototypeを改変しない。
 
 全state・幅・theme・localeの総当たりや厳密なpixel/DOM一致はBrowser確認の対象外である。各状態の実装要件は変更に応じた静的・統合testとdiff確認で支える。prototypeやfixture表示だけで実アプリの保存成功とは報告しない。
 
