@@ -864,10 +864,12 @@ async function prepareRunWorkspace({
   maxBytes,
   shellCommands = 0,
   validateApproval,
+  unitIds = null,
+  importStages = [],
 }) {
   if (definition?.spec?.version === 5) {
     const { prepareModelWorkspace } = await import("./parity-model-workspace.mjs");
-    return prepareModelWorkspace({ repositoryRootPath, slug, runId, definition, approval, current, baseUrls, maxRows, maxBytes });
+    return prepareModelWorkspace({ repositoryRootPath, slug, runId, definition, approval, current, baseUrls, maxRows, maxBytes, unitIds, importStages });
   }
   validateIdentifier(slug, "slug", slugPattern);
   validateIdentifier(runId, "runId");
@@ -1120,6 +1122,7 @@ async function recoverDocumentationFailure({ repositoryRootPath, runId, batchId,
     limit: maxManifestBytes, parentIdentity: paths.runIdentity,
   });
   requireCurrentRunOrigins(manifest);
+  if (manifest.schemaVersion === 3) { const { validateModelWorkspaceState } = await import("./parity-model-workspace.mjs"); await validateModelWorkspaceState({ repositoryRootPath, runId }); }
   const checkpoint = await readCheckpoint(paths.runRoot, paths.runIdentity);
   const batch = checkpoint.batches.find((item) => item.batchId === batchId);
   let legacyProof;
@@ -1158,7 +1161,7 @@ async function recoverDocumentationFailure({ repositoryRootPath, runId, batchId,
   batch.errorCode = null;
   batch.diagnostic = null;
   await writeJsonAtomic(path.join(paths.runRoot, "checkpoint.json"), checkpoint, { parentIdentity: paths.runIdentity });
-  return { runId, batchId, status: "recovered", summary: compactRunSummary(checkpoint) };
+  return { runId, batchId, status: "recovered", summary: checkpoint.schemaVersion === 3 ? { passed: checkpoint.batches.filter((item) => item.status === "passed").length, pending: checkpoint.batches.filter((item) => item.status !== "passed").length, total: checkpoint.batches.length } : compactRunSummary(checkpoint) };
 }
 
 async function recordBatchFailure({
@@ -1189,7 +1192,7 @@ async function recordBatchFailure({
     batchId,
     status: batch.status,
     retryable: batch.status === "failed",
-    summary: compactRunSummary(checkpoint),
+    summary: checkpoint.schemaVersion === 3 ? { passed: checkpoint.batches.filter((item) => item.status === "passed").length, pending: checkpoint.batches.filter((item) => item.status !== "passed").length, total: checkpoint.batches.length } : compactRunSummary(checkpoint),
   };
 }
 
@@ -1206,7 +1209,7 @@ async function invalidateRunWorkspace({
     limit: maxManifestBytes,
     parentIdentity: paths.runIdentity,
   });
-  if (manifest.schemaVersion === 3) { const { invalidateModelWorkspace } = await import("./parity-model-workspace.mjs"); return invalidateModelWorkspace({ repositoryRootPath, runId, changedSources: source ? [source] : [] }); }
+  if (manifest.schemaVersion === 3) { const { invalidateModelWorkspace } = await import("./parity-model-workspace.mjs"); return invalidateModelWorkspace({ repositoryRootPath, runId, changedSources: source ? [source] : [], scope, targetIds }); }
   ensure(manifest.schemaVersion === coverageWorkspaceSchemaVersion, "PARITY_BATCH_INVALID", "invalidate-run requires a coverage workspace");
   const resolution = resolveInvalidationTargets({
     spec: manifest.definition.spec,

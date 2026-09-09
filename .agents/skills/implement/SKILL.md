@@ -7,6 +7,12 @@ description: "Implement and verify one repository goal; explicit $implement invo
 
 Treat the resolved goal as the specification. The current agent owns implementation and verification; do not delegate implementation to a custom agent or route it through lifecycle machinery.
 
+## Approved implementation units
+
+When the adopted goal declares independently verifiable units and local stage commits, follow [implementation-checkpoints.md](../plan/references/implementation-checkpoints.md). Complete each unit's checks and any model stage coverage, create a content-bound receipt, commit only its verified scope, and continue without asking again. Do not invoke shipping for a local stage commit. Preserve generated goal/evidence and unrelated changes outside the index.
+
+For contract 3/profile 5, use full-model estimate/preflight and `prepare-run --unit` / `verify-stage`; stage output is `checkpoint-verification.json`, not overall completion. Import only content/condition/expectation-identical stage results into the final union, execute missing or invalidated obligations, and require public `verify-run` evidence 6. This model path supersedes the legacy matrix-specific instructions below; existing contract 1/2 and profile 1–4 retain their own supported readers and are not silently migrated. A non-UI goal may explicitly require an owned development-tool Browser fixture; keep it separate from product UI approval.
+
 ## Resolve and capture approval
 
 1. Use the explicit `plans/<slug>/goal.md`, or the only `plans/*/goal.md`; stop for zero or multiple candidates. Reject invalid or reserved slugs.
@@ -84,6 +90,6 @@ Treat exact phrase `確認セッションを保持` as an opt-in only when it ap
 
 Complete UI work only when current schema-version-5 evidence has `automationCoverageStatus=pass`, complete recomputed `interactionCoverage`, and all `auditStatus` fields equal `pass`; human visual approval may remain pending and full parity may remain not-run. Non-UI work completes through its goal-specific checks without Browser or parity evidence.
 
-Report changed paths, commands/results, runtime checks, evidence paths, coverage results, unchecked user checks, human-review status, full-parity status, risks, and preserved unrelated changes. Do not mutate the goal for progress, ship automatically, stage, commit, push, or create a pull request.
+Report changed paths, commands/results, runtime checks, evidence paths, coverage results, unchecked user checks, human-review status, full-parity status, risks, and preserved unrelated changes. Do not mutate the goal for progress, ship automatically, push, or create a pull request. Stage/commit only when the adopted goal explicitly authorizes local stage commits, using the content-bound checkpoint workflow above.
 
 At the transition to independent review, follow [the manual model handoff](../review/references/model-handoff.md): finish required implementation verification first, then return the target model and populated continuation prompt before any independent review. Keep `$review` optional unless requested; do not start it automatically.

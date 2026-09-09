@@ -36,11 +36,13 @@ export async function loadVerificationModel(target, repositoryRoot) {
   const profile = await boundedModelRead(root, `${target}/parity-spec.json`);
   const requirements = await boundedModelRead(root, `${target}/${contract.requirementsBundle.path}`);
   const sourceDigests = {};
+  const sourceModes = {};
   const sourceIds = new Set(profile.sourceInventory.map(({ id }) => id));
   for (const source of profile.sourceInventory) {
     const data = await boundedModelRead(root, source.id, false);
     const digest = `sha256:${createHash("sha256").update(data).digest("hex")}`;
     sourceDigests[source.id] = digest;
+    sourceModes[source.id] = (await lstat(path.join(root, source.id))).mode & 0o111 ? "100755" : "100644";
     if (/\.[cm]?[jt]sx?$/u.test(source.id)) {
       const imports = [...data.toString("utf8").matchAll(/(?:from\s*|import\s*(?:\(\s*)?)["'](\.[^"']+)["']/gu)].map((match) => match[1]);
       for (const specifier of imports) {
@@ -58,7 +60,7 @@ export async function loadVerificationModel(target, repositoryRoot) {
     engine[file] = createHash("sha256").update(bytes).digest("hex");
   }
   const compilerDigest = `sha256:${createHash("sha256").update(JSON.stringify(engine)).digest("hex")}`;
-  return { contract, profile, requirements, sourceDigests, compilerDigest };
+  return { contract, profile, requirements, sourceDigests, sourceModes, compilerDigest };
 }
 export async function estimateFromFiles({ target, repositoryRoot, context = "plan", baselineReport, changedSources = [], legacyAnalysis = false }) {
   if (!["plan", "implement"].includes(context)) throw new VerificationModelError("PARITY_MODEL_INVALID", "Estimate context must be plan or implement");

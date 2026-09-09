@@ -196,7 +196,7 @@ function sourceClosures(profile, obligations) {
       for (const dependency of list(source.dependencies, "source dependencies")) visit(dependency);
     };
     paths.forEach(visit);
-    return { sources: [...visited].sort().map((id) => ({ id, digest: sources.get(id).digest })), unknown };
+    return { sources: [...visited].sort().map((id) => ({ id, digest: sources.get(id).digest, ...(sources.get(id).mode ? { mode: sources.get(id).mode } : {}) })), unknown };
   };
   const byObligation = Object.fromEntries([...obligations].map(([id, obligation]) => [id, closure(obligation.sourcePaths)]));
   const allTargets = new Set([...obligations.values()].map((item) => item.targetId));
@@ -220,14 +220,14 @@ function tupleKeys(group, values) {
   return [...result].sort();
 }
 
-export async function compileVerificationModel({ contract, profile, requirements, sourceDigests = {}, proofResults = [], compilerDigest = null, mode = "coverage", context = "plan" }) {
+export async function compileVerificationModel({ contract, profile, requirements, sourceDigests = {}, sourceModes = {}, proofResults = [], compilerDigest = null, mode = "coverage", context = "plan" }) {
   const { targets, scenarios, obligations } = validateVerificationSchema(contract, profile, requirements);
   valid(["coverage", "full"].includes(mode), "Invalid model selection mode");
   if (mode === "full") valid(["release", "ci", "scheduled", "explicit"].includes(context), "Full selection requires explicit full context");
   for (const criterion of profile.originalCriteria) valid(criterion.textDigest === await modelDigest(criterion.text), `Criterion text digest changed ${criterion.id}`, "PARITY_REQUIREMENT_GAP");
   const inputDigests = { contract: await modelDigest(contract), profile: await modelDigest(profile), requirements: await modelDigest(requirements) };
   valid(contract.requirementsBundle.digest === inputDigests.requirements, "Requirements bundle digest differs", "PARITY_REQUIREMENT_GAP");
-  const currentProfile = { ...profile, sourceInventory: profile.sourceInventory.map((source) => ({ ...source, digest: sourceDigests[source.id] ?? source.digest })) };
+  const currentProfile = { ...profile, sourceInventory: profile.sourceInventory.map((source) => ({ ...source, digest: sourceDigests[source.id] ?? source.digest, ...(sourceModes[source.id] ? { mode: sourceModes[source.id] } : {}) })) };
   const dependencies = sourceClosures(currentProfile, obligations);
   inputDigests.sources = await modelDigest(currentProfile.sourceInventory);
   inputDigests.compiler = compilerDigest ?? await modelDigest(COMPILER_VERSION);

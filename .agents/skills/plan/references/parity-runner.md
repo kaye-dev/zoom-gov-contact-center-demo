@@ -176,3 +176,5 @@ Browser APIの文書receiptは現在のadapter module/runtime世代で取得し�
 層別結果は正確なtest path/case ID/input/expected/environment/能力/result digestを必要とする。command exit 0だけでは未実行caseを満たさない。visualは現在の両surface画像を実際に見てから、case ID/obligation ID/criterion ID、artifact digest、viewer、reviewedAtと判定を `recordRunAudit` へ渡す。同じ画像を複数criterionで参照しても各criterionの判定を省略しない。
 
 finalizerは必要ケース・assertion・原観点・substitution・画像・目視・cleanupを再計算する。証跡とartifactをprivateな最終保存先へ書き終えてからworkspaceを消し、public `verify-run` で再読込する。`coverage` はfull parityやhuman承認と区別する。失敗は元のexecution codeを保持し、cleanupにも失敗した場合は追加診断を残す。
+
+段階scope、`--unit` / `--import-stage` / `verify-stage`、content bindingと不足分だけの集約は [implementation-checkpoints.md](implementation-checkpoints.md) を参照する。

@@ -145,7 +145,11 @@ export async function validateModelEvidence(input, evidence, { partial = false, 
   requireValue(evidence.semanticDigest === compiled.semanticDigest, "Evidence semantic binding is stale", "PARITY_CURRENT_STATE_DRIFT");
   requireValue(evidence.cleanup?.status === "pass", "Evidence cleanup is incomplete", "PARITY_CLEANUP_FAILED");
   if (evidence.caseResults.some((item) => item.layer === "browser")) {
-    const canaries = evidence.generationCanaries ?? [evidence.capabilities];
+    const canaries = [...(evidence.generationCanaries ?? [evidence.capabilities])];
+    if (evidence.importBindings?.some((entry) => entry.browserCaseIds.length > 0)) {
+      requireValue(evidence.currentGenerationCanary, "Reused Browser evidence needs a current generation canary", "PARITY_BROWSER_SETUP_REQUIRED");
+      canaries.push(evidence.currentGenerationCanary);
+    }
     requireValue(canaries.length > 0 && canaries.every((item) => item?.status === "pass" && item.viewport?.width === 390 && item.viewport?.height === 844 && item.viewport?.dpr === 1 && /^sha256:[a-f0-9]{64}$/u.test(item.screenshot) && item.bootstrap?.status === "ready" && item.bootstrap.sessionId === item.sessionId && item.bootstrap.generation && item.bootstrap.documents?.length > 0), "Current Browser generation lacks documentation/canary evidence");
   }
   const resultIds = new Set(); const passedKeys = new Set(); const passedObligations = new Set();
@@ -201,4 +205,39 @@ export async function validateModelEvidence(input, evidence, { partial = false, 
     requireValue(compiled.requiredCoverageKeys.every((key) => passedKeys.has(key)), "Required tuple is missing");
   }
   return { status: "pass", caseCount: resultIds.size, obligationCount: passedObligations.size, originalCriterionCount: compiled.originalCriteria.length, requiredCoverageCount: passedKeys.size, semanticDigest: compiled.semanticDigest };
+}
+
+/** Stage scope is a subset of the full contract, never plan-smoke selection. */
+export function selectModelStage(compiled, unitIds) {
+  requireValue(Array.isArray(unitIds) && unitIds.length > 0 && new Set(unitIds).size === unitIds.length, "Stage requires unique unit IDs");
+  const available = new Set(compiled.cases.flatMap((item) => item.unitIds));
+  requireValue(unitIds.every((id) => available.has(id)), "Stage includes an unknown unit");
+  const selected = compiled.cases.filter((item) => item.unitIds.some((id) => unitIds.includes(id)));
+  requireValue(selected.every((item) => item.unitIds.every((id) => unitIds.includes(id))), "Shared executions require all their owning units in the stage");
+  return { unitIds: [...unitIds].sort(), caseIds: selected.map(({ id }) => id), obligationIds: [...new Set(selected.flatMap((item) => item.obligationIds))].sort() };
+}
+
+/** Rebind only equal content/conditions/expectations; preserve the old evidence. */
+export async function reusableModelResults(currentInput, previousInput, previousEvidence, { caseIds } = {}) {
+  await validateModelEvidence(previousInput, previousEvidence, { partial: true });
+  const { compiled } = await modelPreflight(currentInput, { context: "implement" });
+  const unknown = Object.values(compiled.dependencies).some((entry) => entry.unknown);
+  const knownEnvironment = (value) => value !== null && value !== undefined && value !== "" && value !== "unknown" && value !== "pending" && (typeof value !== "object" || Object.values(value).every(knownEnvironment));
+  const reused = [], invalidated = [];
+  for (const result of previousEvidence.caseResults) {
+    const current = compiled.cases.find((item) => item.caseKey === result.caseKey);
+    if (!current) { invalidated.push(result.caseId); continue; }
+    if (caseIds && !caseIds.includes(current.id)) continue;
+    if (!current || current.reuseKey !== result.reuseKey || unknown || (!Object.keys(current.conditions.environment).length || !knownEnvironment(current.conditions.environment))) { invalidated.push(result.caseId); continue; }
+    const copy = { ...result, obligationIds: current.obligationIds, coverageKeys: current.coverageKeys };
+    const candidate = { ...previousEvidence, semanticDigest: compiled.semanticDigest, inputDigests: compiled.inputDigests, executionPlanDigest: compiled.executionPlanDigest, caseResults: [copy], substitutionCoverage: compiled.substitutionCoverage };
+    // New visual criteria or substitution/consumer requirements must independently
+    // close; an old assertion cannot implicitly certify newly added observations.
+    try { await validateModelEvidence(currentInput, candidate, { partial: true }); reused.push(copy); }
+    catch (error) {
+      if (!["PARITY_REQUIREMENT_GAP", "PARITY_SUBSTITUTION_INVALID"].includes(error.code)) throw error;
+      invalidated.push(result.caseId);
+    }
+  }
+  return { reused, invalidated, semanticDigest: compiled.semanticDigest, executionPlanDigest: compiled.executionPlanDigest };
 }

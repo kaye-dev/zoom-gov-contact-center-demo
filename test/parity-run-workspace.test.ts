@@ -2144,7 +2144,7 @@ test("BOOT-LEGACY: old DPR terminal needs a digest-bound workspace record provin
   assert.equal(checkpoint.batches[0].documentationRecovery.legacyProof.sha256, sha256(before.toString()));
 });
 
-async function modelWorkspaceFixture(context: test.TestContext) {
+async function modelWorkspaceFixture(context: test.TestContext, targets = 2) {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), "model-workspace-")));
   context.after(() => rm(root, { recursive: true, force: true }));
   const slug = "model-fixture", runId = "model-run";
@@ -2152,7 +2152,7 @@ async function modelWorkspaceFixture(context: test.TestContext) {
   await mkdir(path.join(root, target), { recursive: true });
   await mkdir(path.join(root, ".codex"));
   const fixtures = await import(pathToFileURL(path.resolve(import.meta.dirname, "fixtures/parity-verification-model.mjs")).href);
-  const input = await fixtures.verificationFixture({ targets: 2, states: 1 });
+  const input = await fixtures.verificationFixture({ targets, states: 1 });
   for (const source of input.profile.sourceInventory) {
     const bytes = `fixture source ${source.id}`;
     await writeFile(path.join(root, source.id), bytes);
@@ -2204,4 +2204,112 @@ test("CERT-01: changed requirements fail before workspace mutation and prior run
   await writeFile(path.join(fixture.root, fixture.target, "parity-spec.json"), JSON.stringify(fixture.input.profile));
   await assert.rejects(workspace.resumeRunWorkspace({ repositoryRootPath: fixture.root, runId: fixture.runId }), { code: "PARITY_CURRENT_STATE_DRIFT" });
   assert.deepEqual(await readFile(checkpointPath), bytes);
+});
+
+test("COVER/FINAL/REUSE-01: stage receipts remain partial; final union executes only the missing unit", async (context) => {
+  const f = await modelWorkspaceFixture(context, 3), workspace = await workspaceModulePromise, facade = await runnerModulePromise;
+  const model = await import("../.agents/skills/plan/scripts/parity-model-workspace.mjs");
+  const options = (runId: string, extra = {}) => ({ repositoryRootPath: f.root, slug: f.slug, runId, definition: f.definition, approval: { ...f.approval, runId }, current: f.current, baseUrls: { production: "http://localhost:3001", prototype: "http://127.0.0.1:4001" }, ...extra });
+  const tabs = { production: "left", prototype: "right" };
+  const oldBytes: Array<{ file: string; bytes: Buffer }> = [];
+  for (const unit of [0, 1]) {
+    const runId = `stage-${unit}`;
+    const prepared = await workspace.prepareRunWorkspace(options(runId, { unitIds: [`feature-${unit}`] }));
+    const runner = new facade.BrowserParityRunner(f.fixtures.modelAdapterSpy());
+    for (let i = 0; i < prepared.summary.total; i++) await workspace.executeBrowserBatch({ ...options(runId), runner, tabs });
+    const saved = await workspace.finalizeRunWorkspace(options(runId));
+    assert.equal(saved.kind, "checkpoint-verification");
+    const verification = await model.verifyModelStage(options(runId));
+    assert.deepEqual(verification.unitIds, [`feature-${unit}`]); assert.equal(verification.caseIds.length, 4);
+    await assert.rejects(facade.verifyCurrentRun({ target: f.target, definition: f.definition, options: { runId }, repositoryRootPath: f.root }));
+    const file = path.join(f.root, saved.evidencePath); oldBytes.push({ file, bytes: await readFile(file) });
+  }
+  const prepared = await workspace.prepareRunWorkspace(options("union", { importStages: ["stage-0", "stage-1"] }));
+  assert.equal(prepared.summary.passed, 2); assert.equal(prepared.summary.pending, 1);
+  await assert.rejects(workspace.finalizeRunWorkspace(options("union")), { code: "PARITY_REQUIREMENT_GAP" });
+  const adapter = f.fixtures.modelAdapterSpy(), runner = new facade.BrowserParityRunner(adapter);
+  await workspace.executeBrowserBatch({ ...options("union"), runner, tabs });
+  const performed = adapter.calls.filter(([operation]: string[]) => operation === "assertion");
+  assert.equal(performed.length, 16); // Four required cases, identity + assertion, both surfaces.
+  const finished = await workspace.finalizeRunWorkspace(options("union"));
+  assert.equal(finished.schemaVersion, 6);
+  assert.equal((await facade.verifyCurrentRun({ target: f.target, definition: f.definition, options: { runId: "union" }, repositoryRootPath: f.root })).status, "pass");
+  for (const original of oldBytes) assert.deepEqual(await readFile(original.file), original.bytes);
+});
+
+test("IMPACT/MIG-01: changed local source invalidates that stage, while other immutable stage results survive", async (context) => {
+  const f = await modelWorkspaceFixture(context), workspace = await workspaceModulePromise, facade = await runnerModulePromise;
+  const options = (runId: string, extra = {}) => ({ repositoryRootPath: f.root, slug: f.slug, runId, definition: f.definition, approval: { ...f.approval, runId }, current: f.current, baseUrls: { production: "http://localhost:3001", prototype: "http://127.0.0.1:4001" }, ...extra });
+  const tabs = { production: "left", prototype: "right" };
+  for (const unit of [0, 1]) {
+    const runId = `prior-${unit}`;
+    const prepared = await workspace.prepareRunWorkspace(options(runId, { unitIds: [`feature-${unit}`] }));
+    const runner = new facade.BrowserParityRunner(f.fixtures.modelAdapterSpy());
+    for (let i = 0; i < prepared.summary.total; i++) await workspace.executeBrowserBatch({ ...options(runId), runner, tabs });
+    await workspace.finalizeRunWorkspace(options(runId));
+  }
+  await writeFile(path.join(f.root, "feature-0.tsx"), "changed implementation only");
+  const prepared = await workspace.prepareRunWorkspace(options("changed", { importStages: ["prior-0", "prior-1"] }));
+  assert.equal(prepared.summary.passed, 1); assert.equal(prepared.summary.pending, 1);
+  const manifest = JSON.parse(await readFile(path.join(f.root, ".codex/parity-runs/changed/manifest.json"), "utf8"));
+  assert.equal(manifest.importBindings[0].caseIds.length, 0); assert.equal(manifest.importBindings[0].invalidatedCaseIds.length, 4);
+  assert.equal(manifest.importBindings[1].caseIds.length, 4);
+  await workspace.abortRunWorkspace(options("changed"));
+  await writeFile(path.join(f.root, "shared.css"), "shared changed");
+  const shared = await workspace.prepareRunWorkspace(options("shared-change", { importStages: ["prior-0", "prior-1"] }));
+  assert.equal(shared.summary.passed, 0); assert.equal(shared.summary.pending, 2);
+});
+
+test("REUSE-01: a new Browser generation needs one fresh canary even when every case is reused", async (context) => {
+  const f = await modelWorkspaceFixture(context), workspace = await workspaceModulePromise, facade = await runnerModulePromise;
+  const options = (runId: string, extra = {}) => ({ repositoryRootPath: f.root, slug: f.slug, runId, definition: f.definition, approval: { ...f.approval, runId }, current: f.current, baseUrls: { production: "http://localhost:3001", prototype: "http://127.0.0.1:4001" }, ...extra });
+  const tabs = { production: "left", prototype: "right" };
+  const prepared = await workspace.prepareRunWorkspace(options("all-stage", { unitIds: ["feature-0", "feature-1"] }));
+  const runner = new facade.BrowserParityRunner(f.fixtures.modelAdapterSpy());
+  for (let i = 0; i < prepared.summary.total; i++) await workspace.executeBrowserBatch({ ...options("all-stage"), runner, tabs });
+  await workspace.finalizeRunWorkspace(options("all-stage"));
+  const reused = await workspace.prepareRunWorkspace(options("all-reuse", { importStages: ["all-stage"] }));
+  assert.equal(reused.summary.pending, 0);
+  await assert.rejects(workspace.finalizeRunWorkspace(options("all-reuse")), { code: "PARITY_BROWSER_SETUP_REQUIRED" });
+  const adapter = f.fixtures.modelAdapterSpy();
+  const previousBootstrap = adapter.bootstrapStatus;
+  adapter.bootstrapStatus = async () => ({ ...await previousBootstrap(), generation: "new-generation" });
+  const currentRunner = new facade.BrowserParityRunner(adapter);
+  await workspace.executeBrowserBatch({ ...options("all-reuse"), runner: currentRunner, tabs });
+  assert.equal(adapter.calls.filter(([operation]: string[]) => operation === "assertion").length, 0);
+  assert.equal(adapter.calls.filter(([operation]: string[]) => operation === "canary-image").length, 1);
+  assert.equal((await workspace.finalizeRunWorkspace(options("all-reuse"))).schemaVersion, 6);
+});
+
+test("IMPACT-01: live workspace source drift requires scoped invalidation and preserves unrelated fragments", async (context) => {
+  const f = await modelWorkspaceFixture(context), workspace = await workspaceModulePromise, facade = await runnerModulePromise;
+  const options = { repositoryRootPath: f.root, slug: f.slug, runId: f.runId, definition: f.definition, approval: f.approval, current: f.current, baseUrls: { production: "http://localhost:3001", prototype: "http://127.0.0.1:4001" } };
+  const prepared = await workspace.prepareRunWorkspace(options);
+  const runner = new facade.BrowserParityRunner(f.fixtures.modelAdapterSpy()), tabs = { production: "left", prototype: "right" };
+  for (let i = 0; i < prepared.summary.total; i++) await workspace.executeBrowserBatch({ ...options, runner, tabs });
+  const runRoot = path.join(f.root, ".codex/parity-runs", f.runId);
+  const before = JSON.parse(await readFile(path.join(runRoot, "checkpoint.json"), "utf8"));
+  const last = before.batches[1].fragment; const untouched = await readFile(path.join(runRoot, last.fileName));
+  await writeFile(path.join(f.root, "feature-0.tsx"), "new local source");
+  await assert.rejects(workspace.nextRunBatch(options), { code: "PARITY_CURRENT_STATE_DRIFT" });
+  const invalidated = await workspace.invalidateRunWorkspace({ ...options, source: "feature-0.tsx", scope: "target", targetIds: [] });
+  assert.equal(invalidated.summary.passed, 1); assert.equal(invalidated.summary.pending, 1);
+  await workspace.executeBrowserBatch({ ...options, runner, tabs });
+  assert.deepEqual(await readFile(path.join(runRoot, last.fileName)), untouched);
+  assert.equal((await workspace.finalizeRunWorkspace(options)).schemaVersion, 6);
+});
+
+test("stage CLI reports only selected units and never certifies a partial stage as full completion", async (context) => {
+  const f = await modelWorkspaceFixture(context), workspace = await workspaceModulePromise, facade = await runnerModulePromise;
+  const output = captureOutput();
+  await facade.runCli({ repositoryRootPath: f.root, argv: ["select", f.target, "--phase", "final", "--unit", "feature-0"], stdout: output.stream });
+  assert.equal(JSON.parse(output.read()).caseCount, 4);
+  const options = { repositoryRootPath: f.root, slug: f.slug, runId: f.runId, definition: f.definition, approval: f.approval, current: f.current, baseUrls: { production: "http://localhost:3001", prototype: "http://127.0.0.1:4001" }, unitIds: ["feature-0"] };
+  const prepared = await workspace.prepareRunWorkspace(options), runner = new facade.BrowserParityRunner(f.fixtures.modelAdapterSpy());
+  for (let i = 0; i < prepared.summary.total; i++) await workspace.executeBrowserBatch({ ...options, runner, tabs: { production: "left", prototype: "right" } });
+  await workspace.finalizeRunWorkspace(options);
+  const verified = captureOutput();
+  await facade.runCli({ repositoryRootPath: f.root, argv: ["verify-stage", f.target, "--run-id", f.runId], stdout: verified.stream });
+  assert.equal(JSON.parse(verified.read()).kind, "checkpoint-verification");
+  await assert.rejects(facade.runCli({ repositoryRootPath: f.root, argv: ["verify-run", f.target, "--run-id", f.runId], stdout: captureOutput().stream }));
 });

@@ -234,3 +234,26 @@ test("CERT-01 execution: only a current exact replacement can omit original exec
   const stale = { ...payload, dependencyDigests: {} };
   await assert.rejects(compileVerificationModel({ ...fixture, proofResults: [{ ...stale, digest: await modelDigest(stale) }] }), { code: "PARITY_SUBSTITUTION_INVALID" });
 });
+
+test("REUSE-01: dependency mode, expectation, fixture and environment changes cannot reuse old case passes", async () => {
+  const { BrowserParityRunner } = await import("../.agents/skills/plan/scripts/parity-runner-core.mjs");
+  const { reusableModelResults } = await import("../.agents/skills/plan/scripts/parity-model-execution.mjs");
+  const { modelAdapterSpy, verificationFixture, rebindFixture } = await fixturePromise;
+  const input = await verificationFixture({ targets: 2, states: 1 });
+  const old = await new BrowserParityRunner(modelAdapterSpy()).runModel({ modelInput: input, tabs: { production: "left", prototype: "right" } });
+  assert.equal((await reusableModelResults(input, input, old)).reused.length, old.caseResults.length);
+  for (const field of ["source", "mode", "fixture", "environment", "unknown"]) {
+    const changed = structuredClone(input);
+    if (field === "source") changed.sourceDigests = { "feature-0.tsx": "sha256:" + "a".repeat(64) };
+    if (field === "mode") changed.sourceModes = { "feature-0.tsx": "100755" };
+    if (field === "fixture") changed.profile.scenarios[0].conditions.fixture.seed++;
+    if (field === "environment") changed.profile.scenarios[0].conditions.environment.build = "other-build";
+    if (field === "unknown") { changed.profile.sourceInventory[0].unresolved = true; changed.profile.sourceImpactMap[0].scope = "unknown"; }
+    const result = await reusableModelResults(changed, input, old);
+    assert.equal(result.reused.length, field === "unknown" ? 0 : old.caseResults.length / 2, field);
+  }
+  const changed = structuredClone(input);
+  changed.profile.obligations[0].expected = "new expectation";
+  await rebindFixture(changed);
+  assert.equal((await reusableModelResults(changed, input, old)).reused.length, old.caseResults.length / 2);
+});
