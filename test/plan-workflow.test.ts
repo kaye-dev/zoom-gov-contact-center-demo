@@ -20,7 +20,7 @@ const headings = [
 ];
 
 const workflowSkillNames = ["plan", "implement", "review", "workflow-retrospective", "workflow-performance-audit"];
-const allSkillNames = [...workflowSkillNames, "git-commit-push-pr", "plan-finalize", "kabeuchi"];
+const allSkillNames = [...workflowSkillNames, "git-commit-push-pr", "kabeuchi"];
 
 function parseTomlSource(relative: string, source: string): Record<string, unknown> {
   try {
@@ -251,7 +251,6 @@ test("親モデル既定はAstra lowを維持し3つのread-only custom agentへ
     "| `$implement` | `gpt-5.6-sol` | `high` |",
     "| `$review` | `gpt-6-astra` | `low` |",
     "| `$git-commit-push-pr` | `gpt-5.6-luna` | `medium` |",
-    "| `$plan-finalize` | `gpt-5.6-luna` | `medium` |",
     "| `$workflow-retrospective` | `gpt-5.6-terra` | `high` |",
     "| `$workflow-performance-audit` | `gpt-5.6-terra` | `high` |",
   ]) {
@@ -271,7 +270,7 @@ test("親モデル既定はAstra lowを維持し3つのread-only custom agentへ
   assert.match(workflow, /`xhigh`、`max`、`ultra`は親エージェントのskill別推奨にもcustom agentの固定設定にも使わない/);
   assert.match(workflow, /品質不足が確認された場合だけ/);
   assert.match(workflow, /skillメタデータとproject-local `profiles`ではmodelを指定しない/);
-  assert.match(workflow, /`\$implement`、`\$git-commit-push-pr`、`\$plan-finalize`、`\$workflow-retrospective`、`\$workflow-performance-audit`はsubagentへ委譲せず/);
+  assert.match(workflow, /`\$implement`、`\$git-commit-push-pr`、`\$workflow-retrospective`、`\$workflow-performance-audit`はsubagentへ委譲せず/);
 
   const modelSelection = workflow.match(/^## モデル選択\n[\s\S]*?(?=^## )/m)?.[0];
   assert.ok(modelSelection, "workflow is missing the model selection section");
@@ -303,26 +302,25 @@ test("kabeuchiは明示呼び出しで1体のadvisorだけをread-only利用す�
   assert.doesNotMatch(metadata, /gpt-5\.|model|reasoning/);
 });
 
-test("実装・shipping・finalize・振り返り・期間監査はcustom agentへ委譲しない", async () => {
-  const [implement, shipping, finalize, retrospective, performanceAudit] = await Promise.all([
+test("実装・shipping・振り返り・期間監査はcustom agentへ委譲しない", async () => {
+  const [implement, shipping, retrospective, performanceAudit] = await Promise.all([
     read(".agents/skills/implement/SKILL.md"),
     read(".agents/skills/git-commit-push-pr/SKILL.md"),
-    read(".agents/skills/plan-finalize/SKILL.md"),
     read(".agents/skills/workflow-retrospective/SKILL.md"),
     read(".agents/skills/workflow-performance-audit/SKILL.md"),
   ]);
   assert.match(implement, /do not delegate implementation to a custom agent/);
   assert.match(shipping, /Do not delegate to a custom agent/);
-  assert.match(finalize, /do not delegate to a custom agent/);
   assert.match(retrospective, /Do not delegate the audit to a custom agent/);
   assert.match(performanceAudit, /Do not delegate this skill to a custom agent/);
-  for (const skill of [implement, shipping, finalize, retrospective, performanceAudit]) {
+  for (const skill of [implement, shipping, retrospective, performanceAudit]) {
     assert.doesNotMatch(skill, /`product_advisor`|`project_explorer`|`independent_reviewer`/);
   }
 });
 
-test("明示的な8 skill構成を保ち廃止skill・lifecycle・旧implementation agentを復活させない", async () => {
+test("明示的な7 skill構成を保ち廃止skill・lifecycle・旧implementation agentを復活させない", async () => {
   const removed = [
+    ".agents/skills/plan-finalize",
     ".agents/skills/plan-critic/SKILL.md",
     ".agents/skills/plan-critic/agents/openai.yaml",
     ".agents/skills/implementation-planner/SKILL.md",
@@ -351,36 +349,6 @@ test("明示的な8 skill構成を保ち廃止skill・lifecycle・旧implementat
     assert.doesNotMatch(skill, /implementation-(?:planner|executor|review)|final-plan-rewriter|G0[1-6]|gpt-5\./);
   }
 });
-
-test("plan finalizeはhandoff不一致とcleanup危険条件をfail closedにする", async () => {
-  const [shipping, finalize] = await Promise.all([
-    read(".agents/skills/git-commit-push-pr/SKILL.md"),
-    read(".agents/skills/plan-finalize/SKILL.md"),
-  ]);
-  for (const field of [
-    /repository root/,
-    /remote/,
-    /branch/,
-    /initial HEAD/,
-    /base ref/,
-    /initial base OID/,
-    /goal SHA-256/,
-    /initial archive commit SHA/,
-    /plan inventory/,
-  ]) {
-    assert.match(finalize, field);
-  }
-  for (const stop of [/foreign plan/, /template drift/, /active or malformed confirmation session/, /tracked dirty state/, /remote divergence/, /rebase\/merge conflict/]) {
-    assert.match(finalize, stop);
-  }
-  assert.match(finalize, /may change after rebase/);
-  assert.match(finalize, /no push or pull-request mutation/);
-  assert.doesNotMatch(finalize, /\bgh\s+(?:pr|api|repo)/u);
-  assert.match(shipping, /old finalize continuation can proceed/);
-  assert.match(shipping, /Never delete or move plan artifacts for shipping/);
-});
-
-
 
 // Keep structural/entrypoint checks here; observed decisions are exercised by
 // the smoke scenario graders and the isolated Git/gh shipping evaluator.

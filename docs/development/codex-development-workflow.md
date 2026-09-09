@@ -29,7 +29,6 @@ goalとprototypeは設計を示し、進捗・検証結果は実装報告へ記�
 | `$implement` | `gpt-5.6-sol` | `high` |
 | `$review` | `gpt-6-astra` | `low` |
 | `$git-commit-push-pr` | `gpt-5.6-luna` | `medium` |
-| `$plan-finalize` | `gpt-5.6-luna` | `medium` |
 | `$workflow-retrospective` | `gpt-5.6-terra` | `high` |
 | `$workflow-performance-audit` | `gpt-5.6-terra` | `high` |
 
@@ -41,7 +40,7 @@ read-only custom agentのモデルはスキルメタデータではなく、`.co
 | `$plan` | `project_explorer` | `gpt-5.6-luna` | `medium` | 通常は親が探索し、分離が必要な複数subsystem・大量資料のread-only探索のみ最大1体起動する。利用不能なら親が継続して未使用を報告する |
 | `$review` | `independent_reviewer` | `gpt-5.6-terra` | `high` | 通常は親が2観点を確認し、独立判断が必要な場合のみ2体を並行起動する。片方でも利用不能なら停止する |
 
-サブエージェントは原則使用せず、必要性の判断と待機方法はAGENTS.mdに従う。これらのcustom agentはすべて`read-only`とし、spawn時のmodelまたはreasoning overrideを渡さない。`$implement`、`$git-commit-push-pr`、`$plan-finalize`、`$workflow-retrospective`、`$workflow-performance-audit`はsubagentへ委譲せず、親エージェントが単独で実行する。全体のsubagent既定モデル、既定reasoning、同時実行数制限はproject-local設定へ追加しない。上表以外の一般subagentは、Codexの通常動作として親taskで選択した設定を継承する。ユーザーまたは管理者の上位設定によるoverrideはrepositoryの管理対象外とする。
+サブエージェントは原則使用せず、必要性の判断と待機方法はAGENTS.mdに従う。これらのcustom agentはすべて`read-only`とし、spawn時のmodelまたはreasoning overrideを渡さない。`$implement`、`$git-commit-push-pr`、`$workflow-retrospective`、`$workflow-performance-audit`はsubagentへ委譲せず、親エージェントが単独で実行する。全体のsubagent既定モデル、既定reasoning、同時実行数制限はproject-local設定へ追加しない。上表以外の一般subagentは、Codexの通常動作として親taskで選択した設定を継承する。ユーザーまたは管理者の上位設定によるoverrideはrepositoryの管理対象外とする。
 
 `xhigh`、`max`、`ultra`は親エージェントのskill別推奨にもcustom agentの固定設定にも使わない。推奨設定で品質不足が確認された場合だけ、対象taskの親エージェントで明示的に選択する。
 
@@ -143,9 +142,9 @@ PR本文はbase...HEADのdiff、base..HEADのcommit、実検証結果、現在�
 
 ### 計画資料の任意cleanup
 
-出荷はplanのarchiveやcleanupを必要としない。ユーザーが明示希望した場合だけ、既存の`$plan-finalize`でarchive済みgoalの同期・限定cleanupを行える。対象、archive、所有権、active confirmation sessionを照合し、他planや未archive資料を削除しない。厳格tree確認はこの任意操作に限定する。
+出荷はplanのarchiveやcleanupを必要としない。資料cleanupは、ユーザーが削除対象を明示した独立の保守作業として扱う。既存CLIのpreviewで対象を確認し、対象外の資料とactive confirmation sessionを保全する。archive・base同期・削除を自動連結しない。
 
-旧finalize continuationも現在の範囲とremote状態を確認して通常出荷へ接続する。通常`plans:guard`とCIはindexの追跡policyだけを検査する。GitHub rulesetのrequired check設定やProduction操作は別の明示作業である。
+通常`plans:guard`とCIはindexの追跡policyだけを検査する。GitHub rulesetのrequired check設定やProduction操作は別の明示作業である。
 
 ## 任意の振り返り
 

@@ -47,4 +47,4 @@ Finish with branch/base, commit, actual validation, push result, PR URL/update r
 
 Shipping uses valid focused-check and UI-smoke results under [workflow-verification-contract.md](../plan/references/workflow-verification-contract.md); it does not run Browser or detailed parity. Carry forward prototype comparison conditions, matches, accepted differences, and any `prototypeとの視覚照合は未確認` limitation. Browser unavailability is disclosed as UI unverified. A known functional/test failure or unintended design difference is not merely unverified and must be reported as a blocker unless the user explicitly accepts that exact failure for shipment.
 
-Goal archive and cleanup are optional separate operations, not steps or handoffs in this invocation. Keep existing archives/evidence untouched. An old finalize continuation can proceed through the normal inspection and push/PR path using current task scope and state. Never delete or move plan artifacts for shipping.
+Goal archive and cleanup are optional separate operations, not steps or handoffs in this invocation. Keep existing archives/evidence untouched. Never delete or move plan artifacts for shipping.
