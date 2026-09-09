@@ -109,6 +109,58 @@ const EXACT_POST_REVIEWED_CHAIN = [
     sha256: "5afbac07aaa22cfd36226cd2d6f919f0e59950fd083c3837903025248885e5f3",
     classification: "expand-compatible",
   },
+  {
+    // 設定シングルトン5件の主キーを id から siteKey へ差し替えるため、既存列の
+    // DROPを含む。既存行は 'lg' へbackfillしてから既定値を外す。
+    name: "20260906120000_add_site_key_tenant_scope",
+    sha256: "6b0e8dddafe51832e8128bb8a5b422e6a2c5e1bcfc04ef7d6d5ede96e695b2d5",
+    classification: "destructive-reviewed",
+  },
+  {
+    // ZAAD／防災無線の配線が済み、テナント指定漏れを吸収する既定値が不要になった。
+    // DROP DEFAULT は分類器が destructive として扱う。
+    name: "20260906150000_drop_zaad_site_key_default",
+    sha256: "ccd52ad88b964a37c6d6d0a9e18f7dbb2dfd542b554e8ca3a3a844f7ba437be9",
+    classification: "destructive-reviewed",
+  },
+  {
+    // Reservation API key の全経路で tenant を明示指定し、発行時の暗黙既定値を外す。
+    // DROP DEFAULT は分類器が destructive として扱う。
+    name: "20260906180000_drop_reservation_api_key_site_key_default",
+    sha256: "bf82e0b5939fbce240a14b16de3851b46b3106d9119cd1c7521a08a08bad8993",
+    classification: "destructive-reviewed",
+  },
+  {
+    name: "20260906190000_add_univ_online_consultation_settings",
+    sha256: "3cbaf69c19539801da7668cb7b2987f40d6b1c8803411385f6e27056f901b924",
+    classification: "destructive-reviewed",
+  },
+  {
+    // 既存行を空文字で維持する追加列。NOT NULL / DEFAULT は自動expand判定の対象外。
+    name: "20260907070000_add_online_consultation_memo",
+    sha256: "512493c07754637460dfa50e2b2b734b8315bce3fad00cc38cd161e56df35d5d",
+    classification: "destructive-reviewed",
+  },
+  {
+    name: "20260908060000_university_outreach",
+    sha256: "b58e418ed3c5e4d2de5fd99e7de3ec5e7249efd8d5e7cbd534f8a1198d8274c0",
+    classification: "destructive-reviewed",
+  },
+  {
+    name: "20260908063000_university_outreach_action_receipts",
+    sha256: "8de6f8b0d09480f33c90ae087fd2c422c43e0f75a0b29787dafac82c674733d0",
+    classification: "destructive-reviewed",
+  },
+  {
+    name: "20260909050000_outreach_crm_municipal",
+    sha256: "912ae41527a5c9c3ac6840d08125c7448f4e7253b8e11183b66293f9760c5bf1",
+    classification: "destructive-reviewed",
+  },
+  {
+    name: "20260909070000_outreach_registration_reception",
+    sha256: "6a848d643141ecf5160f8cca46fdc8647f4cf14f4dfa06878a828bff917f11ee",
+    classification: "destructive-reviewed",
+  },
 ] as const satisfies readonly ExactBatchMigration[];
 
 export type ReviewedMigrationBatchPlan = {

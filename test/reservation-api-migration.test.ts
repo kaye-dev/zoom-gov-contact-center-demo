@@ -8,6 +8,10 @@ const keyUsageMigrationPath = new URL("../prisma/migrations/20260830230000_add_r
 const requestLogMigrationPath = new URL("../prisma/migrations/20260831010000_add_reservation_api_request_logs/migration.sql", import.meta.url);
 const zvaSafetyMigrationPath = new URL("../prisma/migrations/20260831140000_add_reservation_api_zva_safety/migration.sql", import.meta.url);
 const callerAniBindingMigrationPath = new URL("../prisma/migrations/20260901160000_add_reservation_caller_ani_binding/migration.sql", import.meta.url);
+const reservationApiKeySiteKeyDefaultMigrationPath = new URL(
+  "../prisma/migrations/20260906180000_drop_reservation_api_key_site_key_default/migration.sql",
+  import.meta.url,
+);
 
 test("reservation API migration is additive and manifest hash is exact", () => {
   const migration = readFileSync(migrationPath, "utf8");
@@ -100,14 +104,49 @@ test("reservation API migration is additive and manifest hash is exact", () => {
       classification: "expand-compatible",
     },
   );
-  assert.deepEqual(manifest.migrations.at(-1), {
-    name: "20260901160000_add_reservation_caller_ani_binding",
-    sha256: callerAniBindingSha256,
-    classification: "expand-compatible",
-  });
+  assert.deepEqual(
+    manifest.migrations.find(
+      ({ name }) => name === "20260901160000_add_reservation_caller_ani_binding",
+    ),
+    {
+      name: "20260901160000_add_reservation_caller_ani_binding",
+      sha256: callerAniBindingSha256,
+      classification: "expand-compatible",
+    },
+  );
   const reviewed = readFileSync(new URL("../scripts/deploy/lib/reviewed-migrations.ts", import.meta.url), "utf8");
   assert.match(reviewed, new RegExp(keyUsageSha256, "u"));
   assert.match(reviewed, new RegExp(requestLogSha256, "u"));
   assert.match(reviewed, new RegExp(zvaSafetySha256, "u"));
   assert.match(reviewed, new RegExp(callerAniBindingSha256, "u"));
+});
+
+test("Reservation API key siteKey default removal is reviewed exactly", () => {
+  const migration = readFileSync(reservationApiKeySiteKeyDefaultMigrationPath, "utf8");
+  assert.match(
+    migration,
+    /^ALTER TABLE "reservation_api_keys" ALTER COLUMN "siteKey" DROP DEFAULT;$/mu,
+  );
+  assert.doesNotMatch(migration, /\b(?:UPDATE|DELETE|TRUNCATE|DROP TABLE)\b/iu);
+
+  const sha256 = createHash("sha256").update(migration).digest("hex");
+  const manifest = JSON.parse(
+    readFileSync(new URL("../scripts/deploy/migrations.manifest.json", import.meta.url), "utf8"),
+  ) as { migrations: Array<{ name: string; sha256: string; classification: string }> };
+  assert.deepEqual(
+    manifest.migrations.find(
+      ({ name }) =>
+        name === "20260906180000_drop_reservation_api_key_site_key_default",
+    ),
+    {
+      name: "20260906180000_drop_reservation_api_key_site_key_default",
+      sha256,
+      classification: "destructive-reviewed",
+    },
+  );
+  const reviewed = readFileSync(
+    new URL("../scripts/deploy/lib/reviewed-migrations.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(reviewed, new RegExp(sha256, "u"));
 });

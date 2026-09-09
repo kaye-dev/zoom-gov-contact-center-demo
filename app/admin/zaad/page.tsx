@@ -1,40 +1,19 @@
+import { admissionYears } from "@/lib/zaad/university/contracts";
+import type { Metadata } from "next";
+import { getAdminPageTenant } from "@/lib/server/admin-scope";
+import { AdminTenantChoice } from "@/app/admin/AdminTenantChoice";
+import { withPrisma } from "@/lib/server/prisma";
+import { resolveOutreachScope } from "@/lib/server/zaad/outreach-scope";
 import { canAdminAccess } from "@/lib/admin-access/authorization";
 import { requireAdminAccess } from "@/lib/server/admin-access/server";
-
-import { ZaadView, type ZaadViewKey } from "./ZaadView";
-
-export default async function ZaadPage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
+import { OutreachView } from "./OutreachView";
+export const metadata: Metadata = { title: "オートリーチ" };
+export default async function ZaadPage() {
   const { actor } = await requireAdminAccess("zaad", "VIEW", "/admin/zaad");
-  const query = await searchParams;
-  const allowReview = process.env.NODE_ENV !== "production";
-  const requestedView = allowReview ? single(query.reviewView) ?? single(query.view) : single(query.view);
-  const view = isZaadView(requestedView) ? requestedView : "residents";
-  return (
-    <ZaadView
-      initialView={view}
-      reviewState={allowReview ? single(query.reviewState) : undefined}
-      reviewSurface={allowReview ? single(query.reviewSurface) : undefined}
-      reviewDialogMode={allowReview ? single(query.reviewMode) : undefined}
-      reviewActor={allowReview ? single(query.reviewActor) : undefined}
-      reviewConnection={allowReview ? single(query.reviewConnection) : undefined}
-      permissions={{
-        create: canAdminAccess(actor, "zaad", "CREATE"),
-        update: canAdminAccess(actor, "zaad", "UPDATE"),
-        delete: canAdminAccess(actor, "zaad", "DELETE"),
-      }}
-      canViewDeveloperApi={canAdminAccess(actor, "developer-api", "VIEW")}
-    />
-  );
-}
-
-function isZaadView(value: unknown): value is ZaadViewKey {
-  return value === "residents" || value === "contact-lists" || value === "settings" || value === "messages" || value === "campaigns" || value === "one-time";
-}
-
-function single(value: string | string[] | undefined) {
-  return typeof value === "string" ? value : undefined;
+  const selected = await getAdminPageTenant("zaad");
+  if (!selected.ok) return <AdminTenantChoice allowed={selected.allowed} code={selected.code} />;
+  const tenant = selected.tenant.key;
+  const scope = await withPrisma(db => resolveOutreachScope(db, actor, tenant));
+  const now = new Date();
+  return <OutreachView years={admissionYears(now)} serverDate={now.toISOString()} key={`${actor.id}:${tenant}:${scope.departments.join(",")}`} tenant={tenant} departments={scope.departments} allowedTenants={selected.allowed} permissions={{ create: canAdminAccess(actor, "zaad", "CREATE"), update: canAdminAccess(actor, "zaad", "UPDATE"), delete: canAdminAccess(actor, "zaad", "DELETE") }} canConfigure={canAdminAccess(actor, "developer-api", "VIEW")} />;
 }

@@ -1,4 +1,6 @@
 "use client";
+import type { TenantKey } from "@/lib/tenants";
+import { adminFetch as fetch } from "@/lib/admin-fetch";
 
 import { AdminPageTitleHelp } from "@/app/components/admin/AdminPageTitleHelp";
 
@@ -24,6 +26,7 @@ import {
 } from "@/lib/reservations";
 
 type ReservationSystemViewProps = {
+  tenantKey: TenantKey;
   initialCalendar: ReservationCalendarSnapshot;
   initialSelectedDate: string;
   minimumMonth: string;
@@ -32,6 +35,7 @@ type ReservationSystemViewProps = {
 };
 
 export function ReservationSystemView({
+  tenantKey,
   initialCalendar,
   initialSelectedDate,
   minimumMonth,
@@ -127,14 +131,14 @@ export function ReservationSystemView({
         <div className="flex flex-wrap gap-3 sm:shrink-0">
           <Link
             id="reservation-booking-list-link"
-            href="/admin/reservations/bookings"
+            href={`/admin/reservations/bookings?tenant=${tenantKey}`}
             className="inline-flex items-center rounded-md border border-line bg-surface px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             {copy.bookings.entry}
           </Link>
           <Link
             id="api-key-management-link"
-            href="/admin/reservations/api-keys"
+            href={`/admin/reservations/api-keys?tenant=${tenantKey}`}
             className="inline-flex items-center rounded-md border border-line bg-surface px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             {copy.apiKeys.entry}

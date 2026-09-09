@@ -1,0 +1,5 @@
+import type { parseDispatchDraft } from "@/lib/zaad/dispatch-contracts";
+export type DispatchConfirmationStatus = "CURRENT" | "TARGET_CHANGED" | "EXPIRED" | "ALREADY_REQUESTED" | "UNAVAILABLE";
+export type DispatchSnapshot = { name: string; body: string; voiceId: string; languageCode: string; connectionMode: string; recipientCount: number; exclusions: Record<string, number>; excludedTargets?: { name: string | null; reason: string }[]; targets: { personKey: string; name?: string; phone: string }[]; groups: { id: string; name?: string; observedAt?: string }[]; createdAt: string };
+export type DispatchRecord = { id: string; name: string; body: string; voiceId: string; recipientCount: number; appState: string; createdAt: string; expiresAt: string | null; revision: number; snapshot: DispatchSnapshot | null; draft: ReturnType<typeof parseDispatchDraft> | null; messageRevision?: { messageId: string; name: string; revision: number } | null };
+export type DispatchHistory = Pick<DispatchRecord, "id" | "name" | "appState" | "recipientCount" | "createdAt" | "revision">;

@@ -9,10 +9,8 @@ import {
   getScheduleFieldErrors,
   isMaintenanceSettingsConflict,
 } from "../app/admin/maintenance-settings/MaintenanceSettingsForm";
-import {
-  dictionaries,
-  locales,
-} from "../app/i18n/dictionaries";
+import { locales } from "../app/i18n/dictionaries";
+import { defaultTenantDictionaries as dictionaries } from "../app/i18n/build-dictionary";
 
 test("maintenance update request includes the revision and exact wire keys", () => {
   const request = createMaintenanceUpdateRequest({

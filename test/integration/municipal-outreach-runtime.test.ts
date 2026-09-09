@@ -1,0 +1,93 @@
+import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
+import test from "node:test";
+import { withIsolatedPostgresDatabase } from "../helpers/isolated-postgres";
+import { createDatabaseContext } from "../../lib/server/prisma";
+import { registerMunicipalContact } from "../../lib/server/zaad/municipal/registrations";
+import { updateContact } from "../../lib/server/zaad/contacts";
+import { saveWorkflow, setWorkflowTarget, previewWorkflowRun, queueWorkflowRun, getMunicipalRun } from "../../lib/server/zaad/municipal/service";
+import { municipalTick } from "../../lib/server/zaad/municipal/scheduler";
+import { issueAttemptCapability, acceptAnswerReceipt, acceptProviderEvent, processMunicipalInbox } from "../../lib/server/zaad/municipal/receipts";
+import { MUNICIPAL_CONSENT_VERSION, QUESTION_VERSION } from "../../lib/zaad/municipal/contracts";
+import { OutreachContractError } from "../../lib/zaad/outreach-contracts";
+import type { OutreachScope } from "../../lib/server/zaad/outreach-scope";
+import type { MunicipalProvider } from "../../lib/server/zaad/municipal/provider";
+
+test("municipal queue and authenticated receipts preserve independent states", { timeout: 180000 }, async t => {
+  await withIsolatedPostgresDatabase(async databaseUrl => {
+    const context = createDatabaseContext({ ...process.env, DATABASE_URL: databaseUrl, DATABASE_URL_UNPOOLED: databaseUrl }), db = context.prisma;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => { throw new Error("External calls forbidden"); };
+    try {
+      const scope: OutreachScope = { siteKey: "lg", actorId: "municipal-runtime-actor", all: true, live: true, departments: ["resident-support"] };
+      await db.user.create({ data: { id: scope.actorId, name: "Test municipal actor", email: "municipal-runtime@example.invalid", emailVerified: true, createdAt: new Date(), updatedAt: new Date() } });
+      const role = await db.adminAccessRole.findFirstOrThrow({ where: { systemKey: "FULL_ACCESS" } });
+      await db.adminAccessRoleAssignment.update({ where: { userId: scope.actorId }, data: { roleId: role.id } });
+      await db.universityZaadGrant.create({ data: { siteKey: "lg", userId: scope.actorId, departmentKey: "resident-support", liveExecution: true } });
+      const flow = await db.zoomResourceBinding.create({ data: { ownerSiteKey: "lg", accountId: "municipal-test-account", resourceType: "FLOW", zoomId: "test-flow", departmentKey: "resident-support", purpose: "ELDER_WATCH" } });
+      const schedule = { weekdays: [0, 1, 2, 3, 4, 5, 6], windows: [{ start: "00:00", end: "23:59" }] };
+      const registered = await registerMunicipalContact(db, "lg", { operationKey: "municipal_runtime_registration", name: "架空の確認対象者", phone: "09000000991", district: "central", topics: ["elder-watch"], availability: schedule, consent: true, consentVersion: MUNICIPAL_CONSENT_VERSION });
+      await updateContact(db, scope, "MUNICIPAL_CONTACT", registered.contactId, { version: 1, name: "架空の確認対象者", phone: "09000000991", district: "central", status: "ACTIVE", topics: ["elder-watch"], identityVerified: true, phoneVerified: true, attestation: "架空の確認記録", confirmationMethod: "対面", confirmedAt: new Date().toISOString(), availability: schedule });
+      const { workflow } = await saveWorkflow(db, scope, { name: "架空の見守り", purpose: "ELDER_WATCH", departmentKey: "resident-support", body: "電話確認です", voiceId: "Takumi", questionVersion: QUESTION_VERSION, schedule, maxRetries: 1, retryIntervalMinutes: 5, assigneeId: scope.actorId, dueAt: new Date(Date.now() + 7 * 86400000).toISOString(), flowBindingId: flow.id });
+      const { target } = await setWorkflowTarget(db, scope, workflow.workflowId, { version: workflow.revision, contactId: registered.contactId, businessEvidence: { purpose: "ELDER_WATCH", availabilityRevision: 2, confirmedAvailability: schedule }, excluded: false });
+      await t.test("targets selected before setup are saved atomically with their workflow", async () => {
+        const setup = { name: "対象者から作成", purpose: "ELDER_WATCH", departmentKey: "resident-support", body: "電話確認です", voiceId: "Takumi", questionVersion: QUESTION_VERSION, schedule, maxRetries: 0, retryIntervalMinutes: 5, assigneeId: scope.actorId, dueAt: new Date(Date.now() + 86400000).toISOString(), flowBindingId: flow.id };
+        const evidence = { purpose: "ELDER_WATCH", availabilityRevision: 2, confirmedAvailability: schedule };
+        const count = await db.municipalWorkflowRevision.count();
+        await assert.rejects(saveWorkflow(db, scope, { ...setup, initialTargets: [{ contactId: registered.contactId, businessEvidence: evidence, excluded: false }, { contactId: "foreign-contact", businessEvidence: evidence, excluded: false }] }), error => error instanceof OutreachContractError && error.code === "NOT_FOUND");
+        assert.equal(await db.municipalWorkflowRevision.count(), count);
+        const saved = await saveWorkflow(db, scope, { ...setup, initialTargets: [{ contactId: registered.contactId, businessEvidence: evidence, excluded: false }] });
+        assert.equal(saved.targets.length, 1);
+        assert.equal(saved.targets[0].workflowRevisionId, saved.workflow.id);
+      });
+      let sends = 0;
+      const provider: MunicipalProvider = { async readiness() { return { ready: true, missing: [], accountId: "municipal-test-account", flowBindingId: flow.id }; }, async send() { sends++; return { state: "ACCEPTED", engagementId: `engagement-${sends}` }; }, async reconcile() { return { state: "UNKNOWN" }; } };
+      await t.test("a separate preference revision invalidates the confirmed preview", async () => {
+        const preview = await previewWorkflowRun(db, scope, workflow.workflowId, { version: workflow.revision, selection: [target.id], operationKey: "municipal_preview_stale" }, provider);
+        const preference = await db.municipalNotificationPreference.findFirstOrThrow({ where: { contactId: registered.contactId, topic: "elder-watch" } });
+        await db.municipalNotificationPreference.update({ where: { id: preference.id }, data: { confirmedAt: new Date(preference.confirmedAt!.getTime() + 1) } });
+        await assert.rejects(queueWorkflowRun(db, scope, workflow.workflowId, { version: workflow.revision, snapshotId: preview.snapshotId, digest: preview.digest, operationKey: "municipal_preview_stale" }, provider), error => error instanceof OutreachContractError && error.code === "TARGET_CHANGED");
+        assert.equal(await db.municipalScheduleJob.count(), 0); assert.equal(sends, 0);
+      });
+      const key = "municipal_preview_valid", preview = await previewWorkflowRun(db, scope, workflow.workflowId, { version: workflow.revision, selection: [target.id], operationKey: key }, provider);
+      const payload = { version: workflow.revision, snapshotId: preview.snapshotId, digest: preview.digest, operationKey: key };
+      const queued = await queueWorkflowRun(db, scope, workflow.workflowId, payload, provider);
+      await queueWorkflowRun(db, scope, workflow.workflowId, payload, provider);
+      assert.equal(await db.municipalScheduleJob.count(), 1);
+      const job = await db.municipalScheduleJob.findFirstOrThrow();
+      await municipalTick(db, { provider, now: job.dueAt });
+      await municipalTick(db, { provider, now: job.dueAt });
+      assert.equal(sends, 1);
+      const outbox = await db.municipalOutbox.findFirstOrThrow(), attempt = await db.municipalCallAttempt.findFirstOrThrow();
+      const secret = "municipal-runtime-test-secret-000000000000", authorization = `Bearer ${secret}`;
+      const capability = await issueAttemptCapability(db, { correlationId: outbox.correlationId, providerAccountId: attempt.providerAccountId, flowBindingId: flow.id, engagementId: attempt.engagementId }, authorization, secret);
+      const receipt = { receiptId: "receipt-1", attemptCapability: capability.attemptCapability, providerAccountId: attempt.providerAccountId, flowBindingId: flow.id, engagementId: attempt.engagementId, questionVersion: QUESTION_VERSION, identityState: "VERIFIED", ackState: "CONFIRMED", recognitionState: "CLEAR", answers: { usual: { value: "USUAL", input: "DTMF" }, callback: { value: "NO", input: "VOICE" } }, occurredAt: new Date().toISOString() };
+      await t.test("answers before the dialer event stay pending; delayed events update only the derived result", async () => {
+        await acceptAnswerReceipt(db, receipt, authorization, secret);
+        assert.equal((await acceptAnswerReceipt(db, receipt, authorization, secret)).duplicate, true);
+        const before = await getMunicipalRun(db, scope, queued.runId);
+        assert.equal(before.run.targets[0].attempts[0].responses[0].outcome.phoneConfirmed, false);
+        const now = new Date(), timestamp = String(Math.floor(now.getTime() / 1000));
+        const raw = JSON.stringify({ event: "contact_center.outbound_campaign_dialer_status", event_ts: now.getTime(), payload: { account_id: attempt.providerAccountId, object: { engagement_id: attempt.engagementId, campaign_dialer_status: "consumer_answer", date_time_ms: now.toISOString() } } });
+        const headers = new Headers({ "x-zm-request-timestamp": timestamp, "x-zm-signature": `v0=${createHmac("sha256", secret).update(`v0:${timestamp}:${raw}`).digest("hex")}` });
+        await acceptProviderEvent(db, raw, headers, secret, now); await acceptProviderEvent(db, raw, headers, secret, now);
+        assert.equal((await processMunicipalInbox(db)).applied, 1);
+        const after = await getMunicipalRun(db, scope, queued.runId);
+        assert.equal(after.run.targets[0].attempts[0].responses[0].outcome.phoneConfirmed, true);
+        assert.equal(after.run.targets[0].state, "CONFIRMED");
+        assert.equal(((await db.municipalResponse.findFirstOrThrow()).outcome as { classification: string }).classification, "PENDING");
+        assert.equal(await db.municipalResponse.count(), 1); assert.equal(sends, 1);
+        await assert.rejects(acceptAnswerReceipt(db, { ...receipt, receiptId: "receipt-2", answers: { ...receipt.answers, callback: { value: "YES", input: "VOICE" } } }, authorization, secret), error => error instanceof OutreachContractError && error.code === "ANSWER_RECONCILIATION_REQUIRED");
+        assert.equal(await db.municipalResponse.count(), 1);
+        await db.municipalProviderInbox.create({ data: { accountId: "foreign-account", engagementId: attempt.engagementId, dedupKey: "foreign-issue", eventKind: "answer-receipt", occurredAt: now, payload: { private: "must-not-leak" }, state: "QUARANTINED", errorCode: "QUESTION_VERSION_MISMATCH" } });
+        const reconciled = await getMunicipalRun(db, scope, queued.runId);
+        assert.equal(reconciled.run.eventIssues.length, 1);
+        assert.equal(reconciled.run.eventIssues[0].errorCode, "ADDITIONAL_RECEIPT_REQUIRES_REVIEW");
+        assert.equal("payload" in reconciled.run.eventIssues[0], false);
+        assert.equal("accountId" in reconciled.run.eventIssues[0], false);
+        assert.equal(reconciled.run.targets[0].state, "CONFIRMED");
+        assert.equal(await db.municipalResponse.count(), 1);
+      });
+    } finally { globalThis.fetch = originalFetch; await context.close(); }
+  });
+});

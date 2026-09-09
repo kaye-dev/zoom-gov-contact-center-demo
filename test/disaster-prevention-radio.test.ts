@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-import { dictionaries, locales } from '../app/i18n/dictionaries';
+import { locales } from '../app/i18n/dictionaries';
+import { defaultTenantDictionaries as dictionaries } from '../app/i18n/build-dictionary';
 import { listPublicSitemapPaths } from '../lib/search-indexing';
 
 const route = '/life/emergency-safety-disaster/disaster-prevention-radio';
@@ -81,10 +82,12 @@ test('DR-02 page structure and metadata', () => {
   assert.match(viewSource, /id="registration-service"/);
   assert.match(viewSource, /id="phone-service"/);
   assert.match(viewSource, /id="radio-contact"/);
-  assert.match(pageSource, /export const metadata: Metadata/);
+  assert.match(pageSource, /export async function generateMetadata\(\): Promise<Metadata>/);
+  // メタデータのサイト名はHostが決めたテナントに追従する。
+  assert.match(pageSource, /await getRequestDictionary\(\)/);
   assert.match(
     pageSource,
-    /title: `\$\{pageCopy\.title\} \| \$\{dictionary\.cityName\}`/,
+    /title: `\$\{pageCopy\.title\} \| \$\{dictionary\.siteName\}`/,
   );
   assert.match(pageSource, /description: pageCopy\.lead/);
 });

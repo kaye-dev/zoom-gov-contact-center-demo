@@ -4,7 +4,8 @@ import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { dictionaries, locales } from "../app/i18n/dictionaries";
+import { locales } from "../app/i18n/dictionaries";
+import { defaultTenantDictionaries as dictionaries } from "../app/i18n/build-dictionary";
 import {
   ReservationApiJsonCodeBlock,
   tokenizeReservationApiJson,
@@ -21,6 +22,7 @@ import {
 } from "../lib/server/reservation-api-keys";
 import { parseReservationCallerPhone } from "../lib/reservation-api";
 import type { PrismaClient } from "../lib/generated/prisma/client";
+import { DEFAULT_TENANT_KEY } from "../lib/tenants";
 
 test("raw reservation API keys use cryptographic format and one-way digest", () => {
   const first = generateReservationApiKey();
@@ -96,8 +98,8 @@ test("authenticated context returns only the caller ANI digest", async () => {
       },
     },
     reservationApiKey: {
-      async update() {
-        return {};
+      async updateMany() {
+        return { count: 1 };
       },
     },
     reservationApiMonthlyUsage: {
@@ -117,7 +119,7 @@ test("authenticated context returns only the caller ANI digest", async () => {
     },
   } as unknown as PrismaClient;
 
-  const result = await authenticateReservationApiRequest(prisma, {
+  const result = await authenticateReservationApiRequest(prisma, DEFAULT_TENANT_KEY, {
     authorization: `Bearer ${generated.rawKey}`,
     callerPhone: phone,
     now,
@@ -136,12 +138,66 @@ test("authenticated context returns only the caller ANI digest", async () => {
   assert.equal(serialized.includes(phone), false);
 });
 
+test("an API key from another tenant is rejected before permissions or quota use", async () => {
+  const generated = generateReservationApiKey();
+  const queries: Array<{ text: string; values: unknown[] }> = [];
+  const transaction = {
+    async $queryRaw(query: { strings: string[]; values: unknown[] }) {
+      queries.push({ text: query.strings.join("?"), values: [...query.values] });
+      return [];
+    },
+    reservationApiKeyPermission: {
+      async findMany() {
+        throw new Error("permissions must not be read for a tenant mismatch");
+      },
+    },
+  };
+  const prisma = {
+    async $transaction(operation: (client: typeof transaction) => unknown) {
+      return operation(transaction);
+    },
+  } as unknown as PrismaClient;
+
+  const result = await authenticateReservationApiRequest(prisma, DEFAULT_TENANT_KEY, {
+    authorization: `Bearer ${generated.rawKey}`,
+  });
+  assert.deepEqual(result, { status: "UNAUTHORIZED" });
+  assert.equal(queries.length, 1);
+  assert.match(queries[0]!.text, /"publicId" = \? AND "siteKey" = \?/u);
+  assert.deepEqual(queries[0]!.values, [generated.publicId, DEFAULT_TENANT_KEY]);
+});
+
+test("Reservation API key management and admin pages require a tenant key", () => {
+  const keySource = sourceFile("../lib/server/reservation-api-keys.ts");
+  assert.match(keySource, /data:\s*\{\s*siteKey: tenantKey,/u);
+  assert.match(keySource, /findMany\(\{\s*where: \{ siteKey: tenantKey \}/u);
+  assert.match(keySource, /findFirst\(\{\s*where: \{ id: input\.id, siteKey: tenantKey \}/u);
+  const usageSource = sourceFile("../lib/server/reservation-api-usage.ts");
+  assert.match(usageSource, /updateMany\(\{\s*where: \{ id: input\.keyId, siteKey: tenantKey/u);
+
+  const apiSource = sourceFile("../app/api/[[...route]]/route.ts");
+  assert.match(
+    apiSource,
+    /authenticateReservationApiRequest\(\s*c\.get\("prisma"\),\s*c\.get\("tenantKey"\),/u,
+  );
+  for (const relativePath of [
+    "../app/admin/reservations/api-keys/page.tsx",
+    "../app/admin/reservations/api-keys/logs/page.tsx",
+    "../app/admin/reservations/api-keys/logs/[id]/page.tsx",
+  ]) {
+    const pageSource = sourceFile(relativePath);
+    assert.match(pageSource, /getAdminPageTenant/u, relativePath);
+    assert.match(pageSource, /if \(!selected\.ok\) return <AdminTenantChoice/u, relativePath);
+    assert.match(pageSource, /tenant\.key/u, relativePath);
+  }
+});
+
 test("API key management keeps a VIEW-enabled link to request logs", () => {
   const source = sourceFile(
     "../app/admin/reservations/api-keys/ReservationApiKeysView.tsx",
   );
   assert.match(source, /id="api-log-list-link"/u);
-  assert.match(source, /href="\/admin\/reservations\/api-keys\/logs"/u);
+  assert.ok(source.includes("href={`/admin/reservations/api-keys/logs?tenant=${tenantKey}`}"));
   assert.match(source, /\{copy\.logs\.entry\}/u);
   assert.doesNotMatch(
     source,

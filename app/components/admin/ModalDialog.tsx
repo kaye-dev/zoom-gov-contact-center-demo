@@ -1,6 +1,7 @@
 "use client";
 
 import { createPortal } from "react-dom";
+import { modalStackFor } from "./modal-stack";
 import {
   useEffect,
   useEffectEvent,
@@ -65,23 +66,9 @@ export function ModalDialog({
   useEffect(() => {
     if (!isClient) return;
 
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-    const previousOverflow = document.body.style.overflow;
     const portalRoot = dialogRef.current?.parentElement;
-    const siblings = Array.from(document.body.children).filter(
-      (element) => element !== portalRoot,
-    );
-    const previousStates = siblings.map((element) => ({
-      element: element as HTMLElement,
-      inert: (element as HTMLElement).inert,
-      ariaHidden: element.getAttribute("aria-hidden"),
-    }));
-
-    document.body.style.overflow = "hidden";
-    for (const { element } of previousStates) {
-      element.inert = true;
-      element.setAttribute("aria-hidden", "true");
-    }
+    if (!portalRoot) return;
+    const registration = modalStackFor(document).register(portalRoot);
 
     const focusTarget =
       initialFocusRef?.current ??
@@ -90,18 +77,13 @@ export function ModalDialog({
     focusTarget?.focus();
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeFromEffect();
+      if (event.key === "Escape" && registration.isTop()) closeFromEffect();
     };
     document.addEventListener("keydown", onKeyDown);
 
     return () => {
       document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = previousOverflow;
-      for (const { element, inert, ariaHidden } of previousStates) {
-        element.inert = inert;
-        if (ariaHidden === null) element.removeAttribute("aria-hidden");
-        else element.setAttribute("aria-hidden", ariaHidden);
-      }
+      const previouslyFocused = registration.release();
       previouslyFocused?.focus();
     };
   }, [isClient, initialFocusRef]);

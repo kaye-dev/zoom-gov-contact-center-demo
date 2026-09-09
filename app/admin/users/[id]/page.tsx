@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { defaultLocale, dictionaries } from "@/app/i18n/dictionaries";
+import { chromeDictionaries, defaultLocale } from "@/app/i18n/dictionaries";
 import { canAdminAccess } from "@/lib/admin-access/authorization";
 import { getSessionUser } from "@/lib/server/auth/helpers";
 import { requireAdminAccess } from "@/lib/server/admin-access/server";
@@ -10,7 +10,7 @@ import { withPrisma } from "@/lib/server/prisma";
 import { UserDetailsView } from "./UserDetailsView";
 
 export const metadata: Metadata = {
-  title: dictionaries[defaultLocale].admin.userManagement.detailsPageTitle,
+  title: chromeDictionaries[defaultLocale].admin.userManagement.detailsPageTitle,
 };
 
 export default async function UserDetailsPage({

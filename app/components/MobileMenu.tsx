@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { useI18n } from '../i18n/LanguageProvider';
 import { StarEmblem } from './svg/StarEmblemIcon';
 import { PinIcon } from './svg/PinIcon';
@@ -27,7 +28,7 @@ const FOCUSABLE_SELECTOR = [
  * lg 未満でヘッダー右側に隠れるナビ項目（アクセス / 言語 / テーマ）をまとめて表示する。
  */
 export function MobileMenu({ open, onClose }: MobileMenuProps) {
-  const { t } = useI18n();
+  const { t, tenantKey } = useI18n();
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -116,9 +117,9 @@ export function MobileMenu({ open, onClose }: MobileMenuProps) {
           <div className="flex items-center gap-2">
             <StarEmblem className="h-9 w-9 shrink-0" />
             <div className="leading-tight">
-              <p className="text-lg font-bold tracking-wide">{t.cityName}</p>
+              <p className="text-lg font-bold tracking-wide">{t.siteName}</p>
               <p className="text-[9px] font-semibold tracking-[0.2em] text-fg-muted">
-                {t.cityNameRoman}
+                {t.siteNameRoman}
               </p>
             </div>
           </div>
@@ -145,7 +146,8 @@ export function MobileMenu({ open, onClose }: MobileMenuProps) {
           </a>
 
           <div className="border-t border-line-subtle pt-3">
-            <LanguageMenu />
+            {tenantKey === "lg" && <Link href="/notifications/register" onClick={onClose} className="block min-h-11 py-3 font-medium focus-visible:outline-2 focus-visible:outline-accent">{t.municipalOutreach.title}</Link>}
+          <LanguageMenu />
           </div>
 
           <div className="border-t border-line-subtle pt-3">

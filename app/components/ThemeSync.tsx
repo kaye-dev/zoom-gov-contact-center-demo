@@ -11,7 +11,7 @@ export function resolveReviewTheme(
   input: { hostname: string; search: string },
   environment: string | undefined = process.env.NODE_ENV,
 ): ReviewTheme | null {
-  if (environment === 'production' || !LOOPBACK_HOSTNAMES.has(input.hostname)) {
+  if (environment === 'production' || (!LOOPBACK_HOSTNAMES.has(input.hostname) && !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.localhost$/u.test(input.hostname))) {
     return null;
   }
   const candidates = new URLSearchParams(input.search).getAll('theme');

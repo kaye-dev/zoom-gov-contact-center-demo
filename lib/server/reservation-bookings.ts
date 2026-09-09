@@ -1,3 +1,4 @@
+import type { TenantKey } from "@/lib/tenants";
 import { Prisma, type PrismaClient } from "@/lib/generated/prisma/client";
 import {
   isReservationServiceKey,
@@ -113,6 +114,7 @@ export function decodeReservationBookingListCursor(
 
 export async function listReservationBookings(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   input: ReservationBookingListInput,
 ): Promise<{
   bookings: ReservationBookingListSummary[];
@@ -133,6 +135,7 @@ export async function listReservationBookings(
 
   const rows = await prisma.reservationBooking.findMany({
     where: {
+      siteKey: tenantKey,
       ...(conditions.length > 0 ? { AND: conditions } : {}),
       ...(input.service ? { serviceKey: input.service } : {}),
       ...(input.source ? { isDemo: input.source === "DEMO" } : {}),

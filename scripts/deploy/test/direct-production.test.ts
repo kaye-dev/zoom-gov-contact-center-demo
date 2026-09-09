@@ -403,6 +403,42 @@ test("reviewed migration manifest exactly classifies the current SHA-verified ch
         name: "20260901160000_add_reservation_caller_ani_binding",
         classification: "expand-compatible",
       },
+      {
+        name: "20260906120000_add_site_key_tenant_scope",
+        classification: "destructive-reviewed",
+      },
+      {
+        name: "20260906150000_drop_zaad_site_key_default",
+        classification: "destructive-reviewed",
+      },
+      {
+        name: "20260906180000_drop_reservation_api_key_site_key_default",
+        classification: "destructive-reviewed",
+      },
+      {
+        name: "20260906190000_add_univ_online_consultation_settings",
+        classification: "destructive-reviewed",
+      },
+      {
+        name: "20260907070000_add_online_consultation_memo",
+        classification: "destructive-reviewed",
+      },
+      {
+        name: "20260908060000_university_outreach",
+        classification: "destructive-reviewed",
+      },
+      {
+        name: "20260908063000_university_outreach_action_receipts",
+        classification: "destructive-reviewed",
+      },
+      {
+        name: "20260909050000_outreach_crm_municipal",
+        classification: "destructive-reviewed",
+      },
+      {
+        name: "20260909070000_outreach_registration_reception",
+        classification: "destructive-reviewed",
+      },
     ],
   );
 });

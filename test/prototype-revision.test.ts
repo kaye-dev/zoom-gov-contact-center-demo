@@ -973,3 +973,36 @@ test("symlink経由のCLI起動でもrevisionを出力する", async (context) =
     }),
   );
 });
+
+
+test("contract v2 requires the complete feasible product of each target's own states", async (context) => {
+  const fixture = await createRepositoryFixture(context);
+  const prototype = await createPrototype(fixture, "target-states", [["index.html", "<!doctype html>\n"], ["other.html", "<!doctype html>\n"]]);
+  const baseline = JSON.parse(defaultUiContract);
+  const contract = {
+    ...baseline,
+    version: 2,
+    baselineStateInventory: ["default", "error"],
+    comparisonTargets: [
+      { ...baseline.comparisonTargets[0], states: ["default"] },
+      { id: "other", entry: "other.html", route: "/other", surface: "page", states: ["error"] },
+    ],
+    parityMatrix: [
+      ...baseline.parityMatrix,
+      ...baseline.parityMatrix.map((row: Record<string, unknown>) => ({ ...row, id: `other-${row.id}`, targetId: "other", entry: "other.html", route: "/other", state: "error" })),
+    ],
+  };
+  const contractPath = path.join(prototype.absolute, "ui-contract.json");
+  await writeFile(contractPath, JSON.stringify(contract));
+  revisionFrom(runRevision(fixture, [prototype.relative]));
+  for (const [invalid, expected] of [
+    [{ ...contract, parityMatrix: contract.parityMatrix.slice(1) }, /missing target\/state\/breakpoint\/theme coverage/i],
+    [{ ...contract, parityMatrix: [{ ...contract.parityMatrix[0], state: "error" }, ...contract.parityMatrix.slice(1)] }, /state is not applicable to target/i],
+    [{ ...contract, baselineStateInventory: ["default", "error", "unused"] }, /must equal the union/i],
+    [{ ...contract, comparisonTargets: [{ ...contract.comparisonTargets[0], states: [] }, contract.comparisonTargets[1]] }, /states.*non-empty array/i],
+    [{ ...contract, comparisonTargets: [{ ...contract.comparisonTargets[0], states: ["unknown"] }, contract.comparisonTargets[1]] }, /target state is not declared/i],
+  ] as const) {
+    await writeFile(contractPath, JSON.stringify(invalid));
+    assertRejected(runRevision(fixture, [prototype.relative]), expected);
+  }
+});

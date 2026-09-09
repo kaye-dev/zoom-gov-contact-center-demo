@@ -1,4 +1,6 @@
 "use client";
+import { AdminTenantRouteSelect } from "@/app/components/admin/AdminTenantRouteSelect";
+import { adminFetch as fetch } from "@/lib/admin-fetch";
 
 import { settingsSectionClassName, settingsInputFocusClassName } from "@/app/components/admin/settings-form-styles";
 import { AdminPageTitleHelp } from "@/app/components/admin/AdminPageTitleHelp";
@@ -299,6 +301,7 @@ export function MaintenanceSettingsForm({
               label={t.admin.pageDescriptionLabel.replace("{title}", copy.title)}
             />
           </div>
+          <AdminTenantRouteSelect dirty={mode !== savedConfig?.mode || scheduledStartAtJst !== savedScheduledStartAtJst || scheduledEndAtJst !== savedScheduledEndAtJst} saving={isSubmitting} />
           <span
             className={`inline-flex rounded-full border px-3 py-1 text-sm font-bold ${environmentBadgeClass(environment)}`}
           >

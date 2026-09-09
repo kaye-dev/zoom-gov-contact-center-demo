@@ -50,7 +50,7 @@ export function ForgotPasswordForm() {
             {t.auth.resetRequestSent}
           </p>
           <Link
-            href="/login"
+            href="/admin/login"
             className="inline-flex text-sm font-semibold text-accent hover:underline"
           >
             {t.auth.login}

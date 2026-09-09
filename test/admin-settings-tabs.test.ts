@@ -9,11 +9,13 @@ import { PhoneSettingsForm } from "../app/admin/phone-settings/PhoneSettingsForm
 import { ChatSettingsForm } from "../app/admin/chat-settings/ChatSettingsForm";
 import { buildAdminNavigation } from "../app/admin/admin-navigation";
 import { LanguageProvider } from "../app/i18n/LanguageProvider";
-import { dictionaries, locales } from "../app/i18n/dictionaries";
+import { locales } from "../app/i18n/dictionaries";
+import { DEFAULT_TENANT_KEY } from "../lib/tenants";
+import { defaultTenantDictionaries as dictionaries } from "../app/i18n/build-dictionary";
 
 const router = { bfcacheId: "settings-tabs-test", back() {}, forward() {}, refresh() {}, hmrRefresh() {}, push() {}, replace() {}, prefetch() {} };
 const renderPage = (children: ReactNode) => {
-  const languageProps = { availableLocales: locales, children };
+  const languageProps = { availableLocales: locales, tenantKey: DEFAULT_TENANT_KEY, children };
   return renderToStaticMarkup(createElement(AppRouterContext.Provider, { value: router },
     createElement(LanguageProvider, languageProps)));
 };
@@ -37,7 +39,7 @@ test("phone and chat are independently permission-filtered and translated primar
 
 test("phone renders the requested two tabs with each existing field in its own mounted panel", () => {
   for (const canEdit of [true, false]) {
-    const html = renderPage(createElement(PhoneSettingsForm, {
+    const html = renderPage(createElement(PhoneSettingsForm, { initialTenant: "lg",
       canEdit, orderedLocales: [{ locale: "ja", enabled: true }],
       initialSettings: { representativePhone: { display: "03-1234-5678", e164: "+81312345678" }, aiPhoneNumbers: { ja: "+81311111111", en: null, "zh-Hans": null, "zh-Hant": null, ko: null } },
     }));
@@ -50,13 +52,13 @@ test("phone renders the requested two tabs with each existing field in its own m
     assert.doesNotMatch(representative, /id="ai-phone-ja"/);
     assert.match(html, /id="ai-phone-panel"[^>]*hidden=""[\s\S]*id="ai-phone-ja"/);
     assert.equal(/readonly=""/i.test(html), !canEdit);
-    assert.match(html, /<form noValidate=""/i);
+    assert.match(html, /<form[^>]*noValidate=""/i);
   }
 });
 
 test("chat renders three separate mounted panels and defaults to method regardless of configured mode", () => {
   for (const activeMode of ["DISABLED", "CAMPAIGN", "CONTACT_CENTER_ENTRY_ID"] as const) {
-    const html = renderPage(createElement(ChatSettingsForm, { canEdit: true, initialSettings: {
+    const html = renderPage(createElement(ChatSettingsForm, { initialTenant: "lg", canEdit: true, initialSettings: {
       activeMode, campaignWebTag: "campaign-draft", campaignMemo: "campaign memo", contactCenterEntryIdWebTag: "entry-draft", contactCenterEntryIdMemo: "entry memo",
     } }));
     assert.equal((html.match(/role="tab"/g) ?? []).length, 3);
@@ -130,11 +132,11 @@ test("cross-tab validation reveals only the first invalid panel before focus and
 test("form saves remain page-scoped and validation happens before network calls", () => {
   for (const [path, initial] of [["phone-settings/PhoneSettingsForm", "representative-phone"], ["chat-settings/ChatSettingsForm", "chat-method"]]) {
     const source = readFileSync(new URL(`../app/admin/${path}.tsx`, import.meta.url), "utf8");
-    assert.ok(source.includes(`useState("${initial}")`));
-    assert.match(source, /<form noValidate onSubmit=\{submit\}/);
-    assert.ok(source.indexOf("validateSettingsTabs(event.currentTarget, setActiveSection)") < source.indexOf("await fetch("));
-    assert.match(source, /body: JSON.stringify\(settings\)/);
-    assert.match(source, /if \(!canEdit\) return/);
+    assert.ok(source.includes(`: "${initial}")`));
+    assert.match(source, /<form data-admin-form noValidate onSubmit=\{submit\}/);
+    assert.ok(source.indexOf("validateSettingsTabs(event.currentTarget, setActiveSection)") < source.indexOf("await control.save(settings)"));
+    assert.match(source, /await control.save\(settings\)/);
+    assert.match(source, /if \(!canEdit \|\| isSubmitting/);
     assert.doesNotMatch(source, /<AdminSectionNavigation/);
   }
 });

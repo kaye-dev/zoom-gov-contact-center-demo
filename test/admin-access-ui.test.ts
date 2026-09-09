@@ -5,7 +5,8 @@ import { createElement } from "react";
 import { renderAdmin } from "./admin-ui-render";
 import { RolesView } from "../app/admin/roles/RolesView";
 
-import { dictionaries, locales } from "../app/i18n/dictionaries";
+import { locales } from "../app/i18n/dictionaries";
+import { defaultTenantDictionaries as dictionaries } from "../app/i18n/build-dictionary";
 import { ADMIN_RESOURCE_CATALOG } from "../lib/admin-access/catalog";
 import { ADMIN_ACCESS_ACTIONS, ADMIN_RESOURCE_KEYS } from "../lib/admin-access/types";
 import {

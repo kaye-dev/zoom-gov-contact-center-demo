@@ -8,6 +8,7 @@ import {
   type MaintenanceEnvironment,
   type MaintenanceUpdateValidationResult,
 } from "@/lib/maintenance-config";
+import { resolveTenantFromHost, type TenantKey } from "@/lib/tenants";
 
 import {
   writeMaintenanceSettingWithPrisma,
@@ -24,6 +25,7 @@ import {
 } from "./maintenance-store";
 
 type SaveMaintenanceSettingsBaseOptions = {
+  tenantKey?: TenantKey;
   requestHostname: string | null | undefined;
   env?: MaintenanceEnvironmentVariables;
   now?: Date;
@@ -78,10 +80,13 @@ export async function saveMaintenanceSettings(
     parsed.value.config,
     parsed.value.expectedRevision,
   );
+  // メンテナンス設定はテナントと環境の組で持つ。テナントは環境判定と同じ
+  // リクエストHostから解決する。
+  const tenantKey = options.tenantKey ?? resolveTenantFromHost(options.requestHostname, env).key;
   const writeSetting =
     options.writeSetting ??
     ((value: MaintenanceStoreUpdate) =>
-      writeMaintenanceSettingWithPrisma(options.prisma, value));
+      writeMaintenanceSettingWithPrisma(options.prisma, tenantKey, value));
 
   try {
     const result = await writeSetting(update);

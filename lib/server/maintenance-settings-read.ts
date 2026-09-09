@@ -12,6 +12,8 @@ import {
   type MaintenanceEnvironment,
 } from "@/lib/maintenance-config";
 
+import { resolveTenantFromHost, type TenantKey } from "@/lib/tenants";
+
 import { readMaintenanceSettingFromPostgres } from "./maintenance-postgres-reader";
 import {
   type MaintenanceEnvironmentVariables,
@@ -29,6 +31,7 @@ export type MaintenanceSettingsSnapshot = {
 };
 
 export type MaintenanceSettingsOptions = {
+  tenantKey?: TenantKey;
   requestHostname: string | null | undefined;
   env?: MaintenanceEnvironmentVariables;
   now?: Date;
@@ -52,10 +55,11 @@ export async function getMaintenanceSettingsSnapshot(
     appCanonicalOrigin: env.APP_CANONICAL_ORIGIN,
   });
   const configKey = getMaintenanceConfigKey(environment);
+  const tenantKey = options.tenantKey ?? resolveTenantFromHost(options.requestHostname, env).key;
   const readSetting =
     options.readSetting ??
     ((scope: MaintenanceEnvironment) =>
-      readMaintenanceSettingFromPostgres(scope, { env }));
+      readMaintenanceSettingFromPostgres(tenantKey, scope, { env }));
 
   let storeResult: MaintenanceStoreReadResult;
   try {

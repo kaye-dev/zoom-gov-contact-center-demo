@@ -1,12 +1,16 @@
 import type { Metadata } from 'next';
 
 import { LifeIndexView } from '../components/InformationPageViews';
-import { defaultLocale, dictionaries } from '../i18n/dictionaries';
+import { getRequestDictionary } from '../i18n/server-dictionary';
 
-export const metadata: Metadata = {
-  title: `${dictionaries[defaultLocale].contentPages.lifeIndexTitle} | ${dictionaries[defaultLocale].cityName}`,
-  description: dictionaries[defaultLocale].contentPages.lifeIndexLead,
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const dictionary = await getRequestDictionary();
+
+  return {
+    title: `${dictionary.contentPages.lifeIndexTitle} | ${dictionary.siteName}`,
+    description: dictionary.contentPages.lifeIndexLead,
+  };
+}
 
 export default function LifeIndexPage() {
   return <LifeIndexView />;

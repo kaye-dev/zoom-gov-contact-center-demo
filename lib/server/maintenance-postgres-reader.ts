@@ -22,6 +22,8 @@ export const MAINTENANCE_POSTGRES_POOL_MAX = 2;
 // Keep the read bounded and fail closed, but allow that cold connection to
 // complete instead of classifying ordinary cross-region latency as downtime.
 export const MAINTENANCE_POSTGRES_CONNECTION_TIMEOUT_MS = 10_000;
+import type { TenantKey } from "@/lib/tenants";
+
 export const MAINTENANCE_POSTGRES_QUERY_TIMEOUT_MS = 2_000;
 export const MAINTENANCE_POSTGRES_READ_TIMEOUT_MS = 15_000;
 export const MAINTENANCE_POSTGRES_IDLE_TIMEOUT_MS = 10_000;
@@ -36,7 +38,8 @@ SELECT
   "revision",
   "updatedAt"
 FROM "site_maintenance_settings"
-WHERE "environment" = $1::"MaintenanceEnvironment"
+WHERE "siteKey" = $1
+  AND "environment" = $2::"MaintenanceEnvironment"
 LIMIT 1
 `.trim();
 
@@ -71,6 +74,7 @@ let defaultPool: Pool | undefined;
 let defaultPoolConnectionString: string | undefined;
 
 export async function readMaintenanceSettingFromPostgres(
+  tenantKey: TenantKey,
   environment: MaintenanceEnvironment,
   options: MaintenancePostgresReadOptions = {},
 ): Promise<MaintenanceStoreReadResult> {
@@ -127,7 +131,7 @@ export async function readMaintenanceSettingFromPostgres(
 
       const result = await client.query({
         text: MAINTENANCE_POSTGRES_READ_QUERY,
-        values: [toMaintenanceDatabaseEnvironment(environment)],
+        values: [tenantKey, toMaintenanceDatabaseEnvironment(environment)],
       });
 
       if (result.rows.length === 0) return { status: "MISSING" };

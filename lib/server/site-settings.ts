@@ -11,12 +11,15 @@ import {
   type SiteLocale,
 } from "@/lib/site-settings";
 
+import type { TenantKey } from "@/lib/tenants";
+
 import { withPrisma } from "./prisma";
 
 export const getLanguageSettings = cache(
-  async (): Promise<LanguageSettings> =>
+  async (tenantKey: TenantKey): Promise<LanguageSettings> =>
     withPrisma(async (prisma) => {
     const rows = await prisma.localeDisplaySetting.findMany({
+      where: { siteKey: tenantKey },
       orderBy: [{ displayOrder: "asc" }, { locale: "asc" }],
       select: {
         locale: true,
@@ -47,14 +50,16 @@ export const getLanguageSettings = cache(
 
 export async function saveLanguageSettings(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   settings: LanguageSettings,
 ): Promise<LanguageSettings> {
   await prisma.$transaction(async (transaction) => {
     for (const [displayOrder, setting] of settings.locales.entries()) {
       const locale = toDatabaseSiteLocale(setting.locale);
       await transaction.localeDisplaySetting.upsert({
-        where: { locale },
+        where: { siteKey_locale: { siteKey: tenantKey, locale } },
         create: {
+          siteKey: tenantKey,
           locale,
           enabled: setting.enabled,
           displayOrder,

@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { isTenantKey } from "@/lib/tenants";
+import { ADMIN_SETTINGS_RESOURCES } from "@/lib/admin-settings-tenant";
 import {
   useEffect,
   useRef,
@@ -11,6 +14,7 @@ import {
 import { CalendarMonthIcon } from "@/app/components/svg/CalendarMonthIcon";
 import { CodeIcon } from "@/app/components/svg/CodeIcon";
 import { PhoneIcon } from "@/app/components/svg/PhoneIcon";
+import { OnlineConsultationIcon } from "@/app/components/svg/OnlineConsultationIcon";
 import { ChatIcon } from "@/app/components/svg/ChatIcon";
 import { ShieldIcon } from "@/app/components/svg/ShieldIcon";
 import { ChevronLeftIcon } from "@/app/components/svg/ChevronLeftIcon";
@@ -47,6 +51,7 @@ const primaryIcons: Record<
   users: GroupIcon,
   "phone-settings": PhoneIcon,
   "chat-settings": ChatIcon,
+  "online-consultation-settings": OnlineConsultationIcon,
   settings: SettingsIcon,
   roles: ShieldIcon,
   "developer-api": CodeIcon,
@@ -69,6 +74,7 @@ export function AdminNavigation({
   onSignOut,
 }: AdminNavigationProps) {
   const { t } = useI18n();
+  const selectedTenant = useSearchParams()?.get("tenant");
   const accountContainerRef = useRef<HTMLDivElement>(null);
   const accountTriggerRef = useRef<HTMLButtonElement>(null);
   const accountMenuRef = useRef<HTMLDivElement>(null);
@@ -162,7 +168,7 @@ export function AdminNavigation({
           return (
             <Link
               key={item.key}
-              href={item.href}
+              href={selectedTenant && isTenantKey(selectedTenant) && ADMIN_SETTINGS_RESOURCES.some(resource => item.href === `/admin/${resource}`) ? `${item.href}?tenant=${selectedTenant}` : item.href}
               aria-current={isCurrent ? "page" : undefined}
               aria-label={!showLabels ? item.label : undefined}
               title={!showLabels ? item.label : undefined}

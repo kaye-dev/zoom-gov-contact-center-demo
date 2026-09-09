@@ -1,15 +1,8 @@
 import type { MetadataRoute } from "next";
+import { headers } from "next/headers";
 
-import { resolveCanonicalOrigin } from "@/lib/search-indexing";
+import { buildRobotsForHost } from "@/lib/search-indexing";
 
-export default function robots(): MetadataRoute.Robots {
-  const canonicalOrigin = resolveCanonicalOrigin();
-
-  return {
-    rules: {
-      userAgent: "*",
-      allow: "/",
-    },
-    sitemap: `${canonicalOrigin}/sitemap.xml`,
-  };
+export default async function robots(): Promise<MetadataRoute.Robots> {
+  return buildRobotsForHost((await headers()).get("host"));
 }

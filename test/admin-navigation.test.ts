@@ -7,7 +7,7 @@ import {
   resolveAdminNavigationState,
   type AdminNavigationItemKey,
 } from "../app/admin/admin-navigation";
-import { dictionaries } from "../app/i18n/dictionaries";
+import { defaultTenantDictionaries as dictionaries } from "../app/i18n/build-dictionary";
 
 const allItems: AdminNavigationItemKey[] = [
   "users",
@@ -150,7 +150,7 @@ test("the admin root renders the dashboard instead of redirecting away", () => {
 test("PHONE-ALIGN-11: phone header and form align to first tab text without changing full-width navigation", () => {
   const phone = source("../app/admin/phone-settings/PhoneSettingsForm.tsx");
   const tabs = source("../app/admin/AdminSectionNavigation.tsx");
-  assert.match(phone, /data-admin-page-header\s+className="ml-1 mr-0 max-w-4xl/);
+  assert.match(phone, /data-admin-page-header\s+className="ml-1 mr-0 flex/);
   assert.match(phone, /data-admin-page-body className="ml-1 mr-0 mt-6 max-w-4xl/);
   assert.doesNotMatch(phone, /mx-auto/);
   assert.match(tabs, /px-1/);
@@ -184,4 +184,14 @@ test("every users and settings page places section navigation between header and
     assert.match(view, /data-admin-page-body/u, file);
     assert.match(view, /mt-6/u, file);
   }
+});
+
+test("outreach sidebar preserves explicit selection without inferring a tenant from the host", () => {
+  const href = (allowedTenants: string[], hostTenant: string, selectedTenant: string | null) =>
+    buildAdminNavigation(["zaad"], dictionaries.ja, { allowedTenants, hostTenant, selectedTenant }).primaryItems.find(item => item.key === "zaad")?.href;
+  assert.equal(href(["lg", "univ"], "univ", null), "/admin/zaad");
+  assert.equal(href(["lg", "univ"], "lg", "univ"), "/admin/zaad?tenant=univ");
+  assert.equal(href(["univ"], "lg", null), "/admin/zaad");
+  assert.equal(href(["univ"], "univ", "lg"), "/admin/zaad?tenant=lg");
+  assert.equal(href([], "univ", null), undefined);
 });

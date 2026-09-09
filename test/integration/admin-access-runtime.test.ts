@@ -13,6 +13,7 @@ import {
 } from "../../lib/server/admin-access/authority-service";
 import { createDatabaseContext } from "../../lib/server/prisma";
 import { withIsolatedPostgresDatabase } from "../helpers/isolated-postgres";
+import { importApiRoute } from "../helpers/import-api-route";
 
 const TEST_AUTH_SECRET = "runtime-admin-access-test-secret-000000000000";
 const FULL_ACCESS_ROLE_ID = "system-full-access";
@@ -78,7 +79,7 @@ test(
         await createSession(client, "denied-admin", "denied-admin-token");
 
         const authRoute = await import("../../app/api/auth/[...all]/route");
-        const honoRoute = await import("../../app/api/[[...route]]/route");
+        const honoRoute = await importApiRoute();
         const fullCookie = signedSessionCookie("full-admin-token");
         const deniedCookie = signedSessionCookie("denied-admin-token");
 

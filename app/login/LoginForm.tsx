@@ -1,5 +1,6 @@
 "use client";
 
+import { adminAuthHref } from "@/lib/admin-routing";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -37,7 +38,7 @@ export function LoginForm({ callbackURL }: { callbackURL: string }) {
       | { mustChangePassword?: boolean | null }
       | undefined;
 
-    router.push(user?.mustChangePassword ? "/change-password" : callbackURL);
+    router.push(user?.mustChangePassword ? adminAuthHref("change-password", callbackURL) : callbackURL);
     router.refresh();
   };
 
@@ -80,7 +81,7 @@ export function LoginForm({ callbackURL }: { callbackURL: string }) {
         </button>
       </form>
       <Link
-        href="/forgot-password"
+        href="/admin/forgot-password"
         className="mt-4 inline-flex text-sm font-semibold text-accent hover:underline"
       >
         {t.auth.forgotPassword}

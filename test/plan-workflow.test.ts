@@ -480,7 +480,7 @@ test("workflow skillと直接referenceのinstruction量は明示budget内に収�
   }
 });
 
-test("親モデル既定を持たず3つのread-only custom agentへ限定routingする", async () => {
+test("親モデル既定はAstra lowを維持し3つのread-only custom agentへ限定routingする", async () => {
   const [configText, workflow, evaluator, ...skillFiles] = await Promise.all([
     read(".codex/config.toml"),
     read("docs/development/codex-development-workflow.md"),
@@ -492,8 +492,8 @@ test("親モデル既定を持たず3つのread-only custom agentへ限定routin
   ]);
 
   const config = parseToml(".codex/config.toml");
-  assert.equal(config.model, undefined);
-  assert.equal(config.model_reasoning_effort, undefined);
+  assert.equal(config.model, "gpt-6-astra");
+  assert.equal(config.model_reasoning_effort, "low");
   assert.match(configText, /^\[mcp_servers\."openaiDeveloperDocs"\]$/m);
   assert.doesNotMatch(configText, /default_subagent_model|default_subagent_reasoning_effort|max_threads/);
 
@@ -537,7 +537,7 @@ test("親モデル既定を持たず3つのread-only custom agentへ限定routin
   ]) {
     assert.ok(workflow.includes(row), `workflow omitted custom agent routing: ${row}`);
   }
-  assert.match(workflow, /親エージェントのproject-local既定モデルは設けない/);
+  assert.match(workflow, /親エージェントのproject-local既定は`gpt-6-astra \/ low`/);
   assert.match(workflow, /composerでユーザーが選択したモデルとreasoningを維持する/);
   assert.match(workflow, /spawn時のmodelまたはreasoning overrideを渡さない/);
   assert.match(workflow, /上表以外の一般subagentは.*親taskで選択した設定を継承する/);

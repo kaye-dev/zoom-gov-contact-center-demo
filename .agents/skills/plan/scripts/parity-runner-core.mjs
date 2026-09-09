@@ -1,4 +1,4 @@
-import { validateFidelityProfile, supplementInteractionRows, compareFidelityProbe, interactionCoverage } from "./parity-fidelity.mjs";
+import { validateFidelityProfile, supplementInteractionRows, compareFidelityProbe, normalizeExpectedProbeValue, interactionCoverage } from "./parity-fidelity.mjs";
 
 const phases = new Set(["smoke", "pre-edit", "affected", "final"]);
 const fullMatrixPhases = new Set(["pre-edit", "final"]);
@@ -7,10 +7,13 @@ const legacyMatrixScopes = new Set(["targeted", "full"]);
 const coverageMatrixScopes = new Set(["coverage", "full"]);
 const fullExecutionContexts = new Set(["release", "ci", "scheduled", "explicit"]);
 const actionTypes = new Set([
+  "dblclick",
   "click",
   "press",
   "focus",
   "fill",
+  "selectOption",
+  "upload",
   "waitForVisible",
   "waitForHidden",
 ]);
@@ -158,7 +161,7 @@ function validateAction(action, label) {
   ensure(isPlainObject(action), `${label} must be an object`);
   requireNonEmptyString(action.type, `${label}.type`);
   ensure(actionTypes.has(action.type), `${label}.type is not allowed: ${action.type}`);
-  if (["click", "focus", "waitForVisible", "waitForHidden"].includes(action.type)) {
+  if (["click", "dblclick", "focus", "waitForVisible", "waitForHidden"].includes(action.type)) {
     requireExactKeys(action, ["type", "selector"], label);
     requireNonEmptyString(action.selector, `${label}.selector`);
     return;
@@ -167,6 +170,13 @@ function validateAction(action, label) {
     requireExactKeys(action, ["type", "selector", "key"], label);
     requireNonEmptyString(action.selector, `${label}.selector`);
     requireNonEmptyString(action.key, `${label}.key`);
+    return;
+  }
+  if (action.type === "upload") {
+    requireExactKeys(action, ["type", "selector", "file", "sha256"], label);
+    requireNonEmptyString(action.selector, `${label}.selector`);
+    ensure(typeof action.file === "string" && /^(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+\.[A-Za-z0-9]+$/u.test(action.file) && action.file.length <= 512, `${label}.file must be a relative fixture path without traversal`);
+    ensure(typeof action.sha256 === "string" && /^sha256:[a-f0-9]{64}$/u.test(action.sha256), `${label}.sha256 must bind the approved fixture bytes`);
     return;
   }
   requireExactKeys(action, ["type", "selector", "value"], label);
@@ -178,10 +188,14 @@ function validateAction(action, label) {
 }
 
 function validateSurfaceSetup(surface, label) {
-  requireExactKeys(surface, ["query", "actions"], label);
+  requireExactKeys(surface, ["query", "actions", ...(Object.hasOwn(surface, "teardownActions") ? ["teardownActions"] : [])], label);
   requireQuery(surface.query, `${label}.query`);
   ensure(Array.isArray(surface.actions), `${label}.actions must be an array`);
   surface.actions.forEach((action, index) => validateAction(action, `${label}.actions[${index}]`));
+  if (Object.hasOwn(surface, "teardownActions")) {
+    ensure(Array.isArray(surface.teardownActions), `${label}.teardownActions must be an array`);
+    surface.teardownActions.forEach((action, index) => validateAction(action, `${label}.teardownActions[${index}]`));
+  }
 }
 
 function validateBrowserThemeSetup(setup, label, themes) {
@@ -213,7 +227,10 @@ function validateBrowserSetups(browserSetups, contract) {
   const seen = new Set();
   for (const [index, browserSetup] of browserSetups.entries()) {
     const label = `browserSetups[${index}]`;
-    requireExactKeys(browserSetup, ["targetId", "production", "prototype"], label);
+    requireExactKeys(browserSetup, ["targetId", "production", "prototype", ...(Object.hasOwn(browserSetup, "productionHost") ? ["productionHost"] : [])], label);
+    if (Object.hasOwn(browserSetup, "productionHost")) {
+      ensure(typeof browserSetup.productionHost === "string" && /^(?:localhost|[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.localhost)$/u.test(browserSetup.productionHost), `${label}.productionHost must be localhost or a single-label tenant .localhost host`);
+    }
     const targetId = requireNonEmptyString(browserSetup.targetId, `${label}.targetId`);
     ensure(targetIds.includes(targetId), `${label}.targetId is not declared by ui-contract.json`);
     ensure(!seen.has(targetId), "browserSetups target IDs must be unique");
@@ -648,6 +665,20 @@ function coverageRows(contract, spec) {
     const states = [...new Set(targetRows.map(({ state }) => state))];
     const viewports = spec.coverage.viewportOrder;
     const themes = spec.coverage.themeOrder;
+    if (contract.version === 2) {
+      // State behavior is checked under one stable condition. Layout and theme
+      // coverage uses the target's first (representative) state; risk rows and
+      // fidelity groups add the explicitly related interactions below.
+      for (const state of states) {
+        addRow(rowByCoordinate.get(JSON.stringify([targetId, state, viewports[0], themes[0]])), `state baseline ${targetId}/${state}`);
+      }
+      for (const viewport of viewports) {
+        for (const theme of themes) {
+          addRow(rowByCoordinate.get(JSON.stringify([targetId, states[0], viewport, theme])), `layout baseline ${targetId}/${viewport}/${theme}`);
+        }
+      }
+      continue;
+    }
     const baseRowCount = Math.max(states.length, viewports.length, themes.length);
     for (let index = 0; index < baseRowCount; index += 1) {
       const coordinate = JSON.stringify([
@@ -1115,6 +1146,16 @@ function requireLoopbackBaseUrl(value, surface, { legacy = false } = {}) {
   return parsed;
 }
 
+function productionBaseForTarget(baseUrl, spec, targetId) {
+  const parsed = requireLoopbackBaseUrl(baseUrl, "production");
+  const host = spec.browserSetups?.find(item => item.targetId === targetId)?.productionHost;
+  if (host !== undefined) {
+    ensure(typeof host === "string" && /^(?:localhost|[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.localhost)$/u.test(host), "invalid productionHost");
+    parsed.hostname = host;
+  }
+  return parsed.toString();
+}
+
 function targetUrl(baseUrl, row, surface, setup) {
   const relative = surface === "production" ? row.route : row.entry;
   const query = { ...setup.query };
@@ -1182,6 +1223,7 @@ class BrowserParityRunner {
     this.adapter = adapter;
     this.canary = undefined;
     this.surfaceContexts = new Map();
+    this.surfaceTeardowns = new Map();
     this.operations = 0;
   }
 
@@ -1282,6 +1324,17 @@ class BrowserParityRunner {
     return this.canary;
   }
 
+  async teardownSurface(tabId) {
+    const pending = this.surfaceTeardowns.get(tabId);
+    if (!pending) return;
+    await this.activate(tabId, `${pending.label} teardown`);
+    for (const action of pending.actions) {
+      await this.assertActiveTab(tabId, `${pending.label} teardown ${action.type}`);
+      await this.call("runAction", tabId, action);
+    }
+    this.surfaceTeardowns.delete(tabId);
+  }
+
   async prepareSurface({
     tabId,
     row,
@@ -1306,6 +1359,7 @@ class BrowserParityRunner {
     ]);
     try {
       await this.activate(tabId, label);
+      await this.teardownSurface(tabId);
       if (!this.surfaceContexts.has(contextKey)) {
         const authorizationProfileDigest = await sha256Digest(
           `parity:authorization-profile:v1\0${authorizationProfile}`,
@@ -1358,6 +1412,7 @@ class BrowserParityRunner {
         await this.assertActiveTab(tabId, `${label} action ${action.type}`);
         await this.call("runAction", tabId, action);
       }
+      if (setup.teardownActions?.length) this.surfaceTeardowns.set(tabId, { label, actions: setup.teardownActions });
       invalidateContextOnFailure = false;
       const scroll = await this.call("measureScroll", tabId);
       ensure(
@@ -1423,7 +1478,7 @@ class BrowserParityRunner {
       const browserSetup = spec.browserSetups.find(item => item.targetId === row.targetId).production;
       await this.prepareSurface({ tabId: tabs.production, row, surface: "production",
         setup: { query: runtimeCheck.query, actions: [], browser: browserSetup },
-        authorizationProfile: contract.comparisonConditions.authorization, baseUrl: baseUrls.production,
+        authorizationProfile: contract.comparisonConditions.authorization, baseUrl: productionBaseForTarget(baseUrls.production, spec, row.targetId),
         dpr: contract.comparisonConditions.dpr, expectedScroll: contract.comparisonConditions.scroll });
       const result = { id: runtimeCheck.id, status: "pass", query: runtimeCheck.query, steps: [] };
       for (const step of runtimeCheck.steps) {
@@ -1438,7 +1493,7 @@ class BrowserParityRunner {
           let actual, pass;
           do {
             actual = await this.runProbe({ tabId: tabs.production, row, surface: "production", probe, networkSource: canary.networkSource });
-            pass = !actual.unsupported && stableStringify(actual.value) === stableStringify(assertion.expected);
+            pass = !actual.unsupported && stableStringify(actual.value) === stableStringify(await normalizeExpectedProbeValue(probe, assertion.expected, actual.value, sha256Digest));
             if (pass || actual.unsupported || Date.now() >= deadline) break;
             await new Promise(resolve => setTimeout(resolve, 50));
           } while (Date.now() < deadline);
@@ -1598,7 +1653,7 @@ class BrowserParityRunner {
           surface: "production",
           setup: { ...setup.production, browser: browserSetupByTarget.get(row.targetId)?.production },
           authorizationProfile: contract.comparisonConditions.authorization,
-          baseUrl: baseUrls.production,
+          baseUrl: productionBaseForTarget(baseUrls.production, spec, row.targetId),
           dpr: contract.comparisonConditions.dpr,
           expectedScroll: contract.comparisonConditions.scroll,
         });
@@ -1686,7 +1741,7 @@ class BrowserParityRunner {
           const production = productionProbeResults.get(probeId);
           const prototype = prototypeProbeResults.get(probeId);
           const comparison = spec.version === 4
-            ? compareFidelityProbe(probe, production, prototype, spec, phase, compareProbe)
+            ? await compareFidelityProbe(probe, production, prototype, spec, phase, compareProbe, sha256Digest)
             : compareProbe(probe, production, prototype);
           if (comparison.status === "fail" && (probe.kind === "setup" || probe.kind === "state")) {
             const productionMatches = production?.value?.matches === true;
@@ -1796,6 +1851,7 @@ class BrowserParityRunner {
   async run(input) {
     this.canary = undefined;
     this.surfaceContexts = new Map();
+    this.surfaceTeardowns = new Map();
     this.operations = 0;
     let result;
     let failure;
@@ -1803,6 +1859,15 @@ class BrowserParityRunner {
       result = await this.runWithoutCleanup(input);
     } catch (error) {
       failure = error;
+    }
+    try {
+      for (const tabId of this.surfaceTeardowns.keys()) await this.teardownSurface(tabId);
+    } catch (error) {
+      failure = new ParityRunError("PARITY_STATE_TEARDOWN_FAILED", "State teardown did not complete", {
+        operation: "state teardown", ...safeCause(error),
+        priorFailureCode: failure instanceof ParityRunError ? failure.code : null,
+        runEvidence: failure?.evidence ?? result,
+      });
     }
     if (typeof this.adapter.cleanup === "function") {
       try {
@@ -1830,6 +1895,7 @@ class BrowserParityRunner {
 }
 
 export {
+  productionBaseForTarget,
   BrowserParityRunner,
   ParityRunError,
   compareProbe,

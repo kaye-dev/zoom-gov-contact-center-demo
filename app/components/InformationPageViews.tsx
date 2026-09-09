@@ -4,8 +4,8 @@ import Link from 'next/link';
 import type { CSSProperties, ReactNode } from 'react';
 
 import {
-  lifeCategories,
-  newsArticles,
+  getLifeCategories,
+  getNewsArticles,
   type LifeCategory,
   type LifeTopic,
   type NewsArticle,
@@ -196,7 +196,8 @@ function DetailsTable({ rows }: { rows: readonly (readonly [string, string])[] }
 }
 
 export function LifeIndexView() {
-  const { t } = useI18n();
+  const { t, tenantKey } = useI18n();
+  const lifeCategories = getLifeCategories(tenantKey);
 
   return (
     <PageFrame>
@@ -347,7 +348,8 @@ export function LifeTopicView({ category, topic }: { category: LifeCategory; top
 }
 
 export function NewsIndexView() {
-  const { t, locale } = useI18n();
+  const { t, locale, tenantKey } = useI18n();
+  const newsArticles = getNewsArticles(tenantKey);
   const dateFormatter = new Intl.DateTimeFormat(locale, {
     year: 'numeric',
     month: 'long',

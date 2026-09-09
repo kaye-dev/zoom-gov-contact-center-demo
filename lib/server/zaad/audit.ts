@@ -1,10 +1,11 @@
 import { createHmac } from "node:crypto";
 
 import type { Prisma, PrismaClient } from "@/lib/generated/prisma/client";
+import type { TenantKey } from "@/lib/tenants";
 
 export type ZaadAuditInput = {
   actorUserId: string | null;
-  resourceKind: "resident" | "message" | "contact-list" | "registration-setting" | "campaign" | "one-time-dispatch";
+  resourceKind: "caller-notice" | "municipal-registration" | "municipal-workflow" | "municipal-run" | "municipal-case" | "outreach-contact" | "crm-import" | "campaign-binding" | "resource-binding" | "university-registration" | "university-outreach" | "university-case" | "university-intake" | "resident" | "message" | "contact-list" | "registration-setting" | "campaign" | "one-time-dispatch";
   targetId: string;
   action: string;
   result: "SUCCESS" | "REJECTED" | "FAILED" | "RESULT_UNKNOWN";
@@ -18,9 +19,14 @@ export type ZaadAuditInput = {
 
 type AuditClient = PrismaClient | Prisma.TransactionClient;
 
-export async function writeZaadAudit(prisma: AuditClient, input: ZaadAuditInput) {
+export async function writeZaadAudit(
+  prisma: AuditClient,
+  tenantKey: TenantKey,
+  input: ZaadAuditInput,
+) {
   await prisma.zaadAdminAudit.create({
     data: {
+      siteKey: tenantKey,
       actorUserId: input.actorUserId,
       resourceKind: input.resourceKind,
       targetRef: opaqueTargetRef(input.resourceKind, input.targetId),

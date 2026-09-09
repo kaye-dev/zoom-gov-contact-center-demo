@@ -14,6 +14,7 @@ import {
   getPublicReservation,
   updatePublicReservation,
 } from "../lib/server/public-reservations";
+import { DEFAULT_TENANT_KEY } from "../lib/tenants";
 
 const now = new Date("2026-09-01T00:00:00.000Z");
 const callerPhone = parseReservationCallerPhone("+12025550123")!;
@@ -92,14 +93,14 @@ test("reservation creation stores only caller digest and binds idempotency repla
     now,
   };
 
-  const created = await createPublicReservation(prisma, input);
+  const created = await createPublicReservation(prisma, DEFAULT_TENANT_KEY, input);
   assert.equal(created.outcome, "NEW");
   assert.equal(captured.createdBookingData?.callerAniDigest, callerAniDigest);
   assert.equal("callerPhone" in (captured.createdBookingData ?? {}), false);
   assert.equal(JSON.stringify(created.body).includes(callerAniDigest), false);
   assert.equal(JSON.stringify(created.body).includes(callerPhone), false);
 
-  const replayed = await createPublicReservation(prisma, {
+  const replayed = await createPublicReservation(prisma, DEFAULT_TENANT_KEY, {
     ...input,
     requestId: "request_owner_binding_2",
   });
@@ -107,7 +108,7 @@ test("reservation creation stores only caller digest and binds idempotency repla
   assert.equal(replayed.body.requestId, "request_owner_binding_2");
 
   await assert.rejects(
-    createPublicReservation(prisma, {
+    createPublicReservation(prisma, DEFAULT_TENANT_KEY, {
       ...input,
       callerAniDigest: otherCallerAniDigest,
       requestId: "request_owner_binding_3",
@@ -142,11 +143,13 @@ test("reservation read filters by API key, ID, and caller digest without exposin
 
   const result = await getPublicReservation(
     prisma,
+    DEFAULT_TENANT_KEY,
     "api_key_owner_binding",
     "booking_owner_binding_1",
     callerAniDigest,
   );
   assert.deepEqual(where, {
+    siteKey: DEFAULT_TENANT_KEY,
     id: "booking_owner_binding_1",
     apiKeyId: "api_key_owner_binding",
     callerAniDigest,
@@ -163,7 +166,7 @@ test("reservation update and delete fail closed when owner-bound row is absent",
     return [];
   });
   await assert.rejects(
-    updatePublicReservation(updatePrisma, {
+    updatePublicReservation(updatePrisma, DEFAULT_TENANT_KEY, {
       apiKeyId: "api_key_owner_binding",
       callerAniDigest,
       id: "booking_owner_binding_1",
@@ -173,9 +176,11 @@ test("reservation update and delete fail closed when owner-bound row is absent",
     }),
     (error) => error instanceof ReservationApiOperationError && error.code === "NOT_FOUND",
   );
+  assert.match(updateQueries[0]!.text, /"siteKey" =/u);
   assert.match(updateQueries[0]!.text, /"callerAniDigest" =/u);
   assert.deepEqual(updateQueries[0]!.values, [
     "booking_owner_binding_1",
+    DEFAULT_TENANT_KEY,
     "api_key_owner_binding",
     callerAniDigest,
   ]);
@@ -185,15 +190,17 @@ test("reservation update and delete fail closed when owner-bound row is absent",
     deleteQueries.push(snapshotSql(query));
     return [];
   });
-  assert.equal(await deletePublicReservation(deletePrisma, {
+  assert.equal(await deletePublicReservation(deletePrisma, DEFAULT_TENANT_KEY, {
     apiKeyId: "api_key_owner_binding",
     callerAniDigest,
     id: "booking_owner_binding_1",
     expectedRevision: 1,
   }), false);
+  assert.match(deleteQueries[0]!.text, /"siteKey" =/u);
   assert.match(deleteQueries[0]!.text, /"callerAniDigest" =/u);
   assert.deepEqual(deleteQueries[0]!.values, [
     "booking_owner_binding_1",
+    DEFAULT_TENANT_KEY,
     "api_key_owner_binding",
     callerAniDigest,
   ]);

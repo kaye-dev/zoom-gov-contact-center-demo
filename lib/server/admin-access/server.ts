@@ -1,3 +1,4 @@
+import { adminAuthHref } from "@/lib/admin-routing";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 
@@ -10,7 +11,7 @@ import type {
   AdminResourceKey,
 } from "@/lib/admin-access/types";
 import { getSessionUser } from "@/lib/server/auth/helpers";
-import { requirePasswordReadySession } from "@/lib/server/auth/server";
+import { currentAdminCallback, requirePasswordReadySession } from "@/lib/server/auth/server";
 import { withPrisma } from "@/lib/server/prisma";
 
 import { getAdminAccessActor } from "./queries";
@@ -25,7 +26,7 @@ export async function getCurrentAdminAccessActor(callbackURL = "/admin") {
   const actor = await loadCurrentAdminAccessActor(sessionUser.id);
 
   if (!actor || actor.banned) {
-    redirect(`/login?callbackURL=${encodeURIComponent(callbackURL)}`);
+    redirect(adminAuthHref("login", await currentAdminCallback(callbackURL)));
   }
 
   return { session, actor };

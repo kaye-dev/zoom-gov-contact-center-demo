@@ -22,7 +22,7 @@ plans/<slug>/
 
 ## モデル選択
 
-親エージェントのproject-local既定モデルは設けない。通常処理と各skillの親エージェントは、Codexのcomposerでユーザーが選択したモデルとreasoningを維持する。品質と利用量のバランスを考える際は、次の組み合わせを参考に手動選択する。
+親エージェントのproject-local既定は`gpt-6-astra / low`とし、`.codex/config.toml`で管理する。通常処理と各skillの親エージェントは、Codexのcomposerでユーザーが選択したモデルとreasoningを維持する。品質と利用量のバランスを考える際は、次の組み合わせを参考に手動選択する。
 
 | skill | 推奨モデル | reasoning |
 | --- | --- | --- |
@@ -80,7 +80,7 @@ plan cleanupは`$plan-finalize`だけの削除権限であり、archiveされて
 1. 最新要求、確定済み判断、採用済み資料を整理する。
 2. repository、runtime、code、testを確認し、UI変更時はclosest live UIも確認する。複数subsystemまたは大量資料を横断し、独立した要約で親のcontextを節約できる場合だけ、最大1体の`project_explorer`を使う。
 3. 自己完結した最終設計、`## 要件クロージャ`、PRへ渡す`## ユーザー動作確認`を`plans/<slug>/goal.md`へ書く。UI項目は安定した`UI-CHECK-XX` ID、対象、前提、操作、期待結果を持つ未チェック形式にし、非UIは`対象外: UI変更なし`とする。
-4. UI変更時は完成UI、完全Cartesian matrixを持つ`ui-contract.json` version 1、coverage/risk/anchorを宣言する`parity-spec.json` version 4を作る。
+4. UI変更時は完成UI、画面別の適用状態による完全なmatrixを持つ`ui-contract.json` version 2、coverage/risk/anchorを宣言する`parity-spec.json` version 4を作る。
 5. goalを監査し、UI変更時はauthoring中のCSS buildを1回だけ行う。revisionをgoalへ記録後、`parity-runner.mjs preflight ... --context plan`を1回実行してgoal、contract/profile、source inventory、invariant/probe、coverage/full/selected行数をまとめて検証し、返却直前に影響scopeのtargeted smokeを1回行う。
 6. UI planは`./dev-prototype.sh --retain <slug>`でprototypeを確認可能な状態にし、goal、live URL、PID、owner、revision、smoke結果、未確認事項、停止commandを返す。非UI planは確認セッションを作らない。
 
@@ -201,7 +201,7 @@ node .agents/skills/plan/scripts/parity-runner.mjs preflight plans/<slug>/protot
 ./dev-prototype.sh <slug>
 ```
 
-`ui-contract.json` version 1には完全なproduction `sources` inventory、runtime owner、checkout、route、state、theme、responsive、interaction、安定したtargetとmatrix行を記録する。比較条件はviewport、DPR、locale、theme、fixture、authorization、queryと、両surfaceの`window.scrollX` / `window.scrollY`から実測したexact `scroll: {x, y}`を一致させる。
+`ui-contract.json` version 2には完全なproduction `sources` inventory、runtime owner、checkout、route、state、theme、responsive、interaction、安定したtargetとmatrix行を記録する。比較条件はviewport、DPR、locale、theme、fixture、authorization、queryと、両surfaceの`window.scrollX` / `window.scrollY`から実測したexact `scroll: {x, y}`を一致させる。
 
 `parity-spec.json` version 4にはdeterministic setup、state identity assertion、targetごとの`browserSetups`、全row mapping、coverage/anchor probe tier、axis順序、targetごとのanchor、risk row、全sourceのimpact、固定batch、artifact policyを記録する。coverage probeは全rowでroute、setup、state、viewport、theme、control、overflow、consoleをrequiredにし、screenshot・DOM・accessibility・style・geometry・focus・keyboard・networkはanchorへ限定する。version 1から3はlegacy read-only互換として維持する。正本は`.agents/skills/plan/references/parity-runner.md`とする。
 
@@ -272,3 +272,5 @@ CDP capability／DPRのterminal failureでは、設定無効やセッション�
 ## 開発用ポート
 
 Browserの利用範囲と出力URLを照合し、範囲外ならBrowserを開かず作業を止める。起動・保持・予約解放、権限登録、移行・保全・rollbackは[開発用ポートの固定範囲](development-ports.md)に従う。非UIの起動ツール変更ではgoalが要求する限定runtime確認だけを行い、BrowserやUI parityは開始しない。
+
+検証定義は、画面ごとの実在する状態と要件対応から作る。同一実行条件はassertionの和集合を保持して統合し、業務因子と表示因子を分ける。contract v2では全stateの固定条件baselineと代表stateの全幅・明暗を選び、必要な交互作用をrisk/anchor/groupで補完する。旧contract v1の検証と証跡は保持する。画像は要件に必要な代表・重要状態へ限定し、source impactは実依存のconsumerを根拠とする。旧runの再利用は依存fingerprint・条件・期待値・fixture・artifactの同値性と現在性を証明できる場合だけ行い、証明できない結果は再実行する。

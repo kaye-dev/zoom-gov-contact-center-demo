@@ -35,6 +35,7 @@ import {
   type MaintenanceSettingWriter,
   type MaintenanceStoreUpdate,
 } from "../lib/server/maintenance-store";
+import { DEFAULT_TENANT_KEY } from "../lib/tenants";
 
 const SECRET_DATABASE_URL =
   "postgresql://secret-user:secret-password@db.example.test/demo?sslmode=verify-full";
@@ -97,7 +98,7 @@ test("Postgres reader executes one scoped query and releases the client", async 
     },
   };
 
-  const first = await readMaintenanceSettingFromPostgres("production", {
+  const first = await readMaintenanceSettingFromPostgres(DEFAULT_TENANT_KEY, "production", {
     env: PRODUCTION_ENV,
     pool,
     scheduleTimeoutImpl(_callback, delayMs) {
@@ -109,7 +110,7 @@ test("Postgres reader executes one scoped query and releases the client", async 
       clearedTimeouts += 1;
     },
   });
-  const second = await readMaintenanceSettingFromPostgres("production", {
+  const second = await readMaintenanceSettingFromPostgres(DEFAULT_TENANT_KEY, "production", {
     env: PRODUCTION_ENV,
     pool,
     scheduleTimeoutImpl() {
@@ -136,11 +137,11 @@ test("Postgres reader executes one scoped query and releases the client", async 
   assert.deepEqual(queryInputs, [
     {
       text: MAINTENANCE_POSTGRES_READ_QUERY,
-      values: ["PRODUCTION"],
+      values: [DEFAULT_TENANT_KEY, "PRODUCTION"],
     },
     {
       text: MAINTENANCE_POSTGRES_READ_QUERY,
-      values: ["PRODUCTION"],
+      values: [DEFAULT_TENANT_KEY, "PRODUCTION"],
     },
   ]);
 });
@@ -152,7 +153,7 @@ test("Postgres reader distinguishes missing and malformed rows", async () => {
     [[{ ...databaseRow(), revision: 2_147_483_648 }], "INVALID"],
     [[{ ...databaseRow(), environment: "PREVIEW" }], "INVALID"],
   ] as const) {
-    const result = await readMaintenanceSettingFromPostgres("production", {
+    const result = await readMaintenanceSettingFromPostgres(DEFAULT_TENANT_KEY, "production", {
       pool: singleResultPool([...rows]),
       scheduleTimeoutImpl() {
         return {};
@@ -180,7 +181,7 @@ test("Postgres reader timeout destroys an active client and sanitizes the error"
   };
 
   await assert.rejects(
-    readMaintenanceSettingFromPostgres("production", {
+    readMaintenanceSettingFromPostgres(DEFAULT_TENANT_KEY, "production", {
       env: PRODUCTION_ENV,
       pool,
       readTimeoutMs: 25,
@@ -219,7 +220,7 @@ test("Postgres reader deadline covers stalled and late connection acquisition", 
     },
   };
 
-  const read = readMaintenanceSettingFromPostgres("production", {
+  const read = readMaintenanceSettingFromPostgres(DEFAULT_TENANT_KEY, "production", {
     env: PRODUCTION_ENV,
     pool,
     readTimeoutMs: 25,
@@ -271,7 +272,7 @@ test("Postgres reader performs no retry and destroys a failed client", async () 
   };
 
   await assert.rejects(
-    readMaintenanceSettingFromPostgres("production", {
+    readMaintenanceSettingFromPostgres(DEFAULT_TENANT_KEY, "production", {
       env: PRODUCTION_ENV,
       pool,
     }),
@@ -377,7 +378,7 @@ test("Prisma writer applies a partial manual update and increments revision", as
     },
   });
 
-  const result = await writeMaintenanceSettingWithPrisma(prisma, {
+  const result = await writeMaintenanceSettingWithPrisma(prisma, DEFAULT_TENANT_KEY, {
     environment: "production",
     mode: "ENABLED",
     expectedRevision: 4,
@@ -392,6 +393,7 @@ test("Prisma writer applies a partial manual update and increments revision", as
     select: Record<string, unknown>;
   };
   assert.deepEqual(args.where, {
+    siteKey: DEFAULT_TENANT_KEY,
     environment: "PRODUCTION",
     revision: 4,
     schemaVersion: 1,
@@ -427,7 +429,7 @@ test("Prisma writer converts scheduled instants and classifies OCC conflicts", a
   };
 
   assert.deepEqual(
-    await writeMaintenanceSettingWithPrisma(prisma, update),
+    await writeMaintenanceSettingWithPrisma(prisma, DEFAULT_TENANT_KEY, update),
     { status: "CONFLICT" },
   );
   const data = (updateArgs as { data: Record<string, unknown> }).data;
@@ -442,7 +444,7 @@ test("Prisma writer converts scheduled instants and classifies OCC conflicts", a
 
   existing = null;
   await assert.rejects(
-    writeMaintenanceSettingWithPrisma(prisma, update),
+    writeMaintenanceSettingWithPrisma(prisma, DEFAULT_TENANT_KEY, update),
     (error: unknown) => sanitizedWriteError(error),
   );
 });
