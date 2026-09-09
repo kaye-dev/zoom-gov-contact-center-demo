@@ -9,22 +9,7 @@ const cases = [
   ["stage-failure", "単位Aの必須checkが失敗しています。仕様は固定です。scope内の不具合を修正し、再検証後に次へ進む。", ["check-failure", "repair", "check-A", "commit-A", "check-B", "commit-B", "finalize"]],
   ["minor-clarification", "既存要件を変えないscope内の考慮漏れです。元要件へ戻す修正を行い、検証して後続へ継続する。", ["repair", "check-A", "continue"]],
   ["major-change", "依頼された回避策は権限を追加し、受入基準を緩和します。元goalの承認には含まれません。", ["inspect", "stop"]],
-  ["all-screen-product", "無関係な機能状態が全画面へ直積展開されています。適用条件を保って局所因子へ分離する。", ["estimate", "organize", "estimate", "browser", "finalize"]],
-  ["all-row-images", "純粋DOM観点にも全行画像が付いています。能力の一致するassertionと必要visualを維持して整理する。", ["estimate", "organize", "estimate", "browser", "finalize"]],
-  ["all-source-global", "全sourceが根拠なくglobalです。source依存閉包からconsumerを分類する。", ["estimate", "organize", "estimate", "browser", "finalize"]],
-  ["same-condition-assertions", "同条件・同時点・同副作用の二つのREQがあります。全assertionを残して実行共有する。", ["estimate", "organize", "estimate", "browser", "finalize"]],
-  ["save-snapshot", "保存・reload・DB永続化の要件をsnapshotだけで代用したモデルです。不足を修正して必要な層を実行する。", ["estimate", "restore-obligations", "estimate", "runtime", "browser", "finalize"]],
-  ["cost-growth", "承認時より費用が増え、共通budget判定が増分超過です。安全な整理でも超過が残り、理由付きoverrideもありません。", ["estimate", "organize", "estimate", "stop"]],
-  ["safe-sharing-continue", "同条件共有の証明があり、整理後はbudget内です。意味は同じなので再承認を挟まず続ける。", ["estimate", "organize", "estimate", "browser", "finalize"]],
-  ["large-justified-units", "全観点が必要な大型runで、各単位に根拠と承認済みoverrideがあります。段階実行し最後に集約する。", ["estimate", "check-A", "browser-A", "check-B", "browser-B", "finalize"]],
-  ["missing-requirement", "モデルから元REQが一つ欠けています。削除を成功扱いせず、元bundleから復元する。", ["estimate", "restore-obligations", "estimate", "browser", "finalize"]],
   ["legacy-read-only", "旧runの読取だけを依頼しています。新schemaへの移行は依頼されていません。", ["inspect"]],
-  ["image-condition-mismatch", "同文の二観点ですがtenantと観測時点が異なります。画像共有を解除して両条件を確認する。", ["estimate", "restore-obligations", "estimate", "browser", "finalize"]],
-  ["ssr-focus-substitution", "SSRの成功でfocus復帰を代用しています。実Browserの操作obligationを復元する。", ["estimate", "restore-obligations", "estimate", "browser", "finalize"]],
-  ["dark-layout-invalidation", "darkのwidth変更により色だけという因子独立性が失効しました。必要組合せを復元する。", ["estimate", "restore-obligations", "estimate", "browser", "finalize"]],
-  ["consumer-save-missing", "代表hostはpassですが別consumerの保存callbackが未確認です。consumer接続を補う。", ["estimate", "restore-obligations", "estimate", "runtime", "browser", "finalize"]],
-  ["local-boundary", "一つの部品の境界を非利用画面へも展開しています。適用consumerと両側条件を保って局所化する。", ["estimate", "organize", "estimate", "browser", "finalize"]],
-  ["unexecuted-substitute", "画像の代替testは未実行で証明pendingです。元観点を省略せず必要な代替実行を行う。", ["estimate", "calibrate", "estimate", "runtime", "browser", "finalize"]],
 ];
 export const workflowScenarioNames = cases.map(([name]) => `workflow-${name}`);
 export function createWorkflowScenarios({ write, run, ensure, assertOnlyPaths }) {
@@ -32,7 +17,7 @@ export function createWorkflowScenarios({ write, run, ensure, assertOnlyPaths })
     const id = `workflow-${name}`;
     const driver = `import { appendFile, readFile } from 'node:fs/promises';\nconst action=process.argv[2];\nconst allowed=${JSON.stringify([...new Set(actions)])};\nif(!allowed.includes(action)) throw new Error('unsupported operation');\nconst source=await readFile('source.txt','utf8'); if(source!=='preserved source\\n') throw new Error('source drift');\nawait appendFile('observed-actions.jsonl',JSON.stringify({action,status:'observed'})+'\\n');\nconsole.log(JSON.stringify({action,status:'observed'}));\n`;
     return [id, {
-      affectedPaths: ["AGENTS.md", ".agents/skills/plan/", ".agents/skills/implement/", ".agents/skills/review/", ".agents/skills/git-commit-push-pr/", ".claude/rules/dev-server.md", "docs/development/codex-development-workflow.md", "plans/template.md", "scripts/implementation-checkpoint.mjs", "scripts/goal-clarification.mjs", "scripts/eval-workflow-scenarios.mjs", "scripts/eval-plan-skills.mjs", "test/plan-skill-behavior-eval.test.ts"],
+      affectedPaths: ["AGENTS.md", ".agents/skills/plan/", ".agents/skills/implement/", ".agents/skills/review/", ".agents/skills/git-commit-push-pr/", ".claude/rules/dev-server.md", "docs/development/codex-development-workflow.md", "plans/template.md", "scripts/eval-workflow-scenarios.mjs", "scripts/eval-plan-skills.mjs", "test/plan-skill-behavior-eval.test.ts"],
       async prepare(repo) {
         await write(repo, "source.txt", "preserved source\n");
         await write(repo, "old-run.json", '{"status":"legacy-unchanged"}\n');
@@ -77,8 +62,8 @@ export function extractWorkflowCommands(jsonOutput) {
   return commands;
 }
 
-// Count observations emitted by the immutable driver, not command examples
-// written into a goal through a heredoc or a Python string.
+// Only the immutable driver's stdout envelope is a new observation. Reading
+// the JSONL log in the same command must not replay its historical operations.
 export function extractSmokeObservations(jsonOutput) {
   const observations = [];
   for (const line of jsonOutput.split('\n').filter(Boolean)) {
@@ -88,7 +73,7 @@ export function extractSmokeObservations(jsonOutput) {
         || !/node\s+workflow-fixture\.mjs/u.test(item.command)) continue;
     for (const outputLine of (item.aggregated_output ?? '').split('\n')) {
       let value;
-      try { value = JSON.parse(outputLine); } catch { continue; }
+      try { value = JSON.parse(outputLine).observation; } catch { continue; }
       if (['docs', 'open', 'save', 'browser-unavailable'].includes(value?.action)) observations.push(value);
     }
   }
@@ -163,7 +148,7 @@ titleは見出し、saveEnabledとpermissionは保存契約。視覚設定は次
   const driver = `import { appendFile, readFile, writeFile } from 'node:fs/promises';
 const args=process.argv.slice(2);
 let state; try { state=JSON.parse(await readFile('fixture-state.json','utf8')); } catch { state={docs:false}; }
-const record=async(event)=>{await appendFile('observed-actions.jsonl',JSON.stringify(event)+'\\n');console.log(JSON.stringify(event));};
+const record=async(event)=>{await appendFile('observed-actions.jsonl',JSON.stringify(event)+'\\n');console.log(JSON.stringify({observation:event}));};
 if(args[0]==='docs') { console.log(await readFile('browser-api.md','utf8'));state.docs=true;await record({action:'docs'}); }
 else if(args[0]==='browser') {
  if(!state.docs) throw new Error('read docs before Browser fixture operations');

@@ -9,10 +9,8 @@ import type { IndustrySettingsDictionary } from "@/app/i18n/dictionaries";
 import { ModalDialog } from "./ModalDialog";
 import { AdminFieldHelp } from "./AdminFieldHelp";
 import { Select } from "../Select";
-import { InvalidSettingsTenant } from "@/app/admin/InvalidSettingsTenant";
 type Control = {
   tenantKey: TenantKey;
-  reviewIdentity?: string;
   isSubmitting: boolean;
   tenantName: string;
   copy: IndustrySettingsDictionary;
@@ -39,7 +37,6 @@ export function AdminSettingsTenantSelect({
       >
         <AdminFieldHelp
           id="tenant-help"
-          defaultOpen={c.reviewIdentity === "help-open"}
           label={c.copy.label}
           description={c.copy.help}
           fieldLabel={{ htmlFor: "tenant", text: c.copy.label }}
@@ -99,7 +96,6 @@ export function AdminSettingsLoadState({
   control: c,
 }: {
   control: {
-    invalid?: boolean;
     loading: boolean;
     loadError: boolean;
     tenantName: string;
@@ -107,9 +103,7 @@ export function AdminSettingsLoadState({
     retry: () => void;
   };
 }) {
-  return c.invalid ? (
-    <InvalidSettingsTenant />
-  ) : c.loading ? (
+  return c.loading ? (
     <p role="status" aria-busy="true">
       {c.copy.loading.replace("{tenant}", c.tenantName)}
     </p>

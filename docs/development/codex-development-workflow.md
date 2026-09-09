@@ -168,7 +168,7 @@ PR本文はbase...HEADのdiff、base..HEADのcommit、実検証結果、現在�
 
 このworkflowを採用した作業では既存goalもsmokeを使う。製品要件を保持し、検証方式への再同意を要求しない。詳細parityの行列・証跡は保存資料として扱い、未実施・失敗をsmoke成功で書き換えない。既存goal・archive・evidenceの一括移行や削除は行わない。
 
-旧runner/reader/adapter/budgetは保存コードとして保持する。新規計画・実装・review・出荷はそれらを呼ばず、`ui-contract.json`、`parity-spec.json`、`prototype-revision.mjs`、estimate、approval.json、schema 6を前提にしない。保存資料の調査以外では詳細参照を読み込まない。
+旧UI parityのrunner・reader・adapter・budgetと画面内の検証用状態注入は廃止した。過去資料の機械的検証・run再開は提供しない。新規計画・実装・review・出荷はprototype準拠の代表smokeを使う。保存資料の整理は別途明示された対象だけを扱う。
 
 ## Runtimeと権限
 

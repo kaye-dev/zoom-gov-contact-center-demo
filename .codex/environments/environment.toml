@@ -58,5 +58,5 @@ if command -v brew >/dev/null 2>&1; then
     export PATH="$node24_prefix/bin:$PATH"
   fi
 fi
-node --import tsx --test test/dev-compose-runtime.test.ts test/dev-compose-network.test.ts test/parity-runner.test.ts test/plan-workflow.test.ts
+node --import tsx --test test/dev-compose-runtime.test.ts test/dev-compose-network.test.ts test/plan-workflow.test.ts
 '''

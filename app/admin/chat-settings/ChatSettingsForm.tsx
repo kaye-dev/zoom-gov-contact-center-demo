@@ -4,7 +4,6 @@ import { flushSync } from "react-dom";
 import { settingsSectionClassName, settingsInputFocusClassName } from "@/app/components/admin/settings-form-styles";
 import { AdminSettingsTenantSelect, AdminSettingsLoadState } from "@/app/components/admin/AdminSettingsTenantSelect";
 import { useAdminSettingsTenant } from "../useAdminSettingsTenant";
-import type { SettingsReviewState } from "@/lib/admin-settings-review";
 import type { TenantKey } from "@/lib/tenants";
 import { AdminPageTitleHelp } from "@/app/components/admin/AdminPageTitleHelp";
 
@@ -26,7 +25,6 @@ type ChatSettingsFormProps = {
   initialSettings: ChatSettings;
   canEdit: boolean;
   initialTenant: TenantKey;
-  reviewState?: SettingsReviewState;
 };
 
 type Feedback =
@@ -37,14 +35,13 @@ export function ChatSettingsForm({
   initialSettings,
   canEdit,
   initialTenant,
-  reviewState,
 }: ChatSettingsFormProps) {
   const { t } = useI18n();
-  const [invalidField, setInvalidField] = useState<string | null>(reviewState === "validation" ? "chat-settings-campaign-web-tag" : null);
+  const [invalidField, setInvalidField] = useState<string | null>(null);
   useEffect(() => { if (invalidField) document.getElementById(invalidField)?.focus(); }, [invalidField]);
-  const [activeSection, setActiveSection] = useState((reviewState === "detail" || reviewState === "validation") ? "chat-campaign" : reviewState === "third" ? "chat-entry-id" : "chat-method");
-  const [feedback, setFeedback] = useState<Feedback | null>(reviewState === "saved" ? {kind:"success"} : reviewState === "save-error" ? {kind:"error"} : null);
-  const control = useAdminSettingsTenant(initialSettings, initialTenant, "chat-settings", () => { setActiveSection("chat-method"); setFeedback(null); setInvalidField(null); }, reviewState);
+  const [activeSection, setActiveSection] = useState("chat-method");
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const control = useAdminSettingsTenant(initialSettings, initialTenant, "chat-settings", () => { setActiveSection("chat-method"); setFeedback(null); setInvalidField(null); });
   const { settings, setSettings, isSubmitting } = control;
   const feedbackMessage = feedback
     ? feedback.kind === "success"
@@ -132,7 +129,7 @@ export function ChatSettingsForm({
   };
 
   return (
-    <section data-industry-state={control.pending ? "confirm-switch" : invalidField ? "validation" : control.invalid ? "invalid" : control.loading ? "loading" : control.loadError ? "load-error" : control.isSubmitting ? "saving" : feedback?.kind === "success" ? "saved" : feedback?.kind === "error" ? "save-error" : control.dirty ? "dirty" : control.reviewIdentity ?? "default"}>
+    <section data-industry-state={control.pending ? "confirm-switch" : invalidField ? "validation" : control.loading ? "loading" : control.loadError ? "load-error" : control.isSubmitting ? "saving" : feedback?.kind === "success" ? "saved" : feedback?.kind === "error" ? "save-error" : control.dirty ? "dirty" : "default"}>
       <div data-admin-page-chrome className="space-y-4">
         <div
           data-admin-page-header
@@ -145,7 +142,7 @@ export function ChatSettingsForm({
           />
         <AdminSettingsTenantSelect control={control} resource="chat-settings" />
         </div>
-        {!control.invalid && !control.loading && !control.loadError && <AdminSettingsTabs
+        {!control.loading && !control.loadError && <AdminSettingsTabs
           activeSection={activeSection}
           onSelect={setActiveSection}
           label={t.admin.chatManagement.title}
@@ -159,7 +156,7 @@ export function ChatSettingsForm({
 
       <div data-admin-page-body className="ml-1 mr-0 mt-6 max-w-5xl">
       <AdminSettingsLoadState control={control} />
-      {!control.invalid && !control.loading && !control.loadError && <form data-admin-form noValidate onSubmit={submit} className="space-y-6">
+      {!control.loading && !control.loadError && <form data-admin-form noValidate onSubmit={submit} className="space-y-6">
         <AdminSettingsPanel section="chat-method" activeSection={activeSection}>
         <fieldset
           className={settingsSectionClassName}

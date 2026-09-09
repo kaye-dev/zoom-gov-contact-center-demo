@@ -82,4 +82,4 @@ WebとDB/Studioのslotは独立しています。LocalのDB/Studioは5432/5555�
 
 移行トランザクションは追跡対象外の`.codex/port-migration.local.json`に保存します。manifest確定前の失敗では移行前のmanifestを保持し、今回作成した予約だけを所有状態の再確認後に取り消します。確定後の書き込み中断も含め、復元が必要な場合はWeb/artifactを停止して`./dev-compose.sh migrate-ports --rollback`を使います。owner、journalのdigest、manifest、allocation identity、復元先portを再検証し、不一致や競合がある場合は復元を拒否します。
 
-parity証跡は原本を保持します。実行可能なorigin条件を満たさないrunは再開・確定できません。originが変わる場合は新runを作成し、過去の合格行やURL文字列を書き換えて転用しません。
+過去のUI検証証跡は原本を保持します。廃止済みの詳細parity runの再開・確定・移行は提供しません。

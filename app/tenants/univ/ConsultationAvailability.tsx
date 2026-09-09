@@ -19,7 +19,6 @@ type Status = {
 type ConsultationAvailabilityProps = {
   labels: Record<UniversityConsultationService, string>;
   descriptions: Record<UniversityConsultationService, string>;
-  previewState: string;
   copy: Record<
     "ready" | "busy" | "unavailable" | "unknown" | "launch",
     string
@@ -32,16 +31,10 @@ type ConsultationAvailabilityProps = {
 export function ConsultationAvailability({
   labels,
   descriptions,
-  previewState,
   copy,
 }: ConsultationAvailabilityProps) {
   const [status, setStatus] = useState<Status | null>(null);
   useEffect(() => {
-    if (
-      process.env.NODE_ENV === "development" &&
-      previewState.startsWith("now-")
-    )
-      return;
     let live = true;
     const load = () =>
       fetch("/api/public/consultation-availability", { cache: "no-store" })
@@ -65,28 +58,16 @@ export function ConsultationAvailability({
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [previewState]);
+  }, []);
 
   return (
     <div className="mt-7 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
       {(Object.keys(labels) as UniversityConsultationService[]).map(
         (serviceKey) => {
-          const previewStatus: AvailabilityName | null =
-            process.env.NODE_ENV === "development"
-              ? previewState === "now-stale"
-                ? "unknown"
-                : previewState === "now-mixed" &&
-                    serviceKey === "student-support"
-                  ? "busy"
-                  : previewState === "now-open" || previewState === "now-mixed"
-                    ? "ready"
-                    : null
-              : null;
           const service = status?.services.find(
             (item) => item.serviceKey === serviceKey,
           );
           const availability: AvailabilityName =
-            previewStatus ??
             service?.status ??
             (status === null
               ? "unknown"

@@ -3,7 +3,6 @@ export const metadata: Metadata = { title: { default: "管理画面", template: 
 import { withPrisma } from "@/lib/server/prisma";
 import { getRequestTenant } from "@/lib/server/tenant";
 import { outreachTenants } from "@/lib/server/zaad/university/permissions";
-import { getSettingsReview } from "@/lib/server/admin-settings-review";
 import type { ReactNode } from "react";
 
 import { canAdminAccess } from "@/lib/admin-access/authorization";
@@ -51,7 +50,6 @@ export default async function AdminLayout({
 
   return (
     <AdminShell
-      allowSettingsReview={Boolean(await getSettingsReview("default"))}
       visibleItems={visibleItems}
       outreach={{ allowedTenants: allowedOutreachTenants, hostTenant: tenant.key }}
       currentUserName={getSessionUser(session)!.name}

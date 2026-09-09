@@ -30,4 +30,4 @@ A design revision uses `$plan` followed by explicit `$implement`. A direct local
 
 For work adopting this workflow, existing goals also use smoke. Preserve functional, permission, and data requirements. Keep old parity descriptions and evidence as historical data without rewriting their results or requiring another approval of the verification method.
 
-Detailed parity is not an execution option or completion gate. Do not generate its manifests, run its estimates/approval/matrix lifecycle, or route it to release/CI/scheduled checks. Historical tools/readers remain available as stored code, outside normal execution. Read their archived references only for an explicit historical-data investigation, never as a prerequisite to feature work.
+Detailed parity is not an execution option or completion gate. Do not generate its manifests, run its estimates/approval/matrix lifecycle, or route it to release/CI/scheduled checks. The old executors and readers have been removed. Preserve historical goals, images, archives, and evidence with their original bytes and status; no machine verification or run resumption is provided.

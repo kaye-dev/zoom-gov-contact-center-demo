@@ -52,9 +52,7 @@ export function UniversityStudentRegistry({
   canUpdate,
   years,
   serverDate,
-  reviewState,
 }: {
-  reviewState?: string;
   canCreate: boolean;
   canUpdate: boolean;
   years: number[];
@@ -69,33 +67,8 @@ export function UniversityStudentRegistry({
     [loading, setLoading] = useState(true),
     [error, setError] = useState(false),
     [saved, setSaved] = useState(false);
-  const [mode, setMode] = useState<"list" | "add" | "review">(
-      reviewState === "registration-add"
-        ? "add"
-        : reviewState === "registration-review"
-          ? "review"
-          : "list",
-    ),
-    [detail, setDetail] = useState<Detail | null>(
-      reviewState === "registration-review"
-        ? {
-            id: "review-only",
-            name: "登録学生デモ",
-            displayStudentNumber: `1${String(years[0]).slice(-2)}0001`,
-            phoneLast4: "0000",
-            phone: "+819000000000",
-            topicIds: ["scholarship", "class-change"],
-            source: "STUDENT_PUBLIC",
-            status: "PENDING_REVIEW",
-            version: 1,
-            note: "",
-            identityConfirmed: false,
-            phoneConfirmed: false,
-            contactId: null,
-            contact: null,
-          }
-        : null,
-    ),
+  const [mode, setMode] = useState<"list" | "add" | "review">("list"),
+    [detail, setDetail] = useState<Detail | null>(null),
     [value, setValue] = useState(emptyRegistration),
     [errors, setErrors] = useState<Record<string, string>>({}),
     [attestation, setAttestation] = useState("");

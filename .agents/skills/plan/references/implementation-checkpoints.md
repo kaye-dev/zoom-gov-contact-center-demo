@@ -6,4 +6,4 @@ For a requested unit, resolve its purpose, dependencies, source scope, checks, a
 
 Report the commit and actual checks, then continue to the next unit under the same authorization. A local commit does not authorize push, PR creation, merge, or deployment. Final verification reuses valid earlier checks and runs only missing or invalidated checks plus the representative final UI smoke where applicable.
 
-No stage receipt, approval ledger, detailed parity aggregation, or new state machine is required. Historical checkpoint scripts/records are stored for compatibility and are not part of this workflow.
+No stage receipt, approval ledger, detailed parity aggregation, or new state machine is required. Historical records remain unchanged; the old checkpoint scripts have been removed.

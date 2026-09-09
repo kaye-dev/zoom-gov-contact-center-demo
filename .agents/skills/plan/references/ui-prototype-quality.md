@@ -20,4 +20,4 @@ Return a reviewable prototype through `./dev-prototype.sh --retain <slug>` with 
 
 For a design revision, update the same goal and necessary prototype, then perform one replacement smoke after static work. For a direct minor UI adjustment, implement the latest instruction and keep the goal/prototype; the difference is intentional. Keep optional human checks short and unchecked.
 
-Detailed parity manifests, `prototype-revision.mjs`, estimates, and old evidence readers are not used by this authoring workflow.
+This authoring workflow uses HTML/CSS/assets and representative smoke without parity manifests, estimates, or evidence readers.

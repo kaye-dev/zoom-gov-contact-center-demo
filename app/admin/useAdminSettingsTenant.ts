@@ -1,10 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  settingsReviewData,
-  type SettingsReviewState,
-} from "@/lib/admin-settings-review";
 import type { TenantKey } from "@/lib/tenants";
 import {
   ADMIN_SETTINGS_RESOURCES,
@@ -18,7 +14,6 @@ export function useAdminSettingsTenant<T>(
   initialTenant: TenantKey,
   resource: AdminSettingsResource,
   onLoad: () => void,
-  reviewState?: SettingsReviewState,
 ) {
   const { t } = useI18n();
   const copy = t.admin.industrySettings;
@@ -26,38 +21,21 @@ export function useAdminSettingsTenant<T>(
   const pathname = usePathname();
   const [tenantKey, setTenantKey] = useState(initialTenant);
   const [settings, setSettings] = useState(initialSettings);
-  const [reviewIdentity, setReviewIdentity] = useState(reviewState);
   const [baseline, setBaseline] = useState(initialSettings);
-  const [loading, setLoading] = useState(reviewState === "loading");
-  const [loadError, setLoadError] = useState(reviewState === "load-error");
-  const [isSubmitting, setIsSubmitting] = useState(reviewState === "saving");
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [pending, setPending] = useState<{
     tenant?: TenantKey;
     href?: string;
     label: string;
-  } | null>(
-    reviewState === "confirm-switch"
-      ? {
-          tenant: initialTenant === "univ" ? "lg" : "univ",
-          label: copy.names[initialTenant === "univ" ? "lg" : "univ"],
-        }
-      : null,
-  );
+  } | null>(null);
   const [extras, setExtras] = useState<Record<string, unknown>>({});
   const sequence = useRef(new SettingsRequestSequence());
   const abort = useRef<AbortController | null>(null);
-  const saving = useRef(reviewState === "saving");
-  const [fixtureDirty, setFixtureDirty] = useState(
-    ["dirty", "confirm-switch", "save-error", "validation"].includes(
-      reviewState ?? "",
-    ),
-  );
-  const dirty =
-    fixtureDirty || JSON.stringify(settings) !== JSON.stringify(baseline);
+  const saving = useRef(false);
+  const dirty = JSON.stringify(settings) !== JSON.stringify(baseline);
   const onLoadRef = useRef(onLoad);
-  useEffect(() => {
-    if (reviewState === "confirm-switch") document.getElementById("tenant")?.focus();
-  }, [reviewState]);
   useEffect(() => {
     onLoadRef.current = onLoad;
   });
@@ -87,31 +65,24 @@ export function useAdminSettingsTenant<T>(
       url.search = "";
       url.searchParams.set("tenant", next);
       if (view) url.searchParams.set("view", view);
-      if (reviewState) url.searchParams.set("state", "default");
       router.push(url.pathname + url.search, { scroll: false });
-      if (!reviewState) return; // The keyed server page loads the new scope.
+      return; // The keyed server page loads the new scope.
     }
     try {
-      const response = reviewState
-        ? null
-        : await fetch(`/api/admin/${resource}?tenant=${next}`, {
-            cache: "no-store",
-            signal: controller.signal,
-          });
-      const body = response
-        ? await response.json()
-        : { tenantKey: next, ...settingsReviewData(resource, next) };
+      const response = await fetch(`/api/admin/${resource}?tenant=${next}`, {
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      const body = await response.json();
       if (!sequence.current.current(request)) return;
       if (
-        (response && !response.ok) ||
+        !response.ok ||
         body.tenantKey !== next ||
         body.settings === undefined
       )
         throw new Error("settings load failed");
       setSettings(body.settings);
       setBaseline(body.settings);
-      setFixtureDirty(false);
-      setReviewIdentity("default");
       setExtras(body);
       onLoadRef.current();
     } catch {
@@ -162,7 +133,6 @@ export function useAdminSettingsTenant<T>(
       )
         return;
       url.searchParams.set("tenant", tenantKey);
-      if (reviewState) url.searchParams.set("state", "default");
       event.preventDefault();
       event.stopPropagation();
       if (saving.current) return;
@@ -191,7 +161,6 @@ export function useAdminSettingsTenant<T>(
     copy,
     pathname,
     router,
-    reviewState,
   ]);
   async function save(value: T, payload: unknown = value) {
     if (loading || loadError || saving.current)
@@ -201,13 +170,6 @@ export function useAdminSettingsTenant<T>(
     saving.current = true;
     setIsSubmitting(true);
     try {
-      if (reviewState) {
-        setSettings(value);
-        setBaseline(value);
-        setFixtureDirty(false);
-        setReviewIdentity("default");
-        return value;
-      }
       const response = await fetch(`/api/admin/${resource}?tenant=${target}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -237,8 +199,6 @@ export function useAdminSettingsTenant<T>(
     else if (next.href) router.push(next.href);
   }
   return {
-    invalid: reviewIdentity === "invalid",
-    reviewIdentity,
     tenantKey,
     settings,
     setSettings,
@@ -252,7 +212,6 @@ export function useAdminSettingsTenant<T>(
     retry: () => void load(tenantKey),
     cancel: () => {
       setPending(null);
-      setReviewIdentity("default");
     },
     discard,
     save,

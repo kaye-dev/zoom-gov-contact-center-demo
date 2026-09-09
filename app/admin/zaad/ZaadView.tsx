@@ -170,91 +170,44 @@ const SECTION_ORDER: ZaadViewKey[] = [
 export function ZaadView({
   allowedTenants = ["lg"],
   initialView,
-  reviewState,
-  reviewSurface,
-  reviewDialogMode,
-  reviewActor,
-  reviewConnection,
   permissions: actualPermissions,
   canViewDeveloperApi,
 }: {
   allowedTenants?: ("lg" | "univ")[];
   initialView: ZaadViewKey;
-  reviewState?: string;
-  reviewSurface?: string;
-  reviewDialogMode?: string;
-  reviewActor?: string;
-  reviewConnection?: string;
   permissions: PermissionSet;
   canViewDeveloperApi: boolean;
 }) {
   const { locale, t } = useI18n();
   const router = useRouter();
   const copy = t.admin.zaad;
-  const reviewMode = Boolean(
-    reviewState ||
-    reviewSurface ||
-    reviewDialogMode ||
-    reviewActor ||
-    reviewConnection,
-  );
-  const initialPageState: UiState = reviewSurface
-    ? "ready"
-    : isUiState(reviewState)
-      ? reviewState
-      : "pending";
   const [view, setView] = useState(initialView);
   const returnResidentFocus = useRef<((removed?: boolean) => void) | null>(null);
-  const [state, setState] = useState<UiState>(initialPageState);
-  const [dialog, setDialog] = useState<DialogKey | null>(
-    dialogFromReviewSurface(reviewSurface),
-  );
-  const [dialogState, setDialogState] = useState<UiState>(
-    isUiState(reviewState) ? reviewState : "ready",
-  );
+  const [state, setState] = useState<UiState>("pending");
+  const [dialog, setDialog] = useState<DialogKey | null>(null);
+  const [dialogState, setDialogState] = useState<UiState>("ready");
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [errorDetails, setErrorDetails] = useState<CsvErrorDetail[]>([]);
-  const [connection, setConnection] = useState(
-    reviewConnection ?? (reviewMode ? "connected" : "checking"),
-  );
-  const [residents, setResidents] = useState<ResidentPayload>(
-    reviewMode && initialPageState !== "empty"
-      ? syntheticResidents
-      : emptyResidents,
-  );
-  const [residentsLoaded, setResidentsLoaded] = useState(
-    reviewMode && initialPageState !== "pending" && initialPageState !== "failure",
-  );
+  const [connection, setConnection] = useState("checking");
+  const [residents, setResidents] = useState<ResidentPayload>(emptyResidents);
+  const [residentsLoaded, setResidentsLoaded] = useState(false);
   const [residentBusy, setResidentBusy] = useState(false);
   const residentSearch = useRef<ReturnType<
     typeof createResidentSearch<ResidentPayload>
   > | null>(null);
-  const [messages, setMessages] = useState<Message[]>(syntheticMessages);
-  const [contactLists, setContactLists] = useState<ContactList[]>(
-    syntheticContactLists,
-  );
-  const [campaigns, setCampaigns] = useState<Campaign[]>(syntheticCampaigns);
-  const [setting, setSetting] = useState<RegistrationSetting>(syntheticSetting);
-  const [selectedResidentId, setSelectedResidentId] = useState(
-    reviewMode ? syntheticResidents.residents[0].id : "",
-  );
-  const [selectedMessageId, setSelectedMessageId] = useState(
-    reviewSurface === "message-form" && reviewDialogMode === "create"
-      ? ""
-      : syntheticMessages[0].id,
-  );
-  const [selectedContactListId, setSelectedContactListId] = useState(
-    reviewSurface === "contact-list-form" && reviewDialogMode === "create"
-      ? ""
-      : reviewSurface === "contact-list-delete"
-        ? syntheticContactLists[1].id
-        : syntheticContactLists[0].id,
-  );
-  const [selectedCampaignId, setSelectedCampaignId] = useState(
-    reviewSurface === "campaign-pause"
-      ? syntheticCampaigns[1].id
-      : syntheticCampaigns[0].id,
-  );
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [contactLists, setContactLists] = useState<ContactList[]>([]);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [setting, setSetting] = useState<RegistrationSetting>({
+    contactListId: null,
+    contactListName: null,
+    revision: 0,
+    updatedAt: "",
+  });
+  const [selectedResidentId, setSelectedResidentId] = useState("");
+  const [selectedMessageId, setSelectedMessageId] = useState("");
+  const [selectedContactListId, setSelectedContactListId] = useState("");
+  const [selectedCampaignId, setSelectedCampaignId] = useState("");
   const [residentCursorHistory, setResidentCursorHistory] = useState<
     Array<string | null>
   >([]);
@@ -276,12 +229,10 @@ export function ZaadView({
   const [campaignPageHistory, setCampaignPageHistory] = useState<
     Array<string | null>
   >([]);
-  const [feedback, setFeedback] = useState<string | null>(
-    !reviewSurface && reviewState === "success" ? copy.common.success : null,
-  );
+  const [feedback, setFeedback] = useState<string | null>(null);
   const [oneTimeReview, setOneTimeReview] = useState<OneTimeReview>(null);
   const mutationGuard = useSubmissionGuard();
-  const permissions = applyReviewActor(actualPermissions, reviewActor);
+  const permissions = actualPermissions;
 
   const selectedResident =
     residents.residents.find(({ id }) => id === selectedResidentId) ??
@@ -329,7 +280,6 @@ export function ZaadView({
   }, []);
 
   useEffect(() => {
-    if (reviewMode) return;
     let active = true;
     void requestJson<{ state: string }>("/api/admin/zaad/connection")
       .then((body) => {
@@ -341,10 +291,10 @@ export function ZaadView({
     return () => {
       active = false;
     };
-  }, [reviewMode]);
+  }, []);
 
   useEffect(() => {
-    if (reviewMode || view !== "residents") return;
+    if (view !== "residents") return;
     const controller = createResidentSearch<ResidentPayload>({
       request: (query, cursor) => {
         const params = new URLSearchParams();
@@ -369,10 +319,9 @@ export function ZaadView({
     residentSearch.current = controller;
     void controller.start();
     return () => { controller.dispose(); residentSearch.current = null; };
-  }, [reviewMode, view]);
+  }, [view]);
 
   useEffect(() => {
-    if (reviewMode) return;
     let active = true;
     const load = async () => {
       if (view === "messages") {
@@ -449,7 +398,7 @@ export function ZaadView({
     return () => {
       active = false;
     };
-  }, [reviewMode, view]);
+  }, [view]);
 
   const changeView = (next: ZaadViewKey) => {
     if (next === view) return;
@@ -465,7 +414,6 @@ export function ZaadView({
   };
 
   const refresh = () => {
-    if (reviewMode) return;
     if (view === "residents") {
       residentSearch.current?.refresh();
       return;
@@ -477,7 +425,7 @@ export function ZaadView({
   };
 
   const openDialog = (next: DialogKey) => {
-    setDialogState(isUiState(reviewState) ? reviewState : "ready");
+    setDialogState("ready");
     setErrorCode(null);
     setErrorDetails([]);
     setDialog(next);
@@ -653,8 +601,7 @@ export function ZaadView({
           onSelect={(id) => {
             setSelectedMessageId(id);
             setErrorCode(null);
-            if (!reviewMode)
-              void loadMessageDetail(id, setMessages, setErrorCode, setState);
+            void loadMessageDetail(id, setMessages, setErrorCode, setState);
           }}
           onCreate={() => {
             setSelectedMessageId("");
@@ -773,7 +720,6 @@ export function ZaadView({
           campaigns={campaigns}
           canCreate={permissions.create}
           copy={copy}
-          reviewMode={reviewMode}
           onOpenConfirm={(preflight, input) => {
             setOneTimeReview({ preflight, input });
             openDialog("one-time-confirm");
@@ -806,8 +752,6 @@ export function ZaadView({
         selectedCampaign={selectedCampaign}
         permissions={permissions}
         oneTimeReview={oneTimeReview}
-        reviewMode={reviewMode}
-        reviewDialogMode={reviewDialogMode}
         onMutation={(message) => {
           if (dialog === "resident-delete" || dialog === "resident-edit") {
             returnResidentFocus.current?.(dialog === "resident-delete");
@@ -1929,7 +1873,6 @@ function OneTimeSection({
   campaigns,
   canCreate,
   copy,
-  reviewMode,
   onOpenConfirm,
 }: {
   state: UiState;
@@ -1938,7 +1881,6 @@ function OneTimeSection({
   campaigns: Campaign[];
   canCreate: boolean;
   copy: ZaadDictionary;
-  reviewMode: boolean;
   onOpenConfirm: (preflight: Preflight, input: OneTimeRequest) => void;
 }) {
   const eligibleResidents = residents.filter(
@@ -2003,12 +1945,10 @@ function OneTimeSection({
         .map(({ id, revision }) => ({ id, revision })),
     };
     try {
-      const preflight = reviewMode
-        ? syntheticPreflight
-        : await requestJson<Preflight>(
-            "/api/admin/zaad/one-time-dispatches/preflight",
-            { method: "POST", body: JSON.stringify(input) },
-          );
+      const preflight = await requestJson<Preflight>(
+        "/api/admin/zaad/one-time-dispatches/preflight",
+        { method: "POST", body: JSON.stringify(input) },
+      );
       onOpenConfirm(preflight, input);
     } catch (cause) {
       setError(cause instanceof ZaadUiError ? cause.code : "ZAAD_UNKNOWN");
@@ -2376,8 +2316,6 @@ function ZaadDialog({
   selectedCampaign,
   permissions,
   oneTimeReview,
-  reviewMode,
-  reviewDialogMode,
   onMutation,
   onError,
   errorCode,
@@ -2396,8 +2334,6 @@ function ZaadDialog({
   selectedCampaign: Campaign | null;
   permissions: PermissionSet;
   oneTimeReview: OneTimeReview;
-  reviewMode: boolean;
-  reviewDialogMode?: string;
   onMutation: (message: string) => void;
   onError: (code: string | null, details?: CsvErrorDetail[]) => void;
   errorCode: string | null;
@@ -2421,7 +2357,6 @@ function ZaadDialog({
     copy,
     selectedMessage,
     selectedContactList,
-    reviewDialogMode,
   );
   const disabled = state === "pending" || state === "success";
   const alertId = dialogAlertId(dialog, state);
@@ -2457,9 +2392,9 @@ function ZaadDialog({
       ) : null}
       {state === "success" ? (
         <div className="mt-5 text-center">
-          {dialog === "csv-import" ? (
+          {dialog === "csv-import" && csvResult ? (
             <CsvImportResultSummary
-              result={csvResult ?? syntheticCsvImportResult}
+              result={csvResult}
               copy={copy}
             />
           ) : null}
@@ -2509,7 +2444,6 @@ function ZaadDialog({
             setState={setState}
             onMutation={onMutation}
             onError={onError}
-            reviewMode={reviewMode}
           />
         ) : dialog === "resident-delete" ? (
           <DeleteResidentForm
@@ -2521,7 +2455,6 @@ function ZaadDialog({
             setState={setState}
             onMutation={onMutation}
             onError={onError}
-            reviewMode={reviewMode}
           />
         ) : dialog === "csv-import" ? (
           <CsvImportForm
@@ -2532,7 +2465,6 @@ function ZaadDialog({
             setState={setState}
             onMutation={onMutation}
             onError={onError}
-            reviewMode={reviewMode}
             onResult={setCsvResult}
           />
         ) : dialog === "message-form" ? (
@@ -2546,7 +2478,6 @@ function ZaadDialog({
             setState={setState}
             onMutation={onMutation}
             onError={onError}
-            reviewMode={reviewMode}
           />
         ) : dialog === "message-delete" ? (
           <DeleteMessageForm
@@ -2558,7 +2489,6 @@ function ZaadDialog({
             setState={setState}
             onMutation={onMutation}
             onError={onError}
-            reviewMode={reviewMode}
           />
         ) : dialog === "contact-list-form" ? (
           <ContactListDialogForm
@@ -2571,7 +2501,6 @@ function ZaadDialog({
             setState={setState}
             onMutation={onMutation}
             onError={onError}
-            reviewMode={reviewMode}
           />
         ) : dialog === "contact-list-delete" ? (
           <DeleteContactListForm
@@ -2583,7 +2512,6 @@ function ZaadDialog({
             setState={setState}
             onMutation={onMutation}
             onError={onError}
-            reviewMode={reviewMode}
           />
         ) : dialog === "campaign-start" || dialog === "campaign-pause" ? (
           <CampaignStatusForm
@@ -2596,11 +2524,10 @@ function ZaadDialog({
             setState={setState}
             onMutation={onMutation}
             onError={onError}
-            reviewMode={reviewMode}
           />
-        ) : (
+        ) : oneTimeReview ? (
           <OneTimeConfirmForm
-            review={oneTimeReview ?? syntheticOneTimeReview}
+            review={oneTimeReview}
             canSubmit={!disabled && permissions.create}
             disabled={disabled}
             copy={copy}
@@ -2608,10 +2535,9 @@ function ZaadDialog({
             setState={setState}
             onMutation={onMutation}
             onError={onError}
-            reviewMode={reviewMode}
             locale={locale}
           />
-        )}
+        ) : null}
       </div>
     </ModalDialog>
   );
@@ -2627,7 +2553,6 @@ function ResidentDialogForm({
   setState,
   onMutation,
   onError,
-  reviewMode,
 }: {
   mode: "create" | "edit";
   resident: Resident | null;
@@ -2638,7 +2563,6 @@ function ResidentDialogForm({
   setState: (state: UiState) => void;
   onMutation: (message: string) => void;
   onError: (code: string | null) => void;
-  reviewMode: boolean;
 }) {
   const submissionGuard = useSubmissionGuard();
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -2660,8 +2584,7 @@ function ResidentDialogForm({
     };
     setState("pending");
     try {
-      if (!reviewMode)
-        await requestJson(
+      await requestJson(
           `/api/admin/zaad/residents${mode === "edit" ? `/${resident?.id}` : ""}`,
           {
             method: mode === "edit" ? "PATCH" : "POST",
@@ -2764,7 +2687,6 @@ function DeleteResidentForm({
   setState,
   onMutation,
   onError,
-  reviewMode,
 }: CommonDialogFormProps & { resident: Resident | null }) {
   const submissionGuard = useSubmissionGuard();
   return (
@@ -2777,8 +2699,7 @@ function DeleteResidentForm({
         if (!resident || !canSubmit || !submissionGuard.begin()) return;
         setState("pending");
         try {
-          if (!reviewMode)
-            await requestJson(`/api/admin/zaad/residents/${resident.id}`, {
+          await requestJson(`/api/admin/zaad/residents/${resident.id}`, {
               method: "DELETE",
               body: JSON.stringify({ revision: resident.revision }),
             });
@@ -2815,7 +2736,6 @@ function CsvImportForm({
   close,
   setState,
   onError,
-  reviewMode,
   onResult,
 }: CommonDialogFormProps & { onResult: (result: CsvImportResult) => void }) {
   const [file, setFile] = useState<File | null>(null);
@@ -2835,9 +2755,7 @@ function CsvImportForm({
         if (!submissionGuard.begin()) return;
         setState("pending");
         try {
-          const result = reviewMode
-            ? syntheticCsvImportResult
-            : await (() => {
+          const result = await (() => {
                 const body = new FormData();
                 body.append("file", file, file.name);
                 return requestJson<CsvImportResult>(
@@ -2912,7 +2830,6 @@ function MessageDialogForm({
   setState,
   onMutation,
   onError,
-  reviewMode,
 }: CommonDialogBaseProps & {
   message: Message | null;
   canCreate: boolean;
@@ -2946,8 +2863,7 @@ function MessageDialogForm({
         };
         setState("pending");
         try {
-          if (!reviewMode)
-            await requestJson(
+          await requestJson(
               `/api/admin/zaad/messages${editing ? `/${message?.id}` : ""}`,
               {
                 method: editing ? "PATCH" : "POST",
@@ -3037,7 +2953,6 @@ function DeleteMessageForm({
   setState,
   onMutation,
   onError,
-  reviewMode,
 }: CommonDialogFormProps & { message: Message | null }) {
   const submissionGuard = useSubmissionGuard();
   return (
@@ -3050,8 +2965,7 @@ function DeleteMessageForm({
         if (!message || !canSubmit || !submissionGuard.begin()) return;
         setState("pending");
         try {
-          if (!reviewMode)
-            await requestJson(`/api/admin/zaad/messages/${message.id}`, {
+          await requestJson(`/api/admin/zaad/messages/${message.id}`, {
               method: "DELETE",
               body: JSON.stringify({ revision: message.revision }),
             });
@@ -3094,7 +3008,6 @@ function ContactListDialogForm({
   setState,
   onMutation,
   onError,
-  reviewMode,
 }: CommonDialogBaseProps & {
   list: ContactList | null;
   canCreate: boolean;
@@ -3126,8 +3039,7 @@ function ContactListDialogForm({
         };
         setState("pending");
         try {
-          if (!reviewMode)
-            await requestJson(
+          await requestJson(
               `/api/admin/zaad/contact-lists${editing ? `/${list?.id}` : ""}`,
               {
                 method: editing ? "PATCH" : "POST",
@@ -3191,7 +3103,6 @@ function DeleteContactListForm({
   setState,
   onMutation,
   onError,
-  reviewMode,
 }: CommonDialogFormProps & { list: ContactList | null }) {
   const submissionGuard = useSubmissionGuard();
   return (
@@ -3204,8 +3115,7 @@ function DeleteContactListForm({
         if (!list || !canSubmit || !submissionGuard.begin()) return;
         setState("pending");
         try {
-          if (!reviewMode)
-            await requestJson(`/api/admin/zaad/contact-lists/${list.id}`, {
+          await requestJson(`/api/admin/zaad/contact-lists/${list.id}`, {
               method: "DELETE",
             });
           onMutation(copy.common.success);
@@ -3244,7 +3154,6 @@ function CampaignStatusForm({
   setState,
   onMutation,
   onError,
-  reviewMode,
 }: CommonDialogFormProps & {
   campaign: Campaign | null;
   desired: "running" | "paused";
@@ -3260,8 +3169,7 @@ function CampaignStatusForm({
         if (!campaign || !canSubmit || !submissionGuard.begin()) return;
         setState("pending");
         try {
-          if (!reviewMode)
-            await requestJson(
+          await requestJson(
               `/api/admin/zaad/campaigns/${campaign.id}/status`,
               {
                 method: "PATCH",
@@ -3317,7 +3225,6 @@ function OneTimeConfirmForm({
   setState,
   onMutation,
   onError,
-  reviewMode,
   locale,
 }: CommonDialogFormProps & {
   review: NonNullable<OneTimeReview>;
@@ -3336,8 +3243,7 @@ function OneTimeConfirmForm({
         if (!canSubmit || !acknowledged || !submissionGuard.begin()) return;
         setState("pending");
         try {
-          if (!reviewMode)
-            await requestJson("/api/admin/zaad/one-time-dispatches", {
+          await requestJson("/api/admin/zaad/one-time-dispatches", {
               method: "POST",
               body: JSON.stringify({
                 ...review.input,
@@ -3508,7 +3414,6 @@ type CommonDialogBaseProps = {
   setState: (state: UiState) => void;
   onMutation: (message: string) => void;
   onError: (code: string | null, details?: CsvErrorDetail[]) => void;
-  reviewMode: boolean;
   disabled: boolean;
 };
 
@@ -3895,7 +3800,6 @@ function dialogConfig(
   copy: ZaadDictionary,
   message: Message | null,
   contactList: ContactList | null,
-  reviewDialogMode?: string,
 ) {
   if (dialog === "resident-create")
     return {
@@ -3920,7 +3824,7 @@ function dialogConfig(
   if (dialog === "message-form")
     return {
       title:
-        reviewDialogMode === "create" || !message
+        !message
           ? copy.messages.createTitle
           : copy.messages.editTitle,
       description: copy.messages.description,
@@ -3933,7 +3837,7 @@ function dialogConfig(
   if (dialog === "contact-list-form")
     return {
       title:
-        reviewDialogMode === "create" || !contactList
+        !contactList
           ? copy.contactLists.createTitle
           : copy.contactLists.editTitle,
       description: copy.contactLists.description,
@@ -4064,55 +3968,6 @@ async function loadMessageDetail(
   }
 }
 
-function applyReviewActor(
-  actual: PermissionSet,
-  actor: string | undefined,
-): PermissionSet {
-  if (!actor) return actual;
-  if (actor === "creator")
-    return { create: actual.create, update: false, delete: false };
-  if (actor === "updater" || actor === "editor")
-    return { create: false, update: actual.update, delete: false };
-  if (actor === "deleter")
-    return { create: false, update: false, delete: actual.delete };
-  if (actor === "viewer")
-    return { create: false, update: false, delete: false };
-  return actual;
-}
-
-function dialogFromReviewSurface(value: string | undefined): DialogKey | null {
-  if (!value) return null;
-  const normalized = value
-    .replace(/^admin-zaad-/u, "")
-    .replace(/-dialog$/u, "");
-  const allowed: DialogKey[] = [
-    "resident-create",
-    "resident-edit",
-    "resident-delete",
-    "csv-import",
-    "message-form",
-    "message-delete",
-    "contact-list-form",
-    "contact-list-delete",
-    "campaign-start",
-    "campaign-pause",
-    "one-time-confirm",
-  ];
-  return allowed.includes(normalized as DialogKey)
-    ? (normalized as DialogKey)
-    : null;
-}
-
-function isUiState(value: string | undefined): value is UiState {
-  return (
-    value === "ready" ||
-    value === "pending" ||
-    value === "success" ||
-    value === "empty" ||
-    value === "failure"
-  );
-}
-
 class ZaadUiError extends Error {
   constructor(
     readonly code: string,
@@ -4209,225 +4064,8 @@ const dangerButtonClass =
   "min-h-11 cursor-pointer rounded-md border border-red-600 bg-surface px-4 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950/40";
 const thClass = "px-4 py-3 text-left font-semibold";
 
-const syntheticResidents: ResidentPayload = {
-  residents: [
-    {
-      id: "resident-hanako",
-      name: "山田 花子",
-      email: "hanako.yamada@example.jp",
-      phone: "+819012345678",
-      consentStatus: "CONSENTED",
-      source: "PUBLIC_FORM",
-      revision: 4,
-      contactList: {
-        id: "zaad_contact_list_demo_001",
-        name: "未来市 防災行政無線 2026",
-      },
-      syncStatus: "SYNCED",
-      syncErrorCode: null,
-      createdAt: "2026-09-01T01:32:00.000Z",
-      updatedAt: "2026-09-01T01:34:00.000Z",
-    },
-    {
-      id: "resident-ken",
-      name: "佐藤 健",
-      email: "ken.sato@example.jp",
-      phone: "+818023456789",
-      consentStatus: "NOT_CONSENTED",
-      source: "ADMIN_CSV",
-      revision: 2,
-      contactList: null,
-      syncStatus: "NOT_ELIGIBLE",
-      syncErrorCode: null,
-      createdAt: "2026-09-01T00:18:00.000Z",
-      updatedAt: "2026-09-01T00:18:00.000Z",
-    },
-    {
-      id: "resident-misaki",
-      name: "鈴木 美咲",
-      email: "misaki.suzuki@example.jp",
-      phone: "+817034567890",
-      consentStatus: "CONSENTED",
-      source: "ADMIN_FORM",
-      revision: 1,
-      contactList: null,
-      syncStatus: "NOT_ASSIGNED",
-      syncErrorCode: null,
-      createdAt: "2026-08-31T23:47:00.000Z",
-      updatedAt: "2026-08-31T23:47:00.000Z",
-    },
-  ],
-  metrics: { total: 128, consented: 121, synced: 116, needsAttention: 2 },
-  nextCursor: null,
-};
-
 const emptyResidents: ResidentPayload = {
   residents: [],
   metrics: { total: 0, consented: 0, synced: 0, needsAttention: 0 },
   nextCursor: null,
-};
-
-const syntheticMessages: Message[] = [
-  {
-    id: "message-alert",
-    name: "大雨警報のお知らせ",
-    body: "未来市に大雨警報が発表されました。河川や崖の近くには近づかず、今後の情報に注意してください。",
-    bodyPreview:
-      "未来市に大雨警報が発表されました。河川や崖の近くには近づかず、今後の情報に注意してください。",
-    languageCode: "ja-JP",
-    voiceId: "Tomoko",
-    zoomAssetId: "zaad_asset_demo_001",
-    syncStatus: "SYNCED",
-    syncErrorCode: null,
-    revision: 3,
-    updatedAt: "2026-09-01T01:20:00.000Z",
-  },
-  {
-    id: "message-shelter",
-    name: "避難所開設のお知らせ",
-    body: "避難所を開設しました。",
-    bodyPreview: "避難所を開設しました。",
-    languageCode: "ja-JP",
-    voiceId: "Takumi",
-    zoomAssetId: null,
-    syncStatus: "SYNC_FAILED",
-    syncErrorCode: "ZAAD_ZOOM_UNAVAILABLE",
-    revision: 1,
-    updatedAt: "2026-08-31T08:20:00.000Z",
-  },
-];
-
-const syntheticContactLists: ContactList[] = [
-  {
-    id: "zaad_contact_list_demo_001",
-    name: "未来市 防災行政無線 2026",
-    description: "防災行政無線の登録住民向け連絡先リスト",
-    type: "contact",
-    contactCount: 342,
-    revision: "2026-09-01T00:41:00Z",
-    updatedAt: "2026-09-01T00:41:00.000Z",
-  },
-  {
-    id: "zaad_contact_list_demo_002",
-    name: "避難所周辺住民",
-    description: "避難所周辺の連絡先",
-    type: "contact",
-    contactCount: 89,
-    revision: "2026-08-31T06:20:00Z",
-    updatedAt: "2026-08-31T06:20:00.000Z",
-  },
-  {
-    id: "zaad_contact_list_demo_003",
-    name: "訓練対象者",
-    description: "防災訓練用",
-    type: "contact",
-    contactCount: 25,
-    revision: "2026-08-28T04:08:00Z",
-    updatedAt: "2026-08-28T04:08:00.000Z",
-  },
-];
-
-const syntheticCampaigns: Campaign[] = [
-  {
-    id: "campaign-alert",
-    name: "防災行政無線・大雨警報",
-    dialingMethod: "agentless",
-    status: "ready",
-    contactListId: "zaad_contact_list_demo_001",
-    contactListName: "未来市 防災行政無線 2026",
-    contactCount: 342,
-    queueName: "災害情報発信キュー",
-    callerIdMasked: "050-****-5678",
-    maxConcurrentCalls: 10,
-    businessHours: "災害対応時間",
-    retryPolicy: "最大2回",
-    dncPolicy: "DNC適用・常時実行は無効",
-    alwaysRunning: false,
-    revision: "campaign-alert:ready",
-  },
-  {
-    id: "campaign-running",
-    name: "避難所開設のお知らせ",
-    dialingMethod: "agentless",
-    status: "running",
-    contactListId: "zaad_contact_list_demo_002",
-    contactListName: "避難所周辺住民",
-    contactCount: 89,
-    queueName: "災害情報発信キュー",
-    callerIdMasked: "050-****-5678",
-    maxConcurrentCalls: 10,
-    businessHours: "災害対応時間",
-    retryPolicy: "最大2回",
-    dncPolicy: "DNC適用・常時実行は無効",
-    alwaysRunning: false,
-    revision: "campaign-running:running",
-  },
-  {
-    id: "campaign-preview",
-    name: "個別確認コール",
-    dialingMethod: "preview",
-    status: "draft",
-    contactListId: null,
-    contactListName: null,
-    contactCount: null,
-    queueName: null,
-    callerIdMasked: null,
-    maxConcurrentCalls: null,
-    businessHours: null,
-    retryPolicy: null,
-    dncPolicy: null,
-    alwaysRunning: false,
-    revision: "campaign-preview:draft",
-  },
-];
-
-const syntheticSetting: RegistrationSetting = {
-  contactListId: "zaad_contact_list_demo_001",
-  contactListName: "未来市 防災行政無線 2026",
-  revision: 3,
-  updatedAt: "2026-09-01T01:10:00.000Z",
-};
-
-const syntheticCsvImportResult: CsvImportResult = {
-  totalRows: 100,
-  createdCount: 98,
-  duplicateCount: 2,
-};
-
-const syntheticPreflight: Preflight = {
-  preflightToken: "synthetic-preflight-token-for-browser-review-only",
-  expiresAt: "2026-09-01T02:05:00.000Z",
-  selectedListCount: 2,
-  selectedResidentCount: 2,
-  duplicateCount: 5,
-  recipientCount: 428,
-  operationProfile: {
-    callerIdMasked: "050-****-5678",
-    queueName: "災害情報発信キュー",
-    maxConcurrentCalls: 10,
-    businessHours: "災害対応時間",
-    retryPolicy: "最大2回",
-    dncPolicy: "DNC適用・常時実行は無効",
-    alwaysRunning: false,
-  },
-};
-
-const syntheticOneTimeReview: NonNullable<OneTimeReview> = {
-  preflight: syntheticPreflight,
-  input: {
-    operationKey: "synthetic-operation-key",
-    name: "大雨特別警報",
-    body: "未来市に大雨特別警報が発表されました。直ちに安全な場所へ避難してください。",
-    languageCode: "ja-JP",
-    voiceId: "Tomoko",
-    baseCampaignId: "campaign-alert",
-    contactListIds: [
-      "zaad_contact_list_demo_001",
-      "zaad_contact_list_demo_002",
-    ],
-    residentSelections: [
-      { id: "resident-hanako", revision: 4 },
-      { id: "resident-misaki", revision: 1 },
-    ],
-  },
 };

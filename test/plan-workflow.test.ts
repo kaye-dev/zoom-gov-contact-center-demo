@@ -79,10 +79,9 @@ test("不正TOMLは対象path付きで失敗する", () => {
 });
 
 test("Local Environmentはworktree setupとcheckout-scoped actionだけを共有する", async () => {
-  const [environmentText, gitignore, parityReference] = await Promise.all([
+  const [environmentText, gitignore] = await Promise.all([
     read(".codex/environments/environment.toml"),
     read(".gitignore"),
-    read(".agents/skills/plan/references/parity-runner.md"),
   ]);
   const environment = parseToml(".codex/environments/environment.toml");
   const setup = environment.setup as { script: string };
@@ -109,8 +108,6 @@ test("Local Environmentはworktree setupとcheckout-scoped actionだけを共有
   assert.match(gitignore, /^\/\.codex\/runtime\.local\.env$/mu);
   assert.match(gitignore, /^\/\.codex\/runtime-session\.local\.json$/mu);
   assert.match(gitignore, /^\/\.codex\/confirmation-session\.local\.json$/mu);
-  assert.match(parityReference, /\.\/dev-compose\.sh ensure/u);
-  assert.match(parityReference, /development-ports\.md/u);
   const ports = await read("docs/development/development-ports.md");
   assert.match(ports, /3001–3005／4001–4005/u);
 });
@@ -134,43 +131,6 @@ test("PR templateは目的からCodexセッションまでの必須見出しを�
   assert.match(template, /UI変更時はスクリーンショットまたは未添付理由を記載/u);
 });
 
-test("parity runnerとprototype helperはcanonical artifactsを検証する", async () => {
-  const runnerPath = ".agents/skills/plan/scripts/parity-runner.mjs";
-  const revisionPath = ".agents/skills/plan/scripts/prototype-revision.mjs";
-  await Promise.all([
-    access(path.join(root, runnerPath)),
-    access(path.join(root, revisionPath)),
-    access(path.join(root, ".agents/skills/plan/references/parity-runner.md")),
-    access(path.join(root, "dev-prototype.sh")),
-  ]);
-  const [runnerFacade, runnerCore, workspace, revision] = await Promise.all([
-    read(runnerPath),
-    read(".agents/skills/plan/scripts/parity-runner-core.mjs"),
-    read(".agents/skills/plan/scripts/parity-run-workspace.mjs"),
-    read(revisionPath),
-  ]);
-  const runner = `${runnerFacade}\n${runnerCore}\n${workspace}`;
-  for (const token of [
-    "stateSetups",
-    "rowProbeMap",
-    "waitForVisible",
-    "waitForHidden",
-    "BrowserParityRunner",
-    "performance-resource-timing",
-    "browser-network-log",
-    "window.scrollX/window.scrollY",
-    "explicit-$implement-invocation",
-    "validateEvidenceBundle",
-    "prepare-run",
-    "record-batch",
-    "finalize-run",
-  ]) {
-    assert.ok(runner.includes(token), `parity runner omitted ${token}`);
-  }
-  assert.match(revision, /createHash\("sha256"\)/);
-  assert.match(revision, /ui-contract\.json/);
-  assert.match(revision, /productionBaseline\.sources/);
-});
 
 test("skill metadataは明示呼び出しを維持しUI説明の長さとpromptを満たす", async () => {
   for (const name of allSkillNames) {
@@ -363,20 +323,13 @@ test("goal templateはsmokeの最小設計と5列closureを持つ", async () => 
   assert.doesNotMatch(template, /ui-contract|parity-spec|approval\.json|matrix|schema 6/u);
 });
 
-test("active skill reference graphは保存parity資料へ到達しない", async () => {
-  const archived = new Set([
-    ".agents/skills/plan/references/parity-runner.md",
-    ".agents/skills/plan/references/manifest-storage.md",
-    ".agents/skills/plan/references/validation-design.md",
-    ".agents/skills/plan/references/browser-recovery.md",
-  ]);
+test("active skill reference graphは実在するsmoke契約へ接続する", async () => {
   const queue = ["AGENTS.md", "docs/development/codex-development-workflow.md", ...["plan", "implement", "review", "git-commit-push-pr"].map((name) => `.agents/skills/${name}/SKILL.md`)];
   const visited = new Set<string>();
   while (queue.length) {
     const relative = queue.pop()!;
     if (visited.has(relative)) continue;
     visited.add(relative);
-    assert.ok(!archived.has(relative), `active reference reaches stored parity instructions: ${relative}`);
     const content = await read(relative);
     for (const [, link] of content.matchAll(/\[[^\]]*\]\(([^)]+)\)/gu)) {
       if (/^(?:https?:|codex:|#)/u.test(link) || link.includes("<")) continue;
@@ -388,7 +341,6 @@ test("active skill reference graphは保存parity資料へ到達しない", asyn
     }
   }
   assert.ok(visited.has(".agents/skills/plan/references/workflow-verification-contract.md"));
-  for (const file of archived) assert.match(await read(file), /Historical reference only/u);
 });
 
 test("CI guardはローカル資料やarchive履歴を出荷gateにしない", async () => {

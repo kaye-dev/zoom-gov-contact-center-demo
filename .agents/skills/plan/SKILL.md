@@ -24,7 +24,7 @@ Read [ui-prototype-quality.md](references/ui-prototype-quality.md) for UI work. 
 - Finish authoring and static checks before one final prototype smoke. Follow [workflow-verification-contract.md](references/workflow-verification-contract.md) and `.claude/rules/dev-server.md`; use the Codex in-app Browser public API. Report unavailable Browser as unverified without blocking a reviewable plan.
 - Return a live prototype with `./dev-prototype.sh --retain <slug>`. Reuse a matching active session; never replace another slug implicitly. Report URL, PID, owner, smoke result, unverified items, and `./dev-confirmation.sh stop <slug>`.
 
-Do not generate parity manifests, matrices, estimate reports, approval ledgers, or final parity evidence. Do not run `prototype-revision.mjs` or a parity runner; these are historical tooling, not part of this workflow.
+Do not generate parity manifests, matrices, estimate reports, approval ledgers, or final parity evidence. The old parity executors and readers have been removed. Preserve existing goals and evidence without rewriting their results.
 
 For non-UI work, use `UI変更: なし`, `prototype: なし`, `UI検証方式: 対象外`, and `- 対象外: UI変更なし` under the user-check handoff; do not create a prototype or confirmation session. Existing non-UI fields may remain `なし` or `対象外`.
 

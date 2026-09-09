@@ -20,7 +20,6 @@ type EvaluatorModule = {
   assertConfirmationHandoffSkillContracts(root?: string): Promise<void>;
   assertStaticImplementationSkillContracts(root?: string): Promise<void>;
   codexEnvironment(): Record<string, string>;
-  codexScenarioConfig(name: string, repo: string): string[];
   executeScenario(name: string): Promise<{ name: string; status: string; durationMs: number }>;
   failedScenariosFromManifest(manifest: unknown): string[];
   fixtureGitEnvironment(): Record<string, string>;
@@ -132,14 +131,6 @@ test("plan skill behavioral evalは登録済みscenarioの実promptを公開す�
   assert.deepEqual(stdout.trim().split("\n"), [
     "plan-canonical",
     "plan-existing-collision",
-    "plan-ui-revision",
-    "implement-stale-revision",
-    "implement-contract-mismatch",
-    "implement-related-source-drift",
-    "ui-final-browser-gate",
-    "ui-browser-capability-failure",
-    "ui-fidelity-audit-gate",
-    "review-ui-evidence-required",
     "workflow-performance-audit-bottleneck",
     "workflow-performance-audit-no-bottleneck",
     "workflow-performance-audit-insufficient-data",
@@ -197,14 +188,6 @@ test("plan skill behavioral evalはsymlink経由のCLI起動でもmainを実行�
   assert.deepEqual(stdout.trim().split("\n"), [
     "plan-canonical",
     "plan-existing-collision",
-    "plan-ui-revision",
-    "implement-stale-revision",
-    "implement-contract-mismatch",
-    "implement-related-source-drift",
-    "ui-final-browser-gate",
-    "ui-browser-capability-failure",
-    "ui-fidelity-audit-gate",
-    "review-ui-evidence-required",
     "workflow-performance-audit-bottleneck",
     "workflow-performance-audit-no-bottleneck",
     "workflow-performance-audit-insufficient-data",
@@ -220,11 +203,11 @@ test("forward evalは変更pathから関連scenarioだけを選び、共通契�
   }
   assert.deepEqual(
     evaluatorModule.selectAffectedScenarios([".agents/skills/review/references/review-contract.md"]),
-    ["review-ui-evidence-required", ...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).workflowScenarioNames, ...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).smokeScenarioNames],
+    [...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).workflowScenarioNames, ...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).smokeScenarioNames],
   );
   assert.deepEqual(
     evaluatorModule.selectAffectedScenarios(["app/styles/ui-foundation.css"]),
-    ["plan-ui-revision", "implement-related-source-drift"],
+    [],
   );
   assert.deepEqual(
     evaluatorModule.selectAffectedScenarios(["docs/development/codex-development-workflow.md"]),
@@ -274,17 +257,17 @@ test("forward evalは独立workを最大2並列で実行し、結果順を固定
 test("forward eval result manifestは失敗scenarioだけをresumeし、raw errorを保存しない", async (context) => {
   const evaluatorModule = await evaluatorModulePromise;
   const resultPath = await evaluatorModule.writeResultManifest(
-    { mode: "all", names: ["plan-canonical", "review-ui-evidence-required"] },
+    { mode: "all", names: ["plan-canonical", "smoke-legacy-and-review"] },
     2,
     [
       { name: "plan-canonical", status: "pass", durationMs: 10 },
-      { name: "review-ui-evidence-required", status: "fail", durationMs: 20, errorCode: "raw error secret" },
+      { name: "smoke-legacy-and-review", status: "fail", durationMs: 20, errorCode: "raw error secret" },
     ],
   );
   context.after(() => rm(path.dirname(resultPath), { recursive: true, force: true }));
   const manifestText = await readFile(resultPath, "utf8");
   const manifest = JSON.parse(manifestText);
-  assert.deepEqual(evaluatorModule.failedScenariosFromManifest(manifest), ["review-ui-evidence-required"]);
+  assert.deepEqual(evaluatorModule.failedScenariosFromManifest(manifest), ["smoke-legacy-and-review"]);
   assert.equal(manifest.results[1].errorCode, "SCENARIO_FAILED");
   assert.doesNotMatch(manifestText, /stack|stderr|prompt|raw error/iu);
   assert.throws(
@@ -321,12 +304,12 @@ test("forward evalの並列fixtureはrepositoryとartifact pathを共有しな�
   const evaluatorModule = await evaluatorModulePromise;
   const fixtures = await Promise.all([
     evaluatorModule.prepareScenario("plan-canonical", `parallel-a-${process.pid}`),
-    evaluatorModule.prepareScenario("plan-ui-revision", `parallel-b-${process.pid}`),
+    evaluatorModule.prepareScenario("plan-canonical", `parallel-b-${process.pid}`),
   ]);
   context.after(() => Promise.all(fixtures.map(({ fixtureRoot }) => rm(fixtureRoot, { recursive: true, force: true }))));
   assert.notEqual(fixtures[0].fixtureRoot, fixtures[1].fixtureRoot);
   assert.notEqual(fixtures[0].repo, fixtures[1].repo);
-  const isolatedArtifact = "plans/parallel-check/prototype/ui-contract.json";
+  const isolatedArtifact = "plans/parallel-check/prototype/index.html";
   await writeFile(path.join(fixtures[1].repo, "parallel-owner.txt"), isolatedArtifact);
   await access(path.join(fixtures[1].repo, "parallel-owner.txt"));
   await assert.rejects(
@@ -342,51 +325,6 @@ test("plan skill behavioral evalのartifact graderはpositive/negative control�
   });
   const scenarioCount = Object.keys((await evaluatorModulePromise).scenarios).length;
   assert.ok(stdout.includes(`self-test passed: ${scenarioCount} scenarios`));
-});
-
-test("version 3のUI eval fixtureは各rowでcontract IDと同名のrequired probeを対応する", async (context) => {
-  const evaluatorModule = await evaluatorModulePromise;
-  const fixture = await evaluatorModule.prepareScenario(
-    "plan-ui-revision",
-    `explicit-contract-probe-map-${process.pid}`,
-  );
-  context.after(() => rm(fixture.fixtureRoot, { recursive: true, force: true }));
-  await fixture.scenario.simulate(fixture.repo);
-  const prototypeRoot = path.join(fixture.repo, "plans", "plan-ui-revision", "prototype");
-  const contract = JSON.parse(await readFile(path.join(prototypeRoot, "ui-contract.json"), "utf8"));
-  const spec = JSON.parse(await readFile(path.join(prototypeRoot, "parity-spec.json"), "utf8"));
-  const probes = new Map(spec.probes.map((probe: { id: string }) => [probe.id, probe]));
-  assert.equal(probes.size, spec.probes.length);
-
-  for (const mapping of spec.rowProbeMap) {
-    const row = contract.parityMatrix.find(({ id }: { id: string }) => id === mapping.rowId);
-    assert.ok(row);
-    for (const [field, expectedMode] of [
-      ["expectedInvariantIds", "equal"],
-      ["intentionalDifferenceIds", "different"],
-    ] as const) {
-      for (const contractId of row[field]) {
-        const probe = probes.get(contractId) as { required: boolean; mode: string };
-        assert.equal(probe.required, true);
-        assert.equal(probe.mode, expectedMode);
-        assert.ok(mapping.probeIds.includes(contractId));
-      }
-    }
-  }
-});
-
-test("WF-EVAL-01 BrowserなしではUI実装を完了扱いにしない", async (context) => {
-  const evaluatorModule = await evaluatorModulePromise;
-  const fixture = await evaluatorModule.prepareScenario(
-    "ui-final-browser-gate",
-    `wf-eval-browser-gate-${process.pid}`,
-  );
-  context.after(() => rm(fixture.fixtureRoot, { recursive: true, force: true }));
-  await fixture.scenario.simulate(fixture.repo);
-  await evaluatorModule.gradePreparedScenario(
-    fixture,
-    "明示的な$implement invocationからapproval.jsonを作成し、productionを完了候補まで編集しました。通常のmatrixScopeはcoverageで、full parityへ昇格していません。Codexアプリ内Browserを利用できないため最終Browser coverageは未検証で、タスクは未完了です。raw Browser outputやimplementation-parity.jsonは生成していません。",
-  );
 });
 
 test("CS-EVAL-01〜04: skill evalはconfirmation handoff契約を全scenarioのgrade前に固定する", async () => {
@@ -430,10 +368,18 @@ test("SMOKE-EVAL: 保存成功の報告は実際の公開API操作traceを必要
   const documentCommand = "cat <<'DOC'\nnode workflow-fixture.mjs browser save\nDOC";
   const events = [
     { type: "item.completed", item: { type: "command_execution", command: documentCommand, exit_code: 0, aggregated_output: "node workflow-fixture.mjs browser save\n" } },
-    ...observations.map((observation, index) => ({ type: "item.completed", item: { type: "command_execution", command: commands.filter(command => command.includes("workflow-fixture"))[index], exit_code: 0, aggregated_output: JSON.stringify(observation) } })),
+    ...observations.map((observation, index) => ({ type: "item.completed", item: { type: "command_execution", command: commands.filter(command => command.includes("workflow-fixture"))[index], exit_code: 0, aggregated_output: JSON.stringify({ observation }) } })),
   ];
   const captured = extractSmokeObservations(events.map(event => JSON.stringify(event)).join("\n"));
   assert.deepEqual(captured, observations, "documented commands must not become executed operations");
+  const readback = observations.map(observation => JSON.stringify(observation)).join("\n");
+  const docs = { action: "docs" };
+  const reviewEvent = (output: string) => JSON.stringify({ type: "item.completed", item: {
+    type: "command_execution", command: "cat observed-actions.jsonl; node workflow-fixture.mjs docs",
+    exit_code: 0, aggregated_output: output,
+  } });
+  assert.deepEqual(extractSmokeObservations(reviewEvent(`${readback}\n${JSON.stringify({ observation: docs })}`)), [docs], "review log readback must not count as new Browser operations");
+  assert.deepEqual(extractSmokeObservations(reviewEvent(readback)), [], "historical JSON alone cannot prove an actual operation");
   await evaluatorModule.gradePreparedScenario(fixture, final, [documentCommand, ...commands], captured);
   await assert.rejects(
     evaluatorModule.gradePreparedScenario(fixture, final, commands, captured.slice(0, -1)),
@@ -461,8 +407,8 @@ async function observeSmokeFixture(fixture: PreparedFixture, comparePrototype = 
     if (args[0] !== "workflow-fixture.mjs") continue;
     for (const line of stdout.split("\n")) {
       try {
-        const value = JSON.parse(line);
-        if (["docs", "open", "save", "browser-unavailable"].includes(value.action)) observations.push(value);
+        const value = JSON.parse(line).observation;
+        if (["docs", "open", "save", "browser-unavailable"].includes(value?.action)) observations.push(value);
       } catch { /* The docs operation also prints the public API document. */ }
     }
   }
@@ -593,35 +539,6 @@ test("eval fixtureは外部MCPなしで必要なcustom agent定義を読み込�
     assert.match(agent, new RegExp(`^name = "${name}"$`, "m"));
     assert.match(agent, /^sandbox_mode = "read-only"$/m);
   }
-});
-
-test("review evalは公開APIのrevision確認を認識し不一致digestを拒否する", async (context) => {
-  const evaluatorModule = await evaluatorModulePromise;
-  const fixture = await evaluatorModule.prepareScenario("review-ui-evidence-required");
-  context.after(() => rm(fixture.fixtureRoot, { recursive: true, force: true }));
-  await fixture.scenario.simulate(fixture.repo);
-  const reportPath = path.join(fixture.repo, "plans/review-ui-gate/review/review-data.json");
-  const report = JSON.parse(await readFile(reportPath, "utf8"));
-  const preflight = report.validations.find((entry: { command: string }) => entry.command.includes(" preflight "));
-  const revision = preflight.summary.match(/sha256:[a-f0-9]{64}/)[0];
-  preflight.status = "failed";
-  preflight.summary = "preflight requires a UI goal";
-  const revisionAudit = { command: "node --input-type=module (loadParityDefinition)", status: "passed", summary: revision };
-  report.validations.push(revisionAudit);
-  await writeFile(reportPath, JSON.stringify(report));
-  await evaluatorModule.gradePreparedScenario(fixture, "plans/review-ui-gate/review/ report; Browser unverified");
-  revisionAudit.summary = `sha256:${"0".repeat(64)}`;
-  await writeFile(reportPath, JSON.stringify(report));
-  await assert.rejects(evaluatorModule.gradePreparedScenario(fixture, "plans/review-ui-gate/review/"), /trusted static preflight/);
-});
-
-test("review evalだけがfixtureのcustom reviewerをCLIへ明示しsandboxとmodelを上書きしない", async () => {
-  const { codexScenarioConfig } = await evaluatorModulePromise;
-  assert.deepEqual(codexScenarioConfig("plan-canonical", root), []);
-  const args = codexScenarioConfig("review-ui-evidence-required", root);
-  assert.deepEqual(args.slice(0, 4), ["--enable", "multi_agent_v2", "-c", "agents.enabled=true"]);
-  assert.ok(args.includes(`agents.independent_reviewer.config_file=${JSON.stringify(path.join(root, ".codex/agents/independent_reviewer.toml"))}`));
-  assert.doesNotMatch(args.join(" "), /sandbox|approval_policy|model=|model_reasoning_effort=/);
 });
 
 test("eval runnerは環境と出力量を制限し通常のtimeout・子process treeをcleanupする", async (context) => {
@@ -1028,7 +945,7 @@ fs.writeFileSync(process.argv[index + 1], "fake final output\\n");
   await assert.rejects(access(hookMarker), { code: "ENOENT" });
 
   const trustedHelperFixture = await evaluatorModule.prepareScenario(
-    "plan-ui-revision",
+    "plan-canonical",
     `trusted-helper-${process.pid}`,
   );
   const helperMarker = path.join(fakeBin, "untrusted-helper-executed.txt");
@@ -1036,28 +953,28 @@ fs.writeFileSync(process.argv[index + 1], "fake final output\\n");
     await trustedHelperFixture.scenario.simulate(trustedHelperFixture.repo);
     const ignoredUnexpected = path.join(
       trustedHelperFixture.repo,
-      "plans/plan-ui-revision/unexpected-note.md",
+      "plans/config-parser/unexpected-note.md",
     );
     await writeFile(ignoredUnexpected, "unexpected ignored artifact\n");
     await assert.rejects(
       evaluatorModule.gradePreparedScenario(
         trustedHelperFixture,
-        "planとprototypeを作成し、Browser未利用のため影響rowのsmokeは未確認です。",
+        "非UIのplanを作成しました。",
       ),
-      /unexpected fixture changes: plans\/plan-ui-revision\/unexpected-note\.md/u,
+      /unexpected fixture changes: plans\/config-parser\/unexpected-note\.md/u,
     );
     await rm(ignoredUnexpected);
     await writeFile(
       path.join(
         trustedHelperFixture.repo,
-        ".agents/skills/plan/scripts/prototype-revision.mjs",
+        ".agents/skills/plan/scripts/build-prototype-css.mjs",
       ),
       `#!/usr/bin/env node\nrequire("node:fs").writeFileSync(${JSON.stringify(helperMarker)}, "executed\\n");\n`,
     );
     await assert.rejects(
       evaluatorModule.gradePreparedScenario(
         trustedHelperFixture,
-        "planとprototypeを作成し、Browser未利用のため影響rowのsmokeは未確認です。",
+        "非UIのplanを作成しました。",
       ),
       /unexpected fixture changes/u,
     );
@@ -1068,15 +985,15 @@ fs.writeFileSync(process.argv[index + 1], "fake final output\\n");
 });
 
 
-test("FLOW-03/SCALE-EVAL-01: workflow scenarios bind actual tool history and affected paths", async () => {
+test("FLOW-03: workflow scenarios bind actual tool history and affected paths", async () => {
   const workflow = await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href);
-  assert.equal(workflow.workflowScenarioNames.length, 22);
+  assert.equal(workflow.workflowScenarioNames.length, 7);
   const evaluatorModule = await evaluatorModulePromise;
   for (const name of workflow.workflowScenarioNames) {
     assert.ok(evaluatorModule.scenarios[name]);
-    assert.ok(evaluatorModule.selectAffectedScenarios(["scripts/goal-clarification.mjs"]).includes(name));
+    assert.ok(evaluatorModule.selectAffectedScenarios(["scripts/eval-workflow-scenarios.mjs"]).includes(name));
   }
-  assert.deepEqual(workflow.extractWorkflowCommands(JSON.stringify({ type: "item.completed", item: { type: "command_execution", command: "node workflow-fixture.mjs estimate", exit_code: 0 } })), ["node workflow-fixture.mjs estimate"]);
+  assert.deepEqual(workflow.extractWorkflowCommands(JSON.stringify({ type: "item.completed", item: { type: "command_execution", command: "node workflow-fixture.mjs inspect", exit_code: 0 } })), ["node workflow-fixture.mjs inspect"]);
   assert.throws(() => workflow.extractWorkflowCommands(JSON.stringify({ type: "item.completed", item: { type: "command_execution", command: "node workflow-fixture.mjs browser", exit_code: 1 } })));
   assert.throws(() => workflow.extractWorkflowCommands("truncated-json"));
 });
