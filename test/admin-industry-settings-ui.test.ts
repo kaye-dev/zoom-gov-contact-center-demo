@@ -29,7 +29,8 @@ test("HEADER-INLINE/HELP/A11Y: label, help and select retain one inline control"
     "utf8",
   );
   assert.match(select, /flex w-full min-w-0 items-center gap-3/);
-  assert.match(select, /htmlFor="tenant"/);
+  assert.match(select, /fieldLabel=\{\{ htmlFor: "tenant", text: c.copy.label \}\}/);
+  assert.match(readFileSync("app/components/admin/AdminFieldHelp.tsx", "utf8"), /htmlFor=\{fieldLabel.htmlFor\}/);
   assert.match(select, /aria-describedby="tenant-help"/);
   assert.match(select, /AdminFieldHelp/);
   assert.doesNotMatch(select, /<p[^>]*>\{c\.copy\.help\}/);

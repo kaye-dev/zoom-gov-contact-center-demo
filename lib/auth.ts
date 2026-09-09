@@ -17,17 +17,7 @@ import { TENANTS, listTenantProductionOrigins } from "@/lib/tenants";
 const LOCAL_BASE_URL = "http://localhost:3000";
 const LOCAL_SECRET = "local-development-secret-change-me";
 const EXAMPLE_SECRET = "replace-with-a-long-random-secret";
-const defaultTrustedOrigins = [
-  "http://localhost:3000",
-  "http://localhost:3001",
-  "http://localhost:3002",
-  "http://localhost:3003",
-  ...TENANTS.flatMap((tenant) =>
-    [3000, 3001, 3002, 3003].map(
-      (port) => `http://${tenant.devHostLabel}.localhost:${port}`,
-    ),
-  ),
-];
+const defaultTrustedOrigins = [3000, 3001, 3002, 3003].map(port => `http://localhost:${port}`);
 
 type CreateAuthOptions = {
   baseURL?: string;
@@ -129,7 +119,10 @@ function resolveBaseURL(
   }
 
   if (env.NODE_ENV !== "production") {
-    return env.BETTER_AUTH_URL?.trim() || LOCAL_BASE_URL;
+    const configured = env.BETTER_AUTH_URL?.trim() || LOCAL_BASE_URL;
+    const url = new URL(configured);
+    if (["lg.localhost", "univ.localhost"].includes(url.hostname)) return LOCAL_BASE_URL;
+    return configured;
   }
 
   const canonicalOrigin = readRequiredProductionOrigin(

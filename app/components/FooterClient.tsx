@@ -1,11 +1,17 @@
 'use client';
 
+import { useSyncExternalStore } from "react";
+import { publicAdminHref } from "@/lib/admin-routing";
+import type { TenantKey } from "@/lib/tenants";
 import { usePathname } from 'next/navigation';
 
 import { useI18n } from '../i18n/LanguageProvider';
 import { StarEmblem } from './svg/StarEmblemIcon';
 
+const subscribeHost = () => () => {};
+
 type FooterClientProps = {
+  tenantKey?: TenantKey;
   isSignedIn: boolean;
   representativePhone: {
     display: string;
@@ -14,11 +20,13 @@ type FooterClientProps = {
 };
 
 export function FooterClient({
+  tenantKey = "lg",
   isSignedIn,
   representativePhone,
 }: FooterClientProps) {
   const { t } = useI18n();
   const pathname = usePathname();
+  const hostname = useSyncExternalStore(subscribeHost, () => window.location.hostname, () => "");
 
   // 各フッターリンクは対応するドキュメントページへ接続する。
   const policyLinks = [
@@ -28,6 +36,7 @@ export function FooterClient({
   ];
 
   const serviceLinks = [
+    ...(tenantKey === "lg" ? [{ label: t.municipalOutreach.title, href: "/notifications/register" }] : []),
     {
       label: t.footer.disasterRadio,
       href: '/life/emergency-safety-disaster/disaster-prevention-radio',
@@ -36,7 +45,7 @@ export function FooterClient({
     { label: t.footer.sitemap, href: '#' },
     {
       label: isSignedIn ? t.footer.goToAdmin : t.footer.login,
-      href: isSignedIn ? '/admin' : '/login',
+      href: publicAdminHref(tenantKey, hostname),
     },
   ];
 

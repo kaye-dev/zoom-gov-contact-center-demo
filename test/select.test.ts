@@ -102,6 +102,19 @@ test("shared Select preserves native single-select props and ref contract", () =
   assert.equal(selectForbidsGeometryOverrides, true);
 });
 
+test("wrapped display text leaves selection and accessible naming on the native select", () => {
+  const label = "Local government (Future City)";
+  const markup = renderToStaticMarkup(createElement(Select, {
+    id: "tenant", "aria-labelledby": "tenant-label", value: "lg", displayValue: label,
+    onChange: () => {},
+  }, createElement("option", { value: "lg" }, label), createElement("option", { value: "univ" }, "University")));
+  assert.equal((markup.match(/<select\b/g) ?? []).length, 1);
+  assert.match(markup, /<option value="lg" selected="">Local government \(Future City\)<\/option>/);
+  assert.match(tagWithAttribute(markup, "data-select-target"), /aria-labelledby="tenant-label"/);
+  assert.match(tagWithAttribute(markup, "data-select-value"), /aria-hidden="true"/);
+  assert.doesNotMatch(markup, /displayValue=|role="combobox"|tabindex=/);
+});
+
 test("shared Select owns reference-aligned chrome", () => {
   const markup = renderSelect();
   const rootClasses = classesForTag(
@@ -184,7 +197,7 @@ test("all application selects use the shared Select", () => {
 
   assert.deepEqual(violations, []);
   assert.equal(selectSource.match(/<select\b/g)?.length, 1);
-  assert.equal(sharedUsageCount, 28);
+  assert.ok(sharedUsageCount >= 28, "existing shared Select coverage is retained as forms are added");
   assert.match(designSource, /#### 6\.5\.2 セレクト/);
   assert.match(designSource, /app\/components\/Select\.tsx/);
 });

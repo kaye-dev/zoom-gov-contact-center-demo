@@ -120,6 +120,16 @@
       "name": "20260908063000_university_outreach_action_receipts",
       "sha256": "8de6f8b0d09480f33c90ae087fd2c422c43e0f75a0b29787dafac82c674733d0",
       "classification": "destructive-reviewed"
+    },
+    {
+      "name": "20260909050000_outreach_crm_municipal",
+      "sha256": "912ae41527a5c9c3ac6840d08125c7448f4e7253b8e11183b66293f9760c5bf1",
+      "classification": "destructive-reviewed"
+    },
+    {
+      "name": "20260909070000_outreach_registration_reception",
+      "sha256": "6a848d643141ecf5160f8cca46fdc8647f4cf14f4dfa06878a828bff917f11ee",
+      "classification": "destructive-reviewed"
     }
   ]
 }

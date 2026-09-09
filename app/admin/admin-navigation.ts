@@ -118,19 +118,8 @@ export function buildAdminNavigation(
       label: t.admin.reservations,
     });
   }
-  const outreachTenant = outreach
-    ? [outreach.selectedTenant, outreach.hostTenant, ...outreach.allowedTenants].find(
-        (tenant) => tenant !== null && outreach.allowedTenants.includes(tenant),
-      )
-    : undefined;
-  if (visible.has("zaad") && (!outreach || outreachTenant)) {
-    primaryItems.push({
-      key: "zaad",
-      href: outreach && outreachTenant !== outreach.hostTenant
-        ? `/admin/zaad?tenant=${outreachTenant}`
-        : "/admin/zaad",
-      label: t.admin.zaad.navLabel,
-    });
+  if (visible.has("zaad") && (!outreach || outreach.allowedTenants.length)) {
+    primaryItems.push({ key: "zaad", href: "/admin/zaad", label: t.admin.zaad.navLabel });
   }
   if (users[0]) {
     primaryItems.push({
@@ -180,6 +169,15 @@ export function buildAdminNavigation(
       href: settings[0].href,
       label: t.admin.navigation.settingsSection,
     });
+  }
+
+  const tenant = outreach?.selectedTenant;
+  if (tenant === "lg" || tenant === "univ") {
+    for (const item of [...primaryItems, ...users, ...settings]) {
+      const url = new URL(item.href, "http://localhost:3000");
+      url.searchParams.set("tenant", tenant);
+      item.href = url.pathname + url.search;
+    }
   }
 
   return {

@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+export const metadata: Metadata = { title: { default: "管理画面", template: "%s | 管理画面" }, icons: { icon: { url: "/favicons/admin.svg", type: "image/svg+xml", sizes: "any" } }, robots: { index: false, follow: false } };
 import { withPrisma } from "@/lib/server/prisma";
 import { getRequestTenant } from "@/lib/server/tenant";
 import { outreachTenants } from "@/lib/server/zaad/university/permissions";

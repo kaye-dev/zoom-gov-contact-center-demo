@@ -1,7 +1,7 @@
 import { createElement, type ComponentType, type ComponentProps, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
-import { PathnameContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
+import { PathnameContext, SearchParamsContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
 import { AdminShell } from "../app/admin/AdminShell";
 import { LanguageProvider } from "../app/i18n/LanguageProvider";
 import { locales } from "../app/i18n/dictionaries";
@@ -14,6 +14,7 @@ const Shell = AdminShell as ComponentType<WithOptionalChildren<ComponentProps<ty
 export function renderAdmin(children: ReactNode, pathname = "/admin/phone-settings") {
   return renderToStaticMarkup(createElement(AppRouterContext.Provider, { value: router },
     createElement(PathnameContext.Provider, { value: pathname },
+      createElement(SearchParamsContext.Provider, { value: new URLSearchParams("tenant=lg") },
       createElement(Provider, { availableLocales: locales, tenantKey: DEFAULT_TENANT_KEY },
-        createElement(Shell, { visibleItems: [], currentUserName: "Test Admin" }, children)))));
+        createElement(Shell, { visibleItems: [], currentUserName: "Test Admin" }, children))))));
 }

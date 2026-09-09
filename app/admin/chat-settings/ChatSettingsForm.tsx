@@ -43,7 +43,7 @@ export function ChatSettingsForm({
   const [invalidField, setInvalidField] = useState<string | null>(reviewState === "validation" ? "chat-settings-campaign-web-tag" : null);
   useEffect(() => { if (invalidField) document.getElementById(invalidField)?.focus(); }, [invalidField]);
   const [activeSection, setActiveSection] = useState((reviewState === "detail" || reviewState === "validation") ? "chat-campaign" : reviewState === "third" ? "chat-entry-id" : "chat-method");
-  const [feedback, setFeedback] = useState<Feedback | null>(reviewState === "saved" ? {kind:"success"} : (reviewState === "save-error" || reviewState === "validation") ? {kind:"error"} : null);
+  const [feedback, setFeedback] = useState<Feedback | null>(reviewState === "saved" ? {kind:"success"} : reviewState === "save-error" ? {kind:"error"} : null);
   const control = useAdminSettingsTenant(initialSettings, initialTenant, "chat-settings", () => { setActiveSection("chat-method"); setFeedback(null); setInvalidField(null); }, reviewState);
   const { settings, setSettings, isSubmitting } = control;
   const feedbackMessage = feedback
@@ -51,7 +51,7 @@ export function ChatSettingsForm({
       ? control.copy.saved.replace("{tenant}", control.tenantName)
       : feedback.code
         ? t.admin.settings.errors[feedback.code]
-        : t.admin.settings.saveError
+        : control.copy.saveError
     : null;
   const modeOptions: Array<{
     value: ChatSettings["activeMode"];
@@ -140,8 +140,8 @@ export function ChatSettingsForm({
         >
           <AdminPageTitleHelp
             title={t.admin.chatManagement.title}
-            description={t.admin.chatManagement.description}
-            label={t.admin.pageDescriptionLabel.replace("{title}", t.admin.chatManagement.title)}
+            description={control.copy.pageHelpDescription.replace("{title}", t.admin.chatManagement.title)}
+            label={control.copy.pageHelpLabel}
           />
         <AdminSettingsTenantSelect control={control} resource="chat-settings" />
         </div>
@@ -219,7 +219,6 @@ export function ChatSettingsForm({
         </AdminSettingsPanel>
         <AdminSettingsPanel section="chat-campaign" activeSection={activeSection}>
         <ChatMethodFieldset
-            isSubmitting={isSubmitting}
           title={t.admin.chatManagement.campaign.title}
           description={t.admin.chatManagement.campaign.description}
           isActive={settings.activeMode === "CAMPAIGN"}
@@ -237,6 +236,7 @@ export function ChatSettingsForm({
               id="chat-settings-campaign-web-tag"
               aria-invalid={invalidField === "chat-settings-campaign-web-tag" || undefined}
               name="campaignWebTag"
+              disabled={isSubmitting}
               readOnly={!canEdit}
               value={settings.campaignWebTag ?? ""}
               onChange={(event) =>
@@ -268,6 +268,7 @@ export function ChatSettingsForm({
               id="chat-settings-campaign-memo"
               aria-invalid={invalidField === "chat-settings-campaign-memo" || undefined}
               name="campaignMemo"
+              disabled={isSubmitting}
               readOnly={!canEdit}
               value={settings.campaignMemo ?? ""}
               onChange={(event) =>
@@ -289,7 +290,6 @@ export function ChatSettingsForm({
         </AdminSettingsPanel>
         <AdminSettingsPanel section="chat-entry-id" activeSection={activeSection}>
         <ChatMethodFieldset
-            isSubmitting={isSubmitting}
           title={t.admin.chatManagement.contactCenterEntryId.title}
           description={
             t.admin.chatManagement.contactCenterEntryId.description
@@ -309,6 +309,7 @@ export function ChatSettingsForm({
               id="chat-settings-contact-center-entry-id-web-tag"
               aria-invalid={invalidField === "chat-settings-contact-center-entry-id-web-tag" || undefined}
               name="contactCenterEntryIdWebTag"
+              disabled={isSubmitting}
               readOnly={!canEdit}
               value={settings.contactCenterEntryIdWebTag ?? ""}
               onChange={(event) =>
@@ -345,6 +346,7 @@ export function ChatSettingsForm({
               id="chat-settings-contact-center-entry-id-memo"
               aria-invalid={invalidField === "chat-settings-contact-center-entry-id-memo" || undefined}
               name="contactCenterEntryIdMemo"
+              disabled={isSubmitting}
               readOnly={!canEdit}
               value={settings.contactCenterEntryIdMemo ?? ""}
               onChange={(event) =>
@@ -365,24 +367,23 @@ export function ChatSettingsForm({
 
         </AdminSettingsPanel>
 
+
+
+        <p id="save-scope" className="text-sm leading-6 text-fg-muted">{control.copy.scope.replace("{tenant}", control.tenantName)}</p>
+        {control.dirty && <p className="text-sm text-fg-muted">{control.copy.dirty}</p>}
+        {!canEdit && <p role="status" className="text-sm text-fg-muted">{control.copy.readonly}</p>}
         {feedback ? (
           <p
             id="chat-settings-feedback"
             role={feedback.kind === "error" ? "alert" : "status"}
             aria-live={feedback.kind === "error" ? "assertive" : "polite"}
-            className={`rounded-md px-4 py-3 text-sm ${
-              feedback.kind === "error"
-                ? "bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-200"
-                : "bg-green-50 text-green-800 dark:bg-green-950/50 dark:text-green-200"
-            }`}
+            className={feedback.kind === "error"
+              ? "text-sm text-red-700 dark:text-red-400"
+              : "rounded-md bg-green-50 px-4 py-3 text-sm text-green-900 dark:bg-surface-raised dark:text-green-300"}
           >
             {feedbackMessage}
           </p>
         ) : null}
-
-        <p id="save-scope" className="text-sm leading-6 text-fg-muted">{control.copy.scope.replace("{tenant}", control.tenantName)}</p>
-        {control.dirty && <p className="text-sm text-fg-muted">{control.copy.dirty}</p>}
-        {!canEdit && <p role="status" className="text-sm text-fg-muted">{control.copy.readonly}</p>}
         <button
           aria-describedby="save-scope"
           type="submit"
@@ -390,7 +391,7 @@ export function ChatSettingsForm({
           className="cursor-pointer rounded-md bg-primary px-5 py-2.5 font-semibold text-white transition-colors hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isSubmitting
-            ? t.admin.settings.saving
+            ? control.copy.saving
             : t.admin.settings.save}
         </button>
       </form>}
@@ -400,7 +401,6 @@ export function ChatSettingsForm({
 }
 
 function ChatMethodFieldset({
-  isSubmitting,
   title,
   description,
   isActive,
@@ -414,10 +414,9 @@ function ChatMethodFieldset({
   activeLabel: string;
   inactiveLabel: string;
   children: React.ReactNode;
-  isSubmitting: boolean;
 }) {
   return (
-    <fieldset disabled={isSubmitting} className={settingsSectionClassName}>
+    <fieldset className={settingsSectionClassName}>
       <legend className="sr-only">{title}</legend>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="max-w-3xl text-sm leading-6 text-fg-muted">

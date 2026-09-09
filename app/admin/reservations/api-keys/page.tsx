@@ -3,12 +3,15 @@ import { requireAdminAccess } from "@/lib/server/admin-access/server";
 import { listReservationApiKeys } from "@/lib/server/reservation-api-keys";
 import { getReservationApiUsageSnapshot } from "@/lib/server/reservation-api-usage";
 import { withPrisma } from "@/lib/server/prisma";
-import { getRequestTenant } from "@/lib/server/tenant";
+import { getAdminPageTenant } from "@/lib/server/admin-scope";
+import { AdminTenantChoice } from "@/app/admin/AdminTenantChoice";
 
 import { ReservationApiKeysView } from "./ReservationApiKeysView";
 
 export default async function ReservationApiKeysPage() {
-  const tenant = await getRequestTenant();
+  const selected = await getAdminPageTenant("reservations");
+  if (!selected.ok) return <AdminTenantChoice allowed={selected.allowed} code={selected.code} />;
+  const tenant = selected.tenant;
   const { actor } = await requireAdminAccess(
     "reservations",
     "VIEW",
@@ -24,6 +27,7 @@ export default async function ReservationApiKeysPage() {
 
   return (
     <ReservationApiKeysView
+      tenantKey={tenant.key}
       initialApiKeys={initial.apiKeys}
       initialUsageLimit={initial.usageLimit}
       canEdit={canAdminAccess(actor, "reservations", "UPDATE")}

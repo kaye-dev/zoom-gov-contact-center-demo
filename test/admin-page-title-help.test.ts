@@ -70,3 +70,15 @@ test("HELP-SSR: independent IDs, one hidden description per title, button semant
   assert.equal((html.match(/<h1/g) ?? []).length, 2);
   assert.match(html, /aria-hidden="true" focusable="false"/);
 });
+
+
+test("HELP-REVIEW: field help supports an initially open, dismissible state", async () => {
+  const { AdminFieldHelp } = await import("../app/components/admin/AdminFieldHelp");
+  const html = renderToStaticMarkup(createElement(AdminFieldHelp, {
+    id: "tenant-help", label: "業種", description: "対象を選択します。", defaultOpen: true,
+  }));
+  assert.match(html, /aria-expanded="true"/);
+  assert.match(html, /role="tooltip"/);
+  assert.match(html, /対象を選択します。/);
+  assert.equal(isHelpOpen(helpReducer({ ...initialHelpState, pinned: true }, "dismiss")), false);
+});

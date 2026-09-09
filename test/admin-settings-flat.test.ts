@@ -32,7 +32,8 @@ for (const canEdit of [true, false]) {
     assert.equal((html.match(/<input/g) ?? []).length, 4);
     assert.match(html, /max-w-4xl/);
     assert.match(html, /md:grid-cols-2/);
-    assert.match(html, /border-b border-line-subtle py-4 md:grid-cols-\[12rem_minmax\(0,1fr\)\]/);
+    assert.match(html, /<label[^>]*for="ai-phone-ja"[^>]*class="block text-sm font-semibold"/);
+    assert.match(html, /id="ai-phone-ja"/);
     assert.match(html, /aria-describedby="representative-phone-e164-help"/);
     assert.match(html, /aria-describedby="save-scope"/);
     assert.ok(html.includes(dictionaries.ja.admin.industrySettings.scope.replace("{tenant}", dictionaries.ja.admin.industrySettings.names.lg)));
@@ -64,7 +65,9 @@ for (const canEdit of [true, false]) {
       assert.ok(html.includes(`id="${id}-form"`));
     }
     assert.match(html, /data-reveal-state="masked"/);
-    assert.equal((html.match(/value=""/g) ?? []).length, 2);
+    const passwordFields = [...html.matchAll(/<input\b[^>]*type="password"[^>]*>/g)].map(match => match[0]);
+    assert.equal(passwordFields.length, 2);
+    for (const field of passwordFields) assert.match(field, /value=""/);
   });
   test(`FLAT-06 languages editable=${canEdit}`, () => {
     const html = renderAdmin(createElement(LanguageSettingsForm, { canEdit, initialSettings: { locales: locales.map(locale => ({ locale, enabled: true })) } }), "/admin/languages");

@@ -1,4 +1,8 @@
+import { boundedBody } from "@/lib/server/zaad/outreach-api";
+import { OutreachContractError } from "@/lib/zaad/outreach-contracts";
 import { resolveAdminSettingsTenant, ADMIN_SETTINGS_RESOURCES } from "@/lib/admin-settings-tenant";
+import { classifyAdminApi, parseAdminTenant } from "@/lib/admin-routing";
+import { allowedAdminTenants } from "@/lib/server/admin-scope";
 import { consultationServices } from "@/lib/online-consultation-catalog";
 import { randomUUID } from "node:crypto";
 
@@ -182,6 +186,36 @@ app.use("*", async (c, next) => {
   } finally {
     await database.close();
   }
+});
+
+app.use("/admin/*", async (c, next) => {
+  c.header("Cache-Control", "no-store");
+  if (/^\/(?:api\/)?admin\/developer-api(?:\/|$)/.test(c.req.path)) {
+    c.header("Cache-Control", "private, no-store, max-age=0");
+    c.header("Pragma", "no-cache");
+    c.header("Expires", "0");
+  }
+  const route = classifyAdminApi(c.req.path);
+  if (route.kind === "unknown") return c.json({ code: "NOT_FOUND" }, 404);
+  const values = c.req.queries("tenant") ?? [];
+  const parsed = parseAdminTenant(values);
+  if ((route.kind === "tenant" || values.length) && !parsed.ok)
+    return c.json({ code: parsed.code, error: parsed.code, retryable: false }, 400);
+  if (route.kind === "tenant" && parsed.ok) {
+    const permission = route.resource === "online-consultation-settings" ? "chat-settings" : route.resource;
+    const auth = await authorizeAdminApi(c.get("auth"), c.get("prisma"), c.req.raw.headers, permission, "VIEW");
+    if (!auth.ok) return c.json({ code: auth.error, error: auth.error }, auth.status);
+    const allowed = await allowedAdminTenants(c.get("prisma"), auth.actor, route.resource);
+    if (!allowed.includes(parsed.tenantKey)) return c.json({ code: "ADMIN_ACCESS_DENIED", tenantKey: parsed.tenantKey }, 403);
+    if (!["GET", "HEAD"].includes(c.req.method) && c.req.header("content-type")?.split(";")[0] === "application/json") {
+      let payload: unknown;
+      try { payload = JSON.parse(await boundedBody(c.req.raw.clone(), 1024 * 1024)); } catch (error) { return c.json({ code: error instanceof OutreachContractError ? error.code : "INVALID_REQUEST" }, error instanceof OutreachContractError ? error.status : 400); }
+      if (payload && typeof payload === "object" && !Array.isArray(payload) && ["tenant", "tenantKey"].some(key => key in payload && (payload as Record<string, unknown>)[key] !== parsed.tenantKey)) return c.json({ code: "TENANT_MISMATCH", tenantKey: parsed.tenantKey }, 400);
+    }
+    c.set("tenantKey", parsed.tenantKey);
+    c.header("X-Admin-Tenant", parsed.tenantKey);
+  }
+  await next();
 });
 
 registerZaadApiRoutes(app);
@@ -1170,6 +1204,7 @@ app.put("/admin/maintenance-settings", async (c) => {
       await readJsonBody(c.req.raw),
       {
         requestHostname: new URL(c.req.raw.url).hostname,
+        tenantKey: c.get("tenantKey"),
         prisma,
       },
     );
@@ -2818,8 +2853,9 @@ function isDemoRecordPayload(value: unknown): value is { message: string } {
 function parseReservationCalendarRequest(url: URL, now: Date) {
   const keys = [...url.searchParams.keys()];
   if (
-    keys.length !== 2 ||
-    keys.some((key) => key !== "service" && key !== "month") ||
+    keys.length !== 3 ||
+    keys.some((key) => key !== "service" && key !== "month" && key !== "tenant") ||
+    url.searchParams.getAll("tenant").length !== 1 ||
     url.searchParams.getAll("service").length !== 1 ||
     url.searchParams.getAll("month").length !== 1
   ) {

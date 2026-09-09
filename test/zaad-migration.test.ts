@@ -114,10 +114,10 @@ test("ZMI-02: 適用済みZAAD migrationのSQLとmanifest hashを維持する", 
   );
   assert.equal(
     manifest.migrations.findIndex(({ name }) => name === migrationName),
-    manifest.migrations.length - 7,
+    manifest.migrations.length - 11,
   );
   assert.deepEqual(
-    manifest.migrations.slice(-6).map(({ name }) => name),
+    manifest.migrations.slice(-10).map(({ name }) => name),
     [
       "20260901160000_add_reservation_caller_ani_binding",
       "20260906120000_add_site_key_tenant_scope",
@@ -125,6 +125,10 @@ test("ZMI-02: 適用済みZAAD migrationのSQLとmanifest hashを維持する", 
       "20260906180000_drop_reservation_api_key_site_key_default",
       "20260906190000_add_univ_online_consultation_settings",
       "20260907070000_add_online_consultation_memo",
+      "20260908060000_university_outreach",
+      "20260908063000_university_outreach_action_receipts",
+      "20260909050000_outreach_crm_municipal",
+      "20260909070000_outreach_registration_reception",
     ],
   );
   assert.match(reviewed, new RegExp(migrationName, "u"));

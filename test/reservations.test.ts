@@ -228,7 +228,8 @@ test("RES-LIST-UI-01 reservation navigation and list controls follow the admin U
   const listView = source("../app/admin/reservations/bookings/ReservationBookingsView.tsx");
 
   assert.match(calendarView, /id="reservation-booking-list-link"/u);
-  assert.match(calendarView, /href="\/admin\/reservations\/bookings"/u);
+  assert.ok(calendarView.includes("href={`/admin/reservations/bookings?tenant=${tenantKey}`}"));
+  assert.ok(listView.includes('name="tenant" value={tenantKey}'));
   assert.match(calendarView, /\{copy\.bookings\.entry\}/u);
   for (const selector of [
     "back-to-reservation-system",

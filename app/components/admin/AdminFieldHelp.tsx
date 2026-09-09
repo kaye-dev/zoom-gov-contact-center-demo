@@ -11,16 +11,20 @@ export function AdminFieldHelp({
   id,
   description,
   label,
+  fieldLabel,
+  defaultOpen = false,
 }: {
   id: string;
   description: string;
   label: string;
+  fieldLabel?: { htmlFor: string; text: string };
+  defaultOpen?: boolean;
 }) {
   const group = useRef<HTMLDivElement>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
-  const [state, dispatch] = useReducer(helpReducer, initialHelpState);
+  const [state, dispatch] = useReducer(helpReducer, { ...initialHelpState, pinned: defaultOpen });
   const open = isHelpOpen(state);
   const clearClose = () => {
     clearTimeout(closeTimer.current);
@@ -62,8 +66,9 @@ export function AdminFieldHelp({
   return (
     <div
       ref={group}
-      className="relative flex w-fit max-w-full items-center gap-2"
+      className={fieldLabel ? "relative flex shrink-0 items-center gap-1" : "relative flex w-fit max-w-full items-center gap-2"}
     >
+      {fieldLabel && <label htmlFor={fieldLabel.htmlFor} className="block text-sm font-semibold">{fieldLabel.text}</label>}
       <button
         data-field-help-trigger
         type="button"

@@ -101,13 +101,13 @@ test("sidebar identity and navigation icons keep the 34px axis across states", (
   assert.match(navigation, /motion-reduce:transition-none/u);
 });
 
-test("navigation chrome omits a visible management label and exposes the account menu", () => {
+test("neutral administration identity and account menu retain accessible navigation", () => {
   const shell = source("../app/admin/AdminShell.tsx");
   const navigation = source("../app/admin/AdminNavigation.tsx");
   const identity = shell.match(/data-admin-identity\s*className="([^"]+)"/u);
   const account = navigation.match(/data-admin-account\s*className="([^"]+)"/u);
 
-  assert.doesNotMatch(shell, />\s*\{t\.admin\.title\}\s*</u);
+  assert.match(shell, />\s*\{t\.admin\.title\}\s*</u);
   assert.match(navigation, /aria-label=\{t\.admin\.title\}/u);
   assert.match(navigation, /data-admin-current-user/u);
   assert.match(navigation, /\{currentUserName\}/u);
@@ -168,7 +168,7 @@ test("account menu supports pointer, keyboard, outside, route, and shell close p
   assert.match(navigation, /signOutRequestedRef\.current = true/u);
   assert.match(navigation, /disabled=\{isSigningOut\}/u);
   assert.match(shell, /await authClient\.signOut\(\)/u);
-  assert.match(shell, /router\.push\("\/login"\)/u);
+  assert.match(shell, /window\.location\.replace\("\/admin\/login"\)/u);
   assert.match(shell, /router\.refresh\(\)/u);
 });
 

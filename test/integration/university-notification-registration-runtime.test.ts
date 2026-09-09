@@ -124,13 +124,17 @@ test(
           const cookie = user
             ? `better-auth.session_token=${encodeURIComponent(user + "." + createHmac("sha256", secret).update(user).digest("base64"))}`
             : "";
+          const adminRequest = path.startsWith("/admin/");
+          const requestHost = adminRequest ? "localhost:3000" : host;
+          const requestUrl = new URL(`http://${requestHost}/api${path}`);
+          if (adminRequest && !requestUrl.searchParams.has("tenant")) requestUrl.searchParams.set("tenant", "univ");
           const response = await route[method](
-            new Request(`http://${host}/api${path}`, {
+            new Request(requestUrl, {
               method,
               headers: {
-                host,
+                host: requestHost,
                 cookie,
-                origin: `http://${host}`,
+                origin: `http://${requestHost}`,
                 "Content-Type": "application/json",
                 ...extra,
               },
@@ -174,6 +178,24 @@ test(
             );
             assert.equal(accepted.status, 202, await accepted.clone().text());
             assert.deepEqual(await accepted.json(), { status: "accepted" });
+            const forwardedPortRetry = await request(
+              "POST",
+              "/university-notification-registrations",
+              registration,
+              "",
+              "univ.localhost:3000",
+              { host: "univ.localhost:3002", origin: "http://univ.localhost:3002" },
+            );
+            assert.equal(forwardedPortRetry.status, 202);
+            const wrongExternalOrigin = await request(
+              "POST",
+              "/university-notification-registrations",
+              registration,
+              "",
+              "univ.localhost:3000",
+              { host: "univ.localhost:3002", origin: "http://univ.localhost:3000" },
+            );
+            assert.equal(wrongExternalOrigin.status, 403);
             assert.match(
               accepted.headers.get("cache-control") ?? "",
               /no-store/,
@@ -296,7 +318,7 @@ test(
                   "outreach-students",
                 )
               ).status,
-              404,
+              403,
             );
             assert.equal(
               (await request("GET", `${prefix}/templates?tenant=lg`)).status,
@@ -309,7 +331,7 @@ test(
                   `${prefix}/templates?tenant=univ&tenant=lg`,
                 )
               ).status,
-              422,
+              400,
             );
             const list = await data<{
               rows: {

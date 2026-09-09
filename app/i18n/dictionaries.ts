@@ -1,3 +1,6 @@
+import type { MunicipalWorkflowDictionary } from "./municipal-workflows";
+import type { OutreachCommonDictionary } from "./outreach-common";
+import type { MunicipalOutreachDictionary } from "./municipal-outreach";
 import type { UniversityOutreachDictionary } from "./university-outreach";
 // 対応ロケールと UI 文言の辞書。
 // ルーティングを使わず、クライアント側で言語を切り替えるシンプルな構成。
@@ -48,9 +51,15 @@ export const localeNames: Record<Locale, string> = {
  * 画面が参照する完成した辞書。共通クロームと業種コンテンツの合成結果であり、
  * 利用側（useI18n().t）から見た形はテナント軸の導入前と変わらない。
  */
-export type Dictionary = ChromeDictionary & TenantContentDictionary & { universityOutreach: UniversityOutreachDictionary };
+export type Dictionary = ChromeDictionary & TenantContentDictionary & { universityOutreach: UniversityOutreachDictionary; municipalOutreach: MunicipalOutreachDictionary; outreachCommon: OutreachCommonDictionary; municipalWorkflows: MunicipalWorkflowDictionary };
 
 export type IndustrySettingsDictionary = {
+  openUniversitySettings: string;
+  saveError: string;
+  saving: string;
+  pageHelpLabel: string;
+  pageHelpDescription: string;
+  placeholder: string;
   label: string;
   help: string;
   scope: string;
@@ -2367,6 +2376,12 @@ export const chromeDictionaries: Record<Locale, ChromeDictionary> = {
     },
     admin: {
       industrySettings: {
+        openUniversitySettings: "大学の設定を開く",
+        saveError: "保存できませんでした。入力内容を保持しています。もう一度お試しください。",
+        saving: "保存中...",
+        pageHelpLabel: "ページの説明",
+        pageHelpDescription: "選択した業種の{title}の設定を編集します。",
+        placeholder: "業種を選択",
         "label": "設定対象の業種",
         "help": "このページで編集する業種を選択します。",
         "scope": "{tenant}の、このページのすべてのタブの設定を保存します。",
@@ -3023,6 +3038,12 @@ export const chromeDictionaries: Record<Locale, ChromeDictionary> = {
     },
     admin: {
       industrySettings: {
+        openUniversitySettings: "Open university settings",
+        saveError: "Could not save. Your input has been preserved. Please try again.",
+        saving: "Saving...",
+        pageHelpLabel: "Page description",
+        pageHelpDescription: "Edit {title} settings for the selected industry.",
+        placeholder: "Select industry",
         "label": "Industry to configure",
         "help": "Choose the industry to edit on this page.",
         "scope": "Save all tabs on this page for {tenant}.",
@@ -3677,6 +3698,12 @@ export const chromeDictionaries: Record<Locale, ChromeDictionary> = {
     },
     admin: {
       industrySettings: {
+        openUniversitySettings: "打开大学设置",
+        saveError: "无法保存。已保留输入内容，请重试。",
+        saving: "正在保存...",
+        pageHelpLabel: "页面说明",
+        pageHelpDescription: "编辑所选行业的{title}设置。",
+        placeholder: "选择行业",
         "label": "设置对象行业",
         "help": "选择要在此页面编辑的行业。",
         "scope": "保存{tenant}在此页面所有选项卡中的设置。",
@@ -4287,6 +4314,12 @@ export const chromeDictionaries: Record<Locale, ChromeDictionary> = {
     },
     admin: {
       industrySettings: {
+        openUniversitySettings: "開啟大學設定",
+        saveError: "無法儲存。已保留輸入內容，請再試一次。",
+        saving: "正在儲存...",
+        pageHelpLabel: "頁面說明",
+        pageHelpDescription: "編輯所選行業的{title}設定。",
+        placeholder: "選擇行業",
         "label": "設定對象行業",
         "help": "選擇要在此頁面編輯的行業。",
         "scope": "儲存{tenant}在此頁面所有分頁中的設定。",
@@ -4904,6 +4937,12 @@ export const chromeDictionaries: Record<Locale, ChromeDictionary> = {
     },
     admin: {
       industrySettings: {
+        openUniversitySettings: "대학 설정 열기",
+        saveError: "저장하지 못했습니다. 입력 내용은 유지됩니다. 다시 시도하세요.",
+        saving: "저장 중...",
+        pageHelpLabel: "페이지 설명",
+        pageHelpDescription: "선택한 업종의 {title} 설정을 편집합니다.",
+        placeholder: "업종 선택",
         "label": "설정 대상 업종",
         "help": "이 페이지에서 편집할 업종을 선택하세요.",
         "scope": "{tenant}의 이 페이지에 있는 모든 탭 설정을 저장합니다.",

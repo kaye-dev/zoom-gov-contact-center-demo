@@ -1,3 +1,4 @@
+import { getRegistrationReception } from "../registration-reception";
 import { createHash } from "node:crypto";
 import type { Prisma, PrismaClient } from "@/lib/generated/prisma/client";
 import {
@@ -63,6 +64,7 @@ export async function registerStudent(
             throw new OutreachError("REQUEST_RETRY_REQUIRED", 409);
           return previous;
         }
+        if (!actorId && !(await getRegistrationReception(tx, siteKey)).enabled) throw new OutreachError("REGISTRATION_UNAVAILABLE", 503);
         // Database-backed rate limit, serialized with the acceptance transaction.
         const count = await tx.universityStudentRegistration.count({
           where: { siteKey, receivedAt: { gte: new Date(Date.now() - 60000) } },

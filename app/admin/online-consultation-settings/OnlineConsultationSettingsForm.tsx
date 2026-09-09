@@ -144,11 +144,8 @@ export function OnlineConsultationSettingsForm({
         <div data-admin-page-header className="ml-1 mr-0 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <AdminPageTitleHelp
             title={copy.consultationTitle}
-            description={copy.consultationDescription}
-            label={t.admin.pageDescriptionLabel.replace(
-              "{title}",
-              copy.consultationTitle,
-            )}
+            description={copy.pageHelpDescription.replace("{title}", copy.consultationTitle)}
+            label={copy.pageHelpLabel}
           />
         <AdminSettingsTenantSelect
           control={control}
@@ -182,7 +179,7 @@ export function OnlineConsultationSettingsForm({
                   section={key}
                   activeSection={active}
                 >
-                  <fieldset disabled={isSubmitting} className="space-y-6">
+                  <fieldset className="space-y-6">
                     <legend className="sr-only">{copy.consultationConnectionLabel.replace("{service}", copy.services[key])}</legend>
                     <div>
                       <p className="text-lg font-bold">{copy.services[key]}</p>
@@ -201,6 +198,7 @@ export function OnlineConsultationSettingsForm({
                         id={id}
                         rows={7}
                         required
+                        disabled={isSubmitting}
                         readOnly={!canEdit}
                         value={setting?.webClientTag ?? ""}
                         onChange={(e) =>
@@ -241,6 +239,7 @@ export function OnlineConsultationSettingsForm({
                             : undefined
                         }
                         rows={4}
+                        disabled={isSubmitting}
                         readOnly={!canEdit}
                         value={setting?.memo ?? ""}
                         onChange={(e) => update(key, "memo", e.target.value)}
@@ -286,7 +285,7 @@ export function OnlineConsultationSettingsForm({
               >
                 {feedback === "saved"
                   ? copy.saved.replace("{tenant}", control.tenantName)
-                  : t.admin.settings.saveError}
+                  : copy.saveError}
               </p>
             )}
             <button
@@ -295,7 +294,7 @@ export function OnlineConsultationSettingsForm({
               disabled={!canEdit || isSubmitting}
               className="cursor-pointer rounded-md bg-primary px-5 py-2.5 font-semibold text-white transition hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isSubmitting ? t.admin.settings.saving : t.admin.settings.save}
+              {isSubmitting ? control.copy.saving : t.admin.settings.save}
             </button>
           </form>
         )}

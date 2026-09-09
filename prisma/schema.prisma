@@ -524,6 +524,7 @@ model DisasterRadioSubscription {
 }
 
 model ZaadRegistrationSetting {
+  publicRegistrationEnabled Boolean @default(true)
   siteKey                 String   @id
   contactListId           String?
   contactListNameSnapshot String?
@@ -539,6 +540,8 @@ model ZaadRegistrationSetting {
 model ZaadOutboundMessage {
   id              String                @id @default(cuid())
   siteKey         String
+  departmentKey   String?
+  retiredAt       DateTime? @db.Timestamptz(3)
   name            String
   body            String
   languageCode    String                @default("ja-JP")
@@ -556,7 +559,9 @@ model ZaadOutboundMessage {
 
   createdBy user? @relation("ZaadOutboundMessageCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   updatedBy user? @relation("ZaadOutboundMessageUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  revisions MessageRevision[]
 
+  @@unique([siteKey, id])
   @@index([siteKey, updatedAt, id])
   @@map("zaad_outbound_messages")
 }
@@ -565,6 +570,16 @@ model ZaadOneTimeDispatch {
   id                    String                   @id @default(cuid())
   siteKey               String
   operationKey          String
+  departmentKey         String?
+  appState              String?
+  connectionMode        String?
+  messageRevisionId     String?
+  flowBindingId         String?
+  parentDispatchId      String?
+  draft                 Json?
+  snapshot              Json?
+  snapshotDigest        String?
+  expiresAt             DateTime? @db.Timestamptz(3)
   name                  String
   body                  String
   languageCode          String                   @default("ja-JP")
@@ -589,7 +604,9 @@ model ZaadOneTimeDispatch {
   createdBy   user?                           @relation("ZaadOneTimeDispatchCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   sourceLists ZaadOneTimeDispatchSourceList[]
   residents   ZaadOneTimeDispatchResident[]
+  messageRevision MessageRevision? @relation(fields: [siteKey, messageRevisionId], references: [siteKey, id], onDelete: Restrict)
 
+  @@unique([siteKey, id])
   @@index([siteKey, createdAt, id])
   @@index([siteKey, state, updatedAt])
   @@unique([siteKey, operationKey])
@@ -666,6 +683,8 @@ model UniversityContact {
   serial               String?
   displayStudentNumber String?
   registrationSource   String
+  registrationStatus   String @default("PENDING_REVIEW")
+  deletedAt            DateTime? @db.Timestamptz(3)
   identityVerified     Boolean @default(false)
   phoneVerified        Boolean @default(false)
   phoneEligible        Boolean @default(false)
@@ -683,6 +702,445 @@ model UniversityContact {
   @@unique([siteKey, facultyCode, admissionYear, serial])
   @@index([siteKey, departmentKey, id])
   @@map("university_contacts")
+}
+
+// Additive outreach records. No legacy consent, identity, or provider state is inferred.
+model ZoomResourceBinding {
+  id String @id @default(cuid())
+  accountId String
+  resourceType String
+  zoomId String
+  ownerSiteKey String
+  departmentKey String?
+  purpose String
+  notificationTopic String?
+  dispatchId String?
+  version Int @default(1)
+  observedDigest String?
+  tombstone Boolean @default(false)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  memberships ZoomContactMembership[]
+  municipalWorkflows MunicipalWorkflowRevision[] @relation("MunicipalWorkflowFlow")
+  municipalAttempts MunicipalCallAttempt[] @relation("MunicipalAttemptFlow")
+  @@unique([accountId, resourceType, zoomId])
+  @@unique([ownerSiteKey, id])
+  @@index([ownerSiteKey, departmentKey, purpose])
+  @@map("zoom_resource_bindings")
+}
+
+model ZoomContactMembership {
+  id String @id @default(cuid())
+  siteKey String
+  bindingId String
+  zoomContactId String
+  personOrigin String?
+  personId String?
+  observedDigest String
+  confirmedBy String?
+  attestation String?
+  lastSyncedVersion Int?
+  syncState String @default("UNLINKED")
+  version Int @default(1)
+  binding ZoomResourceBinding @relation(fields: [siteKey, bindingId], references: [ownerSiteKey, id], onDelete: Restrict)
+  @@unique([siteKey, bindingId, zoomContactId])
+  @@map("zoom_contact_memberships")
+}
+
+model OutreachOperation {
+  id String @id @default(cuid())
+  siteKey String
+  actorId String
+  operationKey String
+  kind String
+  requestDigest String
+  status String @default("PENDING")
+  result Json?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  @@unique([siteKey, actorId, kind, operationKey])
+  @@map("outreach_operations")
+}
+
+model CrmImportJob {
+  id String @id @default(cuid())
+  siteKey String
+  actorId String
+  departmentKey String
+  source String
+  operationKey String
+  previewDigest String
+  status String @default("PREVIEW")
+  expiresAt DateTime @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  rows CrmImportRow[]
+  @@unique([siteKey, id])
+  @@unique([siteKey, actorId, operationKey])
+  @@map("crm_import_jobs")
+}
+
+model CrmImportRow {
+  id String @id @default(cuid())
+  siteKey String
+  jobId String
+  rowKey String
+  rowNumber Int
+  candidate Json
+  status String
+  errorCode String?
+  personOrigin String?
+  personId String?
+  job CrmImportJob @relation(fields: [siteKey, jobId], references: [siteKey, id], onDelete: Restrict)
+  @@unique([siteKey, jobId, rowKey])
+  @@map("crm_import_rows")
+}
+
+model MessageRevision {
+  id String @id @default(cuid())
+  siteKey String
+  messageId String
+  revision Int
+  name String
+  body String
+  voiceId String
+  languageCode String
+  contentDigest String
+  generationState String @default("NOT_GENERATED")
+  accountId String?
+  zoomAssetId String?
+  zoomAssetItemId String?
+  createdBy String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  message ZaadOutboundMessage @relation(fields: [siteKey, messageId], references: [siteKey, id], onDelete: Restrict)
+  dispatches ZaadOneTimeDispatch[]
+  audioRevisions ZoomAudioRevision[]
+  @@unique([siteKey, messageId, revision])
+  @@unique([siteKey, id])
+  @@map("outreach_message_revisions")
+}
+
+model MunicipalContact {
+  id String @id @default(cuid())
+  siteKey String
+  departmentKey String @default("resident-support")
+  name String
+  phone String
+  district String?
+  contactKind String @default("RESIDENT")
+  source String
+  status String @default("PENDING_REVIEW")
+  identityVerified Boolean @default(false)
+  phoneVerified Boolean @default(false)
+  confirmedBy String?
+  confirmedAt DateTime? @db.Timestamptz(3)
+  confirmationMethod String?
+  attestation String?
+  version Int @default(1)
+  deletedAt DateTime? @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  registrations MunicipalNotificationRegistration[]
+  preferences MunicipalNotificationPreference[]
+  availability MunicipalAvailability[]
+  legacyLinks MunicipalLegacyLink[]
+  targets MunicipalWorkflowTarget[]
+  snapshots MunicipalTargetSnapshot[]
+  @@unique([siteKey, id])
+  @@index([siteKey, departmentKey, createdAt, id])
+  @@index([siteKey, phone])
+  @@map("municipal_contacts")
+}
+
+model MunicipalNotificationRegistration {
+  id String @id @default(cuid())
+  siteKey String
+  contactId String
+  operationKey String
+  requestDigest String
+  name String
+  phone String
+  district String
+  topics String[]
+  availability Json?
+  consentVersion String
+  consentedAt DateTime @db.Timestamptz(3)
+  source String @default("HP")
+  receivedAt DateTime @default(now()) @db.Timestamptz(3)
+  contact MunicipalContact @relation(fields: [siteKey, contactId], references: [siteKey, id], onDelete: Restrict)
+  @@unique([siteKey, operationKey])
+  @@map("municipal_notification_registrations")
+}
+
+model MunicipalNotificationPreference {
+  id String @id @default(cuid())
+  siteKey String
+  contactId String
+  topic String
+  requested Boolean @default(false)
+  enabled Boolean @default(false)
+  consentVersion String?
+  consentedAt DateTime? @db.Timestamptz(3)
+  confirmedBy String?
+  confirmedAt DateTime? @db.Timestamptz(3)
+  withdrawnAt DateTime? @db.Timestamptz(3)
+  version Int @default(1)
+  contact MunicipalContact @relation(fields: [siteKey, contactId], references: [siteKey, id], onDelete: Restrict)
+  @@unique([siteKey, contactId, topic])
+  @@map("municipal_notification_preferences")
+}
+
+model MunicipalAvailability {
+  id String @id @default(cuid())
+  siteKey String
+  contactId String
+  revision Int
+  requested Json
+  confirmed Json?
+  confirmedBy String?
+  confirmedAt DateTime? @db.Timestamptz(3)
+  contact MunicipalContact @relation(fields: [siteKey, contactId], references: [siteKey, id], onDelete: Restrict)
+  @@unique([siteKey, contactId, revision])
+  @@map("municipal_availability")
+}
+
+model MunicipalLegacyLink {
+  id String @id @default(cuid())
+  siteKey String
+  contactId String
+  legacyOrigin String
+  legacyId String
+  confirmedBy String
+  attestation String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  contact MunicipalContact @relation(fields: [siteKey, contactId], references: [siteKey, id], onDelete: Restrict)
+  @@unique([siteKey, legacyOrigin, legacyId])
+  @@map("municipal_legacy_links")
+}
+
+model MunicipalCallerNotice {
+  id String @id @default(cuid())
+  siteKey String
+  departmentKey String
+  callerPhone String
+  officeUrl String
+  approvedBy String
+  publishedAt DateTime @db.Timestamptz(3)
+  version Int @default(1)
+  @@unique([siteKey, departmentKey])
+  @@map("municipal_caller_notices")
+}
+
+model MunicipalWorkflowRevision {
+  id String @id @default(cuid())
+  siteKey String
+  workflowId String
+  revision Int
+  purpose String
+  departmentKey String
+  name String
+  questionVersion String
+  settings Json
+  flowBindingId String?
+  assigneeId String
+  dueAt DateTime @db.Timestamptz(3)
+  enabled Boolean @default(false)
+  createdBy String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  targets MunicipalWorkflowTarget[]
+  runs MunicipalOutreachRun[]
+  flow ZoomResourceBinding? @relation("MunicipalWorkflowFlow", fields: [siteKey, flowBindingId], references: [ownerSiteKey, id], onDelete: Restrict)
+  @@unique([siteKey, id])
+  @@unique([siteKey, workflowId, revision])
+  @@map("municipal_workflow_revisions")
+}
+
+model MunicipalWorkflowTarget {
+  id String @id @default(cuid())
+  siteKey String
+  workflowRevisionId String
+  contactId String
+  businessEvidence Json
+  excluded Boolean @default(false)
+  version Int @default(1)
+  verifiedBy String
+  verifiedAt DateTime @db.Timestamptz(3)
+  workflow MunicipalWorkflowRevision @relation(fields: [siteKey, workflowRevisionId], references: [siteKey, id], onDelete: Restrict)
+  contact MunicipalContact @relation(fields: [siteKey, contactId], references: [siteKey, id], onDelete: Restrict)
+  snapshots MunicipalTargetSnapshot[]
+  @@unique([siteKey, id])
+  @@unique([siteKey, workflowRevisionId, contactId])
+  @@map("municipal_workflow_targets")
+}
+
+model MunicipalOutreachRun {
+  id String @id @default(cuid())
+  siteKey String
+  departmentKey String
+  workflowRevisionId String
+  actorId String
+  operationKey String
+  digest String
+  snapshot Json
+  state String @default("PREVIEW")
+  expiresAt DateTime @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  workflow MunicipalWorkflowRevision @relation(fields: [siteKey, workflowRevisionId], references: [siteKey, id], onDelete: Restrict)
+  targets MunicipalTargetSnapshot[]
+  @@unique([siteKey, id])
+  @@unique([siteKey, actorId, operationKey])
+  @@map("municipal_outreach_runs")
+}
+
+model MunicipalTargetSnapshot {
+  id String @id @default(cuid())
+  siteKey String
+  runId String
+  contactId String
+  contactVersion Int
+  targetId String
+  targetVersion Int
+  snapshot Json
+  state String @default("PENDING")
+  run MunicipalOutreachRun @relation(fields: [siteKey, runId], references: [siteKey, id], onDelete: Restrict)
+  contact MunicipalContact @relation(fields: [siteKey, contactId], references: [siteKey, id], onDelete: Restrict)
+  businessTarget MunicipalWorkflowTarget @relation(fields: [siteKey, targetId], references: [siteKey, id], onDelete: Restrict)
+  attempts MunicipalCallAttempt[]
+  cases MunicipalSupportCase[]
+  jobs MunicipalScheduleJob[]
+  @@unique([siteKey, id])
+  @@unique([siteKey, runId, contactId])
+  @@map("municipal_target_snapshots")
+}
+
+model MunicipalCallAttempt {
+  id String @id @default(cuid())
+  siteKey String
+  targetSnapshotId String
+  attemptNo Int
+  questionVersion String
+  providerAccountId String
+  flowBindingId String
+  engagementId String?
+  capabilityDigest String?
+  capabilityExpiresAt DateTime? @db.Timestamptz(3)
+  callState String @default("QUEUED")
+  identityState String @default("UNVERIFIED")
+  ackState String @default("UNCONFIRMED")
+  recognitionState String @default("NONE")
+  version Int @default(1)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  target MunicipalTargetSnapshot @relation(fields: [siteKey, targetSnapshotId], references: [siteKey, id], onDelete: Restrict)
+  flow ZoomResourceBinding @relation("MunicipalAttemptFlow", fields: [siteKey, flowBindingId], references: [ownerSiteKey, id], onDelete: Restrict)
+  responses MunicipalResponse[]
+  @@unique([siteKey, id])
+  @@unique([siteKey, targetSnapshotId, attemptNo])
+  @@unique([providerAccountId, engagementId])
+  @@map("municipal_call_attempts")
+}
+
+model MunicipalResponse {
+  id String @id @default(cuid())
+  siteKey String
+  attemptId String
+  receiptId String
+  requestDigest String
+  questionVersion String
+  answers Json
+  outcome Json
+  occurredAt DateTime @db.Timestamptz(3)
+  receivedAt DateTime @default(now()) @db.Timestamptz(3)
+  attempt MunicipalCallAttempt @relation(fields: [siteKey, attemptId], references: [siteKey, id], onDelete: Restrict)
+  @@unique([siteKey, attemptId, receiptId])
+  @@map("municipal_responses")
+}
+
+model MunicipalSupportCase {
+  id String @id @default(cuid())
+  siteKey String
+  departmentKey String
+  targetSnapshotId String
+  purpose String
+  reasons String[]
+  assigneeId String
+  dueAt DateTime @db.Timestamptz(3)
+  status String @default("OPEN")
+  handoff Json?
+  businessVerification Json?
+  version Int @default(1)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  target MunicipalTargetSnapshot @relation(fields: [siteKey, targetSnapshotId], references: [siteKey, id], onDelete: Restrict)
+  actions MunicipalCaseAction[]
+  @@unique([siteKey, id])
+  @@unique([siteKey, targetSnapshotId])
+  @@index([siteKey, departmentKey, status, dueAt])
+  @@map("municipal_support_cases")
+}
+
+model MunicipalCaseAction {
+  id String @id @default(cuid())
+  siteKey String
+  caseId String
+  actorId String
+  operationKey String
+  requestDigest String
+  fromVersion Int
+  toVersion Int
+  details Json
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  supportCase MunicipalSupportCase @relation(fields: [siteKey, caseId], references: [siteKey, id], onDelete: Restrict)
+  @@unique([siteKey, caseId, actorId, operationKey])
+  @@map("municipal_case_actions")
+}
+
+model MunicipalScheduleJob {
+  id String @id @default(cuid())
+  siteKey String
+  workflowId String
+  scheduleRevision Int
+  targetSnapshotId String
+  dueSlot String
+  dueAt DateTime @db.Timestamptz(3)
+  attemptNo Int
+  state String @default("PENDING")
+  leaseOwner String?
+  leaseUntil DateTime? @db.Timestamptz(3)
+  target MunicipalTargetSnapshot @relation(fields: [siteKey, targetSnapshotId], references: [siteKey, id], onDelete: Restrict)
+  outbox MunicipalOutbox?
+  @@unique([siteKey, id])
+  @@unique([siteKey, workflowId, scheduleRevision, dueSlot, targetSnapshotId, attemptNo], map: "municipal_job_slot_target_attempt_key")
+  @@index([state, dueAt])
+  @@map("municipal_schedule_jobs")
+}
+
+model MunicipalOutbox {
+  id String @id @default(cuid())
+  siteKey String
+  jobId String
+  operationKey String
+  correlationId String
+  state String @default("READY")
+  providerResult Json?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  job MunicipalScheduleJob @relation(fields: [siteKey, jobId], references: [siteKey, id], onDelete: Restrict)
+  @@unique([siteKey, jobId])
+  @@unique([siteKey, operationKey])
+  @@map("municipal_outbox")
+}
+
+model MunicipalProviderInbox {
+  id String @id @default(cuid())
+  siteKey String?
+  accountId String
+  dedupKey String @unique
+  eventKind String
+  engagementId String?
+  occurredAt DateTime @db.Timestamptz(3)
+  payload Json
+  state String @default("RECEIVED")
+  errorCode String?
+  receivedAt DateTime @default(now()) @db.Timestamptz(3)
+  @@index([state, receivedAt])
+  @@map("municipal_provider_inbox")
 }
 
 model UniversityStudentRegistration {
@@ -913,4 +1371,61 @@ model UniversityVenueReserve {
   batch       UniversityOutreachBatch @relation(fields: [siteKey, batchId], references: [siteKey, id], onDelete: Restrict)
   @@unique([siteKey, batchId, personRef])
   @@map("university_venue_reserves")
+}
+
+model ZoomAudioRevision {
+  id String @id @default(cuid())
+  siteKey String
+  messageRevisionId String
+  accountId String
+  assetId String?
+  assetItemId String?
+  voiceId String
+  languageCode String
+  contentDigest String
+  syncState String @default("NOT_GENERATED")
+  operationKey String
+  errorCode String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+  revision MessageRevision @relation(fields: [siteKey, messageRevisionId], references: [siteKey, id], onDelete: Restrict)
+  @@unique([siteKey, operationKey])
+  @@unique([accountId, assetId, assetItemId])
+  @@index([siteKey, messageRevisionId])
+  @@map("outreach_zoom_audio_revisions")
+}
+
+model OutreachConsentEvidence {
+  id String @id @default(cuid())
+  siteKey String
+  personOrigin String
+  personId String
+  contactVersion Int
+  topics String[]
+  consentVersion String
+  consentedAt DateTime @db.Timestamptz(3)
+  method String
+  attestation String
+  actorId String
+  recordedAt DateTime @default(now()) @db.Timestamptz(3)
+  @@unique([siteKey, personOrigin, personId, contactVersion])
+  @@map("outreach_consent_evidence")
+}
+
+model OutreachImportCandidate {
+  id String @id @default(cuid())
+  siteKey String
+  departmentKey String
+  name String
+  phone String
+  studentNumber String?
+  source String @default("ZCC")
+  status String @default("PENDING_REVIEW")
+  linkedContactId String?
+  version Int @default(1)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+  @@unique([siteKey, id])
+  @@index([siteKey, departmentKey, id])
+  @@map("outreach_import_candidates")
 }

@@ -1,10 +1,24 @@
-import type { NextRequest } from "next/server";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { ADMIN_REQUEST_PATH_HEADER, isAdminPath, localAdminRequest } from "@/lib/admin-routing";
 import { resolveFaqLegacyRedirect } from "@/lib/legacy-redirects";
 import { X_ROBOTS_TAG_VALUE } from "@/lib/search-indexing";
 import { handleMaintenanceRequest } from "@/lib/server/maintenance-request-gate";
 
 export async function proxy(request: NextRequest) {
+  const admin = localAdminRequest(request.url, request.method, process.env.NODE_ENV === "production");
+  if (admin.kind !== "pass") {
+    const response = admin.kind === "redirect"
+      ? NextResponse.redirect(admin.destination, 307)
+      : NextResponse.json({ code: admin.code }, { status: admin.status });
+    response.headers.set("Cache-Control", "no-store");
+    response.headers.set("X-Robots-Tag", X_ROBOTS_TAG_VALUE);
+    return response;
+  }
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.delete(ADMIN_REQUEST_PATH_HEADER);
+  if (isAdminPath(request.nextUrl.pathname))
+    requestHeaders.set(ADMIN_REQUEST_PATH_HEADER, request.nextUrl.pathname + request.nextUrl.search);
+  request = new NextRequest(request, { headers: requestHeaders });
   const pathname = request.nextUrl.pathname;
   const normalizedPathname =
     pathname.length > 1 ? pathname.replace(/\/+$/u, "") : pathname;
@@ -18,6 +32,7 @@ export async function proxy(request: NextRequest) {
   }
 
   const response = await handleMaintenanceRequest(request);
+  if (isAdminPath(pathname)) response.headers.set("Cache-Control", "no-store");
   response.headers.set("X-Robots-Tag", X_ROBOTS_TAG_VALUE);
   return response;
 }

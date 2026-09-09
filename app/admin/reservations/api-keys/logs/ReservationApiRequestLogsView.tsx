@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { TenantKey } from "@/lib/tenants";
 
 import { Select } from "@/app/components/Select";
 import { ChevronLeftIcon } from "@/app/components/svg/ChevronLeftIcon";
@@ -21,10 +22,12 @@ type ReservationApiRequestLogFilters = {
 };
 
 export function ReservationApiRequestLogsView({
+  tenantKey,
   logs,
   nextCursor,
   filters,
 }: {
+  tenantKey: TenantKey;
   logs: ReservationApiRequestLogSummary[];
   nextCursor: string | null;
   filters: ReservationApiRequestLogFilters;
@@ -36,7 +39,7 @@ export function ReservationApiRequestLogsView({
   return (
     <section id="reservation-api-log-list-content" className="min-w-0 space-y-6">
       <div className="max-w-3xl space-y-2">
-        <Link id="back-to-api-keys" href="/admin/reservations/api-keys" className="inline-flex items-center gap-1 text-sm font-semibold text-accent hover:underline">
+        <Link id="back-to-api-keys" href={`/admin/reservations/api-keys?tenant=${tenantKey}`} className="inline-flex items-center gap-1 text-sm font-semibold text-accent hover:underline">
           <ChevronLeftIcon className="h-5 w-5" />
           {copy.backToKeys}
         </Link>
@@ -47,6 +50,7 @@ export function ReservationApiRequestLogsView({
       <section aria-labelledby="api-log-search-heading" className="rounded-lg border border-line bg-surface-raised p-4 shadow-sm md:p-5">
         <h2 id="api-log-search-heading" className="sr-only">{copy.filter.heading}</h2>
         <form id="api-log-filter-form" method="get" action={RESERVATION_API_LOGS_ROUTE} className="grid gap-3 lg:grid-cols-[minmax(16rem,1fr)_minmax(10rem,14rem)_minmax(10rem,14rem)_auto] lg:items-end">
+          <input type="hidden" name="tenant" value={tenantKey} />
           <label className="block space-y-2">
             <span className="block text-sm font-semibold">{copy.filter.search}</span>
             <input name="query" defaultValue={filters.query} maxLength={100} placeholder={copy.filter.searchPlaceholder} className="w-full rounded-md border border-line bg-surface px-3 py-2.5 text-sm text-fg outline-none transition-colors focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" />
@@ -112,7 +116,7 @@ export function ReservationApiRequestLogsView({
             <ol className="divide-y divide-line-subtle">
               {logs.map((log, index) => (
                 <li key={log.id}>
-                  <Link id={index === 0 ? "api-log-row-primary" : undefined} href={`${RESERVATION_API_LOGS_ROUTE}/${encodeURIComponent(log.id)}`} className={`${API_LOG_GRID_CLASS_NAME} cursor-pointer px-5 py-4 align-top transition-colors hover:bg-surface-hover focus:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent`}>
+                  <Link id={index === 0 ? "api-log-row-primary" : undefined} href={`${RESERVATION_API_LOGS_ROUTE}/${encodeURIComponent(log.id)}?tenant=${tenantKey}`} className={`${API_LOG_GRID_CLASS_NAME} cursor-pointer px-5 py-4 align-top transition-colors hover:bg-surface-hover focus:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent`}>
                     <time dateTime={log.requestedAt}>{formatDateTime(log.requestedAt, locale)}</time>
                     <span className="min-w-0">
                       <strong className="block truncate font-semibold">{log.apiKeyName}</strong>
@@ -143,7 +147,7 @@ export function ReservationApiRequestLogsView({
         </div>
         <div id="api-log-pagination" hidden={!hasLogs} className="flex justify-end border-t border-line px-5 py-4">
           {nextCursor ? (
-            <Link href={buildNextPageHref(filters, nextCursor)} className="rounded-md border border-line px-4 py-2 text-sm font-semibold transition-colors hover:bg-surface-hover">{copy.list.next}</Link>
+            <Link href={buildNextPageHref(filters, nextCursor, tenantKey)} className="rounded-md border border-line px-4 py-2 text-sm font-semibold transition-colors hover:bg-surface-hover">{copy.list.next}</Link>
           ) : (
             <span aria-disabled="true" className="rounded-md border border-line px-4 py-2 text-sm font-semibold">{copy.list.next}</span>
           )}
@@ -156,8 +160,9 @@ export function ReservationApiRequestLogsView({
 function buildNextPageHref(
   filters: ReservationApiRequestLogFilters,
   cursor: string,
+  tenantKey: TenantKey,
 ) {
-  const params = new URLSearchParams();
+  const params = new URLSearchParams({ tenant: tenantKey });
   if (filters.query) params.set("query", filters.query);
   if (filters.method) params.set("method", filters.method);
   if (filters.result) params.set("result", filters.result);

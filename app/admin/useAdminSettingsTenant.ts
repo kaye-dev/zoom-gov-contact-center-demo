@@ -78,6 +78,19 @@ export function useAdminSettingsTenant<T>(
     setTenantKey(next);
     setLoading(true);
     setLoadError(false);
+    setExtras({});
+    setPending(null);
+    const url = new URL(window.location.href);
+    const changing = url.searchParams.get("tenant") !== next;
+    if (changing) {
+      const view = url.searchParams.get("view");
+      url.search = "";
+      url.searchParams.set("tenant", next);
+      if (view) url.searchParams.set("view", view);
+      if (reviewState) url.searchParams.set("state", "default");
+      router.push(url.pathname + url.search, { scroll: false });
+      if (!reviewState) return; // The keyed server page loads the new scope.
+    }
     try {
       const response = reviewState
         ? null
@@ -101,10 +114,6 @@ export function useAdminSettingsTenant<T>(
       setReviewIdentity("default");
       setExtras(body);
       onLoadRef.current();
-      const url = new URL(window.location.href);
-      url.searchParams.set("tenant", next);
-      if (reviewState) url.searchParams.set("state", "default");
-      router.replace(url.pathname + url.search, { scroll: false });
     } catch {
       if (sequence.current.current(request) && !controller.signal.aborted)
         setLoadError(true);
@@ -112,7 +121,13 @@ export function useAdminSettingsTenant<T>(
       if (sequence.current.current(request)) setLoading(false);
     }
   }
-  function select(next: TenantKey) {
+  function select(next: TenantKey | "") {
+    if (next === "") {
+      if (saving.current) return;
+      if (dirty && !loadError) setPending({ href: pathname, label: copy.placeholder });
+      else router.push(pathname);
+      return;
+    }
     if (next === tenantKey || saving.current) return;
     if (dirty && !loadError)
       setPending({ tenant: next, label: copy.names[next] });

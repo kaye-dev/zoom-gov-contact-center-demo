@@ -381,6 +381,34 @@ test("parity-specは全target/state・row・probeを厳密に検証する", asyn
     value: "ZAAD_fixture_01",
   } as never);
   assert.equal(validateParitySpec(safeFill, contract), safeFill);
+  const safeTeardown = clone(spec);
+  Object.assign(safeTeardown.stateSetups[0].production, { teardownActions: [{ type: "click", selector: "#discard" }] });
+  assert.equal(validateParitySpec(safeTeardown, contract), safeTeardown);
+  const unsafeTeardown = clone(spec);
+  Object.assign(unsafeTeardown.stateSetups[0].production, { teardownActions: [{ type: "evaluate", value: "unsafe" }] });
+  assert.throws(() => validateParitySpec(unsafeTeardown, contract), /not allowed/u);
+  const safeSelection = clone(spec);
+  safeSelection.stateSetups[0].production.actions.push({ type: "selectOption", selector: "select", value: "FLOW" } as never);
+  assert.equal(validateParitySpec(safeSelection, contract), safeSelection);
+  const doubleClick = clone(spec);
+  doubleClick.stateSetups[0].production.actions.push({ type: "dblclick", selector: "button" } as never);
+  assert.equal(validateParitySpec(doubleClick, contract), doubleClick);
+  Object.assign(doubleClick.stateSetups[0].production.actions.at(-1)!, { value: "unsafe" });
+  assert.throws(() => validateParitySpec(doubleClick, contract), /must contain exactly: selector, type/u);
+  const invalidSelection = clone(safeSelection);
+  (invalidSelection.stateSetups[0].production.actions.at(-1) as unknown as { value: string }).value = "https://example.invalid";
+  assert.throws(() => validateParitySpec(invalidSelection, contract), /synthetic fixture token/u);
+  const upload = clone(spec);
+  upload.stateSetups[0].production.actions.push({ type: "upload", selector: "input[type=file]", file: "fixtures/preview.csv", sha256: `sha256:${"a".repeat(64)}` } as never);
+  assert.equal(validateParitySpec(upload, contract), upload);
+  for (const file of ["../outside.csv", "/tmp/input.csv", ".env", "fixtures/../../secret.csv", "https://example.invalid/file.csv"]) {
+    const invalidUpload = clone(upload);
+    (invalidUpload.stateSetups[0].production.actions.at(-1) as unknown as { file: string }).file = file;
+    assert.throws(() => validateParitySpec(invalidUpload, contract), /relative fixture path/u);
+  }
+  const changedUpload = clone(upload);
+  (changedUpload.stateSetups[0].production.actions.at(-1) as unknown as { sha256: string }).sha256 = "unbound";
+  assert.throws(() => validateParitySpec(changedUpload, contract), /approved fixture bytes/u);
   for (const value of [
     "",
     "山田花子",
@@ -1420,4 +1448,84 @@ test("PORT-09: current origin boundaries and read-only legacy URLs are separate"
   }
   assert.equal(requireLoopbackBaseUrl("http://localhost:3142", "production", { legacy: true }).port, "3142");
   assert.equal(requireLoopbackBaseUrl("http://127.0.0.1:60237", "prototype", { legacy: true }).port, "60237");
+});
+
+
+test("target productionHost selects the navigation and stabilized origin while preserving port", async () => {
+  const { productionBaseForTarget } = await import("../.agents/skills/plan/scripts/parity-runner-core.mjs");
+  const { BrowserParityRunner, validateParitySpec } = await parityModulePromise;
+  const hostSpec = { ...clone(spec), version: 2, browserSetups: [{ targetId: "main", productionHost: "univ.localhost", production: { type: "query", parameter: "theme" }, prototype: { type: "query", parameter: "theme" } }] };
+  validateParitySpec(hostSpec, contract);
+  assert.equal(productionBaseForTarget("http://localhost:3004/", hostSpec, "main"), "http://univ.localhost:3004/");
+  assert.equal(productionBaseForTarget("http://localhost:3004/", spec, "main"), "http://localhost:3004/");
+  for (const host of ["example.com", "univ.localhost:3000", "a.b.localhost", "https://univ.localhost", "univ.localhost/path", "univ.localhost@evil.com", "", null]) {
+    const invalid = clone(hostSpec); invalid.browserSetups[0].productionHost = host as string;
+    assert.throws(() => validateParitySpec(invalid, contract), /productionHost/);
+    assert.throws(() => productionBaseForTarget("http://localhost:3004/", invalid, "main"), /productionHost/);
+  }
+  const urls: string[] = [], origins: string[] = [];
+  const runner = new BrowserParityRunner(createAdapter({ async navigate(_tab: string, url: string) { urls.push(url); }, async stabilizeContext(_tab: string, context: { origin: string }) { origins.push(context.origin); } }));
+  await runner.run({ definition: {contract, spec: hostSpec, prototypeRevision: revision, validationProfileDigest: digest}, phase: "final", changedTargetIds: ["main"], changedStates: ["default"], tabs: {production: "production", prototype: "prototype"}, baseUrls: {production: "http://localhost:3004/", prototype: "http://127.0.0.1:4004/"}, run: {runId: "hosts", goalSha256: digest, runtime: {owner: "fixture", checkout: "/fixture"}, sources: [{path: "src/ui.ts", sha256: digest}]} });
+  assert(urls.some(url => url.startsWith("http://univ.localhost:3004/fixture?")));
+  assert(!urls.some(url => url.startsWith("http://localhost:")));
+  assert(origins.includes("http://univ.localhost:3004"));
+  urls.length = 0;
+  await runner.runRuntimeChecks({ definition: {contract, spec: {...hostSpec, fidelity: {runtimeChecks: [{id: "runtime-host", rowId: contract.parityMatrix[0].id, query: {}, steps: []}]}}}, row: contract.parityMatrix[0], tabs: {production: "production", prototype: "prototype"}, baseUrls: {production: "http://localhost:3004/", prototype: "http://127.0.0.1:4004/"}, canary: {networkSource: "not-required"} });
+  assert(urls.every(url => new URL(url).hostname === "univ.localhost"));
+  assert.equal(urls.length, 1);
+});
+
+test("contract v2 separates fixed state coverage from complete representative layout coverage", async () => {
+  const { selectRows } = await parityModulePromise;
+  const fixture = createCoverageFixture();
+  const scoped = {
+    ...fixture.contract,
+    version: 2,
+    comparisonTargets: fixture.contract.comparisonTargets.map(target => ({ ...target, states: fixture.states })),
+  };
+  const rows = selectRows({ phase: "final", contract: scoped, spec: fixture.spec });
+  const coordinates = new Set(rows.map((row: { targetId: string; state: string; viewport: string; theme: string }) => JSON.stringify([row.targetId, row.state, row.viewport, row.theme])));
+  for (const target of fixture.targets) {
+    for (const state of fixture.states) {
+      assert.ok(coordinates.has(JSON.stringify([target.id, state, fixture.viewports[0], fixture.themes[0]])));
+    }
+    for (const viewport of fixture.viewports) for (const theme of fixture.themes) {
+      assert.ok(coordinates.has(JSON.stringify([target.id, fixture.states[0], viewport, theme])));
+    }
+  }
+  assert.equal(coordinates.size, rows.length);
+  for (const risk of fixture.spec.coverage.riskRows) {
+    assert.ok(coordinates.has(JSON.stringify([risk.targetId, risk.state, risk.viewport, risk.theme])));
+  }
+  for (const anchor of fixture.spec.coverage.anchorRows) assert.ok(rows.some((row: { id: string }) => row.id === anchor.rowId));
+});
+
+test("declared state teardown clears a dirty surface before its next navigation", async () => {
+  const { BrowserParityRunner } = await parityModulePromise;
+  const events: string[] = [];
+  let dirty = false;
+  const runner = new BrowserParityRunner(createAdapter({
+    async navigate() { assert.equal(dirty, false, "must use UI teardown before navigating"); events.push("navigate"); },
+    async runAction(_tab: string, action: { type: string }) { events.push(action.type); dirty = action.type === "fill"; },
+  }));
+  const base = { tabId: "production", row: contract.parityMatrix[0], surface: "production", authorizationProfile: "admin", baseUrl: "http://localhost:3000/", dpr: 1, expectedScroll: { x: 0, y: 0 } };
+  await runner.prepareSurface({ ...base, setup: { query: {}, actions: [{ type: "fill", selector: "input", value: "fixture" }], teardownActions: [{ type: "click", selector: "#discard" }] } });
+  assert.equal(dirty, true);
+  await runner.prepareSurface({ ...base, setup: { query: {}, actions: [] } });
+  assert.deepEqual(events, ["navigate", "fill", "click", "navigate"]);
+});
+
+test("state teardown failure cannot pass a run and still performs adapter cleanup", async () => {
+  const { BrowserParityRunner } = await parityModulePromise;
+  let cleaned = false;
+  const runner = new BrowserParityRunner(createAdapter({
+    async runAction() { throw new Error("cancel control unavailable"); },
+    async cleanup() { cleaned = true; return { status: "pass" }; },
+  }));
+  runner.runWithoutCleanup = async () => {
+    runner.surfaceTeardowns.set("production", { label: "fixture", actions: [{ type: "click", selector: "#discard" }] });
+    return { schemaVersion: 4, cleanup: { status: "pending" } };
+  };
+  await assert.rejects(runner.run({}), (error: unknown) => (error as { code?: string }).code === "PARITY_STATE_TEARDOWN_FAILED");
+  assert.equal(cleaned, true);
 });

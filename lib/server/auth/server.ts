@@ -1,3 +1,4 @@
+import { ADMIN_REQUEST_PATH_HEADER, adminAuthHref, safeAdminCallback } from "@/lib/admin-routing";
 import { cache } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -23,7 +24,7 @@ export async function requireSession(callbackURL = "/admin") {
   const session = await getCurrentSession();
 
   if (!session) {
-    redirect(`/login?callbackURL=${encodeURIComponent(callbackURL)}`);
+    redirect(adminAuthHref("login", await currentAdminCallback(callbackURL)));
   }
 
   return session;
@@ -33,7 +34,7 @@ export async function requirePasswordReadySession(callbackURL = "/admin") {
   const session = await requireSession(callbackURL);
 
   if (shouldChangePassword(session)) {
-    redirect("/change-password");
+    redirect(adminAuthHref("change-password", await currentAdminCallback(callbackURL)));
   }
 
   return session;
@@ -53,4 +54,9 @@ export async function getCurrentUser() {
   const session = await getCurrentSession();
 
   return getSessionUser(session);
+}
+
+export async function currentAdminCallback(fallback = "/admin") {
+  const requestHeaders = await headers();
+  return safeAdminCallback(requestHeaders.get(ADMIN_REQUEST_PATH_HEADER) ?? fallback);
 }

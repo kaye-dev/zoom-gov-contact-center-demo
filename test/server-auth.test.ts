@@ -8,7 +8,7 @@ import { TENANTS } from "../lib/tenants";
 const fakePrisma = {} as PrismaClient;
 const productionSecret = "kShZ6X3N1bW9qP4vR8tY2uI5oA7sD0fG";
 
-test("development auth keeps every tenant localhost origin when custom origins are configured", () => {
+test("development auth accepts canonical localhost and excludes public tenant origins", () => {
   const auth = createAuth(fakePrisma, {
     env: {
       NODE_ENV: "development",
@@ -17,10 +17,9 @@ test("development auth keeps every tenant localhost origin when custom origins a
     },
   });
 
-  assert.ok(auth.options.trustedOrigins?.includes("http://lg.localhost:3000"));
-  assert.ok(
-    auth.options.trustedOrigins?.includes("http://univ.localhost:3000"),
-  );
+  assert.ok(auth.options.trustedOrigins?.includes("http://localhost:3000"));
+  assert.equal(auth.options.trustedOrigins?.includes("http://lg.localhost:3000"), false);
+  assert.equal(auth.options.trustedOrigins?.includes("http://univ.localhost:3000"), false);
 });
 
 test("production auth rejects local secret and URL fallbacks", () => {

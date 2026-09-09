@@ -183,6 +183,7 @@ export function clearZaadZoomTokenCache() {
 }
 
 export class ZaadZoomClient {
+  get accountId() { return this.credentials.accountId; }
   private constructor(
     private readonly credentials: { accountId: string; clientId: string; clientSecret: string; credentialVersion?: string },
     private readonly fetchImpl: FetchLike,
@@ -262,10 +263,14 @@ export class ZaadZoomClient {
     if (input.nextPageToken) query.set("next_page_token", input.nextPageToken);
     const payload = await this.requestJson("GET", `/contact_center/outbound_campaign/contact_lists?${query.toString()}`);
     const root = asRecord(payload);
-    const rows = arrayAt(root, ["contact_lists", "lists"]);
+    const rows = requiredArray(root, ["contact_lists", "lists"]);
     return {
-      lists: rows.map((entry) => parseContactList(asRecord(entry), "contact")).filter((value): value is ZoomContactListDto => value !== null),
-      nextPageToken: stringAt(root, ["next_page_token"]) ?? null,
+      lists: rows.map((entry) => {
+        const value = parseContactList(asRecord(entry), "contact");
+        if (!value) throw new ZaadZoomError(ZAAD_ERROR_CODES.zoomInvalidResponse, 502);
+        return value;
+      }),
+      nextPageToken: parseNextPageToken(root.next_page_token),
     };
   }
 
@@ -318,9 +323,10 @@ export class ZaadZoomClient {
         `/contact_center/outbound_campaign/contact_lists/${encodeId(contactListId)}/contacts?${query.toString()}`,
       );
       const root = asRecord(payload);
-      for (const entry of arrayAt(root, ["contacts"])) {
+      for (const entry of requiredArray(root, ["contacts"])) {
         const parsed = parseContact(asRecord(entry));
-        if (parsed) contacts.push(parsed);
+        if (!parsed) throw new ZaadZoomError(ZAAD_ERROR_CODES.zoomInvalidResponse, 502);
+        contacts.push(parsed);
       }
       const candidate = parseNextPageToken(root.next_page_token);
       if (!candidate) return contacts;
@@ -421,8 +427,12 @@ export class ZaadZoomClient {
     const payload = await this.requestJson("GET", `/contact_center/outbound_campaign/campaigns?${query.toString()}`);
     const root = asRecord(payload);
     return {
-      campaigns: arrayAt(root, ["outbound_campaign_items", "campaigns"]).map((entry) => parseCampaign(asRecord(entry))).filter((entry): entry is ZoomCampaignDto => entry !== null),
-      nextPageToken: stringAt(root, ["next_page_token"]) ?? null,
+      campaigns: requiredArray(root, ["outbound_campaign_items", "campaigns"]).map((entry) => {
+        const value = parseCampaign(asRecord(entry));
+        if (!value) throw new ZaadZoomError(ZAAD_ERROR_CODES.zoomInvalidResponse, 502);
+        return value;
+      }),
+      nextPageToken: parseNextPageToken(root.next_page_token),
     };
   }
 
@@ -1252,4 +1262,9 @@ function enumAt<const T extends readonly string[]>(
 
 function compactObject(value: Record<string, unknown>) {
   return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== null && entry !== undefined));
+}
+
+function requiredArray(value: Record<string, unknown>, keys: string[]): unknown[] {
+  for (const key of keys) if (Array.isArray(value[key])) return value[key] as unknown[];
+  throw new ZaadZoomError(ZAAD_ERROR_CODES.zoomInvalidResponse, 502);
 }

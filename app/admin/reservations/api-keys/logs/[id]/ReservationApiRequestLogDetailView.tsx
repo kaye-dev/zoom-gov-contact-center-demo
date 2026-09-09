@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { TenantKey } from "@/lib/tenants";
 import type { ReactNode } from "react";
 
 import { ChevronLeftIcon } from "@/app/components/svg/ChevronLeftIcon";
@@ -15,8 +16,10 @@ import {
 const RESERVATION_API_LOGS_ROUTE = "/admin/reservations/api-keys/logs";
 
 export function ReservationApiRequestLogDetailView({
+  tenantKey,
   log,
 }: {
+  tenantKey: TenantKey;
   log: ReservationApiRequestLogDetail;
 }) {
   const { locale, t } = useI18n();
@@ -32,7 +35,7 @@ export function ReservationApiRequestLogDetailView({
   return (
     <section id="reservation-api-log-detail-content" className="min-w-0 space-y-6">
       <div className="space-y-3">
-        <Link id="back-to-api-logs" href={RESERVATION_API_LOGS_ROUTE} className="inline-flex items-center gap-1 text-sm font-semibold text-accent hover:underline">
+        <Link id="back-to-api-logs" href={`${RESERVATION_API_LOGS_ROUTE}?tenant=${tenantKey}`} className="inline-flex items-center gap-1 text-sm font-semibold text-accent hover:underline">
           <ChevronLeftIcon className="h-5 w-5" />
           {copy.back}
         </Link>

@@ -1,3 +1,4 @@
+import { adminFetch as fetch } from "@/lib/admin-fetch";
 export class UniversityApiError extends Error {
   constructor(
     readonly code: string,

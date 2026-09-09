@@ -200,3 +200,20 @@ test("literal expectations match compact Browser text and attributes in executio
     assert.equal(fidelity.compareFidelityProbe(probe, observed, observed, spec, "final", core.compareProbe, syncHash).status, "fail");
   }
 });
+
+ test("selection cache respects changed inputs and returns current contract rows", async () => {
+  const [, fidelity, fixtures] = await modules;
+  const { contract, spec } = fixtures.createFidelityFixture();
+  const first = fidelity.supplementInteractionRows(contract, spec, []);
+  const cloned = structuredClone(contract);
+  const cached = fidelity.supplementInteractionRows(cloned, structuredClone(spec), []);
+  assert.deepEqual(cached, first);
+  assert.equal(cached[0], cloned.parityMatrix.find((row: {id:string}) => row.id === first[0].id));
+  cached.pop();
+  assert.equal(fidelity.supplementInteractionRows(contract, spec, []).length, first.length);
+  const additional = { ...contract.parityMatrix[0], id: "zz-cache-extra" };
+  contract.parityMatrix.push(additional);
+  assert.ok(fidelity.supplementInteractionRows(contract, spec, [additional]).some((row: {id:string}) => row.id === additional.id));
+  spec.fidelity.visualChecks.push({ ...spec.fidelity.visualChecks[0], rowId: additional.id });
+  assert.ok(fidelity.supplementInteractionRows(contract, spec, []).some((row: {id:string}) => row.id === additional.id));
+});

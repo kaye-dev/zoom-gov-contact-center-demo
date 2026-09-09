@@ -31,6 +31,7 @@ import {
 } from "./registrations";
 import * as service from "./service";
 import type { PrismaClient } from "@/lib/generated/prisma/client";
+import { requireSameOrigin } from "../outreach-api";
 
 type C = Context<ZaadApiEnvironment>;
 function errorResponse(c: C, error: unknown) {
@@ -52,14 +53,11 @@ function errorResponse(c: C, error: unknown) {
   );
 }
 async function body(c: C) {
-  const origin = c.req.header("origin"),
-    expected = new URL(c.req.url).origin;
-  if (
-    !origin ||
-    origin !== expected ||
-    c.req.header("sec-fetch-site") === "cross-site"
-  )
+  try {
+    requireSameOrigin(c.req.raw);
+  } catch {
     throw new OutreachError("INVALID_ORIGIN", 403);
+  }
   if (
     !c.req.header("content-type")?.toLowerCase().startsWith("application/json")
   )

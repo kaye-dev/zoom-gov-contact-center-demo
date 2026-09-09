@@ -40,10 +40,10 @@ export function PhoneSettingsForm({
   reviewState,
 }: PhoneSettingsFormProps) {
   const { t } = useI18n();
-  const [invalidField, setInvalidField] = useState<string | null>(reviewState === "validation" ? "representative-phone-display" : null);
+  const [invalidField, setInvalidField] = useState<string | null>(reviewState === "validation" ? "representative-phone-e164" : null);
   useEffect(() => { if (invalidField) document.getElementById(invalidField)?.focus(); }, [invalidField]);
   const [activeSection, setActiveSection] = useState(reviewState === "detail" ? "ai-phone" : reviewState === "third" ? "ai-phone" : "representative-phone");
-  const [feedback, setFeedback] = useState<Feedback | null>(reviewState === "saved" ? {kind:"success"} : (reviewState === "save-error" || reviewState === "validation") ? {kind:"error"} : null);
+  const [feedback, setFeedback] = useState<Feedback | null>(reviewState === "saved" ? {kind:"success"} : reviewState === "save-error" ? {kind:"error"} : null);
   const control = useAdminSettingsTenant(initialSettings, initialTenant, "phone-settings", () => { setActiveSection("representative-phone"); setFeedback(null); setInvalidField(null); }, reviewState);
   const { settings, setSettings, isSubmitting } = control;
   const orderedLocales = (control.extras.orderedLocales as LanguageSetting[] | undefined) ?? initialLocales;
@@ -52,7 +52,7 @@ export function PhoneSettingsForm({
       ? control.copy.saved.replace("{tenant}", control.tenantName)
       : feedback.code
         ? t.admin.settings.errors[feedback.code]
-        : t.admin.settings.saveError
+        : control.copy.saveError
     : null;
 
   const updateRepresentativePhone = (
@@ -110,8 +110,8 @@ export function PhoneSettingsForm({
         >
           <AdminPageTitleHelp
             title={t.admin.phoneManagement.title}
-            description={t.admin.phoneManagement.description}
-            label={t.admin.pageDescriptionLabel.replace("{title}", t.admin.phoneManagement.title)}
+            description={control.copy.pageHelpDescription.replace("{title}", t.admin.phoneManagement.title)}
+            label={control.copy.pageHelpLabel}
           />
         <AdminSettingsTenantSelect control={control} resource="phone-settings" />
         </div>
@@ -130,7 +130,7 @@ export function PhoneSettingsForm({
       <AdminSettingsLoadState control={control} />
       {!control.invalid && !control.loading && !control.loadError && <form data-admin-form noValidate onSubmit={submit} className="space-y-6">
         <AdminSettingsPanel section="representative-phone" activeSection={activeSection}>
-        <fieldset disabled={isSubmitting} className={settingsSectionClassName}>
+        <fieldset className={settingsSectionClassName}>
           <legend className="sr-only">
             {t.admin.phoneManagement.representativeTitle}
           </legend>
@@ -150,6 +150,7 @@ export function PhoneSettingsForm({
                 aria-invalid={invalidField === "representative-phone-display" || undefined}
                 name="representativePhoneDisplay"
                 required
+                disabled={isSubmitting}
                 readOnly={!canEdit}
                 value={settings.representativePhone.display}
                 onChange={(event) =>
@@ -166,6 +167,7 @@ export function PhoneSettingsForm({
               >
                 {t.admin.phoneManagement.representativeDisplayHelp}
               </p>
+              {invalidField === "representative-phone-display" && <p role="alert" className="text-sm text-red-700 dark:text-red-400">{control.copy.invalidInput}</p>}
             </div>
 
             <div className="space-y-2">
@@ -180,6 +182,7 @@ export function PhoneSettingsForm({
                 aria-invalid={invalidField === "representative-phone-e164" || undefined}
                 name="representativePhoneE164"
                 required
+                disabled={isSubmitting}
                 readOnly={!canEdit}
                 value={settings.representativePhone.e164}
                 onChange={(event) =>
@@ -197,73 +200,62 @@ export function PhoneSettingsForm({
               >
                 {t.admin.phoneManagement.representativeE164Help}
               </p>
+              {invalidField === "representative-phone-e164" && <p role="alert" className="text-sm text-red-700 dark:text-red-400">{control.copy.invalidInput}</p>}
             </div>
           </div>
         </fieldset>
 
         </AdminSettingsPanel>
         <AdminSettingsPanel section="ai-phone" activeSection={activeSection}>
-        <fieldset disabled={isSubmitting} className={settingsSectionClassName}>
+        <fieldset className={settingsSectionClassName}>
           <legend className="sr-only">
             {t.admin.phoneManagement.aiPhoneTitle}
           </legend>
           <p className="text-sm leading-6 text-fg-muted">
             {t.admin.phoneManagement.aiPhoneDescription}
           </p>
-          <div className="space-y-4">
-            {orderedLocales.map(({ locale, enabled }) => (
-              <LocaleSettingRow
-                key={locale}
-                locale={locale}
-                enabled={enabled}
-                hiddenLabel={t.admin.phoneManagement.hidden}
-              >
-                <div className="space-y-2">
-                  <label
-                    htmlFor={`ai-phone-${locale}`}
-                    className="block text-sm font-semibold"
-                  >
-                    {t.admin.phoneManagement.aiPhoneLabel}
-                  </label>
-                  <input
-                    id={`ai-phone-${locale}`}
-                    name={`aiPhoneNumbers.${locale}`}
-                    readOnly={!canEdit}
-                    value={settings.aiPhoneNumbers[locale] ?? ""}
-                    onChange={(event) =>
-                      updateAiPhone(locale, event.target.value)
-                    }
-                    inputMode="tel"
-                    pattern="\+[1-9]\d{7,14}"
-                    placeholder="+81312345678"
-                    className={`min-w-0 w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors ${settingsInputFocusClassName}`}
-                  />
-                </div>
-              </LocaleSettingRow>
-            ))}
-          </div>
+          {orderedLocales.map(({ locale, enabled }) => (
+            <div key={locale} className="space-y-2">
+              <label htmlFor={`ai-phone-${locale}`} className="block text-sm font-semibold">
+                {localeNames[locale]}
+                {!enabled && <span className="ml-2 text-xs font-normal text-fg-muted">{t.admin.phoneManagement.hidden}</span>}
+              </label>
+              <input
+                id={`ai-phone-${locale}`}
+                name={`aiPhoneNumbers.${locale}`}
+                disabled={isSubmitting}
+                readOnly={!canEdit}
+                value={settings.aiPhoneNumbers[locale] ?? ""}
+                onChange={(event) => updateAiPhone(locale, event.target.value)}
+                inputMode="tel"
+                pattern="\+[1-9]\d{7,14}"
+                placeholder="+81312345678"
+                aria-describedby={`ai-phone-${locale}-help`}
+                className={`min-w-0 w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors ${settingsInputFocusClassName}`}
+              />
+              <p id={`ai-phone-${locale}-help`} className="text-xs leading-5 text-fg-muted">{t.admin.phoneManagement.representativeE164Help}</p>
+            </div>
+          ))}
         </fieldset>
 
         </AdminSettingsPanel>
 
+
+
+        <p id="save-scope" className="text-sm leading-6 text-fg-muted">{control.copy.scope.replace("{tenant}", control.tenantName)}</p>
+        {control.dirty && <p className="text-sm text-fg-muted">{control.copy.dirty}</p>}
+        {!canEdit && <p role="status" className="text-sm text-fg-muted">{control.copy.readonly}</p>}
         {feedback ? (
           <p
             role={feedback.kind === "error" ? "alert" : "status"}
             aria-live={feedback.kind === "error" ? "assertive" : "polite"}
-            className={`rounded-md px-4 py-3 text-sm ${
-              feedback.kind === "error"
-                ? "bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-200"
-                : "bg-green-50 text-green-800 dark:bg-green-950/50 dark:text-green-200"
-            }`}
+            className={feedback.kind === "error"
+              ? "text-sm text-red-700 dark:text-red-400"
+              : "rounded-md bg-green-50 px-4 py-3 text-sm text-green-900 dark:bg-surface-raised dark:text-green-300"}
           >
             {feedbackMessage}
           </p>
         ) : null}
-
-        {invalidField && <p role="alert" className="text-sm text-red-700 dark:text-red-400">{control.copy.invalidInput}</p>}
-        <p id="save-scope" className="text-sm leading-6 text-fg-muted">{control.copy.scope.replace("{tenant}", control.tenantName)}</p>
-        {control.dirty && <p className="text-sm text-fg-muted">{control.copy.dirty}</p>}
-        {!canEdit && <p role="status" className="text-sm text-fg-muted">{control.copy.readonly}</p>}
         <button
           aria-describedby="save-scope"
           type="submit"
@@ -271,37 +263,11 @@ export function PhoneSettingsForm({
           className="cursor-pointer rounded-md bg-primary px-5 py-2.5 font-semibold text-white transition-colors hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isSubmitting
-            ? t.admin.settings.saving
+            ? control.copy.saving
             : t.admin.settings.save}
         </button>
       </form>}
       </div>
     </section>
-  );
-}
-
-function LocaleSettingRow({
-  locale,
-  enabled,
-  hiddenLabel,
-  children,
-}: {
-  locale: SiteLocale;
-  enabled: boolean;
-  hiddenLabel: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="grid min-w-0 gap-3 border-b border-line-subtle py-4 md:grid-cols-[12rem_minmax(0,1fr)] md:items-start">
-      <div className="flex flex-wrap items-center gap-2 pt-1">
-        <span className="font-semibold">{localeNames[locale]}</span>
-        {!enabled ? (
-          <span className="rounded-full bg-surface-hover px-2 py-0.5 text-xs font-semibold text-fg-muted">
-            {hiddenLabel}
-          </span>
-        ) : null}
-      </div>
-      {children}
-    </div>
   );
 }

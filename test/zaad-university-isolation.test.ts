@@ -10,6 +10,8 @@ import {
 import type { AdminAccessActor } from "../lib/admin-access/types";
 import { DEPARTMENTS } from "../lib/zaad/university/contracts";
 import { OutreachError } from "../lib/zaad/university/contracts";
+import { resolveOutreachScope } from "../lib/server/zaad/outreach-scope";
+import { MUNICIPAL_DEPARTMENTS } from "../lib/zaad/municipal/contracts";
 
 const actor: AdminAccessActor = {
   id: "actor", adminAttribute: "user", banned: false, mustChangePassword: false,
@@ -99,4 +101,27 @@ test("NO-ACCESS: grants never bypass base permission, suspension, password chang
     assert.deepEqual(await outreachTenants(db, denied), []);
     await assert.rejects(universityScope(db, "univ", denied), (error) => error instanceof OutreachError && error.status === 403);
   }
+});
+
+test("shared outreach scope grants full departments in both tenants without inheriting live permission", async () => {
+  for (const siteKey of ["lg", "univ"] as const) {
+    const { db } = database([]);
+    const resolved = await resolveOutreachScope(db, full, siteKey);
+    assert.equal(resolved.siteKey, siteKey);
+    assert.equal(resolved.all, true);
+    assert.equal(resolved.live, false);
+    assert.deepEqual(resolved.departments, [...(siteKey === "lg" ? MUNICIPAL_DEPARTMENTS : DEPARTMENTS)]);
+  }
+  const { db } = database([{ siteKey: "lg", departmentKey: "resident-support", liveExecution: true }]);
+  assert.equal((await resolveOutreachScope(db, full, "lg")).live, true);
+  assert.equal((await resolveOutreachScope(db, full, "univ")).live, false);
+});
+
+test("shared outreach scope keeps ordinary role grants tenant and department bound", async () => {
+  const { db } = database([{ siteKey: "lg", departmentKey: "welfare" }]);
+  const resolved = await resolveOutreachScope(db, actor, "lg");
+  assert.deepEqual(resolved.departments, ["welfare"]);
+  assert.equal(resolved.all, false);
+  await assert.rejects(resolveOutreachScope(db, actor, "univ"));
+  await assert.rejects(resolveOutreachScope(db, { ...full, banned: true }, "lg"));
 });

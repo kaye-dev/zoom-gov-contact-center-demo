@@ -7,9 +7,9 @@ export function InvalidSettingsTenant() {
   const pathname = usePathname();
   return (
     <div role="alert" className="space-y-4">
-      <p>{t.admin.industrySettings.invalid}</p>
+      <p className="font-semibold">{t.admin.industrySettings.invalid}</p>
       <Link className="text-primary underline" href={`${pathname}?tenant=univ`}>
-        {t.admin.industrySettings.names.univ}
+        {t.admin.industrySettings.openUniversitySettings}
       </Link>
     </div>
   );

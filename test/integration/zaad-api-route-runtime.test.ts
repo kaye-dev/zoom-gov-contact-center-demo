@@ -1,3 +1,14 @@
+import * as nodeModule from "node:module";
+// The runtime is Node 24; the repository currently uses Node 20 declarations.
+const { registerHooks } = nodeModule as unknown as {
+  registerHooks(options: {
+    resolve(
+      specifier: string,
+      context: unknown,
+      next: (specifier: string, context: unknown) => unknown,
+    ): unknown;
+  }): { deregister(): void };
+};
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import test from "node:test";
@@ -40,10 +51,18 @@ test(
           await createSession(client, userId, `${userId}-token`);
         }
 
-        const route = await import("../../app/api/[[...route]]/route");
+        const hooks = registerHooks({
+          resolve(specifier, context, next) {
+            return next(specifier === "server-only" ? "next/dist/compiled/server-only/empty.js" : specifier, context);
+          },
+        });
+        const route = await import("../../app/api/[[...route]]/route").finally(() => hooks.deregister());
         const fullCookie = signedSessionCookie(`${FULL_ADMIN}-token`);
         const viewCookie = signedSessionCookie(`${VIEW_ADMIN}-token`);
         const noAccessCookie = signedSessionCookie(`${NO_ACCESS_ADMIN}-token`);
+        const missingTenant = await invoke(route.GET, "GET", "/api/admin/zaad/residents", { cookie: fullCookie, omitTenant: true });
+        assert.equal(missingTenant.status, 400);
+        assert.equal((await missingTenant.json()).code, "TENANT_REQUIRED");
 
         await t.test("anonymous public registration accepts only the exact payload and hides duplicates", async () => {
           const exactPayload = {
@@ -106,11 +125,11 @@ test(
           const path = "/api/admin/zaad/residents";
           const anonymous = await invoke(route.GET, "GET", path);
           assert.equal(anonymous.status, 401);
-          assert.deepEqual(await anonymous.json(), { error: "AUTHENTICATION_REQUIRED" });
+          assert.deepEqual(await anonymous.json(), { code: "AUTHENTICATION_REQUIRED", error: "AUTHENTICATION_REQUIRED" });
 
           const denied = await invoke(route.GET, "GET", path, { cookie: noAccessCookie });
           assert.equal(denied.status, 403);
-          assert.deepEqual(await denied.json(), { error: "ADMIN_ACCESS_DENIED" });
+          assert.deepEqual(await denied.json(), { code: "ADMIN_ACCESS_DENIED", error: "ADMIN_ACCESS_DENIED" });
 
           const view = await invoke(route.GET, "GET", path, { cookie: viewCookie });
           assert.equal(view.status, 200, await view.clone().text());
@@ -188,7 +207,12 @@ test(
             { cookie: fullCookie },
           );
           assert.equal(connection.status, 200);
-          assert.deepEqual(await connection.json(), { state: "missing" });
+          const connectionBody = await connection.json();
+          assert.deepEqual(connectionBody.connection, { state: "missing" });
+          assert.equal(connectionBody.tenantKey, "lg");
+          assert.equal(connectionBody.fullAccess, true);
+          assert.equal(connectionBody.liveExecution, false);
+          assert.ok(Array.isArray(connectionBody.departments));
         });
 
         await t.test("CSV multipart import is atomic and rejects unknown parts", async () => {
@@ -350,6 +374,7 @@ type InvokeOptions = {
   body?: unknown;
   rawBody?: string;
   headers?: Record<string, string>;
+  omitTenant?: boolean;
 };
 
 async function invoke(
@@ -368,7 +393,9 @@ async function invoke(
   if (options.body !== undefined && !headers.has("content-type")) {
     headers.set("content-type", "application/json");
   }
-  return handler(new Request(`http://localhost:3000${path}`, {
+  const url = new URL(`http://localhost:3000${path}`);
+  if (url.pathname.startsWith("/api/admin/") && !url.searchParams.has("tenant") && !options.omitTenant) url.searchParams.set("tenant", "lg");
+  return handler(new Request(url, {
     method,
     headers,
     body: options.rawBody ?? (

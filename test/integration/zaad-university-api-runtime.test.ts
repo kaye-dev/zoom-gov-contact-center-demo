@@ -116,14 +116,17 @@ test(
           path: string,
           body?: unknown,
           user = "outreach-all",
-          host = "univ.localhost:3000",
+          host = "localhost:3000",
           extra: Record<string, string> = {},
+          omitTenant = false,
         ) {
           const cookie = user
             ? `better-auth.session_token=${encodeURIComponent(user + "." + createHmac("sha256", secret).update(user).digest("base64"))}`
             : "";
+          const url = new URL(`http://${host}/api${path}`);
+          if (url.pathname.startsWith("/api/admin/") && !url.searchParams.has("tenant") && !omitTenant) url.searchParams.set("tenant", "univ");
           const response = await route[method](
-            new Request(`http://${host}/api${path}`, {
+            new Request(url, {
               method,
               headers: {
                 host,
@@ -160,7 +163,9 @@ test(
           assert.equal((await request("GET", `${prefix}/templates`, undefined, "outreach-none")).status, 403);
           assert.equal((await request("GET", `${prefix}/templates`, undefined, "outreach-legacy")).status, 403);
           assert.equal((await request("GET", `${prefix}/templates?tenant=lg`, undefined, "outreach-full")).status, 404);
-          assert.equal((await request("GET", `${prefix}/templates`, undefined, "outreach-full", "localhost:3000")).status, 404);
+          const missingTenant = await request("GET", `${prefix}/templates`, undefined, "outreach-full", "localhost:3000", {}, true);
+          assert.equal(missingTenant.status, 400);
+          assert.equal((await missingTenant.json()).code, "TENANT_REQUIRED");
           assert.deepEqual(external, []);
         });
         await t.test(

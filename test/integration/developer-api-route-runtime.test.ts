@@ -1,3 +1,4 @@
+import { importApiRoute } from "../helpers/import-api-route";
 import assert from "node:assert/strict";
 import { createHmac, randomBytes } from "node:crypto";
 import { test } from "node:test";
@@ -41,7 +42,7 @@ test(
           await createSession(client, userId, `${userId}-token`);
         }
 
-        const route = await import("../../app/api/[[...route]]/route");
+        const route = await importApiRoute();
         const fullCookie = signedSessionCookie(`${FULL_ADMIN}-token`);
         const viewCookie = signedSessionCookie(`${VIEW_ADMIN}-token`);
         const noAccessCookie = signedSessionCookie(`${NO_ACCESS_ADMIN}-token`);
@@ -71,6 +72,7 @@ test(
         );
         assert.equal(passwordResponse.status, 403);
         assert.deepEqual(await passwordResponse.json(), {
+          code: "PASSWORD_CHANGE_REQUIRED",
           error: "PASSWORD_CHANGE_REQUIRED",
         });
         assert.equal(await settingsCount(client), 0);
@@ -146,7 +148,7 @@ test(
           assert.equal(response.status, expectedStatus);
           assertNoStore(response);
         }
-        for (const response of [
+        for (const [index, response] of [
           await invokeRaw(
             route.POST,
             "POST",
@@ -168,9 +170,9 @@ test(
             fullCookie,
             { field: "unknown" },
           ),
-        ]) {
+        ].entries()) {
           assert.equal(response.status, 400);
-          assert.deepEqual(await response.json(), {
+          assert.deepEqual(await response.json(), index === 0 ? { code: "INVALID_REQUEST" } : {
             error: DEVELOPER_API_ERROR_CODES.invalidRequest,
           });
           assertNoStore(response);
@@ -278,7 +280,7 @@ test(
         await client.query(
           `UPDATE site_developer_api_settings
            SET "clientSecretEncrypted" = 'v1.invalid.invalid.invalid'
-           WHERE id = 1`,
+           WHERE "siteKey" = 'lg'`,
         );
         const originalConsoleError = console.error;
         const logged: unknown[][] = [];
@@ -353,8 +355,10 @@ async function invokeRaw(
 ) {
   const headers = new Headers({ "content-type": "application/json" });
   if (cookie) headers.set("cookie", cookie);
+  const url = new URL(`http://localhost:3000${path}`);
+  if (url.pathname.startsWith("/api/admin/") && !url.searchParams.has("tenant")) url.searchParams.set("tenant", "lg");
   return handler(
-    new Request(`http://localhost:3000${path}`, {
+    new Request(url, {
       method,
       headers,
       body,
@@ -455,7 +459,7 @@ async function readCiphertexts(client: Client) {
     secretTokenEncrypted: string | null;
   }>(
     `SELECT "clientSecretEncrypted", "secretTokenEncrypted"
-     FROM site_developer_api_settings WHERE id = 1`,
+     FROM site_developer_api_settings WHERE "siteKey" = 'lg'`,
   );
   return result.rows[0];
 }

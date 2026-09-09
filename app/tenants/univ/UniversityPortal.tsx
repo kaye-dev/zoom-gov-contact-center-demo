@@ -1,5 +1,6 @@
 "use client";
 
+import { PublicAdminLink } from "@/app/components/PublicAdminLink";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
@@ -313,12 +314,12 @@ function UniversityFooter({ content }: { content: UniversityContent }) {
               </li>
               <li><Link href="/notifications/register" className="font-bold text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent">{t.universityOutreach.registerLink}</Link></li>
               <li>
-                <Link
-                  href="/admin"
+                <PublicAdminLink
+                  tenant="univ"
                   className="hover:text-accent hover:underline"
                 >
                   {content.footer.admin}
-                </Link>
+                </PublicAdminLink>
               </li>
               <li>
                 <span>

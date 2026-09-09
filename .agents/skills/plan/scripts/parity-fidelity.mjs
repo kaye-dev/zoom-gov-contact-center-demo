@@ -136,7 +136,7 @@ export function validateFidelityProfile(spec, contract, { validateAction, valida
         keys(step.action, ["type"], "reload action");
         reloadAfterChange ||= changed;
       } else validateAction?.(step.action, "runtime action");
-      if (["click", "fill", "press"].includes(step.action.type)) changed = true;
+      if (["click", "dblclick", "fill", "press", "selectOption", "upload"].includes(step.action.type)) changed = true;
       for (const assertion of list(step.assertions, "runtime assertions")) {
         keys(assertion, ["probeId", "expected"], "runtime assertion");
         const probe = probes.get(assertion.probeId);
@@ -172,28 +172,38 @@ export function validateFidelityProfile(spec, contract, { validateAction, valida
   return f;
 }
 
+// One bounded content-keyed selection only: mutable inputs are reserialized on every call.
+let lastInteractionSelection;
+// Current 3,671-row profile has a 10.4M-character key; retain at most one 16M-character key.
+const maxSelectionCacheChars = 16 * 1024 * 1024;
 export function supplementInteractionRows(contract, spec, baseRows) {
   if (spec.version !== 4) return baseRows;
+  const selectionKey = JSON.stringify([contract.parityMatrix, spec.fidelity, baseRows.map(row => row.id)]);
+  if (lastInteractionSelection?.key === selectionKey) {
+    return contract.parityMatrix.filter(row => lastInteractionSelection.ids.has(row.id));
+  }
   const selected = new Set(baseRows.map(row => row.id));
   for (const item of [...spec.fidelity.visualChecks, ...spec.fidelity.runtimeChecks]) selected.add(item.rowId);
   const groups = spec.fidelity.interactionGroups.map(group => {
     const candidates = interactionCandidates(contract, group);
     const missing = new Set(candidates.flatMap(candidate => candidate.tuples));
-    return { candidates, missing };
+    return { tuplesByRow: new Map(candidates.map(candidate => [candidate.row.id, candidate.tuples])), missing };
   });
-  const consume = id => { for (const group of groups) for (const candidate of group.candidates) if (candidate.row.id === id) candidate.tuples.forEach(tuple => group.missing.delete(tuple)); };
+  const consume = id => { for (const group of groups) group.tuplesByRow.get(id)?.forEach(tuple => group.missing.delete(tuple)); };
   selected.forEach(consume);
   const candidates = [...contract.parityMatrix].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   while (groups.some(group => group.missing.size)) {
     let best, bestScore = 0;
     for (const row of candidates) {
       if (selected.has(row.id)) continue;
-      const score = groups.reduce((sum, group) => sum + (group.candidates.find(candidate => candidate.row.id === row.id)?.tuples.filter(tuple => group.missing.has(tuple)).length ?? 0), 0);
+      const score = groups.reduce((sum, group) => sum + (group.tuplesByRow.get(row.id)?.filter(tuple => group.missing.has(tuple)).length ?? 0), 0);
       if (score > bestScore) { best = row; bestScore = score; }
     }
     check(best, "uncovered feasible tuples have no executable case");
     selected.add(best.id); consume(best.id);
   }
+  lastInteractionSelection = selectionKey.length <= maxSelectionCacheChars
+    ? { key: selectionKey, ids: new Set(selected) } : undefined;
   return contract.parityMatrix.filter(row => selected.has(row.id));
 }
 

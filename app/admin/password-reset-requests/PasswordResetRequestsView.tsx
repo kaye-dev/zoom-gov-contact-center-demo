@@ -1,4 +1,5 @@
 "use client";
+import { adminFetch as fetch } from "@/lib/admin-fetch";
 
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";

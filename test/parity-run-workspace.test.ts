@@ -1675,6 +1675,48 @@ test("WS-MANIFEST-03 分割契約の再開・更新と参照の改ざん・欠�
   assert.equal(fresh.batch.batchId, "batch-0001");
 });
 
+test("WS checkpoint preserves large existing state across resume and invalidation with UTF-8 bounds", async (context) => {
+  const workspace = await workspaceModulePromise;
+  const fixture = await createFixture(context, "ws-checkpoint-capacity");
+  const definition = createCoverageWorkspaceDefinition();
+  const handshake = await workspace.prepareRunWorkspace({
+    repositoryRootPath: fixture.root, slug: "fixture", runId: "ws-checkpoint-capacity",
+    definition, approval: fixture.approval, current: fixture.current,
+    baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
+    matrixScope: "coverage", validateApproval: fixture.runner.validateApprovalEvidence,
+  });
+  const checkpointPath = path.join(path.dirname(handshake.manifestPath), "checkpoint.json");
+  const checkpoint = JSON.parse(await readFile(checkpointPath, "utf8"));
+  checkpoint.padding = "検証".repeat(100_000);
+  await writeFile(checkpointPath, JSON.stringify(checkpoint));
+  assert.ok((await stat(checkpointPath)).size > 552_496);
+  const next = await workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId });
+  await workspace.recordBatchResult({ repositoryRootPath: fixture.root, runId: handshake.runId,
+    batchId: next.batch.batchId, input: JSON.stringify(coverageFragment(handshake, next.batch, definition)) });
+  const resumed = await workspace.resumeRunWorkspace({ repositoryRootPath: fixture.root, runId: handshake.runId });
+  assert.equal(resumed.batch.batchId, "batch-0002");
+  await workspace.invalidateRunWorkspace({ repositoryRootPath: fixture.root, runId: handshake.runId,
+    scope: "global", currentSources: [{ path: "src/ui.ts", sha256: revision }] });
+  const updated = JSON.parse(await readFile(checkpointPath, "utf8"));
+  assert.equal(updated.padding, checkpoint.padding);
+  // Fill exactly to the UTF-8 bound; formatting must fall back to compact JSON.
+  updated.padding = "";
+  const spare = 32 * 1024 * 1024 - Buffer.byteLength(JSON.stringify(updated)) - 1;
+  updated.padding = "検".repeat(Math.floor(spare / 3)) + "x".repeat(spare % 3);
+  await writeFile(checkpointPath, JSON.stringify(updated) + "\n");
+  const reserved = await workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId });
+  const bounded = JSON.parse(await readFile(checkpointPath, "utf8"));
+  bounded.padding += "x".repeat(32 * 1024 * 1024 - Buffer.byteLength(JSON.stringify(bounded)) - 1);
+  await writeFile(checkpointPath, JSON.stringify(bounded) + "\n");
+  const before = await readFile(checkpointPath, "utf8");
+  assert.equal(Buffer.byteLength(before), 32 * 1024 * 1024);
+  await assert.rejects(workspace.recordBatchFailure({ repositoryRootPath: fixture.root, runId: handshake.runId,
+    batchId: reserved.batch.batchId, code: "PARITY_BROWSER_TRANSIENT", transient: true }), /exceeds the byte limit/u);
+  assert.equal(await readFile(checkpointPath, "utf8"), before);
+  await writeFile(checkpointPath, before + " ");
+  await assert.rejects(workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId }), /exceeds the byte limit/u);
+});
+
 test("WS-SEC-05 manifestとcheckpointの用途別byte上限を強制する", async (context) => {
   const workspace = await workspaceModulePromise;
   const definition = createCoverageWorkspaceDefinition();
@@ -1710,7 +1752,7 @@ test("WS-SEC-05 manifestとcheckpointの用途別byte上限を強制する", asy
     validateApproval: checkpointFixture.runner.validateApprovalEvidence,
   });
   const checkpointPath = path.join(path.dirname(checkpointHandshake.manifestPath), "checkpoint.json");
-  await writeFile(checkpointPath, JSON.stringify({ padding: "x".repeat(512 * 1024) }));
+  await writeFile(checkpointPath, JSON.stringify({ padding: "x".repeat(32 * 1024 * 1024) }));
   await assert.rejects(
     workspace.nextRunBatch({ repositoryRootPath: checkpointFixture.root, runId: checkpointHandshake.runId }),
     /exceeds the byte limit/u,
@@ -1860,10 +1902,11 @@ test("WS-SEC-06 runRootの外部symlink差替えはread・write・promote前に�
   await assert.rejects(access(path.join(evidenceRunRoot, "implementation-parity.json")));
 });
 
-for (const storage of ["inline", "split"]) for (const version of [3, 4]) test(`WS-COVERAGE-05 ${storage} finalize promotes artifacts only after profile ${version} requirements pass`, async (context) => {
+for (const multiHost of [false, true]) for (const storage of ["inline", "split"]) for (const version of [3, 4]) test(`WS-COVERAGE-05 hosts=${multiHost} ${storage} finalize promotes artifacts only after profile ${version} requirements pass`, async (context) => {
   const workspace = await workspaceModulePromise;
   const fixture = await createFixture(context, "ws-coverage-finalize");
   const definition = createCoverageWorkspaceDefinition();
+  if (multiHost) definition.spec.browserSetups.forEach((setup, index) => Object.assign(setup, { productionHost: index === 0 ? "lg.localhost" : "univ.localhost" }));
   if (storage === "split") definition.contract.stateAndInteraction = ["界😀".repeat(400_000)];
   const fidelity = {
     requirements: [{ id: "REQ-01", expected: "Both target layouts conform", probeIds: ["coverage"], runtimeCheckIds: [], visualCheckIds: [] as string[], staticCheckIds: ["types"], interactionGroupIds: ["themes"], noInteractionReason: null }],
@@ -1920,6 +1963,19 @@ for (const storage of ["inline", "split"]) for (const version of [3, 4]) test(`W
   for (let index = 0; index < handshake.batches.length; index += 1) {
     const next = await workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId });
     const value = coverageFragment(handshake, next.batch, definition);
+    if (multiHost) {
+      const contexts = surfaceContexts("coverage-fixture");
+      const origins = new Set<string>();
+      for (const row of value.rows) {
+        const target = definition.contract.parityMatrix.find(item => item.id === row.rowId)!;
+        const host = target.targetId === "main" ? "lg.localhost" : "univ.localhost";
+        const url = new URL(row.actualConditions.urls.production); url.hostname = host;
+        row.actualConditions.urls.production = url.href; origins.add(url.origin);
+      }
+      const observed = [...origins].map(origin => ({ ...contexts[0], origin })).concat([contexts[1]]);
+      Object.assign(value, { surfaceContexts: observed });
+      if (value.capabilities) value.capabilities.surfaceContexts = observed;
+    }
     for (const row of value.rows) {
       if (version === 4) Object.assign(row, { runtimeChecks: [] });
       const artifacts = artifactsByRow.get(row.rowId) ?? [];
@@ -1961,6 +2017,12 @@ for (const storage of ["inline", "split"]) for (const version of [3, 4]) test(`W
   const finalized = await finalize();
   const evidence = JSON.parse(await readFile(path.join(fixture.root, finalized.evidencePath), "utf8"));
   assert.equal(evidence.schemaVersion, version + 1);
+  if (multiHost) {
+    assert.deepEqual(evidence.capabilities.surfaceContexts.filter((item: {surface: string}) => item.surface === "production").map((item: {origin: string}) => item.origin).sort(), ["http://lg.localhost:3002", "http://univ.localhost:3002"]);
+    const wrongHost = structuredClone(evidence);
+    wrongHost.rows[0].actualConditions.urls.production = "http://univ.localhost:3002/fixture";
+    assert.throws(() => fixture.runner.validateParityEvidence(wrongHost, definition.contract, definition.spec), /host does not match/);
+  }
   if (version === 4) {
     assert.equal(evidence.interactionCoverage[0].passedTuples, 8);
     assert.equal(evidence.auditStatus.visual, "pass");
@@ -1996,7 +2058,7 @@ test("workspace Browser executor checkpoints bounded rows and validates both cle
       executed.push(input.batch.batchId);
       this.operations += 20;
       const fragment = coverageFragment(handshake, batchDescriptors.find((batch: { batchId: string }) => batch.batchId === input.batch.batchId)!, definition);
-      return { rows: fragment.rows, capabilities: fragment.capabilities, metrics: { ...fragment.metrics, browserOperations: this.operations } };
+      return { rows: fragment.rows, capabilities: fragment.capabilities ?? coverageFragment(handshake, batchDescriptors[0], definition).capabilities, metrics: { ...fragment.metrics, browserOperations: this.operations } };
     },
     adapter: { async cleanup() { cleanupCount += 1; return { status: "pass", tabs: [terminal, { ...terminal, tabId: "prototype" }] }; } },
   };
@@ -2120,6 +2182,358 @@ test("DPR recovery preserves passed evidence, checks both origins, and reserves 
   }
 });
 
+test("Navigation recovery preserves passed evidence, checks both origins, and reserves no batch", async (context) => {
+  const workspace = await workspaceModulePromise;
+  for (const scenario of ["pass", "wrong-code", "production-denied", "prototype-denied", "wrong-dpr", "cleanup-failed", "checkpoint-drift", "repeat", "wrong-operation", "failed-cleanup-evidence", "missing-evidence"]) {
+    await context.test(scenario, async (child) => {
+      const fixture = await createFixture(child, `nav-recover-${scenario}`);
+      const definition = createCoverageWorkspaceDefinition();
+      const handshake = await workspace.prepareRunWorkspace({ repositoryRootPath: fixture.root,
+        slug: "fixture", runId: `nav-recover-${scenario}`, definition, approval: fixture.approval,
+        current: fixture.current, baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
+        matrixScope: "coverage", validateApproval: fixture.runner.validateApprovalEvidence });
+      const base = { repositoryRootPath: fixture.root, runId: handshake.runId };
+      const first = await workspace.nextRunBatch(base);
+      const descriptor = { ...handshake.batches[0], ...JSON.parse(await readFile(first.batch.path, "utf8")) };
+      await workspace.recordBatchResult({ ...base, batchId: first.batch.batchId,
+        input: JSON.stringify(coverageFragment(handshake, descriptor, definition)) });
+      const second = await workspace.nextRunBatch(base);
+      await workspace.recordBatchFailure({ ...base, batchId: second.batch.batchId,
+        code: scenario === "wrong-code" ? "PARITY_REQUIRED_PROBE_UNAVAILABLE" : "PARITY_UNEXPECTED_ERROR",
+        diagnostic: "test", transient: false });
+      const runRoot = path.dirname(handshake.manifestPath);
+      const checkpointPath = path.join(runRoot, "checkpoint.json");
+      const before = await readFile(checkpointPath, "utf8");
+      const fragmentPath = path.join(runRoot, `fragment-${first.batch.batchId}.json`);
+      const passedFragment = await readFile(fragmentPath, "utf8");
+      let active = "";
+      const visits: string[] = [];
+      const tabs = { production: "recovered-production", prototype: "recovered-prototype" };
+      const adapter = {
+        requiresBrowserSetups: true, comparisonTabIds: tabs, sessionId: "coverage-fixture",
+        async activateTab(id: string) { active = id; }, async activeTabId() { return active; },
+        async navigate(_id: string, url: string) { visits.push(url); },
+        async setViewport() {
+          if ((scenario === "production-denied" && active === tabs.production) ||
+            (scenario === "prototype-denied" && active === tabs.prototype)) {
+            throw new fixture.runner.ParityRunError("PARITY_DPR_OVERRIDE_UNAVAILABLE", "denied");
+          }
+        },
+        async measureViewport() { return { width: 390, height: 844, dpr: scenario === "wrong-dpr" ? 2 : 1 }; },
+        async screenshotDigest() { return digest; },
+        async performanceEntries() { return []; },
+        async setTheme() {}, async runAction() {}, async runProbe() {}, async measureScroll() {},
+        async cleanup() {
+          if (scenario === "checkpoint-drift") {
+            const changed = JSON.parse(await readFile(checkpointPath, "utf8"));
+            changed.resumed = true;
+            await writeFile(checkpointPath, JSON.stringify(changed));
+          }
+          return { status: "pass", tabs: Object.values(tabs).map((tabId) => ({
+            status: "pass", tabId, cdpCleared: true, viewportReset: scenario !== "cleanup-failed",
+            baseline: { width: 1280, height: 720, dpr: 2 }, readback: { width: 1280, height: 720, dpr: 2 },
+          })) };
+        },
+      };
+      const failureFile = `failure-${second.batch.batchId}-1.json`;
+      if (scenario !== "missing-evidence") await writeFile(path.join(runRoot, failureFile), JSON.stringify({
+        code: "PARITY_UNEXPECTED_ERROR", evidence: { operation: scenario === "wrong-operation" ? "runProbe" : "navigate" },
+        cleanup: { status: scenario === "failed-cleanup-evidence" ? "fail" : "pass" },
+      }));
+      let orphan;
+      if (scenario === "pass") {
+        const sink = await workspace.createWorkspaceArtifactSink(base);
+        orphan = await sink({ kind: "screenshot", rowId: second.batch.rowIds[0], probeId: "screen", surface: "production", content: "orphan-image", mediaType: "image/png" });
+      }
+      const recovery = { ...base, batchId: second.batch.batchId, adapter, tabs, failureFile };
+      if (!["pass", "repeat"].includes(scenario)) {
+        await assert.rejects(workspace.recoverNavigationTerminalBatch(recovery));
+        if (scenario !== "checkpoint-drift") assert.equal(await readFile(checkpointPath, "utf8"), before);
+      } else {
+        const result = await workspace.recoverNavigationTerminalBatch(recovery);
+        assert.equal(result.status, "recovered");
+        assert.equal(result.batch, null);
+        assert.deepEqual(visits, ["http://localhost:3002/", "http://127.0.0.1:4002/"]);
+        const after = JSON.parse(await readFile(checkpointPath, "utf8"));
+        assert.deepEqual(after.batches[0], JSON.parse(before).batches[0]);
+        assert.equal(after.batches[1].status, "pending");
+        assert.equal(after.batches[1].attempts, 1);
+        assert.equal(after.batches[1].navigationRecovery.previousErrorCode, "PARITY_UNEXPECTED_ERROR");
+        if (orphan) {
+          const archived = after.batches[1].navigationRecovery.archivedArtifacts[0];
+          assert.equal(await readFile(path.join(fixture.root, archived.archivedPath), "utf8"), "orphan-image");
+          await assert.rejects(readFile(path.join(fixture.root, orphan.path)), { code: "ENOENT" });
+          assert.ok(!after.artifactIndex.some((entry: { path: string }) => entry.path === orphan.path));
+        }
+        const next = await workspace.nextRunBatch(base);
+        assert.equal(next.batch.batchId, second.batch.batchId);
+        assert.equal(next.batch.attempt, 2);
+        if (scenario === "pass") {
+          const descriptor = { ...handshake.batches[1], ...JSON.parse(await readFile(next.batch.path, "utf8")) };
+          const fragment = { ...coverageFragment(handshake, descriptor, definition),
+            surfaceContexts: surfaceContexts("coverage-fixture").map(item => ({ ...item,
+              tabId: tabs[item.surface as keyof typeof tabs] })),
+          };
+          for (const change of ["unobserved", "mixed", "session"]) {
+            const invalid = structuredClone(fragment);
+            if (change === "unobserved") invalid.surfaceContexts[0].tabId = "unobserved";
+            if (change === "mixed") invalid.surfaceContexts[0].tabId = "comparison";
+            if (change === "session") invalid.surfaceContexts[0].sessionId = "other-session";
+            await assert.rejects(workspace.recordBatchResult({ ...base, batchId: next.batch.batchId,
+              input: JSON.stringify(invalid) }));
+          }
+          await workspace.recordBatchResult({ ...base, batchId: next.batch.batchId,
+            input: JSON.stringify(fragment) });
+          assert.equal(await readFile(fragmentPath, "utf8"), passedFragment);
+          await workspace.invalidateRunWorkspace({ ...base, scope: "global",
+            currentSources: [{ path: "src/ui.ts", sha256: revision }] });
+          const invalidated = JSON.parse(await readFile(checkpointPath, "utf8"));
+          assert.equal(invalidated.batches[1].navigationRecovery, undefined);
+          assert.deepEqual(invalidated.batches[1].recoveryHistory,
+            [{ kind: "navigation", ...after.batches[1].navigationRecovery }]);
+
+        }
+        if (scenario === "repeat") {
+          await workspace.recordBatchFailure({ ...base, batchId: second.batch.batchId,
+            code: "PARITY_UNEXPECTED_ERROR", diagnostic: "test", transient: false });
+          await assert.rejects(workspace.recoverNavigationTerminalBatch(recovery), /unrecovered navigation terminal/u);
+        }
+      }
+      if (scenario !== "pass") assert.equal(await readFile(fragmentPath, "utf8"), passedFragment);
+    });
+  }
+});
+
+test("Closed-tab recovery requires retired failed tabs and retains verified evidence", async (context) => {
+  const workspace = await workspaceModulePromise;
+  for (const scenario of ["pass", "wrong-code", "production-denied", "prototype-denied", "wrong-dpr", "cleanup-failed", "checkpoint-drift", "repeat", "wrong-operation", "failed-cleanup-evidence", "missing-evidence", "still-live", "reappears", "replacement-missing", "foreign-failed-tab", "wrong-session"]) {
+    await context.test(scenario, async (child) => {
+      const fixture = await createFixture(child, `closure-recover-${scenario}`);
+      const definition = createCoverageWorkspaceDefinition();
+      const handshake = await workspace.prepareRunWorkspace({ repositoryRootPath: fixture.root,
+        slug: "fixture", runId: `closure-recover-${scenario}`, definition, approval: fixture.approval,
+        current: fixture.current, baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
+        matrixScope: "coverage", validateApproval: fixture.runner.validateApprovalEvidence });
+      const base = { repositoryRootPath: fixture.root, runId: handshake.runId };
+      const first = await workspace.nextRunBatch(base);
+      const descriptor = { ...handshake.batches[0], ...JSON.parse(await readFile(first.batch.path, "utf8")) };
+      await workspace.recordBatchResult({ ...base, batchId: first.batch.batchId,
+        input: JSON.stringify(coverageFragment(handshake, descriptor, definition)) });
+      const second = await workspace.nextRunBatch(base);
+      await workspace.recordBatchFailure({ ...base, batchId: second.batch.batchId,
+        code: scenario === "wrong-code" ? "PARITY_REQUIRED_PROBE_UNAVAILABLE" : "PARITY_CLEANUP_FAILED",
+        diagnostic: "test", transient: false });
+      const runRoot = path.dirname(handshake.manifestPath);
+      const checkpointPath = path.join(runRoot, "checkpoint.json");
+      const before = await readFile(checkpointPath, "utf8");
+      const fragmentPath = path.join(runRoot, `fragment-${first.batch.batchId}.json`);
+      const passedFragment = await readFile(fragmentPath, "utf8");
+      let active = "";
+      const visits: string[] = [];
+      const tabs = { production: "recovered-production", prototype: "recovered-prototype" };
+      const adapter = {
+        requiresBrowserSetups: true, comparisonTabIds: tabs, sessionId: scenario === "wrong-session" ? "other-session" : "coverage-fixture",
+        async activateTab(id: string) { active = id; }, async activeTabId() { return active; },
+        async navigate(_id: string, url: string) { visits.push(url); },
+        async setViewport() {
+          if ((scenario === "production-denied" && active === tabs.production) ||
+            (scenario === "prototype-denied" && active === tabs.prototype)) {
+            throw new fixture.runner.ParityRunError("PARITY_DPR_OVERRIDE_UNAVAILABLE", "denied");
+          }
+        },
+        async measureViewport() { return { width: 390, height: 844, dpr: scenario === "wrong-dpr" ? 2 : 1 }; },
+        async screenshotDigest() { return digest; },
+        async performanceEntries() { return []; },
+        async setTheme() {}, async runAction() {}, async runProbe() {}, async measureScroll() {},
+        async cleanup() {
+          if (scenario === "checkpoint-drift") {
+            const changed = JSON.parse(await readFile(checkpointPath, "utf8"));
+            changed.resumed = true;
+            await writeFile(checkpointPath, JSON.stringify(changed));
+          }
+          return { status: "pass", tabs: Object.values(tabs).map((tabId) => ({
+            status: "pass", tabId, cdpCleared: true, viewportReset: scenario !== "cleanup-failed",
+            baseline: { width: 1280, height: 720, dpr: 2 }, readback: { width: 1280, height: 720, dpr: 2 },
+          })) };
+        },
+      };
+      const failureFile = `failure-${second.batch.batchId}-1.json`;
+      if (scenario !== "missing-evidence") await writeFile(path.join(runRoot, failureFile), JSON.stringify({
+        code: "PARITY_CLEANUP_FAILED", evidence: { operation: scenario === "wrong-operation" ? "runProbe" : "navigate" },
+        cleanup: { status: scenario === "failed-cleanup-evidence" ? "pass" : "fail", failedTabIds: [{ tabId: scenario === "foreign-failed-tab" ? "foreign" : "comparison", code: "PARITY_CLEANUP_FAILED" }] },
+      }));
+      let orphan;
+      if (scenario === "pass") {
+        const sink = await workspace.createWorkspaceArtifactSink(base);
+        orphan = await sink({ kind: "screenshot", rowId: second.batch.rowIds[0], probeId: "screen", surface: "production", content: "orphan-image", mediaType: "image/png" });
+      }
+      let inventoryReads = 0;
+      const browser = { tabs: { async list() {
+        inventoryReads += 1;
+        return [
+          ...Object.values(tabs).filter(id => scenario !== "replacement-missing" || id !== tabs.production).map(id => ({ id })),
+          ...((scenario === "still-live" || (scenario === "reappears" && inventoryReads > 1)) ? [{ id: "comparison" }] : []),
+        ];
+      } } };
+      const recovery = { ...base, batchId: second.batch.batchId, adapter, tabs, failureFile, browser };
+      if (!["pass", "repeat"].includes(scenario)) {
+        await assert.rejects(workspace.recoverClosedTabsTerminalBatch(recovery));
+        if (scenario !== "checkpoint-drift") assert.equal(await readFile(checkpointPath, "utf8"), before);
+      } else {
+        const result = await workspace.recoverClosedTabsTerminalBatch(recovery);
+        assert.equal(result.status, "recovered");
+        assert.equal(result.batch, null);
+        assert.deepEqual(visits, ["http://localhost:3002/", "http://127.0.0.1:4002/"]);
+        const after = JSON.parse(await readFile(checkpointPath, "utf8"));
+        assert.deepEqual(after.batches[0], JSON.parse(before).batches[0]);
+        assert.equal(after.batches[1].status, "pending");
+        assert.equal(after.batches[1].attempts, 1);
+        assert.equal(after.batches[1].tabClosureRecovery.previousErrorCode, "PARITY_CLEANUP_FAILED");
+        assert.deepEqual(after.batches[1].tabClosureRecovery.closedTabIds, ["comparison"]);
+        assert.equal(after.batches[1].tabClosureRecovery.closureVerified, true);
+        assert.equal(inventoryReads, 2);
+        if (orphan) {
+          const archived = after.batches[1].tabClosureRecovery.archivedArtifacts[0];
+          assert.equal(await readFile(path.join(fixture.root, archived.archivedPath), "utf8"), "orphan-image");
+          await assert.rejects(readFile(path.join(fixture.root, orphan.path)), { code: "ENOENT" });
+          assert.ok(!after.artifactIndex.some((entry: { path: string }) => entry.path === orphan.path));
+        }
+        const next = await workspace.nextRunBatch(base);
+        assert.equal(next.batch.batchId, second.batch.batchId);
+        assert.equal(next.batch.attempt, 2);
+        if (scenario === "pass") {
+          const descriptor = { ...handshake.batches[1], ...JSON.parse(await readFile(next.batch.path, "utf8")) };
+          const fragment = { ...coverageFragment(handshake, descriptor, definition),
+            surfaceContexts: surfaceContexts("coverage-fixture").map(item => ({ ...item,
+              tabId: tabs[item.surface as keyof typeof tabs] })),
+          };
+          for (const change of ["unobserved", "mixed", "session"]) {
+            const invalid = structuredClone(fragment);
+            if (change === "unobserved") invalid.surfaceContexts[0].tabId = "unobserved";
+            if (change === "mixed") invalid.surfaceContexts[0].tabId = "comparison";
+            if (change === "session") invalid.surfaceContexts[0].sessionId = "other-session";
+            await assert.rejects(workspace.recordBatchResult({ ...base, batchId: next.batch.batchId,
+              input: JSON.stringify(invalid) }));
+          }
+          await workspace.recordBatchResult({ ...base, batchId: next.batch.batchId,
+            input: JSON.stringify(fragment) });
+          assert.equal(await readFile(fragmentPath, "utf8"), passedFragment);
+          await workspace.invalidateRunWorkspace({ ...base, scope: "global",
+            currentSources: [{ path: "src/ui.ts", sha256: revision }] });
+          const invalidated = JSON.parse(await readFile(checkpointPath, "utf8"));
+          assert.equal(invalidated.batches[1].tabClosureRecovery, undefined);
+          assert.deepEqual(invalidated.batches[1].recoveryHistory,
+            [{ kind: "tabClosure", ...after.batches[1].tabClosureRecovery }]);
+
+        }
+        if (scenario === "repeat") {
+          await workspace.recordBatchFailure({ ...base, batchId: second.batch.batchId,
+            code: "PARITY_CLEANUP_FAILED", diagnostic: "test", transient: false });
+          await assert.rejects(workspace.recoverClosedTabsTerminalBatch(recovery), /unrecovered tabClosure terminal/u);
+        }
+      }
+      if (scenario !== "pass") assert.equal(await readFile(fragmentPath, "utf8"), passedFragment);
+    });
+  }
+});
+
+test("Capture recovery preserves passed evidence, checks both origins, and reserves no batch", async (context) => {
+  const workspace = await workspaceModulePromise;
+  for (const scenario of ["pass", "wrong-code", "production-denied", "prototype-denied", "wrong-dpr", "cleanup-failed", "checkpoint-drift", "repeat", "wrong-operation", "failed-cleanup-evidence", "missing-evidence"]) {
+    await context.test(scenario, async (child) => {
+      const fixture = await createFixture(child, `capture-recover-${scenario}`);
+      const definition = createCoverageWorkspaceDefinition();
+      const handshake = await workspace.prepareRunWorkspace({ repositoryRootPath: fixture.root,
+        slug: "fixture", runId: `capture-recover-${scenario}`, definition, approval: fixture.approval,
+        current: fixture.current, baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
+        matrixScope: "coverage", validateApproval: fixture.runner.validateApprovalEvidence });
+      const base = { repositoryRootPath: fixture.root, runId: handshake.runId };
+      const first = await workspace.nextRunBatch(base);
+      const descriptor = { ...handshake.batches[0], ...JSON.parse(await readFile(first.batch.path, "utf8")) };
+      await workspace.recordBatchResult({ ...base, batchId: first.batch.batchId,
+        input: JSON.stringify(coverageFragment(handshake, descriptor, definition)) });
+      const second = await workspace.nextRunBatch(base);
+      await workspace.recordBatchFailure({ ...base, batchId: second.batch.batchId,
+        code: scenario === "wrong-code" ? "PARITY_REQUIRED_PROBE_UNAVAILABLE" : "PARITY_UNEXPECTED_ERROR",
+        diagnostic: "test", transient: false });
+      const runRoot = path.dirname(handshake.manifestPath);
+      const checkpointPath = path.join(runRoot, "checkpoint.json");
+      const before = await readFile(checkpointPath, "utf8");
+      const fragmentPath = path.join(runRoot, `fragment-${first.batch.batchId}.json`);
+      const passedFragment = await readFile(fragmentPath, "utf8");
+      let active = "";
+      const visits: string[] = [];
+      const tabs = { production: "comparison", prototype: "prototype" };
+      const adapter = {
+        requiresBrowserSetups: true, comparisonTabIds: tabs, sessionId: "iab-recovery",
+        async activateTab(id: string) { active = id; }, async activeTabId() { return active; },
+        async navigate(_id: string, url: string) { visits.push(url); },
+        async setViewport() {
+          if ((scenario === "production-denied" && active === tabs.production) ||
+            (scenario === "prototype-denied" && active === tabs.prototype)) {
+            throw new fixture.runner.ParityRunError("PARITY_DPR_OVERRIDE_UNAVAILABLE", "denied");
+          }
+        },
+        async measureViewport() { return { width: 390, height: 844, dpr: scenario === "wrong-dpr" ? 2 : 1 }; },
+        async screenshotDigest() { return digest; },
+        async performanceEntries() { return []; },
+        async setTheme() {}, async runAction() {}, async runProbe() {}, async measureScroll() {},
+        async cleanup() {
+          if (scenario === "checkpoint-drift") {
+            const changed = JSON.parse(await readFile(checkpointPath, "utf8"));
+            changed.resumed = true;
+            await writeFile(checkpointPath, JSON.stringify(changed));
+          }
+          return { status: "pass", tabs: Object.values(tabs).map((tabId) => ({
+            status: "pass", tabId, cdpCleared: true, viewportReset: scenario !== "cleanup-failed",
+            baseline: { width: 1280, height: 720, dpr: 2 }, readback: { width: 1280, height: 720, dpr: 2 },
+          })) };
+        },
+      };
+      const failureFile = `failure-${second.batch.batchId}-1.json`;
+      if (scenario !== "missing-evidence") await writeFile(path.join(runRoot, failureFile), JSON.stringify({
+        code: "PARITY_UNEXPECTED_ERROR", evidence: { operation: scenario === "wrong-operation" ? "navigate" : "runProbe", causeCategory: "unexpected", rowId: second.batch.rowIds[0], probeId: "anchor-screenshot" },
+        cleanup: { status: scenario === "failed-cleanup-evidence" ? "fail" : "pass" },
+      }));
+      let orphan;
+      if (scenario === "pass") {
+        const sink = await workspace.createWorkspaceArtifactSink(base);
+        orphan = await sink({ kind: "screenshot", rowId: second.batch.rowIds[0], probeId: "screen", surface: "production", content: "orphan-image", mediaType: "image/png" });
+      }
+      const recovery = { ...base, batchId: second.batch.batchId, adapter, tabs, failureFile };
+      if (!["pass", "repeat"].includes(scenario)) {
+        await assert.rejects(workspace.recoverCaptureTerminalBatch(recovery));
+        if (scenario !== "checkpoint-drift") assert.equal(await readFile(checkpointPath, "utf8"), before);
+      } else {
+        const result = await workspace.recoverCaptureTerminalBatch(recovery);
+        assert.equal(result.status, "recovered");
+        assert.equal(result.batch, null);
+        assert.deepEqual(visits, ["http://localhost:3002/", "http://127.0.0.1:4002/"]);
+        const after = JSON.parse(await readFile(checkpointPath, "utf8"));
+        assert.deepEqual(after.batches[0], JSON.parse(before).batches[0]);
+        assert.equal(after.batches[1].status, "pending");
+        assert.equal(after.batches[1].attempts, 1);
+        assert.equal(after.batches[1].captureRecovery.previousErrorCode, "PARITY_UNEXPECTED_ERROR");
+        if (orphan) {
+          const archived = after.batches[1].captureRecovery.archivedArtifacts[0];
+          assert.equal(await readFile(path.join(fixture.root, archived.archivedPath), "utf8"), "orphan-image");
+          await assert.rejects(readFile(path.join(fixture.root, orphan.path)), { code: "ENOENT" });
+          assert.ok(!after.artifactIndex.some((entry: { path: string }) => entry.path === orphan.path));
+        }
+        const next = await workspace.nextRunBatch(base);
+        assert.equal(next.batch.batchId, second.batch.batchId);
+        assert.equal(next.batch.attempt, 2);
+        if (scenario === "repeat") {
+          await workspace.recordBatchFailure({ ...base, batchId: second.batch.batchId,
+            code: "PARITY_UNEXPECTED_ERROR", diagnostic: "test", transient: false });
+          await assert.rejects(workspace.recoverCaptureTerminalBatch(recovery), /unrecovered capture terminal/u);
+        }
+      }
+      assert.equal(await readFile(fragmentPath, "utf8"), passedFragment);
+    });
+  }
+});
+
 test("PORT-09: retired-origin workspace stays readable and resumption never rewrites checkpoint", async context => {
   const workspace = await workspaceModulePromise;
   const runId = "retired-port-workspace";
@@ -2142,4 +2556,31 @@ test("PORT-09: retired-origin workspace stays readable and resumption never rewr
       (error: { code?: string }) => error.code === "PARITY_CURRENT_STATE_DRIFT");
     assert.equal(await readFile(path.join(runRoot, "checkpoint.json"), "utf8"), before);
   }
+});
+
+
+test("large coverage checkpoint retains the complete artifact inventory across resume", async context => {
+  const workspace = await workspaceModulePromise;
+  const fixture = await createFixture(context, "large-checkpoint");
+  const definition = createCoverageWorkspaceDefinition();
+  const handshake = await workspace.prepareRunWorkspace({ repositoryRootPath: fixture.root,
+    slug: "fixture", runId: "large-checkpoint", definition, approval: fixture.approval,
+    current: fixture.current, baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
+    matrixScope: "coverage", validateApproval: fixture.runner.validateApprovalEvidence });
+  const checkpointPath = path.join(path.dirname(handshake.manifestPath), "checkpoint.json");
+  const checkpoint = JSON.parse(await readFile(checkpointPath, "utf8"));
+  // Thousands of rows each contribute a production/prototype screenshot and a11y record.
+  checkpoint.artifactIndex = Array.from({ length: 3671 * 4 }, (_, index) => ({
+    path: `.codex/parity-runs/large-checkpoint/artifacts/row-${index}--screen--production.jpg`,
+    sha256: digest, bytes: 44177, kind: "screenshot", mediaType: "image/jpeg",
+    surface: "production", rowId: `row-${index}`, probeId: "screen",
+  }));
+  const serialized = JSON.stringify(checkpoint);
+  assert.ok(Buffer.byteLength(serialized) > 2 * 1024 * 1024);
+  await writeFile(checkpointPath, serialized, { mode: 0o600 });
+  const resumed = await workspace.resumeRunWorkspace({ repositoryRootPath: fixture.root, runId: handshake.runId });
+  assert.equal(resumed.status, "ready");
+  const after = JSON.parse(await readFile(checkpointPath, "utf8"));
+  assert.deepEqual(after.artifactIndex, checkpoint.artifactIndex);
+  assert.equal(after.batches.filter((entry: { status: string }) => entry.status === "passed").length, 0);
 });

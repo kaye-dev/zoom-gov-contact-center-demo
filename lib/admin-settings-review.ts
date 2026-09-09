@@ -4,6 +4,7 @@ import { consultationServices } from "./online-consultation-catalog";
 import { SITE_LOCALES } from "./site-settings";
 export const SETTINGS_REVIEW_STATES = [
   "default",
+  "help-open",
   "lg",
   "detail",
   "third",

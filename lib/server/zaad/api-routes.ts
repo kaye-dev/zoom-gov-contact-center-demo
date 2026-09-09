@@ -1,3 +1,5 @@
+import { resolveOutreachScope } from "./outreach-scope";
+import { registerOutreachRoutes } from "./outreach-routes";
 import { outreachTenants } from "./university/permissions";
 import { registerUniversityApiRoutes } from "./university/api-routes";
 import { Hono, type Context } from "hono";
@@ -61,6 +63,7 @@ export type ZaadApiEnvironment = {
 type ZaadContext = Context<ZaadApiEnvironment>;
 
 export function registerZaadApiRoutes(app: Hono<ZaadApiEnvironment>) {
+  registerOutreachRoutes(app);
   registerUniversityApiRoutes(app);
   app.post("/disaster-radio-subscriptions", async (c) => {
     try {
@@ -190,6 +193,8 @@ async function withZaadAuth(
     if (tenantValues.length > 1 || (tenantValues.length && tenantValues[0] !== "lg")) return c.json({ error: ZAAD_ERROR_CODES.invalidRequest }, 400);
     const tenantKey = tenantValues.length ? "lg" : c.get("tenantKey");
     if (tenantKey !== "lg" || !(await outreachTenants(prisma, authorization.actor)).includes("lg")) return c.json({ error: "NOT_FOUND" }, 404);
+    const scope = await resolveOutreachScope(prisma, authorization.actor, tenantKey);
+    if (!scope.departments.includes("resident-support")) return c.json({ error: "NOT_FOUND" }, 404);
     return await run({
       prisma,
       tenantKey,

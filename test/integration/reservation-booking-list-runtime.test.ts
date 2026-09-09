@@ -42,7 +42,14 @@ test(
           })),
         });
 
-        const first = await listReservationBookings(database.prisma, {});
+        await database.prisma.reservationBooking.create({ data: {
+          ...booking("university-only-booking", "legal-consultation", false, 540), siteKey: "univ",
+          createdAt: new Date("2026-09-05T00:00:00.000Z"),
+        } });
+        const university = await listReservationBookings(database.prisma, "univ", {});
+        assert.deepEqual(university.bookings.map(row => row.id), ["university-only-booking"]);
+        assert.equal(university.nextCursor, null);
+        const first = await listReservationBookings(database.prisma, "lg", {});
         assert.equal(first.bookings.length, 50);
         assert.ok(first.nextCursor);
         assert.deepEqual(first.bookings.slice(0, 2).map(({ id }) => id), [
@@ -51,7 +58,7 @@ test(
         ]);
         assert.equal(first.bookings[0]!.startMinute, 999);
 
-        const second = await listReservationBookings(database.prisma, {
+        const second = await listReservationBookings(database.prisma, "lg", {
           cursor: decodeReservationBookingListCursor(first.nextCursor!)!,
         });
         assert.equal(second.bookings.length, 6);
@@ -61,22 +68,22 @@ test(
           56,
         );
 
-        const zva = await listReservationBookings(database.prisma, { source: "ZVA" });
+        const zva = await listReservationBookings(database.prisma, "lg", { source: "ZVA" });
         assert.ok(zva.bookings.length > 0);
         assert.ok(zva.bookings.every(({ source }) => source === "ZVA"));
         assert.equal(zva.bookings.some(({ id }) => id.includes("demo")), false);
 
-        const demos = await listReservationBookings(database.prisma, { source: "DEMO" });
+        const demos = await listReservationBookings(database.prisma, "lg", { source: "DEMO" });
         assert.ok(demos.bookings.length > 0);
         assert.ok(demos.bookings.every(({ source }) => source === "DEMO"));
 
-        const legalZva = await listReservationBookings(database.prisma, {
+        const legalZva = await listReservationBookings(database.prisma, "lg", {
           service: "legal-consultation",
           source: "ZVA",
         });
         assert.deepEqual(legalZva, { bookings: [], nextCursor: null });
 
-        const civicDemos = await listReservationBookings(database.prisma, {
+        const civicDemos = await listReservationBookings(database.prisma, "lg", {
           service: "civic-facility",
           source: "DEMO",
         });

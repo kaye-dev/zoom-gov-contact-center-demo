@@ -326,6 +326,7 @@ function createSingleTabParityAdapter({
   timeouts = {},
   clock = defaultClock,
   artifactSink,
+  fixtureReader,
   sharedViewportState,
   logicalTabState,
 }) {
@@ -994,11 +995,12 @@ function createSingleTabParityAdapter({
     const cleanupDeadline = cleanupStartedAt + resolvedTimeouts.cleanupMs;
     let readback;
     let readbackFailed = false;
+    const initialViewport = viewportState.initialViewports?.get(comparisonTabId) ?? viewportState.initialViewport;
     const baselineRestored = () =>
-      !viewportState.initialViewport ||
-      (readback?.width === viewportState.initialViewport.width &&
-        readback?.height === viewportState.initialViewport.height &&
-        readback?.dpr === viewportState.initialViewport.dpr);
+      !initialViewport ||
+      (readback?.width === initialViewport.width &&
+        readback?.height === initialViewport.height &&
+        readback?.dpr === initialViewport.dpr);
     const measureCleanupReadback = async () => {
       try {
         await selectedTab();
@@ -1036,7 +1038,7 @@ function createSingleTabParityAdapter({
       tabId: comparisonTabId,
       cdpCleared,
       viewportReset,
-      baseline: viewportState.initialViewport,
+      baseline: initialViewport,
       readback,
     };
     if (errors.length > 0) fail("PARITY_CLEANUP_FAILED", errors.join("; "), state.cleanupResult);
@@ -1150,6 +1152,10 @@ function createSingleTabParityAdapter({
         return;
       }
       const locator = tab.playwright.locator(action.selector);
+      if (action.type === "waitForVisible") {
+        await locator.waitFor({ state: "visible", timeoutMs: resolvedTimeouts.actionMs });
+        await comparisonTab(requestedTabId);
+      }
       const count = await locator.count();
       if (action.type === "waitForHidden") {
         if (count === 0) {
@@ -1168,12 +1174,46 @@ function createSingleTabParityAdapter({
         fail("PARITY_CURRENT_STATE_DRIFT", `${action.type} requires exactly one element; received ${count}`);
       }
       await comparisonTab(requestedTabId);
+      if (action.type === "upload") {
+        if (typeof fixtureReader !== "function" || typeof action.file !== "string" || !/^(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+\.[A-Za-z0-9]+$/u.test(action.file) || !/^sha256:[a-f0-9]{64}$/u.test(action.sha256 ?? "")) {
+          fail("PARITY_FIXTURE_INVALID", "upload requires an explicit fixture reader and a relative path with an approved digest");
+        }
+        let fixturePath;
+        try {
+          const fixture = await fixtureReader(action.file), bytes = fixture.bytes;
+          fixturePath = fixture.path;
+          if (typeof fixturePath !== "string" || !/^(?:\/|[A-Za-z]:\\)/u.test(fixturePath) || !ArrayBuffer.isView(bytes) || bytes.BYTES_PER_ELEMENT !== 1 || Object.prototype.toString.call(bytes) !== "[object Uint8Array]" || bytes.byteLength > 2 * 1024 * 1024) throw new Error("invalid fixture");
+          if (await sha256Digest(bytes) !== action.sha256) throw new Error("fixture digest mismatch");
+        } catch {
+          fail("PARITY_FIXTURE_INVALID", "upload fixture is missing, outside its root, oversized, or different from its approved digest");
+        }
+        if (typeof tab.playwright.waitForEvent !== "function") fail("PARITY_UPLOAD_UNAVAILABLE", "the Browser file chooser API is unavailable");
+        const chooserPromise = tab.playwright.waitForEvent("filechooser", { timeoutMs: resolvedTimeouts.actionMs });
+        void chooserPromise.catch(() => {});
+        try {
+          await locator.click({ timeoutMs: resolvedTimeouts.actionMs });
+          const chooser = await chooserPromise;
+          await comparisonTab(requestedTabId);
+          await chooser.setFiles([fixturePath]);
+          const after = await fixtureReader(action.file);
+          if (after.path !== fixturePath || await sha256Digest(after.bytes) !== action.sha256) fail("PARITY_FIXTURE_INVALID", "upload fixture changed during file selection");
+        } catch (error) {
+          // Consume a rejected chooser wait if clicking failed first.
+          void chooserPromise.catch(() => {});
+          throw error;
+        }
+      }
       if (action.type === "click") await locator.click({ timeoutMs: resolvedTimeouts.actionMs });
+      else if (action.type === "dblclick") {
+        if (typeof locator.dblclick !== "function") fail("PARITY_DOUBLE_CLICK_UNAVAILABLE", "the Browser native double-click API is unavailable");
+        await locator.dblclick({ timeoutMs: resolvedTimeouts.actionMs });
+      }
       else if (action.type === "press") await locator.press(action.key, { timeoutMs: resolvedTimeouts.actionMs });
       else if (action.type === "focus") await locator.pressSequentially("", { timeoutMs: resolvedTimeouts.actionMs });
       else if (action.type === "fill") await locator.fill(action.value, { timeoutMs: resolvedTimeouts.actionMs });
-      else if (action.type === "waitForVisible") {
-        await locator.waitFor({ state: "visible", timeoutMs: resolvedTimeouts.actionMs });
+      else if (action.type === "selectOption") {
+        if (typeof locator.selectOption !== "function") fail("PARITY_SELECT_UNAVAILABLE", "the Browser native selection API is unavailable");
+        await locator.selectOption(action.value);
       }
       await comparisonTab(requestedTabId);
     },
@@ -1276,9 +1316,9 @@ function createSingleTabParityAdapter({
           const box = element.getBoundingClientRect();
           return { x: box.x, y: box.y, width: box.width, height: box.height };
         }, selector);
-        const overlayOpen = probe.tier === "anchor" && await tab.playwright.evaluate(() =>
-          document.body.style.overflow === "hidden");
-        const bytes = await tab.screenshot(probe.tier === "anchor" ? (overlayOpen ? {} : { fullPage: true }) : { clip: rect });
+        // The native visible tab may be narrower than the CDP viewport. A default
+        // capture can clip fixed dialogs, so anchors always capture the full page.
+        const bytes = await tab.screenshot(probe.tier === "anchor" ? { fullPage: true } : { clip: rect });
         const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8;
         const artifact = probe.tier === "anchor"
           ? await storeArtifact({ probe, context, content: bytes,
@@ -1852,6 +1892,7 @@ function createInAppBrowserParityAdapter(options) {
   }
 
   const sharedViewportState = {
+    initialViewports: new Map(),
     viewport: undefined,
     viewportApplied: false,
     initialViewport: undefined,
@@ -1935,12 +1976,27 @@ function createInAppBrowserParityAdapter(options) {
         });
       }
       sharedViewportState.needsRunReset = true;
+      sharedViewportState.initialViewports.clear();
       return { status: "pass", tabs: results };
     },
   };
   for (const operation of routedTabOperations) {
-    adapter[operation] = async (requestedTabId, ...args) =>
-      activeAdapter(requestedTabId)[operation](requestedTabId, ...args);
+    adapter[operation] = async (requestedTabId, ...args) => {
+      activeAdapter(requestedTabId);
+      if (operation === "setViewport" && sharedViewportState.initialViewports.size === 0) {
+        // Capture both native sizes before the shared Browser override changes either tab.
+        const measured = new Map();
+        for (const [tabId, selected] of tabAdapters) {
+          await selected.activateOwnedTab(tabId);
+          logicalTabState.activeTabId = tabId;
+          measured.set(tabId, await selected.measureViewport(tabId));
+        }
+        await tabAdapters.get(requestedTabId).activateOwnedTab(requestedTabId);
+        logicalTabState.activeTabId = requestedTabId;
+        sharedViewportState.initialViewports = measured;
+      }
+      return activeAdapter(requestedTabId)[operation](requestedTabId, ...args);
+    };
   }
   return guardAdapterOperations(adapter);
 }

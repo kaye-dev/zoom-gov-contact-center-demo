@@ -186,7 +186,8 @@ test("Reservation API key management and admin pages require a tenant key", () =
     "../app/admin/reservations/api-keys/logs/[id]/page.tsx",
   ]) {
     const pageSource = sourceFile(relativePath);
-    assert.match(pageSource, /getRequestTenant/u, relativePath);
+    assert.match(pageSource, /getAdminPageTenant/u, relativePath);
+    assert.match(pageSource, /if \(!selected\.ok\) return <AdminTenantChoice/u, relativePath);
     assert.match(pageSource, /tenant\.key/u, relativePath);
   }
 });
@@ -196,7 +197,7 @@ test("API key management keeps a VIEW-enabled link to request logs", () => {
     "../app/admin/reservations/api-keys/ReservationApiKeysView.tsx",
   );
   assert.match(source, /id="api-log-list-link"/u);
-  assert.match(source, /href="\/admin\/reservations\/api-keys\/logs"/u);
+  assert.ok(source.includes("href={`/admin/reservations/api-keys/logs?tenant=${tenantKey}`}"));
   assert.match(source, /\{copy\.logs\.entry\}/u);
   assert.doesNotMatch(
     source,

@@ -142,6 +142,7 @@ export function FindInfo({
         </div>
       </LabeledBox>
 
+      {tenantKey === "lg" && <section className="mt-10 rounded-lg border border-line bg-surface p-6"><h2 className="text-xl font-bold">{t.municipalOutreach.title}</h2><p className="mt-3 leading-7 text-fg-muted">{t.municipalOutreach.intro}</p><Link href="/notifications/register" className="mt-4 inline-flex min-h-11 items-center rounded-md bg-primary px-5 py-2.5 font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">{t.municipalOutreach.link}</Link></section>}
       {/* 生活情報（アイコングリッド、デスクトップ 1 行 6 列） */}
       <LabeledBox
         label={t.findInfo.lifeInfo.sectionLabel}

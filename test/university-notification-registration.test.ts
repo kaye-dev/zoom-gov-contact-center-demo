@@ -119,9 +119,12 @@ test("REGISTRATION-I18N: all five locales contain complete public and staff copy
     );
   }
 });
-test("REGISTRATION-ENTRY/RECOVERY: university-only route and persistent, accessible input flow", () => {
+test("REGISTRATION-ENTRY/RECOVERY: tenant-isolated route and persistent, accessible input flow", () => {
   const route = readFileSync("app/notifications/register/page.tsx", "utf8");
-  assert.match(route, /getRequestTenant\(\)\)\.key !== "univ"\) notFound/);
+  assert.match(route, /const tenant = await getRequestTenant\(\)/);
+  assert.match(route, /if \(tenant\.key === "lg"\)/);
+  assert.match(route, /<MunicipalNotificationRegistration/);
+  assert.match(route, /<UniversityPortal page="registration">/);
   const ui = readFileSync(
     "app/notifications/register/StudentNotificationRegistration.tsx",
     "utf8",

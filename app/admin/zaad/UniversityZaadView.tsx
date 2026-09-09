@@ -4,7 +4,7 @@ import { Checkbox } from "@/app/components/Checkbox";
 import Link from "next/link";
 import { ModalDialog } from "@/app/components/admin/ModalDialog";
 import { TableRowActions } from "@/app/components/admin/TableRowActions";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useI18n } from "@/app/i18n/LanguageProvider";
 import { AdminFieldHelp } from "@/app/components/admin/AdminFieldHelp";
@@ -75,7 +75,9 @@ export function UniversityZaadView({
   serverDate,
   reviewState,
   reviewPurpose,
+  embedded = false,
 }: {
+  embedded?: boolean;
   reviewState?: string;
   reviewPurpose?: string;
   permissions: Permissions;
@@ -88,6 +90,7 @@ export function UniversityZaadView({
     c = t.universityOutreach,
     a = c.admin;
   const router = useRouter();
+  const urlParams = useSearchParams();
   const permissions =
     reviewState === "readonly"
       ? { create: false, update: false, delete: false }
@@ -205,6 +208,7 @@ export function UniversityZaadView({
   }
   function go(next: Stage) {
     setStage(next);
+    if (embedded) { const params = new URLSearchParams(urlParams.toString()); params.set("stage", next); params.set("case", chosen.id); router.push(`/admin/zaad?${params}`, { scroll: false }); }
     setError(null);
     setFeedback(false);
   }
@@ -385,7 +389,7 @@ export function UniversityZaadView({
   const summary = run?.summary;
   return (
     <div data-zaad-state={stage} data-zaad-case={chosen.id} data-tenant="univ">
-      <div
+      {!embedded && <div
         data-admin-page-header
         className="ml-1 flex flex-col gap-4 md:flex-row md:items-start md:justify-between"
       >
@@ -419,7 +423,7 @@ export function UniversityZaadView({
             ))}
           </Select>
         </div>
-      </div>
+      </div>}
       <div className="mt-5 rounded-md border border-line bg-surface-raised px-4 py-3 text-sm">
         {a.demo} {!permissions.update && a.readonly}
       </div>

@@ -1,10 +1,14 @@
 "use client";
+import { AdminTenantRouteSelect } from "@/app/components/admin/AdminTenantRouteSelect";
+import { adminFetch as fetch } from "@/lib/admin-fetch";
 
 import { settingsSectionClassName, settingsInputFocusClassName } from "@/app/components/admin/settings-form-styles";
 import { SettingsSaveScope } from "@/app/components/admin/SettingsSaveScope";
 import { AdminPageTitleHelp } from "@/app/components/admin/AdminPageTitleHelp";
 
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { parseAdminTenant, safeOutreachReturnPath } from "@/lib/admin-routing";
 import { useState, type FormEvent } from "react";
 
 import { PasswordInput } from "@/app/components/PasswordInput";
@@ -53,13 +57,19 @@ function secretRevealState(state: SecretState) {
 export function DeveloperApiSettingsForm({ initialSettings, canEdit }: Props) {
   const { t } = useI18n();
   const router = useRouter();
+  const query = useSearchParams();
+  const selectedTenant = parseAdminTenant(query.getAll("tenant"));
+  const returnTo = selectedTenant.ok ? safeOutreachReturnPath(query.get("returnTo"), selectedTenant.tenantKey) : null;
   const [activeSection, setActiveSection] = useState<Section>("server-to-server-oauth");
+  const [savedSettings, setSavedSettings] = useState(initialSettings);
   const [settings, setSettings] = useState(initialSettings);
   const [clientSecret, setClientSecret] = useState<SecretState>(MASKED_SECRET);
   const [secretToken, setSecretToken] = useState<SecretState>(MASKED_SECRET);
   const [feedback, setFeedback] = useState<Partial<Record<Section, Feedback>>>({});
   const [submitting, setSubmitting] = useState<Partial<Record<Section, boolean>>>({});
   const copy = t.admin.developerApiManagement;
+  const hasUnsavedChanges = settings.accountId !== savedSettings.accountId || settings.clientId !== savedSettings.clientId || clientSecret.origin === "replacement" || secretToken.origin === "replacement";
+  const isBusy = Object.values(submitting).some(Boolean) || clientSecret.revealing || secretToken.revealing;
   const inputClass =
     `w-full rounded-md border border-line bg-surface px-3 py-2 text-fg outline-none transition-colors ${settingsInputFocusClassName}`;
 
@@ -209,6 +219,7 @@ export function DeveloperApiSettingsForm({ initialSettings, canEdit }: Props) {
         }
 
         setSettings(body.settings);
+        setSavedSettings(body.settings);
         if (section === "server-to-server-oauth") setClientSecret(MASKED_SECRET);
         else setSecretToken(MASKED_SECRET);
         setFeedback((current) => ({
@@ -238,13 +249,14 @@ export function DeveloperApiSettingsForm({ initialSettings, canEdit }: Props) {
       <div data-admin-page-chrome className="space-y-4">
         <div
           data-admin-page-header
-          className="ml-1 mr-0 max-w-5xl space-y-2"
+          className="ml-1 mr-0 flex max-w-5xl flex-col gap-4 md:flex-row md:items-center"
         >
           <AdminPageTitleHelp
             title={copy.title}
             description={copy.description}
             label={t.admin.pageDescriptionLabel.replace("{title}", copy.title)}
           />
+          <AdminTenantRouteSelect dirty={hasUnsavedChanges} saving={isBusy} />
         </div>
         <DeveloperApiSectionTabs
           activeSection={activeSection}
@@ -408,6 +420,7 @@ export function DeveloperApiSettingsForm({ initialSettings, canEdit }: Props) {
         </form>
         </div>
       </div>
+      {returnTo && !hasUnsavedChanges && !isBusy && <Link className="mt-6 inline-block text-accent underline" href={returnTo}>{t.outreachCommon.returnToOutreach}</Link>}
     </section>
   );
 }

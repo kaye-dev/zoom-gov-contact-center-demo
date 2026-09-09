@@ -6,7 +6,7 @@ Use this contract for new UI plans, normal UI implementation, and current review
 
 Follow [NIST's DOs and DON'Ts](https://csrc.nist.gov/Projects/automated-combinatorial-testing-for-software/software-testing-methodology/dos-and-don-ts-of-testing): derive factors from requirements, include abstract properties, choose equivalence classes and boundaries, and choose an appropriate interaction strength rather than assuming pairwise is sufficient. Four to six values is a modelling guideline, not permission to remove required states or known reproduction cases.
 
-Current axis coverage is not a pairwise guarantee. Keep the complete Cartesian UI contract v1 and stable row IDs. Start from existing axis/risk/anchor coverage plus declared runtime/visual rows. Supplement feasible t-way tuples greedily by greatest missing-tuple coverage, resolving ties by case ID lexical order. Report actual counts, not a fixed 63-case limit or a mathematical minimum. Full UI Cartesian runs remain independent explicit/release/CI/scheduled tasks.
+Current axis coverage is not a pairwise guarantee. Keep the complete feasible target-state Cartesian UI contract v2 and stable row IDs; preserve already-approved v1 compatibility. Start from existing axis/risk/anchor coverage plus declared runtime/visual rows. Supplement feasible t-way tuples greedily by greatest missing-tuple coverage, resolving ties by case ID lexical order. Report actual counts, not a fixed 63-case limit or a mathematical minimum. Full UI Cartesian runs remain independent explicit/release/CI/scheduled tasks.
 
 Profile v4 retains every v3 field and adds exactly one `fidelity` object:
 

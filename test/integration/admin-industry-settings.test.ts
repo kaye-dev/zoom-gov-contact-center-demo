@@ -282,10 +282,10 @@ test(
         );
         assert.equal(legacy.status, 200);
         assert.equal((await legacy.json()).settings[0].memo, "lg memo");
-        assert.equal(
-          (await request("GET", "/admin/phone-settings")).status,
-          200,
-        );
+        const missingTenant = await request("GET", "/admin/phone-settings");
+        assert.equal(missingTenant.status, 400);
+        assert.equal((await missingTenant.json()).code, "TENANT_REQUIRED");
+        assert.equal((await request("GET", "/admin/phone-settings?tenant=lg")).status, 200);
         await db.query(
           `UPDATE "user" SET "mustChangePassword"=true WHERE id='industry-full'`,
         );

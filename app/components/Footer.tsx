@@ -13,6 +13,7 @@ export async function Footer() {
 
   return (
     <FooterClient
+      tenantKey={tenant.key}
       isSignedIn={Boolean(session)}
       representativePhone={phoneSettings.representativePhone}
     />

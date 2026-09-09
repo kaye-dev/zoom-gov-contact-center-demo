@@ -151,32 +151,16 @@ test("pointer section changes do not create the blue programmatic focus outline"
   assert.doesNotMatch(changeView, /document\./u);
 });
 
-test("ZAAD section history restores the URL view on back and forward navigation", () => {
-  assert.match(pageSource, /single\(query\.view\)/u);
-  assert.match(
-    pageSource,
-    /isZaadView\(requestedView\) \? requestedView : "residents"/u,
-  );
-  assert.match(
-    viewSource,
-    /const zaadPathname = window\.location\.pathname/u,
-  );
-  assert.match(
-    viewSource,
-    /window\.addEventListener\("popstate", restoreViewFromHistory\)/u,
-  );
-  assert.match(
-    viewSource,
-    /window\.removeEventListener\("popstate", restoreViewFromHistory\)/u,
-  );
-  assert.match(
-    viewSource,
-    /setView\(zaadViewFromUrl\(url\)\)/u,
-  );
-  assert.match(
-    viewSource,
-    /return SECTION_ORDER\.find\(\(view\) => view === requestedView\) \?\? "residents"/u,
-  );
+test("ZAAD section history reads the query and protects dirty back/forward navigation", () => {
+  const source = readFileSync("app/admin/zaad/OutreachView.tsx", "utf8");
+  assert.match(pageSource, /<OutreachView/u);
+  assert.match(source, /useSearchParams\(\)/u);
+  assert.match(source, /query\.get\("view"\)/u);
+  assert.match(source, /window\.addEventListener\("popstate", pop, true\)/u);
+  assert.match(source, /window\.removeEventListener\("popstate", pop, true\)/u);
+  assert.match(source, /if \(!dirty && !saving\) return/u);
+  assert.match(source, /setPending\(destination\)/u);
+  assert.match(source, /resolveOutreachView\(tenant, query\.get\("view"\), query\.get\("workflow"\)\)/u);
 });
 
 test("ZAAD exposes all six query-backed sections and permission-disabled actions", () => {
@@ -327,19 +311,12 @@ test("sections and dialogs share the safe ZAAD error mapper", () => {
 });
 
 test("Developer API settings navigation honors server-derived VIEW access", () => {
-  assert.match(
-    pageSource,
-    /canViewDeveloperApi=\{canAdminAccess\(actor, "developer-api", "VIEW"\)\}/u,
-  );
-  assert.match(viewSource, /canViewDeveloperApi \? \(/u);
-  assert.match(
-    viewSource,
-    /role="link"\s+aria-disabled="true"\s+aria-describedby="zaad-developer-api-permission-reason"/u,
-  );
-  assert.match(
-    viewSource,
-    /id="zaad-developer-api-permission-reason"\s+className="sr-only"/u,
-  );
+  assert.match(pageSource, /canConfigure=\{canAdminAccess\(actor, "developer-api", "VIEW"\)\}/u);
+  const source = readFileSync("app/admin/zaad/OutreachView.tsx", "utf8");
+  assert.match(source, /canConfigure \? <Link/u);
+  assert.match(source, /const returnTo = `\/admin\/zaad\?\$\{new URLSearchParams\(\{ tenant, view: selected \}\)\}`/u);
+  assert.match(source, /const setupHref = `\/admin\/developer-api\?\$\{new URLSearchParams\(\{ tenant, returnTo \}\)\}`/u);
+  assert.match(source, /!canConfigure && copy\.setupPermission/u);
 });
 
 test("one-time confirmation renders the complete immutable preflight contract", () => {
@@ -604,8 +581,11 @@ test("async outcomes focus rendered status targets without changing modal focus 
 
   assert.match(
     modalSource,
-    /const previouslyFocused = document\.activeElement/u,
+    /const registration = modalStackFor\(document\)\.register\(portalRoot\)/u,
   );
+  const stackSource = readFileSync(new URL("../app/components/admin/modal-stack.ts", import.meta.url), "utf8");
+  assert.match(stackSource, /returnFocus: document\.activeElement/u);
+  assert.match(modalSource, /const previouslyFocused = registration\.release\(\)/u);
   assert.match(modalSource, /focusTarget\?\.focus\(\)/u);
   assert.match(modalSource, /onKeyDown=\{trapFocus\}/u);
   assert.match(modalSource, /previouslyFocused\?\.focus\(\)/u);

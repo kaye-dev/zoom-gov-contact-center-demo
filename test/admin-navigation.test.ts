@@ -186,12 +186,12 @@ test("every users and settings page places section navigation between header and
   }
 });
 
-test("outreach sidebar chooses only an authorized tenant including an explicit cross-tenant selection", () => {
+test("outreach sidebar preserves explicit selection without inferring a tenant from the host", () => {
   const href = (allowedTenants: string[], hostTenant: string, selectedTenant: string | null) =>
     buildAdminNavigation(["zaad"], dictionaries.ja, { allowedTenants, hostTenant, selectedTenant }).primaryItems.find(item => item.key === "zaad")?.href;
   assert.equal(href(["lg", "univ"], "univ", null), "/admin/zaad");
   assert.equal(href(["lg", "univ"], "lg", "univ"), "/admin/zaad?tenant=univ");
-  assert.equal(href(["univ"], "lg", null), "/admin/zaad?tenant=univ");
-  assert.equal(href(["univ"], "univ", "lg"), "/admin/zaad");
+  assert.equal(href(["univ"], "lg", null), "/admin/zaad");
+  assert.equal(href(["univ"], "univ", "lg"), "/admin/zaad?tenant=lg");
   assert.equal(href([], "univ", null), undefined);
 });

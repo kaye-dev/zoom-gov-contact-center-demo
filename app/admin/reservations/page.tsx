@@ -9,7 +9,8 @@ import {
 } from "@/lib/reservations";
 import { requireAdminAccess } from "@/lib/server/admin-access/server";
 import { withPrisma } from "@/lib/server/prisma";
-import { getRequestTenant } from "@/lib/server/tenant";
+import { getAdminPageTenant } from "@/lib/server/admin-scope";
+import { AdminTenantChoice } from "@/app/admin/AdminTenantChoice";
 import { getReservationCalendarSnapshot } from "@/lib/server/reservations";
 
 import { ReservationSystemView } from "./ReservationSystemView";
@@ -21,7 +22,9 @@ export default async function ReservationsPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const tenant = await getRequestTenant();
+  const selected = await getAdminPageTenant("reservations");
+  if (!selected.ok) return <AdminTenantChoice allowed={selected.allowed} code={selected.code} />;
+  const tenant = selected.tenant;
   const { actor } = await requireAdminAccess(
     "reservations",
     "VIEW",
@@ -45,6 +48,7 @@ export default async function ReservationsPage({
 
   return (
     <ReservationSystemView
+      tenantKey={tenant.key}
       initialCalendar={calendar}
       initialSelectedDate={selectedDate}
       minimumMonth={range.minimum}

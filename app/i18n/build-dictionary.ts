@@ -1,3 +1,6 @@
+import { municipalWorkflowDictionaries } from "./municipal-workflows";
+import { outreachCommonDictionaries } from "./outreach-common";
+import { municipalOutreachDictionaries } from "./municipal-outreach";
 import { universityOutreachDictionaries } from "./university-outreach";
 import { DEFAULT_TENANT_KEY, type TenantKey } from '@/lib/tenants';
 
@@ -51,6 +54,9 @@ export function buildDictionary(
   const dictionary: Dictionary = {
     ...chrome,
     universityOutreach: universityOutreachDictionaries[locale],
+    municipalOutreach: municipalOutreachDictionaries[locale],
+    outreachCommon: outreachCommonDictionaries[locale],
+    municipalWorkflows: municipalWorkflowDictionaries[locale],
     siteName: content.siteName,
     siteNameRoman: content.siteNameRoman,
     findInfo: {

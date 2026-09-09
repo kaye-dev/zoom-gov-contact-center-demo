@@ -57,7 +57,8 @@ export function AdminPageTitleHelp({ title, description, label }: { title: strin
     };
   }, [open]);
   return (
-    <div ref={group} className="relative flex w-fit max-w-full items-center gap-2">
+    <div ref={group} className="relative min-w-0">
+      <div className="flex items-center gap-2">
       <h1 className="min-w-0 text-2xl font-bold">{title}</h1>
       <button
         data-page-help-trigger
@@ -74,7 +75,9 @@ export function AdminPageTitleHelp({ title, description, label }: { title: strin
       >
         <InfoIcon className="h-6 w-6" />
       </button>
+      </div>
       <div
+        hidden={!open}
         id={id}
         role="tooltip"
         onPointerEnter={(event) => enter(event.pointerType)}
