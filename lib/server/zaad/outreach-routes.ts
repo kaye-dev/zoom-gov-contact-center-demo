@@ -1,3 +1,4 @@
+import { groupSyncCandidates, syncContactLists, groupSyncOperation } from "./group-sync";
 import { updateZaadResident, deleteZaadResident } from "./residents";
 import { listResourceBindings, previewResourceBinding, saveResourceBinding } from "./resource-bindings";
 import { getRegistrationReception, saveRegistrationReception } from "./registration-reception";
@@ -72,6 +73,9 @@ export function registerOutreachRoutes(app: Hono<ZaadApiEnvironment>) {
     const body = record(await outreachJson(c));
     return previewZoomCrmImport(db, scope, c.req.param("id"), { ...body, contactIds: [c.req.param("contactId")] });
   }));
+  app.get(`${root}/contact-lists/sync-candidates`, c => withOutreach(c, "UPDATE", (db, scope) => groupSyncCandidates(db, scope, undefined, c.req.query("cursor"))));
+  app.post(`${root}/contact-lists/sync-bindings`, c => withOutreach(c, "UPDATE", async (db, scope) => syncContactLists(db, scope, await outreachJson(c))));
+  app.get(`${root}/contact-lists/sync-operations/:operationKey`, c => withOutreach(c, "UPDATE", (db, scope) => groupSyncOperation(db, scope, c.req.param("operationKey"))));
   app.get(`${root}/contact-lists`, c => withOutreach(c, "VIEW", (db, scope) => listZoomGroups(db, scope)));
   app.post(`${root}/contact-lists`, c => withOutreach(c, "CREATE", async (db, scope) => saveZoomGroup(db, scope, await outreachJson(c))));
   app.get(`${root}/contact-lists/:id`, c => withOutreach(c, "VIEW", (db, scope) => zoomGroupMembers(db, scope, c.req.param("id"), undefined, true)));

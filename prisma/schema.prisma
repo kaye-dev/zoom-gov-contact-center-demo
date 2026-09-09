@@ -723,7 +723,8 @@ model ZoomResourceBinding {
   memberships ZoomContactMembership[]
   municipalWorkflows MunicipalWorkflowRevision[] @relation("MunicipalWorkflowFlow")
   municipalAttempts MunicipalCallAttempt[] @relation("MunicipalAttemptFlow")
-  @@unique([accountId, resourceType, zoomId])
+  // Non-CONTACT_LIST resources retain account-wide ownership via a partial unique index in SQL.
+  @@unique([accountId, resourceType, zoomId, ownerSiteKey], map: "zoom_resource_bindings_site_resource_key")
   @@unique([ownerSiteKey, id])
   @@index([ownerSiteKey, departmentKey, purpose])
   @@map("zoom_resource_bindings")

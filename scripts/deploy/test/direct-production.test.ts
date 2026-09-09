@@ -439,6 +439,10 @@ test("reviewed migration manifest exactly classifies the current SHA-verified ch
         name: "20260909070000_outreach_registration_reception",
         classification: "destructive-reviewed",
       },
+      {
+        name: "20260909130000_shared_contact_list_bindings",
+        classification: "destructive-reviewed",
+      },
     ],
   );
 });

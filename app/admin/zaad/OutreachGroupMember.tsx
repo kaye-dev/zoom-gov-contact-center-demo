@@ -50,6 +50,8 @@ export function OutreachGroupMember({ tenant, group, action, close, saved, setDi
     <ModalDialog initialFocusRef={mode === "delete" ? deleteCancelRef : undefined} title={title} description={group.name} locked={busy || discard} onRequestClose={requestClose}>
       <form className="space-y-4" onChange={changed} onSubmit={event => { event.preventDefault(); void submit(); }}>
         <p className="text-sm leading-6 text-fg-muted">{d.memberBoundary}</p>
+        {(mode === "edit" || mode === "add") && <p className="text-sm leading-6 text-fg-muted">{d.groupSync.sharedEdit}</p>}
+        {mode === "delete" && <p className="text-sm leading-6 text-fg-muted">{d.groupSync.sharedMemberDelete}</p>}
         {error && <p role="alert">{error}</p>}
         <fieldset disabled={busy} className="space-y-4">
           {selecting && (failed ? <div role="alert"><p>{z.common.failure}</p><button type="button" className={secondary} onClick={() => setReload(value => value + 1)}>{z.common.retry}</button></div> : contacts === null ? <p role="status">{z.common.loading}</p> : <label className="block">{d.people}<Select required value={selected} onChange={event => setSelected(event.target.value)}><option value="">{d.select}</option>{contacts.map(row => <option key={referenceKey(row.reference)} value={referenceKey(row.reference)}>{row.name} · {row.phone}{row.studentNumber ? ` · ${row.studentNumber}` : ""}</option>)}</Select></label>)}

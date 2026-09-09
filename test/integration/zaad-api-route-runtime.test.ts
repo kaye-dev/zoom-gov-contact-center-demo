@@ -64,6 +64,18 @@ test(
         assert.equal(missingTenant.status, 400);
         assert.equal((await missingTenant.json()).code, "TENANT_REQUIRED");
 
+        await t.test("contact group sync endpoints require authentication and update access", async () => {
+          for (const path of ["/api/admin/zaad/contact-lists/sync-candidates", "/api/admin/zaad/contact-lists/sync-operations/fixture-operation"]) {
+            const anonymous = await invoke(route.GET, "GET", path);
+            assert.equal(anonymous.status, 401);
+            const readonly = await invoke(route.GET, "GET", path, { cookie: viewCookie });
+            assert.equal(readonly.status, 403);
+          }
+          const denied = await invoke(route.POST, "POST", "/api/admin/zaad/contact-lists/sync-bindings", { cookie: viewCookie, body: { operationKey: "fixture-operation", accountId: "fixture-account", contactListIds: ["fixture-list-1"] } });
+          assert.equal(denied.status, 403);
+          assert.equal(externalFetches.length, 0);
+        });
+
         await t.test("anonymous public registration accepts only the exact payload and hides duplicates", async () => {
           const exactPayload = {
             name: "山田 花子",

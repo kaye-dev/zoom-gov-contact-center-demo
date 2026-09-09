@@ -161,6 +161,12 @@ const EXACT_POST_REVIEWED_CHAIN = [
     sha256: "6a848d643141ecf5160f8cca46fdc8647f4cf14f4dfa06878a828bff917f11ee",
     classification: "destructive-reviewed",
   },
+  {
+    // Existing ownership index is replaced; production application requires separate review.
+    name: "20260909130000_shared_contact_list_bindings",
+    sha256: "cc76f963c1a9fa8c074ca9ad8980fbd955797baa426ddc21a4f17dcd1f5d5085",
+    classification: "destructive-reviewed",
+  },
 ] as const satisfies readonly ExactBatchMigration[];
 
 export type ReviewedMigrationBatchPlan = {

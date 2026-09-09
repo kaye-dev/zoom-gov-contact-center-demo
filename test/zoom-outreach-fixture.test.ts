@@ -83,3 +83,24 @@ test('fixture delay offsets persist, unauthorized requests do not consume delays
   assert.equal((await call(failed, 'contact_lists')).status, 503);
   assert.equal((await call(failed, 'contact_lists')).status, 200);
 });
+
+test('candidate inventory failures and delays do not affect connection probes', async () => {
+  const waits: number[] = [];
+  const path = '/v2/contact_center/outbound_campaign/contact_lists';
+  const provider = new ZoomOutreachProvider('fixture-lg', {
+    accountId: 'fixture-lg', lists: [], members: {}, campaigns: [],
+    requestDelays: [{ path, method: 'GET', remaining: 1, milliseconds: 300, pageSize: 100 }],
+    readFailures: [{ path, remaining: 1, pageSize: 100 }],
+  }, async milliseconds => { waits.push(milliseconds); });
+  assert.equal((await call(provider, 'contact_lists?page_size=1')).status, 200);
+  assert.deepEqual(waits, []);
+  assert.equal(provider.snapshot().readFailures?.[0].remaining, 1);
+  assert.equal((await call(provider, 'contact_lists?page_size=100')).status, 503);
+  assert.deepEqual(waits, [300]);
+  assert.equal((await call(provider, 'contact_lists?page_size=1')).status, 200);
+  assert.equal((await call(provider, 'contact_lists?page_size=100')).status, 200);
+  for (const pageSize of [0, 101, 1.5]) {
+    assert.throws(() => new ZoomOutreachProvider('fixture-lg', { ...provider.snapshot(), readFailures: [{ path, remaining: 1, pageSize }] }), /Invalid fixture page size filter/);
+    assert.throws(() => new ZoomOutreachProvider('fixture-lg', { ...provider.snapshot(), requestDelays: [{ path, method: 'GET', remaining: 1, milliseconds: 1, pageSize }] }), /Invalid fixture page size filter/);
+  }
+});

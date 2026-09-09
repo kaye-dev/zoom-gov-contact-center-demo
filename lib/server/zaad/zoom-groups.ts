@@ -8,7 +8,7 @@ import { getContact } from "./contacts";
 import { writeZaadAudit } from "./audit";
 export type GroupClient = Pick<ZaadZoomClient, "accountId" | "listContactLists" | "getContactList" | "createContactList" | "updateContactList" | "deleteContactList" | "listContacts" | "createContact" | "updateContact" | "deleteContact" | "listCampaigns" | "getCampaign">;
 
-export async function requireZoomBinding(db: PrismaClient, scope: OutreachScope, client: Pick<GroupClient, "accountId">, resourceType: string, zoomId: string) {
+export async function requireZoomBinding(db: Pick<PrismaClient, "zoomResourceBinding">, scope: OutreachScope, client: Pick<GroupClient, "accountId">, resourceType: string, zoomId: string) {
   const row = await db.zoomResourceBinding.findFirst({ where: { ownerSiteKey: scope.siteKey, resourceType, zoomId, accountId: client.accountId, tombstone: false, ...(!scope.all ? { departmentKey: { in: scope.departments } } : {}) } });
   if (!row) throw new OutreachContractError("NOT_FOUND", 404);
   return row;
@@ -23,7 +23,7 @@ export async function listZoomGroups(db: PrismaClient, scope: OutreachScope, inj
     if (seen.has(result.nextPageToken) || page === 99) throw new OutreachContractError("PROVIDER_PAGINATION_LOOP", 502);
     seen.add(result.nextPageToken); token = result.nextPageToken;
   }
-  const bindings = await db.zoomResourceBinding.findMany({ where: { ownerSiteKey: scope.siteKey, accountId: client.accountId, resourceType: "CONTACT_LIST", tombstone: false, ...(!scope.all ? { departmentKey: { in: scope.departments } } : {}) } });
+  const bindings = await db.zoomResourceBinding.findMany({ where: { ownerSiteKey: scope.siteKey, accountId: client.accountId, resourceType: "CONTACT_LIST", tombstone: false, purpose: "REGULAR", dispatchId: null, ...(!scope.all ? { departmentKey: { in: scope.departments } } : {}) } });
   const items = bindings.map(binding => {
     const row = all.get(binding.zoomId);
     if (!row) throw new OutreachContractError("PROVIDER_RESOURCE_MISSING", 409);
@@ -102,19 +102,29 @@ export async function saveZoomGroup(db: PrismaClient, scope: OutreachScope, payl
     return { tenantKey: scope.siteKey, group: observed, syncState: "SYNCED" };
   });
 }
+/** Detach only the current site's group. Zoom data and local CRM memberships are retained. */
 export async function deleteZoomGroup(db: PrismaClient, scope: OutreachScope, id: string, payload: unknown, injected?: GroupClient) {
   const v = record(payload); fields(v, ["operationKey", "version"]);
-  const client = injected ?? await ZaadZoomClient.fromDatabase(db, scope.siteKey), binding = await requireZoomBinding(db, scope, client, "CONTACT_LIST", id);
-  if (whole(v.version) !== binding.version) throw new OutreachContractError("VERSION_CONFLICT", 409);
-  await assertGroupIdle(client, id, true);
-  return providerOperation(db, scope, "GROUP_DELETE", v.operationKey, { id, accountId: client.accountId, version: v.version }, async () => {
-    await client.deleteContactList(id);
-    let absent = false;
-    try { await client.getContactList(id); } catch (error) { if (error instanceof ZaadZoomError && error.httpStatus === 404) absent = true; else throw error; }
-    if (!absent) throw new OutreachContractError("PROVIDER_READBACK_MISMATCH", 409);
-    await db.zoomResourceBinding.update({ where: { id: binding.id, version: binding.version }, data: { tombstone: true, version: { increment: 1 } } });
-    return { tenantKey: scope.siteKey, deleted: true };
-  });
+  const key = operationKey(v.operationKey), version = whole(v.version);
+  const client = injected ?? await ZaadZoomClient.fromDatabase(db, scope.siteKey);
+  const unique = { siteKey: scope.siteKey, actorId: scope.actorId, kind: "GROUP_DETACH", operationKey: key };
+  const requestDigest = digest({ id, accountId: client.accountId, version });
+  try {
+    return await db.$transaction(async tx => {
+      const previous = await tx.outreachOperation.findUnique({ where: { siteKey_actorId_kind_operationKey: unique } });
+      if (previous) {
+        if (previous.requestDigest !== requestDigest) throw new OutreachContractError("OPERATION_CONFLICT", 409);
+        return { tenantKey: scope.siteKey, detached: true };
+      }
+      const binding = await requireZoomBinding(tx, scope, client, "CONTACT_LIST", id);
+      if (binding.version !== version) throw new OutreachContractError("VERSION_CONFLICT", 409);
+      if (binding.dispatchId || binding.purpose !== "REGULAR") throw new OutreachContractError("RESOURCE_OWNERSHIP_CONFLICT", 409);
+      await tx.zoomResourceBinding.update({ where: { id: binding.id, version }, data: { tombstone: true, version: { increment: 1 } } });
+      await tx.outreachOperation.create({ data: { ...unique, requestDigest, status: "COMPLETED", result: json({ id, detached: true }) } });
+      await writeZaadAudit(tx, scope.siteKey, { actorUserId: scope.actorId, resourceKind: "resource-binding", targetId: binding.id, action: "DELETE", result: "SUCCESS", changedFieldNames: ["tombstone"] });
+      return { tenantKey: scope.siteKey, detached: true };
+    }, { isolationLevel: "Serializable" });
+  } catch (error) { databaseError(error); }
 }
 export async function saveZoomMember(db: PrismaClient, scope: OutreachScope, listId: string, payload: unknown, contactId?: string, injected?: GroupClient) {
   const v = record(payload); fields(v, ["operationKey", "reference", "name", "phone", "version", "expectedDigest"]);
