@@ -34,6 +34,7 @@ For user-visible work:
 6. Run model preflight and select the goal-derived affected unit for one targeted smoke after all authoring. Use the common runner and documented Browser bootstrap. Derive viewports, themes, locale and state boundaries from source and risk; no fixed product examples are universal defaults. Do not run full coverage during plan authoring.
 7. After smoke, run `./dev-prototype.sh --retain <slug>` once. Return the live URL, PID, owner, current revision, final smoke result, unverified items, and exact `./dev-confirmation.sh stop <slug>` command so the user can give feedback. Reuse a matching active session; never replace another slug implicitly. Browser unavailability does not block a reviewable plan; report it without claiming verification.
 
+
 Do not use Browser checks as authoring steps. Do not run the coverage or full matrix or request a separate UI approval during `$plan`. When feedback revises the same plan, update the adopted goal/prototype and finish all static work before one replacement final smoke. A later explicit `$implement` invocation is the approval boundary; it starts with static preflight and, after implementation and static checks, requires final Browser coverage. Full parity remains a separate release/CI/scheduled/user-explicit task.
 
 For non-UI work, keep `UI変更: なし`, `prototype: なし`, `approval contract: なし`, `validation profile: なし`, `prototype revision: UI変更なし`, `UI承認方式: UI変更なし`, and `- 対象外: UI変更なし` under `## ユーザー動作確認`; do not create a prototype or confirmation session.

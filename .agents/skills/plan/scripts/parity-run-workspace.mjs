@@ -16,8 +16,9 @@ import {
 import path from "node:path";
 
 import {
-  ParityRunError,
   BrowserParityRunner,
+  productionBaseForTarget,
+  ParityRunError,
   createCoverageReport,
   createRunContext,
   mergeBatchResults,
@@ -34,7 +35,10 @@ const maxManifestBytes = 2 * 1024 * 1024;
 const maxLogicalManifestBytes = 32 * 1024 * 1024;
 const manifestPartChars = 128 * 1024;
 const maxManifestParts = 256;
-const maxCheckpointBytes = 512 * 1024;
+// 1,837 two-row batches already require 552 KB before artifacts; keep reads and writes bounded together.
+// A checkpoint aggregates every selected row and artifact; its bound matches
+// the logical manifest, while individual artifacts/fragments retain their limits.
+const maxCheckpointBytes = maxLogicalManifestBytes;
 const maxFragmentBytes = 512 * 1024;
 const maxArtifactBytes = 2 * 1024 * 1024;
 const maxDiagnosticBytes = 2 * 1024;
@@ -456,6 +460,7 @@ async function createWorkspaceArtifactSink({ repositoryRootPath, runId, maxBytes
     const checkpoint = await readCheckpoint(paths.runRoot, paths.runIdentity);
     checkpoint.artifactIndex.push(record);
     await writeJsonAtomic(path.join(paths.runRoot, "checkpoint.json"), checkpoint, {
+      maxBytes: maxCheckpointBytes,
       parentIdentity: paths.runIdentity,
     });
     await assertWorkspaceIdentities(paths);
@@ -499,7 +504,8 @@ async function readStableFile(
   { limit, parentIdentity, beforeMetadataReadback } = {},
 ) {
   ensure(
-    Number.isSafeInteger(limit) && limit >= 0 && limit <= maxManifestBytes,
+    Number.isSafeInteger(limit) && limit >= 0 &&
+      limit <= (path.basename(target) === "checkpoint.json" ? maxCheckpointBytes : maxManifestBytes),
     "PARITY_BATCH_INVALID",
     "file byte limit is invalid",
   );
@@ -642,7 +648,7 @@ function validateCapabilities(value, manifest) {
     "capability canary network source does not match selected probes",
   );
   ensure(
-    Array.isArray(value.surfaceContexts) && value.surfaceContexts.length === 2,
+    Array.isArray(value.surfaceContexts) && value.surfaceContexts.length >= 2,
     "PARITY_BATCH_INVALID",
     "capabilities.surfaceContexts must contain production and prototype provenance",
   );
@@ -651,9 +657,11 @@ function validateCapabilities(value, manifest) {
     `parity:authorization-profile:v1\0${expectedAuthorizationProfile}`,
   );
   const expectedOrigins = Object.fromEntries(
-    ["production", "prototype"].map((surface) => [surface, new URL(manifest.baseUrls[surface]).origin]),
+    ["production", "prototype"].map((surface) => [surface, new Set(surface === "production" ? manifest.definition.contract.comparisonTargets.map(target => new URL(productionBaseForTarget(manifest.baseUrls.production, manifest.definition.spec, target.id)).origin) : [new URL(manifest.baseUrls.prototype).origin])]),
   );
   const seenSurfaces = new Set();
+  const seenContexts = new Set();
+  const surfaceTabs = new Map();
   const seenTabIds = new Set();
   for (const [index, context] of value.surfaceContexts.entries()) {
     exactKeys(
@@ -666,13 +674,17 @@ function validateCapabilities(value, manifest) {
       "PARITY_BATCH_INVALID",
       `capabilities.surfaceContexts[${index}].surface is invalid`,
     );
-    ensure(!seenSurfaces.has(context.surface), "PARITY_BATCH_INVALID", "surface context provenance is duplicated");
+    const contextKey = JSON.stringify([context.surface, context.origin]);
+    ensure(!seenContexts.has(contextKey), "PARITY_BATCH_INVALID", "surface context provenance is duplicated");
+    seenContexts.add(contextKey);
+    ensure(!surfaceTabs.has(context.surface) || surfaceTabs.get(context.surface) === context.tabId, "PARITY_BATCH_INVALID", "surface tab changed across origins");
+    surfaceTabs.set(context.surface, context.tabId);
     seenSurfaces.add(context.surface);
     validateDiagnosticId(context.sessionId, `capabilities.surfaceContexts[${index}].sessionId`);
     validateDiagnosticId(context.tabId, `capabilities.surfaceContexts[${index}].tabId`);
     seenTabIds.add(context.tabId);
     ensure(
-      context.sessionId === value.sessionId && context.origin === expectedOrigins[context.surface],
+      context.sessionId === value.sessionId && expectedOrigins[context.surface].has(context.origin),
       "PARITY_BATCH_INVALID",
       `capabilities.surfaceContexts[${index}] does not match Browser provenance`,
     );
@@ -703,7 +715,7 @@ function validateTerminalCleanup(value, capabilities) {
   if (Array.isArray(value?.tabs)) {
     exactKeys(value, ["status", "tabs"], "terminalCleanup");
     ensure(value.status === "pass", "PARITY_CLEANUP_FAILED", "terminal Browser cleanup must pass");
-    const expectedIds = capabilities.surfaceContexts.map(({ tabId }) => tabId).sort();
+    const expectedIds = [...new Set(capabilities.surfaceContexts.map(({ tabId }) => tabId))].sort();
     ensure(stableStringify(value.tabs.map(({ tabId }) => tabId).sort()) === stableStringify(expectedIds),
       "PARITY_CLEANUP_FAILED", "cleanup must cover both owned surface tabs exactly once");
     for (const cleanup of value.tabs) validateTerminalCleanup(cleanup, { ...capabilities, tabId: cleanup.tabId });
@@ -810,7 +822,39 @@ function validateCompactProbeResults(rows, manifest) {
   }
 }
 
-function validateFragmentContract(fragment, manifest, descriptorIndex, priorCapabilities) {
+function observedTabBindings(canary, manifest, descriptorIndex, checkpoint) {
+  const bindings = [canary.surfaceContexts];
+  for (const batch of checkpoint?.batches.slice(0, descriptorIndex + 1) ?? []) {
+    for (const key of ["dprRecovery", "navigationRecovery", "captureRecovery", "tabClosureRecovery"]) {
+      const recovery = batch[key];
+      if (!recovery) continue;
+      const contexts = recovery.canaries;
+      if (key === "tabClosureRecovery") {
+        ensure(recovery.closureVerified === true && recovery.previousErrorCode === "PARITY_CLEANUP_FAILED" &&
+          Array.isArray(recovery.closedTabIds) && recovery.closedTabIds.length > 0 &&
+          recovery.closedTabIds.every(id => typeof id === "string" && !contexts?.some(item => item.tabId === id)),
+        "PARITY_BATCH_INVALID", "tab closure recovery requires verified retired tabs");
+      }
+      ensure(Array.isArray(contexts) && contexts.length === 2 &&
+        new Set(contexts.map(item => item.surface)).size === 2 &&
+        new Set(contexts.map(item => item.tabId)).size === 2,
+      "PARITY_BATCH_INVALID", "recovery requires two distinct surface canaries");
+      for (const context of contexts) {
+        ensure(["production", "prototype"].includes(context.surface) &&
+          context.status === "pass" && context.sessionId === canary.sessionId &&
+          context.origin === new URL(manifest.baseUrls[context.surface]).origin &&
+          context.viewport?.width === 390 && context.viewport?.height === 844 && context.viewport?.dpr === 1,
+        "PARITY_BATCH_INVALID", "recovery canary does not match Browser provenance");
+        validateSha256(context.screenshot, "recovery canary screenshot");
+      }
+      validateTerminalCleanup(recovery.cleanup, { surfaceContexts: contexts });
+      bindings.push(contexts);
+    }
+  }
+  return bindings;
+}
+
+function validateFragmentContract(fragment, manifest, descriptorIndex, priorCapabilities, checkpoint) {
   const isFirst = descriptorIndex === 0;
   const isLast = descriptorIndex === manifest.batches.length - 1;
   ensure(
@@ -819,6 +863,29 @@ function validateFragmentContract(fragment, manifest, descriptorIndex, priorCapa
     "capability canary must appear exactly on the first batch",
   );
   if (fragment.capabilities !== null) validateCapabilities(fragment.capabilities, manifest);
+  const canary = fragment.capabilities ?? priorCapabilities;
+  const hasTargetHosts = manifest.definition.spec.browserSetups?.some(item => item.productionHost !== undefined);
+  ensure(!hasTargetHosts || Array.isArray(fragment.surfaceContexts), "PARITY_BATCH_INVALID", "target hosts require per-batch surface contexts");
+  if (fragment.surfaceContexts !== undefined) {
+    ensure(canary, "PARITY_BATCH_INVALID", "surface contexts require a capability canary");
+    validateCapabilities({ ...canary, surfaceContexts: fragment.surfaceContexts }, manifest);
+    ensure(observedTabBindings(canary, manifest, descriptorIndex, checkpoint).some(binding =>
+      fragment.surfaceContexts.every(context => binding.some(item =>
+        item.surface === context.surface && item.tabId === context.tabId))),
+    "PARITY_BATCH_INVALID", "surface tabs require a first-batch or verified recovery binding");
+  }
+  for (const row of fragment.rows) {
+    const target = manifest.definition.contract.parityMatrix.find(item => item.id === row.rowId);
+    ensure(target, "PARITY_BATCH_INVALID", "row target missing");
+    for (const surface of ["production", "prototype"]) {
+      const url = row.actualConditions?.urls?.[surface];
+      if (!url) continue;
+      const expectedOrigin = new URL(surface === "production" ? productionBaseForTarget(manifest.baseUrls.production, manifest.definition.spec, target.targetId) : manifest.baseUrls.prototype).origin;
+      ensure(new URL(url).origin === expectedOrigin, "PARITY_BATCH_INVALID", "row origin does not match its target");
+      const contexts = fragment.surfaceContexts ?? canary?.surfaceContexts;
+      ensure(contexts?.some(item => item.surface === surface && item.origin === expectedOrigin), "PARITY_BATCH_INVALID", "row origin has no observed surface context");
+    }
+  }
   ensure(
     (fragment.terminalCleanup !== null) === isLast,
     "PARITY_CLEANUP_FAILED",
@@ -827,7 +894,8 @@ function validateFragmentContract(fragment, manifest, descriptorIndex, priorCapa
   if (fragment.terminalCleanup !== null) {
     const capabilities = isFirst ? fragment.capabilities : priorCapabilities;
     ensure(capabilities, "PARITY_BATCH_INVALID", "capability canary is required before terminal cleanup");
-    validateTerminalCleanup(fragment.terminalCleanup, capabilities);
+    validateTerminalCleanup(fragment.terminalCleanup, fragment.surfaceContexts
+      ? { ...capabilities, surfaceContexts: fragment.surfaceContexts } : capabilities);
   }
   validateMetrics(fragment.metrics, "batch result metrics");
   validateEvidenceUrls(fragment.rows);
@@ -953,7 +1021,7 @@ async function prepareRunWorkspace({
       await writeJsonExclusive(
         path.join(paths.runRoot, "checkpoint.json"),
         createCheckpoint(runId, batchDescriptors),
-        { parentIdentity: paths.runIdentity },
+        { maxBytes: maxCheckpointBytes, parentIdentity: paths.runIdentity },
       );
     }
     return {
@@ -1014,6 +1082,7 @@ async function nextRunBatch({ repositoryRootPath, runId }) {
   descriptorState.errorCode = null;
   descriptorState.diagnostic = null;
   await writeJsonAtomic(path.join(paths.runRoot, "checkpoint.json"), checkpoint, {
+    maxBytes: maxCheckpointBytes,
     parentIdentity: paths.runIdentity,
   });
   const descriptor = manifest.batches.find(({ batchId }) => batchId === descriptorState.batchId);
@@ -1064,6 +1133,7 @@ async function executeBrowserBatch({ repositoryRootPath, runId, runner, tabs, la
     const fragment = {
       schemaVersion: manifest.schemaVersion, runId, batchId, batchSha256: descriptor.sha256,
       rowIds, rows: result.rows, capabilities: isFirst ? result.capabilities : null,
+      surfaceContexts: result.capabilities.surfaceContexts,
       metrics: { ...result.metrics, browserOperations: result.metrics.browserOperations - operationsBefore }, terminalCleanup,
     };
     return await recordBatchResult({ repositoryRootPath, runId, batchId, input: JSON.stringify(fragment) });
@@ -1091,6 +1161,151 @@ async function executeBrowserBatch({ repositoryRootPath, runId, runner, tabs, la
   }
 }
 
+// This is an explicit Browser recovery, not a general terminal retry or a batch reservation.
+async function recoverDprTerminalBatch(options) {
+  return recoverTerminalBrowserBatch(options, "dpr");
+}
+
+async function recoverNavigationTerminalBatch(options) {
+  return recoverTerminalBrowserBatch(options, "navigation");
+}
+
+async function recoverCaptureTerminalBatch(options) {
+  return recoverTerminalBrowserBatch(options, "capture");
+}
+
+async function recoverClosedTabsTerminalBatch(options) {
+  return recoverTerminalBrowserBatch(options, "tabClosure");
+}
+
+async function recoverTerminalBrowserBatch({ repositoryRootPath, runId, batchId, adapter, tabs, failureFile, browser }, kind) {
+  validateIdentifier(batchId, "batchId");
+  const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
+  const manifestPath = path.join(paths.runRoot, "manifest.json");
+  const stored = await readManifest(manifestPath, { limit: maxManifestBytes, parentIdentity: paths.runIdentity });
+  const manifest = stored.value;
+  requireCurrentRunOrigins(manifest);
+  const checkpoint = await readCheckpoint(paths.runRoot, paths.runIdentity);
+  const before = stableStringify(checkpoint);
+  const batch = checkpoint.batches.find((entry) => entry.batchId === batchId);
+  const recoveryKey = `${kind}Recovery`;
+  const expectedCode = kind === "dpr" ? "PARITY_DPR_OVERRIDE_UNAVAILABLE" :
+    kind === "tabClosure" ? "PARITY_CLEANUP_FAILED" : "PARITY_UNEXPECTED_ERROR";
+  ensure(manifest.schemaVersion === coverageWorkspaceSchemaVersion && batch?.status === "terminal" &&
+    batch.errorCode === expectedCode && !batch[recoveryKey] && !batch.fragmentSha256 &&
+    (kind === "dpr" || batch.attempts === 1),
+  "PARITY_BATCH_INVALID", `only an unrecovered ${kind === "dpr" ? "DPR" : kind} terminal batch without a result can recover`);
+  let failureDigest;
+  let closedTabIds;
+  let priorSessionId;
+  const verifyClosedTabs = async () => {
+    ensure(typeof browser?.tabs?.list === "function", "PARITY_BATCH_INVALID", "tab closure requires live Browser inventory");
+    const live = await browser.tabs.list();
+    ensure(Array.isArray(live) && live.every(item => typeof item.id === "string"),
+      "PARITY_BATCH_INVALID", "Browser tab inventory is invalid");
+    ensure(closedTabIds.every(id => !live.some(item => item.id === id)) &&
+      Object.values(tabs).every(id => live.some(item => item.id === id)),
+    "PARITY_BATCH_INVALID", "failed tabs must be closed and replacement tabs must be live");
+  };
+  if (kind !== "dpr") {
+    ensure(typeof failureFile === "string" &&
+      new RegExp(`^failure-${batchId}-[0-9]+\\.json$`, "u").test(failureFile),
+    "PARITY_BATCH_INVALID", "navigation recovery requires the recorded failure file");
+    const failure = await readJsonFile(path.join(paths.runRoot, failureFile), {
+      limit: maxManifestBytes, parentIdentity: paths.runIdentity,
+    });
+    const cause = failure.value.evidence;
+    const expectedOperation = kind === "navigation" || kind === "tabClosure" ? cause?.operation === "navigate" :
+      cause?.operation === "runProbe" && cause.causeCategory === "unexpected" &&
+      batch.rowIds.includes(cause.rowId) &&
+      manifest.definition.spec.probes.some(probe => probe.id === cause.probeId && probe.kind === "screenshot");
+    ensure(failure.value.code === expectedCode && expectedOperation &&
+      !cause?.rows && failure.value.cleanup?.status === (kind === "tabClosure" ? "fail" : "pass"),
+    "PARITY_BATCH_INVALID", "only a Browser operation exception with successful cleanup can recover");
+    if (kind === "tabClosure") {
+      const failedTabs = failure.value.cleanup.failedTabIds;
+      ensure(Array.isArray(failedTabs) && failedTabs.length > 0 && failedTabs.length <= 2 &&
+        failedTabs.every(item => item.code === "PARITY_CLEANUP_FAILED" && typeof item.tabId === "string"),
+      "PARITY_BATCH_INVALID", "tab closure requires recorded failed cleanup tab IDs");
+      closedTabIds = [...new Set(failedTabs.map(item => item.tabId))];
+      const priorIndex = manifest.batches.findIndex(item => item.batchId === batchId) - 1;
+      ensure(priorIndex >= 0, "PARITY_BATCH_INVALID", "tab closure requires a prior verified surface binding");
+      const prior = await readJsonFile(path.join(paths.runRoot, `fragment-${manifest.batches[priorIndex].batchId}.json`), {
+        limit: maxFragmentBytes, parentIdentity: paths.runIdentity,
+      });
+      const contexts = prior.value.surfaceContexts ?? prior.value.capabilities?.surfaceContexts;
+      ensure(Array.isArray(contexts) && closedTabIds.every(id => contexts.some(item => item.tabId === id)) &&
+        Object.values(tabs).every(id => !closedTabIds.includes(id)),
+      "PARITY_BATCH_INVALID", "failed cleanup tabs must belong to the preceding verified surfaces");
+      priorSessionId = contexts[0].sessionId;
+      ensure(contexts.every(item => item.sessionId === priorSessionId) && adapter?.sessionId === priorSessionId,
+        "PARITY_BATCH_INVALID", "tab closure recovery must retain the Browser session");
+      await verifyClosedTabs();
+    }
+    failureDigest = failure.sha256;
+  }
+  ensure(!checkpoint.batches.some((entry) => entry.status === "running"),
+    "PARITY_BATCH_INVALID", "cannot recover while a batch is running");
+  ensure(adapter?.requiresBrowserSetups === true && tabs?.production && tabs?.prototype &&
+    tabs.production !== tabs.prototype &&
+    stableStringify(adapter.comparisonTabIds) === stableStringify(tabs),
+  "PARITY_COMPARISON_TAB_REQUIRED", "DPR recovery requires the two owned in-app Browser tabs");
+  const canaries = [];
+  let cleanup;
+  try {
+    for (const surface of ["production", "prototype"]) {
+      // A new runner prevents a cached canary (including the other origin's) from authorizing recovery.
+      const runner = new BrowserParityRunner(adapter);
+      const canary = await runner.capabilityCanary({ tabId: tabs[surface],
+        viewport: { width: 390, height: 844 }, dpr: 1,
+        requiresNetwork: selectedRowsRequireNetwork(manifest), url: manifest.baseUrls[surface] });
+      validateSha256(canary.screenshot, "recovery canary screenshot");
+      ensure(manifest.definition.contract.comparisonConditions.dpr === 1,
+        "PARITY_DPR_MISMATCH", "recovery cannot change the declared DPR");
+      canaries.push({ surface, origin: new URL(manifest.baseUrls[surface]).origin, ...canary });
+    }
+  } finally {
+    cleanup = await adapter.cleanup();
+    validateTerminalCleanup(cleanup, { surfaceContexts: Object.values(tabs).map((tabId) => ({ tabId })) });
+  }
+  if (closedTabIds) await verifyClosedTabs();
+  const afterManifest = await readManifest(manifestPath, { limit: maxManifestBytes, parentIdentity: paths.runIdentity });
+  const afterCheckpoint = await readCheckpoint(paths.runRoot, paths.runIdentity);
+  ensure(afterManifest.sha256 === stored.sha256 && stableStringify(afterCheckpoint) === before,
+    "PARITY_CURRENT_STATE_DRIFT", "run changed during DPR recovery");
+  const pendingArtifacts = checkpoint.artifactIndex.filter(({ rowId }) => batch.rowIds.includes(rowId));
+  const archivedArtifacts = [];
+  if (pendingArtifacts.length) {
+    const artifactRoot = path.join(paths.runRoot, "artifacts");
+    const artifactIdentity = await captureDirectoryIdentity(artifactRoot);
+    const epochSuffix = batch.recoveryHistory?.length ? `-${batch.recoveryHistory.length}` : "";
+    const archiveRoot = path.join(paths.runRoot, `${batchId}-${kind}-recovery-artifacts${epochSuffix}`);
+    const archiveIdentity = await ensureRealDirectory(archiveRoot, { create: true, mode: 0o700 });
+    for (const artifact of pendingArtifacts) {
+      const target = path.resolve(paths.repositoryRoot, artifact.path);
+      ensure(path.dirname(target) === artifactRoot, "PARITY_BATCH_INVALID", "recovery artifact escaped its root");
+      const bytes = await readStableFile(target, { limit: artifact.bytes, parentIdentity: artifactIdentity });
+      ensure(bytes.length === artifact.bytes && sha256(bytes) === artifact.sha256,
+        "PARITY_BATCH_INVALID", "recovery artifact digest changed");
+      await assertDirectoryIdentity(archiveIdentity);
+      const archived = path.join(archiveRoot, path.basename(target));
+      await writeFile(archived, bytes, { flag: "wx", mode: 0o600 });
+      await rm(target);
+      archivedArtifacts.push({ ...artifact, archivedPath: path.relative(paths.repositoryRoot, archived) });
+    }
+    checkpoint.artifactIndex = checkpoint.artifactIndex.filter(({ rowId }) => !batch.rowIds.includes(rowId));
+  }
+  batch[recoveryKey] = { archivedArtifacts, ...(closedTabIds ? { closedTabIds, closureVerified: true } : {}), ...(failureDigest ? { failureFile, failureDigest } : {}), at: new Date().toISOString(), previousStatus: batch.status,
+    previousErrorCode: batch.errorCode, previousAttempts: batch.attempts,
+    manifestSha256: stored.sha256, canaries, cleanup };
+  batch.status = "pending";
+  batch.errorCode = null;
+  batch.diagnostic = null;
+  checkpoint.resumed = true;
+  await writeJsonAtomic(path.join(paths.runRoot, "checkpoint.json"), checkpoint, { maxBytes: maxCheckpointBytes, parentIdentity: paths.runIdentity });
+  return { runId, batchId, status: "recovered", batch: null, summary: compactRunSummary(checkpoint) };
+}
+
 async function resumeRunWorkspace({ repositoryRootPath, runId }) {
   const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
   const { value: manifest } = await readManifest(path.join(paths.runRoot, "manifest.json"), { limit: maxManifestBytes, parentIdentity: paths.runIdentity });
@@ -1106,6 +1321,7 @@ async function resumeRunWorkspace({ repositoryRootPath, runId }) {
     }
   }
   await writeJsonAtomic(path.join(paths.runRoot, "checkpoint.json"), checkpoint, {
+    maxBytes: maxCheckpointBytes,
     parentIdentity: paths.runIdentity,
   });
   return nextRunBatch({ repositoryRootPath, runId });
@@ -1185,6 +1401,7 @@ async function recordBatchFailure({
   if (transient && batch.attempts < 2) batch.status = "failed";
   else batch.status = "terminal";
   await writeJsonAtomic(path.join(paths.runRoot, "checkpoint.json"), checkpoint, {
+    maxBytes: maxCheckpointBytes,
     parentIdentity: paths.runIdentity,
   });
   return {
@@ -1219,6 +1436,7 @@ async function invalidateRunWorkspace({
     source,
   });
   const affectedTargets = new Set(resolution.targetIds);
+  let sourcesChanged = false;
   if (currentSources !== undefined) {
     ensure(Array.isArray(currentSources) && currentSources.length === manifest.sources.length &&
       new Set(currentSources.map((entry) => entry.path)).size === manifest.sources.length,
@@ -1228,6 +1446,7 @@ async function invalidateRunWorkspace({
       ensure(current && /^sha256:[a-f0-9]{64}$/u.test(current.sha256),
         "PARITY_CURRENT_STATE_DRIFT", "invalidation source inventory changed");
       if (current.sha256 === previous.sha256) continue;
+      sourcesChanged = true;
       const impact = resolveInvalidationTargets({ spec: manifest.definition.spec,
         contract: manifest.definition.contract, scope: "shared", source: previous.path });
       ensure(impact.targetIds.every((targetId) => affectedTargets.has(targetId)),
@@ -1253,6 +1472,15 @@ async function invalidateRunWorkspace({
     batch.errorCode = null;
     batch.diagnostic = null;
     batch.fragmentSha256 = null;
+    if (sourcesChanged) {
+      for (const kind of ["dpr", "navigation", "capture", "tabClosure"]) {
+        const key = `${kind}Recovery`;
+        if (!batch[key]) continue;
+        batch.recoveryHistory ??= [];
+        batch.recoveryHistory.push({ kind, ...batch[key] });
+        delete batch[key];
+      }
+    }
     invalidatedBatchIds.push(batch.batchId);
   }
   const invalidatedRows = new Set(checkpoint.batches
@@ -1279,6 +1507,7 @@ async function invalidateRunWorkspace({
     batchIds: invalidatedBatchIds,
   });
   await writeJsonAtomic(path.join(paths.runRoot, "checkpoint.json"), checkpoint, {
+    maxBytes: maxCheckpointBytes,
     parentIdentity: paths.runIdentity,
   });
   if (currentSources !== undefined) {
@@ -1428,7 +1657,7 @@ async function recordBatchResult({
   assertSecretFree(fragment);
   exactKeys(
     fragment,
-    ["schemaVersion", "runId", "batchId", "batchSha256", "rowIds", "rows", "capabilities", "metrics", "terminalCleanup"],
+    ["schemaVersion", "runId", "batchId", "batchSha256", "rowIds", "rows", "capabilities", "metrics", "terminalCleanup", ...(Object.hasOwn(fragment, "surfaceContexts") ? ["surfaceContexts"] : [])],
     "batch result",
   );
   ensure(fragment.schemaVersion === workspaceSchemaVersion, "PARITY_BATCH_INVALID", "batch result schemaVersion is invalid");
@@ -1444,7 +1673,7 @@ async function recordBatchResult({
     ensure(row?.rowId === descriptor.rowIds[index], "PARITY_BATCH_INVALID", "batch result row order mismatch");
     ensure(row.status === "pass" || row.status === "fail", "PARITY_BATCH_INVALID", "batch result row status is invalid");
   });
-  validateFragmentContract(fragment, manifest, descriptorIndex, priorCapabilities);
+  validateFragmentContract(fragment, manifest, descriptorIndex, priorCapabilities, checkpoint);
   const target = path.join(paths.runRoot, `fragment-${batchId}.json`);
   const written = await writeJsonExclusive(target, fragment, {
     parentIdentity: paths.runIdentity,
@@ -1456,6 +1685,7 @@ async function recordBatchResult({
     checkpointBatch.errorCode = requiredFailure ? "PARITY_REQUIRED_PROBE_FAILED" : null;
     checkpointBatch.diagnostic = requiredFailure ? "one or more required probes failed" : null;
     await writeJsonAtomic(path.join(paths.runRoot, "checkpoint.json"), checkpoint, {
+      maxBytes: maxCheckpointBytes,
       parentIdentity: paths.runIdentity,
     });
     return {
@@ -1567,7 +1797,7 @@ async function finalizeRunWorkspace({
     const fragment = fragmentFile.value;
     exactKeys(
       fragment,
-      ["schemaVersion", "runId", "batchId", "batchSha256", "rowIds", "rows", "capabilities", "metrics", "terminalCleanup"],
+      ["schemaVersion", "runId", "batchId", "batchSha256", "rowIds", "rows", "capabilities", "metrics", "terminalCleanup", ...(Object.hasOwn(fragment, "surfaceContexts") ? ["surfaceContexts"] : [])],
       `fragment ${descriptor.batchId}`,
     );
     ensure(
@@ -1591,7 +1821,7 @@ async function finalizeRunWorkspace({
       "PARITY_BATCH_INVALID",
       `fragment row ownership mismatch: ${descriptor.batchId}`,
     );
-    validateFragmentContract(fragment, manifest, descriptorIndex, validatedCapabilities);
+    validateFragmentContract(fragment, manifest, descriptorIndex, validatedCapabilities, checkpoint);
     if (fragment.capabilities !== null) validatedCapabilities = fragment.capabilities;
     fragments.push(fragment);
   }
@@ -1611,7 +1841,10 @@ async function finalizeRunWorkspace({
     "PARITY_CLEANUP_FAILED",
     "terminal Browser cleanup must pass on the final batch",
   );
-  const capabilities = validatedCapabilities;
+  const capabilities = validatedCapabilities && {
+    ...validatedCapabilities,
+    surfaceContexts: [...new Map(fragments.flatMap(fragment => fragment.surfaceContexts ?? fragment.capabilities?.surfaceContexts ?? []).map(context => [JSON.stringify([context.surface, context.origin]), context])).values()],
+  };
   ensure(capabilities?.status === "pass", "PARITY_BATCH_INCOMPLETE", "capability canary must pass");
   let fidelityAudit;
   let fidelityStatus;
@@ -1622,7 +1855,7 @@ async function finalizeRunWorkspace({
     const observed = { ...manifest, rows, artifactIndex: checkpoint.artifactIndex };
     fidelityCoverage = interactionCoverage(definition.contract, definition.spec, rows);
     ensure(fidelityCoverage.every(group => group.status === "pass"), "PARITY_BATCH_INCOMPLETE", "t-way coverage incomplete");
-    fidelityStatus = validateFidelityAudit(fidelityAudit, observed, definition.spec);
+    fidelityStatus = validateFidelityAudit(fidelityAudit, observed, definition.spec, sha256);
   }
   let artifactIndex = [];
   let evidenceIdentity;
@@ -1760,6 +1993,10 @@ export {
   createWorkspaceArtifactSink,
   finalizeRunWorkspace,
   recordRunAudit,
+  recoverDprTerminalBatch,
+  recoverNavigationTerminalBatch,
+  recoverCaptureTerminalBatch,
+  recoverClosedTabsTerminalBatch,
   executeBrowserBatch,
   invalidateRunWorkspace,
   nextRunBatch,

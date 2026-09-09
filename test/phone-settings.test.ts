@@ -28,13 +28,16 @@ test("PHONE-ALIGN-12: readable left-aligned width, responsive fields and save/ac
   const form = readFileSync(new URL("../app/admin/phone-settings/PhoneSettingsForm.tsx", import.meta.url), "utf8");
   assert.match(form, /ml-1 mr-0 mt-6 max-w-4xl/);
   assert.match(form, /md:grid-cols-2/);
-  assert.match(form, /md:grid-cols-\[12rem_minmax\(0,1fr\)\]/);
+  assert.match(form, /<label htmlFor=\{`ai-phone-\$\{locale\}`\} className="block text-sm font-semibold"/);
   assert.equal((form.match(/min-w-0 w-full rounded-md/g) ?? []).length, 3);
   assert.match(form, /readOnly=\{!canEdit\}/);
   assert.match(form, /disabled=\{isSubmitting \|\| !canEdit\}/);
-  assert.match(form, /if \(!canEdit\) return/);
-  assert.match(form, /method: "PUT"/); assert.match(form, /body: JSON.stringify\(settings\)/);
-  assert.match(form, /setSettings\(body.settings\)/);
+  assert.match(form, /if \(!canEdit \|\| isSubmitting/);
+  assert.match(form, /await control.save\(settings\)/);
+  const controller = readFileSync(new URL("../app/admin/useAdminSettingsTenant.ts", import.meta.url), "utf8");
+  assert.match(controller, /method: "PUT"/);
+  assert.match(controller, /body: JSON.stringify\(payload\)/);
+  assert.match(controller, /setSettings\(body.settings\)/);
   assert.match(form, /setFeedback\(\{ kind: "error" \}\)/);
 });
 

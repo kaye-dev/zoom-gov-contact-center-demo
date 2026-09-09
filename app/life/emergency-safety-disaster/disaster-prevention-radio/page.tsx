@@ -1,15 +1,17 @@
 import type { Metadata } from 'next';
 
 import { DisasterPreventionRadioView } from '../../../components/DisasterPreventionRadioView';
-import { defaultLocale, dictionaries } from '../../../i18n/dictionaries';
+import { getRequestDictionary } from '../../../i18n/server-dictionary';
 
-const dictionary = dictionaries[defaultLocale];
-const pageCopy = dictionary.contentPages.disasterRadio;
+export async function generateMetadata(): Promise<Metadata> {
+  const dictionary = await getRequestDictionary();
+  const pageCopy = dictionary.contentPages.disasterRadio;
 
-export const metadata: Metadata = {
-  title: `${pageCopy.title} | ${dictionary.cityName}`,
-  description: pageCopy.lead,
-};
+  return {
+    title: `${pageCopy.title} | ${dictionary.siteName}`,
+    description: pageCopy.lead,
+  };
+}
 
 export default async function DisasterPreventionRadioPage({
   searchParams,

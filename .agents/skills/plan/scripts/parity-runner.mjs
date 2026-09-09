@@ -546,7 +546,7 @@ function validateArtifactRecord(artifact, label) {
 
 function validateSurfaceContextProvenance(capabilities, contract) {
   ensure(
-    Array.isArray(capabilities.surfaceContexts) && capabilities.surfaceContexts.length === 2,
+    Array.isArray(capabilities.surfaceContexts) && capabilities.surfaceContexts.length >= 2,
     "parity evidence must record production and prototype surface contexts",
   );
   const expectedAuthorizationProfile = contract.comparisonConditions.authorization;
@@ -562,7 +562,9 @@ function validateSurfaceContextProvenance(capabilities, contract) {
       label,
     );
     ensure(context.surface === "production" || context.surface === "prototype", `${label}.surface is invalid`);
-    ensure(!contexts.has(context.surface), "parity evidence surface contexts must be unique by surface");
+    const contextKey = JSON.stringify([context.surface, context.origin]);
+    ensure(!contexts.has(contextKey), "parity evidence surface contexts must be unique by surface and origin");
+    ensure([...contexts.values()].filter(item => item.surface === context.surface).every(item => item.tabId === context.tabId), "parity evidence surface tab changed across origins");
     requireNonEmptyString(context.sessionId, `${label}.sessionId`);
     requireNonEmptyString(context.tabId, `${label}.tabId`);
     ensure(context.sessionId === capabilities.sessionId, `${label}.sessionId does not match the capability session`);
@@ -577,10 +579,10 @@ function validateSurfaceContextProvenance(capabilities, contract) {
       context.authorizationProfileDigest === expectedAuthorizationProfileDigest,
       `${label}.authorizationProfileDigest does not match its sanitized profile name`,
     );
-    contexts.set(context.surface, context);
+    contexts.set(contextKey, context);
   }
   ensure(
-    contexts.has("production") && contexts.has("prototype"),
+    ["production", "prototype"].every(surface => [...contexts.values()].some(item => item.surface === surface)),
     "parity evidence surface context provenance is incomplete",
   );
   ensure(
@@ -745,7 +747,7 @@ function validateRowEvidence(rowEvidence, manifestRow, contract, expectedProbes,
       const result = compareFidelityProbe(expectedProbe,
         { value: probe.production, artifact: probe.artifacts.find(item => item.surface === "production") },
         { value: probe.prototype, artifact: probe.artifacts.find(item => item.surface === "prototype") },
-        spec, phase, compareProbe);
+        spec, phase, compareProbe, sha256);
       ensure(result.status === probe.status, `${probeLabel} comparison result is not reproducible`);
     }
     if (probe.status === "skipped") {
@@ -956,9 +958,12 @@ function validateParityEvidence(evidence, contract, spec, requirements, sourceDi
   for (const row of evidence.rows) {
     validateRowEvidence(row, manifestRows.get(row.rowId), contract, probesByRow?.get(row.rowId), evidence.schemaVersion, spec, evidence.phase);
     if (row.actualConditions && surfaceContexts) {
+      const targetId = manifestRows.get(row.rowId).targetId;
+      const productionHost = spec?.browserSetups?.find(item => item.targetId === targetId)?.productionHost;
+      if (productionHost !== undefined) ensure(new URL(row.actualConditions.urls.production).hostname === productionHost, `parity evidence row ${row.rowId} production host does not match its target`);
       for (const surface of ["production", "prototype"]) {
         ensure(
-          new URL(row.actualConditions.urls[surface]).origin === surfaceContexts.get(surface).origin,
+          surfaceContexts.has(JSON.stringify([surface, new URL(row.actualConditions.urls[surface]).origin])),
           `parity evidence row ${row.rowId} ${surface} origin does not match its surface context`,
         );
       }
@@ -1024,7 +1029,7 @@ function validateParityEvidence(evidence, contract, spec, requirements, sourceDi
     ensure(stableStringify(coverage) === stableStringify(evidence.interactionCoverage), "interaction coverage is not reproducible");
     if (evidence.phase === "final") {
       ensure(coverage.every(group => group.status === "pass"), "interaction coverage is incomplete");
-      const status = validateFidelityAudit(evidence.audit, evidence, spec);
+      const status = validateFidelityAudit(evidence.audit, evidence, spec, sha256);
       ensure(stableStringify(status) === stableStringify(evidence.auditStatus), "audit status is not reproducible");
     } else {
       ensure(evidence.audit === null && stableStringify(evidence.auditStatus) === stableStringify({ static: "not-run", runtime: "not-run", requirements: "not-run", visual: "not-run" }), "smoke must not claim implementation audit");

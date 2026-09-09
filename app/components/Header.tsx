@@ -11,7 +11,7 @@ import { MenuIcon } from './svg/MenuIcon';
 import { useI18n } from '../i18n/LanguageProvider';
 
 export function Header() {
-  const { t } = useI18n();
+  const { t, tenantKey } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -31,9 +31,9 @@ export function Header() {
     >
       <StarEmblem className="h-11 w-11 shrink-0" />
       <div className="leading-tight">
-        <p className="text-2xl font-bold tracking-wide">{t.cityName}</p>
+        <p className="text-2xl font-bold tracking-wide">{t.siteName}</p>
         <p className="text-[10px] font-semibold tracking-[0.2em] text-fg-muted">
-          {t.cityNameRoman}
+          {t.siteNameRoman}
         </p>
       </div>
     </Link>
@@ -49,6 +49,7 @@ export function Header() {
         {/* デスクトップ（lg 以上）の右側ナビ */}
         <div className="ml-auto hidden items-center lg:flex">
           <nav className="flex items-center gap-7">
+            {tenantKey === "lg" && <Link href="/notifications/register" className="text-sm hover:text-accent focus-visible:outline-2 focus-visible:outline-accent">{t.municipalOutreach.title}</Link>}
             <a
               href="#"
               className="flex items-center gap-2 text-sm text-fg transition-colors hover:text-accent"

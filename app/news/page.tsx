@@ -1,13 +1,28 @@
-import type { Metadata } from 'next';
+import type { Metadata } from "next";
 
-import { NewsIndexView } from '../components/InformationPageViews';
-import { defaultLocale, dictionaries } from '../i18n/dictionaries';
+import { NewsIndexView } from "../components/InformationPageViews";
+import { getRequestDictionary } from "../i18n/server-dictionary";
+import { getRequestTenant } from "@/lib/server/tenant";
+import { UniversityPortal } from "@/app/tenants/univ/UniversityPortal";
 
-export const metadata: Metadata = {
-  title: `${dictionaries[defaultLocale].contentPages.newsIndexTitle} | ${dictionaries[defaultLocale].cityName}`,
-  description: dictionaries[defaultLocale].contentPages.newsIndexLead,
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const tenant = await getRequestTenant();
+  if (tenant.features.universityPortal) {
+    return {
+      title: `ニュース | ${tenant.metadata.shortName}`,
+      description: tenant.metadata.description,
+    };
+  }
+  const dictionary = await getRequestDictionary();
 
-export default function NewsIndexPage() {
+  return {
+    title: `${dictionary.contentPages.newsIndexTitle} | ${dictionary.siteName}`,
+    description: dictionary.contentPages.newsIndexLead,
+  };
+}
+
+export default async function NewsIndexPage() {
+  if ((await getRequestTenant()).features.universityPortal)
+    return <UniversityPortal page="news" />;
   return <NewsIndexView />;
 }

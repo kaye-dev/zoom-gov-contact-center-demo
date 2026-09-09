@@ -73,7 +73,7 @@ test("RES-LIST-QUERY-01 uses a 51-row allowlisted query and a stable composite c
   } as unknown as PrismaClient;
 
   const cursor = { createdAt, id: "booking-cursor" };
-  const result = await listReservationBookings(prisma, {
+  const result = await listReservationBookings(prisma, "lg", {
     service: "my-number-card",
     source: "ZVA",
     cursor,
@@ -81,6 +81,7 @@ test("RES-LIST-QUERY-01 uses a 51-row allowlisted query and a stable composite c
 
   assert.deepEqual(query, {
     where: {
+      siteKey: "lg",
       AND: [{
         OR: [
           { createdAt: { lt: createdAt } },
@@ -136,19 +137,21 @@ test("RES-LIST-FILTER-01 maps source filters to Prisma isDemo conditions", async
     },
   } as unknown as PrismaClient;
 
-  await listReservationBookings(prisma, {});
-  await listReservationBookings(prisma, { source: "ZVA" });
-  await listReservationBookings(prisma, { source: "DEMO" });
-  assert.deepEqual(whereValues, [{}, { isDemo: false }, { isDemo: true }]);
+  await listReservationBookings(prisma, "lg", {});
+  await listReservationBookings(prisma, "lg", { source: "ZVA" });
+  await listReservationBookings(prisma, "lg", { source: "DEMO" });
+  assert.deepEqual(whereValues, [{ siteKey: "lg" }, { siteKey: "lg", isDemo: false }, { siteKey: "lg", isDemo: true }]);
 });
 
 test("RES-LIST-HREF-01 preserves selected filters and adds one cursor", () => {
   const href = buildReservationBookingListNextHref(
     { service: "bulky-waste", source: "DEMO" },
     "cursor-value",
+    "univ",
   );
   const url = new URL(href, "http://localhost");
   assert.equal(url.pathname, "/admin/reservations/bookings");
+  assert.deepEqual(url.searchParams.getAll("tenant"), ["univ"]);
   assert.equal(url.searchParams.get("service"), "bulky-waste");
   assert.equal(url.searchParams.get("source"), "DEMO");
   assert.deepEqual(url.searchParams.getAll("cursor"), ["cursor-value"]);

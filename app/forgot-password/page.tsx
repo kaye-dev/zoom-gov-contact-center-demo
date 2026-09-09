@@ -1,9 +1,7 @@
-import { ForgotPasswordForm } from "./ForgotPasswordForm";
+import { redirect } from "next/navigation";
+import { safeAdminCallback } from "@/lib/admin-routing";
 
-export default function ForgotPasswordPage() {
-  return (
-    <main className="min-h-screen bg-surface px-4 py-12 text-fg">
-      <ForgotPasswordForm />
-    </main>
-  );
+export default async function LegacyAuthPage({ searchParams }: { searchParams: Promise<{ callbackURL?: string | string[] }> }) {
+  const callbackURL = safeAdminCallback((await searchParams).callbackURL);
+  redirect(`/admin/forgot-password?callbackURL=${encodeURIComponent(callbackURL)}`);
 }

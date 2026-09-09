@@ -12,15 +12,16 @@ import {
   decryptDeveloperApiSecret,
   encryptDeveloperApiSecret,
 } from "./developer-api-crypto";
+import type { TenantKey } from "@/lib/tenants";
+
 import { withPrisma } from "./prisma";
 
-const SETTING_ID = 1;
 
 export const getDeveloperApiSettings = cache(
-  async (): Promise<DeveloperApiSettingsSnapshot> =>
+  async (tenantKey: TenantKey): Promise<DeveloperApiSettingsSnapshot> =>
     withPrisma(async (prisma) => {
       const row = await prisma.siteDeveloperApiSetting.findUnique({
-        where: { id: SETTING_ID },
+        where: { siteKey: tenantKey },
         select: {
           accountId: true,
           clientId: true,
@@ -34,12 +35,13 @@ export const getDeveloperApiSettings = cache(
 
 export async function saveDeveloperApiSettings(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   update: DeveloperApiSettingsUpdate,
 ): Promise<DeveloperApiSettingsSnapshot | null> {
   assertDeveloperApiEncryptionAvailable();
   return prisma.$transaction(async (transaction) => {
     const current = await transaction.siteDeveloperApiSetting.findUnique({
-      where: { id: SETTING_ID },
+      where: { siteKey: tenantKey },
       select: {
         clientSecretEncrypted: true,
         secretTokenEncrypted: true,
@@ -67,9 +69,9 @@ export async function saveDeveloperApiSettings(
         ? encryptDeveloperApiSecret(update.secretToken, "secretToken")
         : undefined;
     const saved = await transaction.siteDeveloperApiSetting.upsert({
-      where: { id: SETTING_ID },
+      where: { siteKey: tenantKey },
       create: {
-        id: SETTING_ID,
+        siteKey: tenantKey,
         accountId:
           update.section === "server-to-server-oauth" ? update.accountId : "",
         clientId:
@@ -97,16 +99,17 @@ export async function saveDeveloperApiSettings(
 
 export async function revealDeveloperApiSecret(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   field: DeveloperApiSecretField,
 ): Promise<string | null> {
   const row =
     field === "clientSecret"
       ? await prisma.siteDeveloperApiSetting.findUnique({
-          where: { id: SETTING_ID },
+          where: { siteKey: tenantKey },
           select: { clientSecretEncrypted: true },
         })
       : await prisma.siteDeveloperApiSetting.findUnique({
-          where: { id: SETTING_ID },
+          where: { siteKey: tenantKey },
           select: { secretTokenEncrypted: true },
         });
   const encrypted =

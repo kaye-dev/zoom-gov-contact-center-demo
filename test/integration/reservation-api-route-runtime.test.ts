@@ -1,3 +1,4 @@
+import { importApiRoute } from "../helpers/import-api-route";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import test from "node:test";
@@ -22,6 +23,7 @@ import {
 } from "../../lib/server/reservation-api-request-logs";
 import { getReservationApiPeriod } from "../../lib/server/reservation-api-usage";
 import { withPrisma } from "../../lib/server/prisma";
+import { DEFAULT_TENANT_KEY } from "../../lib/tenants";
 import { withIsolatedPostgresDatabase } from "../helpers/isolated-postgres";
 
 const AUTH_SECRET = "runtime-reservation-api-test-secret-000000000";
@@ -44,7 +46,7 @@ test("reservation API keys, scopes, CRUD, quota, and revocation work end to end"
       await grantViewOnly(client, VIEW_ADMIN);
       await createSession(client, FULL_ADMIN, "full-token");
       await createSession(client, VIEW_ADMIN, "view-token");
-      const route = await import("../../app/api/[[...route]]/route");
+      const route = await importApiRoute();
       const fullCookie = sessionCookie("full-token");
       const viewCookie = sessionCookie("view-token");
 
@@ -222,14 +224,14 @@ test("reservation API keys, scopes, CRUD, quota, and revocation work end to end"
       assert.equal(JSON.stringify(storedCaller.rows).includes(PRIMARY_CALLER_PHONE), false);
 
       await client.query(
-        `INSERT INTO reservation_bookings (id, "serviceKey", "reservationDate", "startMinute", "isDemo") VALUES ('hidden-demo', 'my-number-card', $1::date, 570, true)`,
+        `INSERT INTO reservation_bookings ("siteKey", id, "serviceKey", "reservationDate", "startMinute", "isDemo") VALUES ('lg', 'hidden-demo', 'my-number-card', $1::date, 570, true)`,
         [date],
       );
       await client.query(
         `INSERT INTO reservation_bookings
-           (id, "serviceKey", "reservationDate", "startMinute", "isDemo", "apiKeyId", "externalReferenceId", "callerAniDigest")
+           ("siteKey", id, "serviceKey", "reservationDate", "startMinute", "isDemo", "apiKeyId", "externalReferenceId", "callerAniDigest")
          VALUES
-           ('legacy-ownerless', 'legal-consultation', $1::date, 840, false, $2, 'zva_legacy_ownerless_0001', NULL)`,
+           ('lg', 'legacy-ownerless', 'legal-consultation', $1::date, 840, false, $2, 'zva_legacy_ownerless_0001', NULL)`,
         [date, issued.apiKey.id],
       );
       const listResponse = await invoke(route.GET, "GET", `/api/public/v1/reservations?serviceKey=my-number-card&dateFrom=${date}&dateTo=${date}&limit=1`, { bearer: issued.rawKey });
@@ -425,7 +427,7 @@ test("authenticated reservation API outcomes create bounded request logs without
     try {
       await createUser(client, FULL_ADMIN);
       await createSession(client, FULL_ADMIN, "request-log-full-token");
-      const route = await import("../../app/api/[[...route]]/route");
+      const route = await importApiRoute();
       const fullCookie = sessionCookie("request-log-full-token");
       const fullKey = await issueKey(route, fullCookie, {
         name: "Request log full access",
@@ -597,9 +599,9 @@ test("authenticated reservation API outcomes create bounded request logs without
 
       await client.query(
         `INSERT INTO reservation_bookings
-           (id, "serviceKey", "reservationDate", "startMinute", "isDemo", "apiKeyId", "externalReferenceId", "callerAniDigest")
+           ("siteKey", id, "serviceKey", "reservationDate", "startMinute", "isDemo", "apiKeyId", "externalReferenceId", "callerAniDigest")
          VALUES
-           ('request-log-server-error', 'my-number-card', $1::date, 540, false, $2, 'zva_server_error_reference_0001', $3)`,
+           ('lg', 'request-log-server-error', 'my-number-card', $1::date, 540, false, $2, 'zva_server_error_reference_0001', $3)`,
         [
           date,
           fullKey.apiKey.id,
@@ -646,7 +648,7 @@ test("authenticated reservation API outcomes create bounded request logs without
       assert.equal(limitedCall.log.apiKeyId, quotaKey.apiKey.id);
       assert.equal(limitedCall.log.errorCode, "RESERVATION_API_KEY_MONTHLY_LIMIT_EXCEEDED");
 
-      await client.query(`DELETE FROM reservation_api_usage_settings WHERE id = 1`);
+      await client.query(`DELETE FROM reservation_api_usage_settings WHERE "siteKey" = 'lg'`);
       let quotaFailureCall: Awaited<ReturnType<typeof invokeExpectingOneLog>>;
       try {
         quotaFailureCall = await invokeExpectingOneLog(
@@ -659,9 +661,9 @@ test("authenticated reservation API outcomes create bounded request logs without
       } finally {
         await client.query(
           `INSERT INTO reservation_api_usage_settings
-             (id, "monthlyLimit", revision, "updatedAt", "updatedByUserId")
-           VALUES (1, NULL, 1, CURRENT_TIMESTAMP, NULL)
-           ON CONFLICT (id) DO NOTHING`,
+             ("siteKey", "monthlyLimit", revision, "updatedAt", "updatedByUserId")
+           VALUES ('lg', NULL, 1, CURRENT_TIMESTAMP, NULL)
+           ON CONFLICT ("siteKey") DO NOTHING`,
         );
       }
       assert.equal(quotaFailureCall.response.status, 500);
@@ -756,12 +758,14 @@ test("authenticated reservation API outcomes create bounded request logs without
       const directory = await withPrisma(async (prisma) => {
         const first = await listReservationApiRequestLogs(
           prisma,
+          DEFAULT_TENANT_KEY,
           { query: "Pagination Fixture" },
           paginationNow,
         );
         assert.ok(first.nextCursor);
         const second = await listReservationApiRequestLogs(
           prisma,
+          DEFAULT_TENANT_KEY,
           {
             query: "Pagination Fixture",
             cursor: first.nextCursor
@@ -772,16 +776,19 @@ test("authenticated reservation API outcomes create bounded request logs without
         );
         const filtered = await listReservationApiRequestLogs(
           prisma,
+          DEFAULT_TENANT_KEY,
           { query: "PKEY••••LOGS", method: "POST", result: "client-error" },
           paginationNow,
         );
         const byId = await listReservationApiRequestLogs(
           prisma,
+          DEFAULT_TENANT_KEY,
           { query: "pagination-log-051" },
           paginationNow,
         );
         const byPreview = await listReservationApiRequestLogs(
           prisma,
+          DEFAULT_TENANT_KEY,
           { query: "PKEY••••LOGS" },
           paginationNow,
         );
@@ -867,7 +874,7 @@ test("ZVA safety contract handles discovery, retries, ownership, preconditions, 
     try {
       await createUser(client, FULL_ADMIN);
       await createSession(client, FULL_ADMIN, "zva-safety-full-token");
-      const route = await import("../../app/api/[[...route]]/route");
+      const route = await importApiRoute();
       const fullCookie = sessionCookie("zva-safety-full-token");
       const primaryKey = await issueKey(route, fullCookie, {
         name: "ZVA primary",
@@ -1389,11 +1396,11 @@ async function insertSyntheticRequestLog(
 ) {
   await client.query(
     `INSERT INTO reservation_api_request_logs (
-       id, "apiKeyId", "apiKeyName", "apiKeyPreview", permission, method, path,
+       "siteKey", id, "apiKeyId", "apiKeyName", "apiKeyPreview", permission, method, path,
        "pathParameters", query, "requestBody", "responseBody", "statusCode",
        "errorCode", "durationMs", "requestedAt", "completedAt"
      ) VALUES (
-       $1, $2, $3, $4, 'LIST', 'GET', '/api/public/v1/reservations',
+       'lg', $1, $2, $3, $4, 'LIST', 'GET', '/api/public/v1/reservations',
        '{}'::jsonb, '{}'::jsonb, NULL, '{"items":[],"nextCursor":null}'::jsonb,
        200, NULL, 1, $5, $6
      )`,
@@ -1415,12 +1422,12 @@ async function insertPaginationLogs(
 ) {
   await client.query(
     `INSERT INTO reservation_api_request_logs (
-       id, "apiKeyId", "apiKeyName", "apiKeyPreview", permission, method, path,
+       "siteKey", id, "apiKeyId", "apiKeyName", "apiKeyPreview", permission, method, path,
        "pathParameters", query, "requestBody", "responseBody", "statusCode",
        "errorCode", "durationMs", "requestedAt", "completedAt"
      )
      SELECT
-       'pagination-log-' || lpad(series::text, 3, '0'),
+       'lg', 'pagination-log-' || lpad(series::text, 3, '0'),
        $1,
        'Pagination Fixture',
        'zgcc_rsv_PKEY••••LOGS',
@@ -1549,7 +1556,9 @@ async function invoke(
   if (options.body !== undefined || options.contentType) {
     headers.set("content-type", options.contentType ?? "application/json");
   }
-  return handler(new Request(`http://localhost:3000${path}`, {
+  const url = new URL(`http://localhost:3000${path}`);
+  if (url.pathname.startsWith("/api/admin/") && !url.searchParams.has("tenant")) url.searchParams.set("tenant", "lg");
+  return handler(new Request(url, {
     method,
     headers,
     body: options.rawBody ?? (

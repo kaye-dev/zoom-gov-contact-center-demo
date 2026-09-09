@@ -5,12 +5,13 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { AdminPageTitleHelp } from "../app/components/admin/AdminPageTitleHelp";
-import { dictionaries, locales } from "../app/i18n/dictionaries";
+import { locales } from "../app/i18n/dictionaries";
+import { defaultTenantDictionaries as dictionaries } from "../app/i18n/build-dictionary";
 
 const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const pages = [
-  ["PHONE", "phone-settings/PhoneSettingsForm", "max-w-4xl", "t.admin.phoneManagement.description"],
-  ["CHAT", "chat-settings/ChatSettingsForm", "max-w-5xl", "t.admin.chatManagement.description"],
+  ["PHONE", "phone-settings/PhoneSettingsForm", "max-w-4xl", 'control.copy.pageHelpDescription.replace("{title}", t.admin.phoneManagement.title)'],
+  ["CHAT", "chat-settings/ChatSettingsForm", "max-w-5xl", 'control.copy.pageHelpDescription.replace("{title}", t.admin.chatManagement.title)'],
   ["LANG", "languages/LanguageSettingsForm", "max-w-3xl", "t.admin.languageManagement.description"],
   ["MAINT", "maintenance-settings/MaintenanceSettingsForm", "max-w-5xl", "copy.description"],
   ["ROLES", "roles/RolesView", null, "copy.listDescription"],
@@ -28,7 +29,8 @@ for (const [id, path, maxWidth, description] of pages) {
       assert.ok(classes.includes("mr-0"));
       assert.ok(!classes.includes("mx-auto"));
       assert.ok(!classes.includes("w-full"));
-      if (maxWidth) assert.ok(classes.includes(maxWidth));
+      if (maxWidth && !(marker === "header" && ["PHONE", "CHAT"].includes(id))) assert.ok(classes.includes(maxWidth));
+      if (marker === "header" && ["PHONE", "CHAT"].includes(id)) { assert.ok(classes.includes("flex")); assert.ok(classes.includes("md:items-start")); }
     }
     const navigation = id === "DEV" ? "<DeveloperApiSectionTabs" : ["PHONE", "CHAT"].includes(id) ? "<AdminSettingsTabs" : "<AdminSectionNavigation";
     assert.ok(text.indexOf("data-admin-page-header") < text.indexOf(navigation));
@@ -44,7 +46,8 @@ for (const [id, path, maxWidth, description] of pages) {
     assert.ok(help);
     assert.ok(help.includes(`description={${description}}`));
     assert.equal(text.split(description).length - 1, 1);
-    assert.match(help, /label=\{t.admin.pageDescriptionLabel.replace\("\{title\}",/);
+    if (["PHONE", "CHAT"].includes(id)) assert.match(help, /label=\{control.copy.pageHelpLabel\}/);
+    else assert.match(help, /label=\{t.admin.pageDescriptionLabel.replace\("\{title\}",/);
     assert.doesNotMatch(text, /<h1/);
   });
 }
@@ -76,7 +79,7 @@ test("HELP-CONTENT: field guidance, role count, environment and security control
 
 test("RESPONSIVE: tooltip has bounded absolute layout, semantic colors and an unshrinking 44px trigger", () => {
   const help = source("app/components/admin/AdminPageTitleHelp.tsx");
-  for (const cls of ["relative flex w-fit max-w-full", "min-w-0 text-2xl font-bold", "h-11 w-11 shrink-0", "cursor-pointer", "absolute left-0 top-full", "max-w-[calc(100vw-2.5rem)]", "bg-fg", "text-surface", "focus-visible:outline-accent"]) {
+  for (const cls of ["relative min-w-0", "flex items-center gap-2", "min-w-0 text-2xl font-bold", "h-11 w-11 shrink-0", "cursor-pointer", "absolute left-0 top-full", "max-w-[calc(100vw-2.5rem)]", "bg-fg", "text-surface", "focus-visible:outline-accent"]) {
     assert.ok(help.includes(cls), cls);
   }
   assert.match(source("app/admin/roles/RolesView.tsx"), /relative max-w-full overflow-x-auto/);

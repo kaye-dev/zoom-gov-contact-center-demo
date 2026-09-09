@@ -1,3 +1,12 @@
+import { normalizeRequestHostname } from "./hostname";
+import {
+  DEFAULT_TENANT_KEY,
+  findTenantByProductionHostname,
+  getTenant,
+  resolveTenantFromHost,
+  type TenantKey,
+} from "./tenants";
+
 export const NOINDEX_ROBOTS_METADATA = {
   index: false,
   follow: false,
@@ -92,13 +101,69 @@ export function resolveCanonicalOrigin(
   return url.origin;
 }
 
+/**
+ * Resolves the canonical origin for one request. Each registered tenant domain
+ * is served by this same deployment and must advertise its own origin in
+ * robots.txt and sitemap.xml. Unregistered hosts (Vercel deployment URLs,
+ * tunnels, local development) keep the previous `APP_CANONICAL_ORIGIN`
+ * behavior.
+ */
+export function resolveRequestCanonicalOrigin(
+  host: string | null | undefined,
+  env: CanonicalOriginEnvironment = process.env,
+): string {
+  const hostname = normalizeRequestHostname(host);
+  const tenant =
+    hostname === null ? null : findTenantByProductionHostname(hostname);
+
+  if (tenant !== null) {
+    return `https://${tenant.productionHost}`;
+  }
+
+  return resolveCanonicalOrigin(env);
+}
+
+/** Builds the robots.txt payload for one request host. */
+export function buildRobotsForHost(
+  host: string | null | undefined,
+  env: CanonicalOriginEnvironment = process.env,
+): { rules: { userAgent: string; allow: string }; sitemap: string } {
+  const canonicalOrigin = resolveRequestCanonicalOrigin(host, env);
+
+  return {
+    rules: {
+      userAgent: "*",
+      allow: "/",
+    },
+    sitemap: `${canonicalOrigin}/sitemap.xml`,
+  };
+}
+
+/** 全テナント共通の固定公開パス。 */
 const FIXED_PUBLIC_PATHS = [
   "/",
   "/life",
-  "/life/emergency-safety-disaster/disaster-prevention-radio",
   "/life/frequently-asked-questions",
   "/news",
 ] as const;
+
+/** 大学テナント専用の公開情報アーキテクチャ。自治体の /life は混在させない。 */
+const UNIVERSITY_PUBLIC_PATHS = [
+  "/",
+  "/admissions",
+  "/academics",
+  "/campus-life",
+  "/scholarships",
+  "/careers",
+  "/faq",
+  "/news",
+  "/consultation",
+] as const;
+
+/** feature flagが立っているテナントだけが公開する固定パス。 */
+const FEATURE_PUBLIC_PATHS = {
+  disasterRadio: "/life/emergency-safety-disaster/disaster-prevention-radio",
+} as const;
 
 /** Encodes content slugs as literal URL path segments without URL reinterpretation. */
 export function buildSitemapPath(...segments: string[]): string {
@@ -124,30 +189,48 @@ export function buildSitemapPath(...segments: string[]): string {
     .join("/")}`;
 }
 
-/** Lists every canonical public HTML path from the same data used by pages. */
-export async function listPublicSitemapPaths(): Promise<string[]> {
-  const [siteContent, faqContent, docs] = await Promise.all([
+/** Lists every canonical public HTML path of one tenant, from the page data. */
+export async function listPublicSitemapPaths(
+  tenantKey: TenantKey = DEFAULT_TENANT_KEY,
+): Promise<string[]> {
+  const tenant = getTenant(tenantKey);
+  const docs = await import("../app/docs/_lib/docs");
+  const docsPaths = (await docs.listDocSlugs()).map((slug) =>
+    buildSitemapPath("docs", ...slug),
+  );
+
+  if (tenant.features.universityPortal) {
+    return [...new Set([...UNIVERSITY_PUBLIC_PATHS, ...docsPaths])].sort(
+      (left, right) => left.localeCompare(right, "en"),
+    );
+  }
+
+  const [siteContent, faqContent] = await Promise.all([
     import("../app/content/site-content"),
     import("./faq-content"),
-    import("../app/docs/_lib/docs"),
   ]);
 
-  const lifeCategoryPaths = siteContent.lifeCategories
+  const lifeCategories = siteContent.getLifeCategories(tenantKey);
+  const featurePaths = tenant.features.disasterRadio
+    ? [FEATURE_PUBLIC_PATHS.disasterRadio]
+    : [];
+
+  const lifeCategoryPaths = lifeCategories
     .filter((category) => category.id !== "faq")
     .map((category) => buildSitemapPath("life", category.slug));
-  const lifeTopicPaths = siteContent.lifeCategories.flatMap((category) =>
+  const lifeTopicPaths = lifeCategories.flatMap((category) =>
     category.topics.map(
       (topic) => buildSitemapPath("life", category.slug, topic.slug),
     ),
   );
-  const newsPaths = siteContent.newsArticles.map(
-    (article) => buildSitemapPath("news", article.slug),
-  );
-  const faqDepartmentPaths = faqContent.getFaqDepartmentStaticParams().map(
+  const newsPaths = siteContent
+    .getNewsArticles(tenantKey)
+    .map((article) => buildSitemapPath("news", article.slug));
+  const faqDepartmentPaths = faqContent.getFaqDepartmentStaticParams(tenantKey).map(
     ({ department }) =>
       buildSitemapPath("life", "frequently-asked-questions", department),
   );
-  const faqDetailPaths = faqContent.getFaqCategoryStaticParams().map(
+  const faqDetailPaths = faqContent.getFaqCategoryStaticParams(tenantKey).map(
     ({ department, faq }) =>
       buildSitemapPath(
         "life",
@@ -156,13 +239,10 @@ export async function listPublicSitemapPaths(): Promise<string[]> {
         faq,
       ),
   );
-  const docsPaths = (await docs.listDocSlugs()).map(
-    (slug) => buildSitemapPath("docs", ...slug),
-  );
-
   return [
     ...new Set([
       ...FIXED_PUBLIC_PATHS,
+      ...featurePaths,
       ...lifeCategoryPaths,
       ...lifeTopicPaths,
       ...newsPaths,
@@ -175,9 +255,12 @@ export async function listPublicSitemapPaths(): Promise<string[]> {
 
 export async function buildPublicSitemap(
   env: CanonicalOriginEnvironment = process.env,
+  host?: string | null,
 ): Promise<Array<{ url: string }>> {
-  const canonicalOrigin = resolveCanonicalOrigin(env);
-  const paths = await listPublicSitemapPaths();
+  const canonicalOrigin = resolveRequestCanonicalOrigin(host, env);
+  const paths = await listPublicSitemapPaths(
+    resolveTenantFromHost(host, env).key,
+  );
   const entries = paths.map((path) => ({
     url: new URL(path, canonicalOrigin).href,
   }));

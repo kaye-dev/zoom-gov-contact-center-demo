@@ -22,6 +22,7 @@ import {
   utcDateToCalendarDate,
   type ReservationServiceKey,
 } from "@/lib/reservations";
+import type { TenantKey } from "@/lib/tenants";
 
 export const RESERVATION_API_IDEMPOTENCY_RETENTION_MS = 24 * 60 * 60 * 1_000;
 
@@ -66,6 +67,7 @@ export function listPublicReservationServices(): ReservationServiceDto[] {
 
 export async function getPublicReservationAvailability(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   input: {
     serviceKey: ReservationServiceKey;
     dateFrom: string;
@@ -80,6 +82,7 @@ export async function getPublicReservationAvailability(
   }
   const bookings = await prisma.reservationBooking.findMany({
     where: {
+      siteKey: tenantKey,
       serviceKey: input.serviceKey,
       reservationDate: {
         gte: calendarDateToUtc(input.dateFrom),
@@ -128,11 +131,13 @@ export async function getPublicReservationAvailability(
 
 export async function listPublicReservations(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   apiKeyId: string,
   input: ReservationListInput,
 ) {
   const rows = await prisma.reservationBooking.findMany({
     where: {
+      siteKey: tenantKey,
       apiKeyId,
       isDemo: false,
       ...(input.serviceKey ? { serviceKey: input.serviceKey } : {}),
@@ -164,18 +169,20 @@ export async function listPublicReservations(
 
 export async function getPublicReservation(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   apiKeyId: string,
   id: string,
   callerAniDigest: ReservationCallerAniDigest,
 ) {
   const booking = await prisma.reservationBooking.findFirst({
-    where: { id, apiKeyId, callerAniDigest, isDemo: false },
+    where: { id, siteKey: tenantKey, apiKeyId, callerAniDigest, isDemo: false },
   });
   return booking ? toReservationDto(booking) : null;
 }
 
 export async function createPublicReservation(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   input: {
     apiKeyId: string;
     callerAniDigest: ReservationCallerAniDigest;
@@ -231,13 +238,15 @@ export async function createPublicReservation(
       );
       await assertExternalReferenceAvailable(
         transaction,
+        tenantKey,
         input.apiKeyId,
         input.reservation.externalReferenceId,
       );
-      await lockReservationTarget(transaction, input.reservation);
-      await assertCapacity(transaction, input.reservation, slot.capacity);
+      await lockReservationTarget(transaction, tenantKey, input.reservation);
+      await assertCapacity(transaction, tenantKey, input.reservation, slot.capacity);
       const booking = await transaction.reservationBooking.create({
         data: {
+          siteKey: tenantKey,
           serviceKey: input.reservation.serviceKey,
           reservationDate: calendarDateToUtc(input.reservation.reservationDate),
           startMinute: input.reservation.startMinute,
@@ -283,6 +292,7 @@ export async function createPublicReservation(
 
 export async function updatePublicReservation(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   input: {
     apiKeyId: string;
     callerAniDigest: ReservationCallerAniDigest;
@@ -300,6 +310,7 @@ export async function updatePublicReservation(
                "externalReferenceId", "callerAniDigest", "revision", "createdAt", "updatedAt"
         FROM "reservation_bookings"
         WHERE "id" = ${input.id}
+          AND "siteKey" = ${tenantKey}
           AND "isDemo" = false
           AND "apiKeyId" = ${input.apiKeyId}
           AND "callerAniDigest" = ${input.callerAniDigest}
@@ -327,12 +338,13 @@ export async function updatePublicReservation(
       );
       await assertExternalReferenceAvailable(
         transaction,
+        tenantKey,
         input.apiKeyId,
         merged.externalReferenceId,
         input.id,
       );
-      await lockReservationTarget(transaction, merged);
-      await assertCapacity(transaction, merged, slot.capacity, input.id);
+      await lockReservationTarget(transaction, tenantKey, merged);
+      await assertCapacity(transaction, tenantKey, merged, slot.capacity, input.id);
       return transaction.reservationBooking.update({
         where: { id: input.id },
         data: {
@@ -356,6 +368,7 @@ export async function updatePublicReservation(
 
 export async function deletePublicReservation(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   input: {
     apiKeyId: string;
     callerAniDigest: ReservationCallerAniDigest;
@@ -368,6 +381,7 @@ export async function deletePublicReservation(
       SELECT "revision"
       FROM "reservation_bookings"
       WHERE "id" = ${input.id}
+        AND "siteKey" = ${tenantKey}
         AND "isDemo" = false
         AND "apiKeyId" = ${input.apiKeyId}
         AND "callerAniDigest" = ${input.callerAniDigest}
@@ -419,20 +433,21 @@ async function lockIdempotencyKey(
 
 async function lockReservationTarget(
   transaction: Prisma.TransactionClient,
+  tenantKey: TenantKey,
   input: ReservationWriteInput,
 ) {
   const month = input.reservationDate.slice(0, 7);
   await transaction.$queryRaw(Prisma.sql`
     SELECT 1 AS "locked"
     FROM (
-      SELECT pg_advisory_xact_lock(hashtext(${`reservation-demo-fill:${month}`}))
+      SELECT pg_advisory_xact_lock(hashtext(${`reservation-demo-fill:${tenantKey}:${month}`}))
     ) AS "reservationMonthLock"
   `);
   await transaction.$queryRaw(Prisma.sql`
     SELECT 1 AS "locked"
     FROM (
       SELECT pg_advisory_xact_lock(
-        hashtext(${`reservation-slot:${input.serviceKey}:${input.reservationDate}:${input.startMinute}`})
+        hashtext(${`reservation-slot:${tenantKey}:${input.serviceKey}:${input.reservationDate}:${input.startMinute}`})
       )
     ) AS "reservationSlotLock"
   `);
@@ -455,12 +470,14 @@ async function lockExternalReference(
 
 async function assertExternalReferenceAvailable(
   transaction: Prisma.TransactionClient,
+  tenantKey: TenantKey,
   apiKeyId: string,
   externalReferenceId: string,
   excludeId?: string,
 ) {
   const existing = await transaction.reservationBooking.findFirst({
     where: {
+      siteKey: tenantKey,
       apiKeyId,
       externalReferenceId,
       ...(excludeId ? { id: { not: excludeId } } : {}),
@@ -474,12 +491,14 @@ async function assertExternalReferenceAvailable(
 
 async function assertCapacity(
   transaction: Prisma.TransactionClient,
+  tenantKey: TenantKey,
   input: ReservationWriteInput,
   capacity: number,
   excludeId?: string,
 ) {
   const count = await transaction.reservationBooking.count({
     where: {
+      siteKey: tenantKey,
       serviceKey: input.serviceKey,
       reservationDate: calendarDateToUtc(input.reservationDate),
       startMinute: input.startMinute,

@@ -3,40 +3,43 @@ import { cache } from "react";
 import type { ChatSettings } from "@/lib/chat-settings";
 import type { PrismaClient } from "@/lib/generated/prisma/client";
 
+import type { TenantKey } from "@/lib/tenants";
+
 import { withPrisma } from "./prisma";
 
-const SITE_CHAT_SETTING_ID = 1;
+export const getChatSettings = cache(
+  async (tenantKey: TenantKey): Promise<ChatSettings> => {
+    return withPrisma(async (prisma) => {
+      const setting = await prisma.siteChatSetting.findUnique({
+        where: { siteKey: tenantKey },
+        select: {
+          activeMode: true,
+          campaignWebTag: true,
+          campaignMemo: true,
+          contactCenterEntryIdWebTag: true,
+          contactCenterEntryIdMemo: true,
+        },
+      });
 
-export const getChatSettings = cache(async (): Promise<ChatSettings> => {
-  return withPrisma(async (prisma) => {
-    const setting = await prisma.siteChatSetting.findUnique({
-      where: { id: SITE_CHAT_SETTING_ID },
-      select: {
-        activeMode: true,
-        campaignWebTag: true,
-        campaignMemo: true,
-        contactCenterEntryIdWebTag: true,
-        contactCenterEntryIdMemo: true,
-      },
+      if (!setting) {
+        throw new Error("Site chat settings have not been initialized.");
+      }
+
+      return setting;
     });
-
-    if (!setting) {
-      throw new Error("Site chat settings have not been initialized.");
-    }
-
-    return setting;
-  });
-});
+  },
+);
 
 export async function saveChatSettings(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   settings: ChatSettings,
 ): Promise<void> {
   await prisma.$transaction(async (transaction) => {
     await transaction.siteChatSetting.upsert({
-      where: { id: SITE_CHAT_SETTING_ID },
+      where: { siteKey: tenantKey },
       create: {
-        id: SITE_CHAT_SETTING_ID,
+        siteKey: tenantKey,
         activeMode: settings.activeMode,
         campaignWebTag: settings.campaignWebTag,
         campaignMemo: settings.campaignMemo,

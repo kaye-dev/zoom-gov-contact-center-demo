@@ -7,7 +7,7 @@ import { PasswordInput } from "@/app/components/PasswordInput";
 
 import { useI18n } from "../i18n/LanguageProvider";
 
-export function ChangePasswordForm() {
+export function ChangePasswordForm({ callbackURL = "/admin" }: { callbackURL?: string }) {
   const { t } = useI18n();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +42,7 @@ export function ChangePasswordForm() {
     }
 
     setSuccess(true);
-    router.push("/admin");
+    router.push(callbackURL);
     router.refresh();
   };
 

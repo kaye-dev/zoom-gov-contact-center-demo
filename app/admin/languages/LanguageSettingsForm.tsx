@@ -1,4 +1,6 @@
 "use client";
+import { AdminTenantRouteSelect } from "@/app/components/admin/AdminTenantRouteSelect";
+import { adminFetch as fetch } from "@/lib/admin-fetch";
 
 import { settingsSectionClassName } from "@/app/components/admin/settings-form-styles";
 import { AdminPageTitleHelp } from "@/app/components/admin/AdminPageTitleHelp";
@@ -36,6 +38,7 @@ export function LanguageSettingsForm({
 }: LanguageSettingsFormProps) {
   const { t } = useI18n();
   const router = useRouter();
+  const [savedLocales, setSavedLocales] = useState(initialSettings.locales);
   const [locales, setLocales] = useState(initialSettings.locales);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -103,6 +106,7 @@ export function LanguageSettingsForm({
       }
 
       setLocales(body.settings.locales);
+      setSavedLocales(body.settings.locales);
       setFeedback({ kind: "success" });
       router.refresh();
     } catch {
@@ -117,13 +121,14 @@ export function LanguageSettingsForm({
       <div data-admin-page-chrome className="space-y-4">
         <div
           data-admin-page-header
-          className="ml-1 mr-0 max-w-3xl space-y-2"
+          className="ml-1 mr-0 flex max-w-3xl flex-col gap-4 md:flex-row md:items-center"
         >
           <AdminPageTitleHelp
             title={t.admin.languageManagement.title}
             description={t.admin.languageManagement.description}
             label={t.admin.pageDescriptionLabel.replace("{title}", t.admin.languageManagement.title)}
           />
+          <AdminTenantRouteSelect dirty={JSON.stringify(locales) !== JSON.stringify(savedLocales)} saving={isSubmitting} />
         </div>
         <AdminSectionNavigation />
       </div>

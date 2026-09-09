@@ -82,3 +82,5 @@
 ## リスク
 
 なし。
+
+<!-- UI検証: contract v2は画面別statesの和集合と各画面の全state×viewport×themeを宣言する。全stateの固定条件baselineと代表stateの全幅・明暗を選び、必要なrisk/anchor/groupを追加する。要件ごとに静的テスト・実操作・画像の対応を記録し、同条件assertionの和集合、実依存source impact、旧証跡の現在性を保持する。 -->

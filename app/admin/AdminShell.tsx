@@ -10,7 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { CloseIcon } from "@/app/components/svg/CloseIcon";
 import { LeftPanelCloseIcon } from "@/app/components/svg/LeftPanelCloseIcon";
@@ -34,6 +34,8 @@ type AdminShellProps = {
   children: ReactNode;
   visibleItems: AdminNavigationItemKey[];
   currentUserName: string;
+  allowSettingsReview?: boolean;
+  outreach?: { allowedTenants: ("lg" | "univ")[]; hostTenant: "lg" | "univ" };
 };
 
 type AdminNavigationContextValue = {
@@ -68,13 +70,19 @@ export function AdminShell({
   children,
   visibleItems,
   currentUserName,
+  allowSettingsReview = false,
+  outreach,
 }: AdminShellProps) {
   const { t } = useI18n();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const reviewState = searchParams?.get("state");
+  const selectedTenant = searchParams?.get("tenant") ?? null;
+  const settingsReview = allowSettingsReview && ["/admin/phone-settings", "/admin/chat-settings", "/admin/online-consultation-settings"].includes(pathname);
   const router = useRouter();
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(!(settingsReview && reviewState === "collapsed"));
+  const [isDrawerOpen, setIsDrawerOpen] = useState(settingsReview && reviewState === "menu");
   const [accountMenuSurface, setAccountMenuSurface] = useState<
     "desktop" | "drawer" | null
   >(null);
@@ -86,8 +94,8 @@ export function AdminShell({
   const previousPathnameRef = useRef(pathname);
 
   const model = useMemo(
-    () => buildAdminNavigation(visibleItems, t),
-    [t, visibleItems],
+    () => buildAdminNavigation(visibleItems, t, outreach ? { ...outreach, selectedTenant } : undefined),
+    [t, visibleItems, outreach, selectedTenant],
   );
   const navigationState = useMemo(
     () => resolveAdminNavigationState(pathname),
@@ -231,7 +239,7 @@ export function AdminShell({
     if (isSigningOut) return;
     setIsSigningOut(true);
     await authClient.signOut();
-    router.push("/login");
+    window.location.replace("/admin/login");
     router.refresh();
   };
 
@@ -295,7 +303,7 @@ export function AdminShell({
                   isSidebarExpanded ? "max-h-9" : "max-h-0"
                 } ${sidebarLabelClassName}`}
               >
-                {t.cityName}
+                {t.admin.title}
               </span>
             </div>
             <AdminNavigation
@@ -315,7 +323,7 @@ export function AdminShell({
 
           <div className="min-w-0">
             <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-line bg-surface-raised px-4 lg:hidden">
-              <span className="font-bold">{t.cityName}</span>
+              <span className="font-bold">{t.admin.title}</span>
               <button
                 ref={drawerTriggerRef}
                 id="admin-menu-button"
@@ -330,6 +338,7 @@ export function AdminShell({
               </button>
             </header>
             <main className="w-full px-4 py-8 md:px-6 lg:pb-8 lg:pt-5">
+              {(pathname === "/admin" || /^\/admin\/(?:users|roles)(?:\/|$)/u.test(pathname)) && <p className="mb-4 text-sm text-fg-muted">{t.outreachCommon.allIndustries}</p>}
               {children}
             </main>
           </div>
@@ -359,7 +368,7 @@ export function AdminShell({
                 data-admin-identity
                 className="flex h-16 shrink-0 items-center justify-between px-4"
               >
-                <span className="font-bold">{t.cityName}</span>
+                <span className="font-bold">{t.admin.title}</span>
                 <button
                   ref={drawerCloseButtonRef}
                   type="button"

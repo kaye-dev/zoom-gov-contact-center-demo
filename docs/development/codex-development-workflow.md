@@ -22,7 +22,7 @@ plans/<slug>/
 
 ## モデル選択
 
-親エージェントのproject-local既定モデルは設けない。通常処理と各skillの親エージェントは、Codexのcomposerでユーザーが選択したモデルとreasoningを維持する。品質と利用量のバランスを考える際は、次の組み合わせを参考に手動選択する。
+親エージェントのproject-local既定は`gpt-6-astra / low`とし、`.codex/config.toml`で管理する。通常処理と各skillの親エージェントは、Codexのcomposerでユーザーが選択したモデルとreasoningを維持する。品質と利用量のバランスを考える際は、次の組み合わせを参考に手動選択する。
 
 | skill | 推奨モデル | reasoning |
 | --- | --- | --- |

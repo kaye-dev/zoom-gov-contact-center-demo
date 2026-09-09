@@ -6,6 +6,7 @@ export type AdminNavigationItemKey =
   | "password-reset-requests"
   | "phone-settings"
   | "chat-settings"
+  | "online-consultation-settings"
   | "language-settings"
   | "maintenance-settings"
   | "developer-api"
@@ -18,6 +19,7 @@ export type AdminPrimaryNavigationKey =
   | "users"
   | "phone-settings"
   | "chat-settings"
+  | "online-consultation-settings"
   | "settings"
   | "roles"
   | "developer-api"
@@ -49,13 +51,22 @@ export type AdminNavigationState = {
   sectionItemKey: AdminNavigationItemKey | null;
 };
 
-const userPaths: Record<Extract<AdminNavigationItemKey, "users" | "new-user" | "password-reset-requests">, string> = {
+const userPaths: Record<
+  Extract<
+    AdminNavigationItemKey,
+    "users" | "new-user" | "password-reset-requests"
+  >,
+  string
+> = {
   users: "/admin/users",
   "new-user": "/admin/users/new",
   "password-reset-requests": "/admin/password-reset-requests",
 };
 
-const settingsPaths: Record<Extract<AdminNavigationItemKey, "language-settings" | "maintenance-settings">, string> = {
+const settingsPaths: Record<
+  Extract<AdminNavigationItemKey, "language-settings" | "maintenance-settings">,
+  string
+> = {
   "language-settings": "/admin/languages",
   "maintenance-settings": "/admin/maintenance-settings",
 };
@@ -63,33 +74,34 @@ const settingsPaths: Record<Extract<AdminNavigationItemKey, "language-settings" 
 export function buildAdminNavigation(
   visibleItems: AdminNavigationItemKey[],
   t: Dictionary,
+  outreach?: { allowedTenants: readonly string[]; hostTenant: string; selectedTenant: string | null },
 ): AdminNavigationModel {
   const visible = new Set(visibleItems);
-  const users = ([
-    { key: "users", href: userPaths.users, label: t.admin.users },
-    { key: "new-user", href: userPaths["new-user"], label: t.admin.newUser },
-    {
-      key: "password-reset-requests",
-      href: userPaths["password-reset-requests"],
-      label: t.admin.passwordResets,
-    },
-  ] satisfies AdminSectionNavigationItem[]).filter((item) =>
-    visible.has(item.key),
-  );
-  const settings = ([
-    {
-      key: "language-settings",
-      href: settingsPaths["language-settings"],
-      label: t.admin.languageSettings,
-    },
-    {
-      key: "maintenance-settings",
-      href: settingsPaths["maintenance-settings"],
-      label: t.admin.maintenanceSettings,
-    },
-  ] satisfies AdminSectionNavigationItem[]).filter((item) =>
-    visible.has(item.key),
-  );
+  const users = (
+    [
+      { key: "users", href: userPaths.users, label: t.admin.users },
+      { key: "new-user", href: userPaths["new-user"], label: t.admin.newUser },
+      {
+        key: "password-reset-requests",
+        href: userPaths["password-reset-requests"],
+        label: t.admin.passwordResets,
+      },
+    ] satisfies AdminSectionNavigationItem[]
+  ).filter((item) => visible.has(item.key));
+  const settings = (
+    [
+      {
+        key: "language-settings",
+        href: settingsPaths["language-settings"],
+        label: t.admin.languageSettings,
+      },
+      {
+        key: "maintenance-settings",
+        href: settingsPaths["maintenance-settings"],
+        label: t.admin.maintenanceSettings,
+      },
+    ] satisfies AdminSectionNavigationItem[]
+  ).filter((item) => visible.has(item.key));
 
   const primaryItems: AdminPrimaryNavigationItem[] = [
     {
@@ -106,12 +118,8 @@ export function buildAdminNavigation(
       label: t.admin.reservations,
     });
   }
-  if (visible.has("zaad")) {
-    primaryItems.push({
-      key: "zaad",
-      href: "/admin/zaad",
-      label: t.admin.zaad.navLabel,
-    });
+  if (visible.has("zaad") && (!outreach || outreach.allowedTenants.length)) {
+    primaryItems.push({ key: "zaad", href: "/admin/zaad", label: t.admin.zaad.navLabel });
   }
   if (users[0]) {
     primaryItems.push({
@@ -121,16 +129,39 @@ export function buildAdminNavigation(
     });
   }
   if (visible.has("roles")) {
-    primaryItems.push({ key: "roles", href: "/admin/roles", label: t.admin.accessControl.rolesNav });
+    primaryItems.push({
+      key: "roles",
+      href: "/admin/roles",
+      label: t.admin.accessControl.rolesNav,
+    });
   }
   if (visible.has("phone-settings")) {
-    primaryItems.push({ key: "phone-settings", href: "/admin/phone-settings", label: t.admin.phoneSettings });
+    primaryItems.push({
+      key: "phone-settings",
+      href: "/admin/phone-settings",
+      label: t.admin.phoneSettings,
+    });
   }
   if (visible.has("chat-settings")) {
-    primaryItems.push({ key: "chat-settings", href: "/admin/chat-settings", label: t.admin.chatSettings });
+    primaryItems.push({
+      key: "chat-settings",
+      href: "/admin/chat-settings",
+      label: t.admin.chatSettings,
+    });
+  }
+  if (visible.has("online-consultation-settings")) {
+    primaryItems.push({
+      key: "online-consultation-settings",
+      href: "/admin/online-consultation-settings",
+      label: t.admin.onlineConsultation,
+    });
   }
   if (visible.has("developer-api")) {
-    primaryItems.push({ key: "developer-api", href: "/admin/developer-api", label: t.admin.developerApi });
+    primaryItems.push({
+      key: "developer-api",
+      href: "/admin/developer-api",
+      label: t.admin.developerApi,
+    });
   }
   if (settings[0]) {
     primaryItems.push({
@@ -138,6 +169,15 @@ export function buildAdminNavigation(
       href: settings[0].href,
       label: t.admin.navigation.settingsSection,
     });
+  }
+
+  const tenant = outreach?.selectedTenant;
+  if (tenant === "lg" || tenant === "univ") {
+    for (const item of [...primaryItems, ...users, ...settings]) {
+      const url = new URL(item.href, "http://localhost:3000");
+      url.searchParams.set("tenant", tenant);
+      item.href = url.pathname + url.search;
+    }
   }
 
   return {
@@ -169,7 +209,10 @@ export function resolveAdminNavigationState(
       sectionItemKey: "password-reset-requests",
     };
   }
-  if (pathname === userPaths.users || pathname.startsWith(`${userPaths.users}/`)) {
+  if (
+    pathname === userPaths.users ||
+    pathname.startsWith(`${userPaths.users}/`)
+  ) {
     return {
       primaryKey: "users",
       sectionKey: "users",
@@ -180,15 +223,36 @@ export function resolveAdminNavigationState(
     return { primaryKey: "roles", sectionKey: null, sectionItemKey: null };
   }
   if (pathname === "/admin/developer-api") {
-    return { primaryKey: "developer-api", sectionKey: null, sectionItemKey: null };
+    return {
+      primaryKey: "developer-api",
+      sectionKey: null,
+      sectionItemKey: null,
+    };
   }
   if (pathname === "/admin/phone-settings") {
-    return { primaryKey: "phone-settings", sectionKey: null, sectionItemKey: null };
+    return {
+      primaryKey: "phone-settings",
+      sectionKey: null,
+      sectionItemKey: null,
+    };
   }
   if (pathname === "/admin/chat-settings") {
-    return { primaryKey: "chat-settings", sectionKey: null, sectionItemKey: null };
+    return {
+      primaryKey: "chat-settings",
+      sectionKey: null,
+      sectionItemKey: null,
+    };
   }
-  const setting = Object.entries(settingsPaths).find(([, href]) => pathname === href);
+  if (pathname === "/admin/online-consultation-settings") {
+    return {
+      primaryKey: "online-consultation-settings",
+      sectionKey: null,
+      sectionItemKey: null,
+    };
+  }
+  const setting = Object.entries(settingsPaths).find(
+    ([, href]) => pathname === href,
+  );
   if (setting) {
     return {
       primaryKey: "settings",
@@ -197,7 +261,11 @@ export function resolveAdminNavigationState(
     };
   }
   if (pathname.startsWith("/admin/reservations")) {
-    return { primaryKey: "reservations", sectionKey: null, sectionItemKey: null };
+    return {
+      primaryKey: "reservations",
+      sectionKey: null,
+      sectionItemKey: null,
+    };
   }
   if (pathname.startsWith("/admin/zaad")) {
     return { primaryKey: "zaad", sectionKey: null, sectionItemKey: null };

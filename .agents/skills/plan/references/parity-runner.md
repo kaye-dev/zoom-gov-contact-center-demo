@@ -4,7 +4,7 @@ Use this reference when authoring UI plans, running normal UI `$implement` final
 
 ## Contract, profile, and coverage
 
-`ui-contract.json` owns the complete target × state × viewport × theme Cartesian matrix and immutable row IDs. The profile selects rows from that matrix; it never defines a second UI truth.
+`ui-contract.json` version 2 owns the complete feasible union of each target’s `states` × viewport × theme matrix and immutable row IDs. Each target declares its non-empty `states`; `baselineStateInventory` is exactly their union. Version 1 remains compatible with its original global-state product. A state that renders another screen’s default is not a separate business condition. Merge identical conditions only after preserving the union of probe definitions, comparisons, invariants, requirement references, and unresolved failures. The profile selects rows from that matrix; it never defines a second UI truth.
 
 Version 4 `parity-spec.json` retains the following coverage fields and adds `fidelity` defined in [fidelity-audit.md](fidelity-audit.md):
 
@@ -14,15 +14,25 @@ Version 4 `parity-spec.json` retains the following coverage fields and adds `fid
 
 Baseline comparison maps contract semantics without changing the `rowProbeMap` schema: every ID in a row's `expectedInvariantIds` has a same-ID required `equal` probe in that row's `probeIds`, and every ID in `intentionalDifferenceIds` has a same-ID required `different` probe there. Probe IDs are globally unique, so one arbitrary probe cannot stand in for multiple contract IDs. Missing, optional, wrong-mode, or row-unmapped same-ID probes fail static validation. Versions 1 and 2 retain their historical validation behavior.
 
-Every `stateSetups` entry covers one target/state pair on production and prototype and names one or more required coverage `assertionProbeIds`. Surface setup permits bounded string query fixtures and allowlisted `click`, `press`, `focus`, `fill`, `waitForVisible`, and `waitForHidden` actions. It rejects JavaScript, external URLs, credentials, cookies, token-like names, real email/phone data, and unbounded free text.
+Every `stateSetups` entry covers one target/state pair on production and prototype and names one or more required coverage `assertionProbeIds`. Surface setup permits bounded string query fixtures and allowlisted `click`, `press`, `focus`, `fill`, `selectOption`, `upload`, `waitForVisible`, and `waitForHidden` actions. It rejects JavaScript, external URLs, credentials, cookies, token-like names, real email/phone data, and unbounded free text.
 
-`browserSetups` covers every comparison target exactly once. A surface uses one of:
+A surface setup may declare `teardownActions` using the same action allowlist. The runner executes these real UI actions on that surface before its next navigation and at final cleanup. Declare cancel/discard actions for dirty forms; do not suppress unload guards or change application data to permit navigation. Teardown failure fails the run, while environment cleanup still runs.
+
+`selectOption` uses `{type, selector, value}` for a bounded synthetic option value. It calls the Browser native selection API on exactly one element; unavailable support or an ambiguous selector fails. Do not replace selection with DOM assignments or assume keyboard navigation selected the requested value.
+
+`dblclick` uses `{type, selector}` and the Browser native double-click API on exactly one element. Use it to verify repeated-input protection; two sequential awaited clicks do not establish the same timing. Unavailable native support fails without a synthetic event fallback. A seeded in-progress record verifies state rendering only, not that an execution request was sent or accepted.
+
+`upload` uses `{type, selector, file, sha256}` with an approved synthetic fixture, a relative file path, and its `sha256:` digest. Supply `fixtureReader: createParityFixtureReader(checkoutRoot)` to the in-app Browser adapter; import the reader factory from `parity-file-fixtures.mjs` with an absolute owning-checkout root. Filesystem access stays outside the platform-neutral Browser adapter. The adapter checks real-path containment, file size (at most 2 MiB, including oversized-input test fixtures), and the digest before opening the Browser file chooser; it starts `waitForEvent("filechooser")` before clicking, calls `chooser.setFiles`, and checks for file drift afterward. Missing fixtures, symlinks outside the root, content changes, and unavailable chooser support fail the action. Do not upload repository credentials or real personal data. Keep fixture hashes in the profile and classify fixture sources in the impact map; a URL query or an injected DOM file value is not an upload assertion.
+
+`browserSetups` covers every comparison target exactly once. Each target may declare `productionHost` beside `targetId`, `production`, and `prototype`. It accepts only `localhost` or a single-label tenant `.localhost` hostname, without a scheme, port, path, or credentials. Omission preserves the run's production base origin. The runner replaces only the hostname, preserving the ownership-verified run port. Declare the actual public tenant host for Host-routed pages and `localhost` for canonical admin pages; query fixtures do not replace Host routing. Coverage and ordinary runtime actions use the same resolved origin. Per-batch observed surface contexts bind session, owned tab, surface, origin, and authorization; evidence readers validate each row against its target host and merge observed origins across batches. Cleanup still covers each of the two owned tabs exactly once.
+
+A surface uses one of:
 
 - `query`: append the row theme to a safe reviewer-only parameter;
 - `aria-switch`: reconcile `aria-checked`, root class, and `color-scheme`;
 - `fixed`: only when every row for that target has the declared theme.
 
-The normal `coverage` selection is deterministic. For each target it cycles the declared state, viewport, and theme order for `max(state count, viewport count, theme count)` rows, then adds declared risk and anchor coordinates only when they are not already selected. Static validation requires every target-state, target-viewport, and target-theme pair, no unassigned values, no duplicate coordinate, and stable row IDs/order. The current reference fixture is 18 targets × 5 states × 8 viewports × 2 themes: 144 coverage rows and 1,440 full rows.
+The normal `coverage` selection is deterministic. Contract v2 checks every state at the first viewport/theme and the first state at every viewport/theme; contract v1 retains its cycle for `max(state count, viewport count, theme count)` rows. Both add declared risk, anchor, and fidelity coordinates without duplicate rows. Static validation requires every target-state, target-viewport, and target-theme pair, no unassigned values, no duplicate coordinate, and stable row IDs/order. The current reference fixture is 18 targets × 5 states × 8 viewports × 2 themes: 144 coverage rows and 1,440 full rows.
 
 Each risk row declares `id`, `targetId`, `state`, `viewport`, `theme`, `interaction`, `reason`, `requiredProbeIds`, and `expected`. Each anchor declares `id`, `targetId`, `rowId`, and `reason`; every target has at least one anchor, and the row maps an anchor probe. A risk coordinate already in the covering matrix is annotated rather than duplicated.
 
@@ -64,12 +74,10 @@ For normal UI `$implement` or an independently requested parity task, prepare on
 Local uses `http://localhost:3000` or an ownership-verified single-label tenant origin such as `http://univ.localhost:3000`; worktrees use the ownership-verified allocated port within the [Browser operating range](../../../../docs/development/development-ports.md#利用範囲と割り当て). Obtain owner, process/container, mount, health, and `PRODUCTION_URL` from one completed `./dev-compose.sh ensure`; do not wrap it in status polling, fixed sleep, or follow-log commands. Matching CLI arguments do not prove ownership. Check both surface URLs against that range before Browser use; stop if either is outside it. The linked document also defines artifact reuse, release, migration, data preservation, rollback, and evidence handling.
 
 ```sh
-node .agents/skills/plan/scripts/parity-runner.mjs prepare-run plans/<slug>/prototype \
-  --run-id <run-id> \
+node .agents/skills/plan/scripts/parity-runner.mjs prepare-run plans/<slug>/prototype --run-id <run-id> \
   --production-url <verified-loopback-url> \
   --prototype-url <verified-loopback-url> \
-  --runtime-owner <verified-owner> \
-  --runtime-checkout <verified-checkout> \
+  --runtime-owner <verified-owner> --runtime-checkout <verified-checkout> \
   --matrix-scope coverage
 ```
 
@@ -79,26 +87,25 @@ The common `executeBrowserBatch({ repositoryRootPath, runId, runner, tabs })` ex
 
 ```sh
 node .agents/skills/plan/scripts/parity-runner.mjs next-batch plans/<slug>/prototype --run-id <run-id>
-node .agents/skills/plan/scripts/parity-runner.mjs record-batch plans/<slug>/prototype \
-  --run-id <run-id> --batch-id <batch-id>
+node .agents/skills/plan/scripts/parity-runner.mjs record-batch plans/<slug>/prototype --run-id <run-id> --batch-id <batch-id>
 node .agents/skills/plan/scripts/parity-runner.mjs resume-run plans/<slug>/prototype --run-id <run-id>
 ```
 
 Record tool failure without raw output:
 
 ```sh
-node .agents/skills/plan/scripts/parity-runner.mjs record-failure plans/<slug>/prototype \
-  --run-id <run-id> --batch-id <batch-id> \
+node .agents/skills/plan/scripts/parity-runner.mjs record-failure plans/<slug>/prototype --run-id <run-id> --batch-id <batch-id> \
   --failure-code <stable-code> --diagnostic <bounded-text> --transient true
 ```
 
 A transient failure may retry the same batch once. The second failure is terminal. Required-probe failures are terminal immediately. There is no run-wide time cutoff. Never restart passed rows, rebuild the run with changing batch sizes, switch Browser, or rerun test/build solely because Browser failed.
 
+Before a terminal recovery, read [Browser recovery](browser-recovery.md); its one-retry, canary, cleanup, and provenance requirements are mandatory.
+
 After implementation fixes, invalidate by exact impact and resume:
 
 ```sh
-node .agents/skills/plan/scripts/parity-runner.mjs invalidate-run plans/<slug>/prototype \
-  --run-id <run-id> --invalidation-scope target --target <target-id>
+node .agents/skills/plan/scripts/parity-runner.mjs invalidate-run plans/<slug>/prototype --run-id <run-id> --invalidation-scope target --target <target-id>
 node .agents/skills/plan/scripts/parity-runner.mjs invalidate-run plans/<slug>/prototype \
   --run-id <run-id> --invalidation-scope shared --source <production-source>
 node .agents/skills/plan/scripts/parity-runner.mjs invalidate-run plans/<slug>/prototype \
@@ -116,8 +123,7 @@ Immediately before finalization, perform the one permitted runtime drift readbac
 ```sh
 node .agents/skills/plan/scripts/parity-runner.mjs finalize-run plans/<slug>/prototype \
   --run-id <run-id> \
-  --runtime-owner <verified-owner> \
-  --runtime-checkout <verified-checkout>
+  --runtime-owner <verified-owner> --runtime-checkout <verified-checkout>
 ```
 
 Finalization first requires a bound `record-audit` input and all fidelity gates to pass, then requires all batches and probes to pass, validates fragment/artifact digests, promotes artifacts to `plans/<slug>/evidence/<run-id>/artifacts/`, removes the workspace, reads back its absence, and exclusively writes schema-version-5 `implementation-parity.json`. Failed runs retain the workspace when policy allows; remove only that run with `cleanup-run` or `abort-run`.

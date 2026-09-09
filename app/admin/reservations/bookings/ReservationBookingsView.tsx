@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { TenantKey } from "@/lib/tenants";
 
 import { Select } from "@/app/components/Select";
 import { ChevronLeftIcon } from "@/app/components/svg/ChevronLeftIcon";
@@ -25,10 +26,12 @@ type ReservationBookingFilters = {
 };
 
 export function ReservationBookingsView({
+  tenantKey,
   bookings,
   nextCursor,
   filters,
 }: {
+  tenantKey: TenantKey;
   bookings: ReservationBookingListSummary[];
   nextCursor: string | null;
   filters: ReservationBookingFilters;
@@ -43,7 +46,7 @@ export function ReservationBookingsView({
       <div className="max-w-3xl space-y-2">
         <Link
           id="back-to-reservation-system"
-          href="/admin/reservations"
+          href={`/admin/reservations?tenant=${tenantKey}`}
           className="inline-flex items-center gap-1 text-sm font-semibold text-accent hover:underline"
         >
           <ChevronLeftIcon className="h-5 w-5" />
@@ -66,6 +69,7 @@ export function ReservationBookingsView({
           action={RESERVATION_BOOKINGS_ROUTE}
           className="grid gap-3 md:grid-cols-[minmax(14rem,1fr)_minmax(14rem,1fr)_auto] md:items-end"
         >
+          <input type="hidden" name="tenant" value={tenantKey} />
           <label className="block space-y-2">
             <span className="block text-sm font-semibold">{copy.filter.service}</span>
             <Select id="booking-service-filter" name="service" defaultValue={filters.service}>
@@ -180,7 +184,7 @@ export function ReservationBookingsView({
         >
           {nextCursor ? (
             <Link
-              href={buildReservationBookingListNextHref(filters, nextCursor)}
+              href={buildReservationBookingListNextHref(filters, nextCursor, tenantKey)}
               className="rounded-md border border-line px-4 py-2 text-sm font-semibold transition-colors hover:bg-surface-hover"
             >
               {copy.list.next}
@@ -199,8 +203,9 @@ export function ReservationBookingsView({
 export function buildReservationBookingListNextHref(
   filters: ReservationBookingFilters,
   cursor: string,
+  tenantKey: TenantKey,
 ) {
-  const params = new URLSearchParams();
+  const params = new URLSearchParams({ tenant: tenantKey });
   if (filters.service) params.set("service", filters.service);
   if (filters.source) params.set("source", filters.source);
   params.set("cursor", cursor);

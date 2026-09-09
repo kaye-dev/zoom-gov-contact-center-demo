@@ -9,7 +9,8 @@ import {
   parseAdminUserPasswordReset,
   parseAdminUserUpdate,
 } from "../lib/admin-users";
-import { dictionaries, locales } from "../app/i18n/dictionaries";
+import { locales } from "../app/i18n/dictionaries";
+import { defaultTenantDictionaries as dictionaries } from "../app/i18n/build-dictionary";
 
 test("admin user updates accept exactly one supported normalized field", () => {
   assert.deepEqual(parseAdminUserUpdate({ field: "name", value: "  City Admin  " }), {

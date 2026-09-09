@@ -1,4 +1,5 @@
 "use client";
+import { adminFetch as fetch } from "@/lib/admin-fetch";
 
 import { settingsInputFocusClassName } from "@/app/components/admin/settings-form-styles";
 import { useState } from "react";

@@ -381,6 +381,34 @@ test("parity-specは全target/state・row・probeを厳密に検証する", asyn
     value: "ZAAD_fixture_01",
   } as never);
   assert.equal(validateParitySpec(safeFill, contract), safeFill);
+  const safeTeardown = clone(spec);
+  Object.assign(safeTeardown.stateSetups[0].production, { teardownActions: [{ type: "click", selector: "#discard" }] });
+  assert.equal(validateParitySpec(safeTeardown, contract), safeTeardown);
+  const unsafeTeardown = clone(spec);
+  Object.assign(unsafeTeardown.stateSetups[0].production, { teardownActions: [{ type: "evaluate", value: "unsafe" }] });
+  assert.throws(() => validateParitySpec(unsafeTeardown, contract), /not allowed/u);
+  const safeSelection = clone(spec);
+  safeSelection.stateSetups[0].production.actions.push({ type: "selectOption", selector: "select", value: "FLOW" } as never);
+  assert.equal(validateParitySpec(safeSelection, contract), safeSelection);
+  const doubleClick = clone(spec);
+  doubleClick.stateSetups[0].production.actions.push({ type: "dblclick", selector: "button" } as never);
+  assert.equal(validateParitySpec(doubleClick, contract), doubleClick);
+  Object.assign(doubleClick.stateSetups[0].production.actions.at(-1)!, { value: "unsafe" });
+  assert.throws(() => validateParitySpec(doubleClick, contract), /must contain exactly: selector, type/u);
+  const invalidSelection = clone(safeSelection);
+  (invalidSelection.stateSetups[0].production.actions.at(-1) as unknown as { value: string }).value = "https://example.invalid";
+  assert.throws(() => validateParitySpec(invalidSelection, contract), /synthetic fixture token/u);
+  const upload = clone(spec);
+  upload.stateSetups[0].production.actions.push({ type: "upload", selector: "input[type=file]", file: "fixtures/preview.csv", sha256: `sha256:${"a".repeat(64)}` } as never);
+  assert.equal(validateParitySpec(upload, contract), upload);
+  for (const file of ["../outside.csv", "/tmp/input.csv", ".env", "fixtures/../../secret.csv", "https://example.invalid/file.csv"]) {
+    const invalidUpload = clone(upload);
+    (invalidUpload.stateSetups[0].production.actions.at(-1) as unknown as { file: string }).file = file;
+    assert.throws(() => validateParitySpec(invalidUpload, contract), /relative fixture path/u);
+  }
+  const changedUpload = clone(upload);
+  (changedUpload.stateSetups[0].production.actions.at(-1) as unknown as { sha256: string }).sha256 = "unbound";
+  assert.throws(() => validateParitySpec(changedUpload, contract), /approved fixture bytes/u);
   for (const value of [
     "",
     "山田花子",

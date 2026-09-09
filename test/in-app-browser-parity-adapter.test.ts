@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
@@ -625,6 +626,55 @@ test("IAB-01b production/prototypeを別tab contextでnavigate・cache・cleanup
   );
 });
 
+test("IAB-01b independent tab DPR canaries survive shared viewport and adapter reuse", async () => {
+  const { createInAppBrowserParityAdapter } = await adapterModulePromise;
+  const { BrowserParityRunner } = await coreModulePromise;
+  const production = createFakeBrowser();
+  const prototype = createFakeBrowser();
+  prototype.tab.id = "prototype";
+  production.state.width = 632;
+  production.state.height = 863;
+  // Browser dimensions are shared; CDP deviceScaleFactor belongs to each tab.
+  production.viewport.set = async (value) => {
+    for (const fixture of [production, prototype]) {
+      fixture.state.width = value.width;
+      fixture.state.height = value.height;
+    }
+  };
+  production.viewport.reset = async () => {
+    for (const fixture of [production, prototype]) {
+      fixture.state.width = fixture === production ? 632 : 1280;
+      fixture.state.height = fixture === production ? 863 : 720;
+    }
+  };
+  const adapter = createInAppBrowserParityAdapter({ browser: production.browser,
+    tabs: { production: production.tab, prototype: prototype.tab } });
+  for (let run = 0; run < 2; run += 1) {
+    for (const [fixture, url] of [
+      [production, "http://localhost:3002/fixture"],
+      [prototype, "http://127.0.0.1:4002/prototype"],
+    ] as const) {
+      const result = await new BrowserParityRunner(adapter).capabilityCanary({
+        tabId: fixture.tab.id, url, viewport: { width: 390, height: 844 },
+        dpr: 1, requiresNetwork: false,
+      });
+      assert.equal(result.status, "pass");
+      assert.equal(fixture.state.dpr, 1);
+    }
+    // Once configured, a real loss of DPR must still fail navigation.
+    prototype.state.dpr = 2;
+    await assert.rejects(adapter.navigate("prototype", "http://127.0.0.1:4002/next"),
+      (error: unknown) => assertSanitizedParityError(error, "PARITY_DPR_MISMATCH"));
+    const cleanup = await adapter.cleanup();
+    assert.equal(cleanup.status, "pass");
+    assert.deepEqual(cleanup.tabs.map((tab: { baseline: unknown }) => tab.baseline), [
+      { width: 632, height: 863, dpr: 2 }, { width: 1280, height: 720, dpr: 2 },
+    ]);
+    assert.equal(production.state.dpr, 2);
+    assert.equal(prototype.state.dpr, 2);
+  }
+});
+
 test("IAB-01c parallel Browser sessionのcleanupは他sessionを変更しない", async () => {
   const { createInAppBrowserParityAdapter } = await adapterModulePromise;
   const first = createFakeBrowser();
@@ -1248,6 +1298,59 @@ test("IAB-04 contextual theme setup and readback", async () => {
     }),
     (error: unknown) => (error as { code?: string }).code === "PARITY_THEME_SETUP_FAILED",
   );
+});
+
+test("IAB-05 visible waits allow a response to mount the element before checking uniqueness", async () => {
+  const { createInAppBrowserParityAdapter } = await adapterModulePromise;
+  const fixture = createFakeBrowser();
+  const originalLocator = fixture.tab.playwright.locator.bind(fixture.tab.playwright);
+  let waited = false;
+  fixture.tab.playwright.locator = (selector: string) => {
+    const locator = originalLocator(selector);
+    if (selector !== "#async-result") return locator;
+    return {
+      ...locator,
+      async count() { return fixture.state.elements.get(selector)?.count ?? 0; },
+      async waitFor(options: { state: string }) {
+        assert.equal(options.state, "visible");
+        assert.equal(fixture.state.elements.has(selector), false);
+        waited = true;
+        fixture.state.elements.set(selector, { count: 1, visible: true });
+      },
+    };
+  };
+  const adapter = createInAppBrowserParityAdapter({ browser: fixture.browser, tab: fixture.tab });
+  await adapter.runAction("comparison", { type: "waitForVisible", selector: "#async-result" });
+  assert.equal(waited, true);
+  await assert.rejects(adapter.runAction("comparison", { type: "waitForVisible", selector: "#multiple" }));
+});
+
+test("IAB-UPLOAD binds approved bytes and listens before clicking; drift and escaped files cannot open a chooser", async () => {
+  const { createInAppBrowserParityAdapter } = await adapterModulePromise;
+  const { sha256Digest } = await coreModulePromise;
+  const { createParityFixtureReader } = await import("../.agents/skills/plan/scripts/parity-file-fixtures.mjs");
+  const temporary = await mkdtemp(path.join(tmpdir(), "parity-upload-")), root = path.join(temporary, "fixtures");
+  await mkdir(root);
+  try {
+    const bytes = new TextEncoder().encode("name,phone\nFixture,09000000001\n");
+    await writeFile(path.join(root, "upload.csv"), bytes);
+    const fixture = createFakeBrowser(), calls: string[] = [];
+    const originalLocator = fixture.tab.playwright.locator.bind(fixture.tab.playwright);
+    fixture.tab.playwright.locator = (selector: string) => ({ ...originalLocator(selector), async click() { calls.push("click"); } });
+    Object.assign(fixture.tab.playwright, { async waitForEvent(event: string) { calls.push(event); return { async setFiles(files: string[]) { calls.push("setFiles"); assert.deepEqual(await readFile(files[0]), Buffer.from(bytes)); } }; } });
+    const reader = createParityFixtureReader(root);
+    const adapter = createInAppBrowserParityAdapter({ browser: fixture.browser, tab: fixture.tab, fixtureReader: async (file: string) => { const result = await reader(file); return { ...result, bytes: runInNewContext("new Uint8Array(bytes)", { bytes: Array.from(result.bytes) }) }; } });
+    const action = { type: "upload", selector: "#field", file: "upload.csv", sha256: await sha256Digest(bytes) };
+    await adapter.runAction("comparison", action);
+    assert.deepEqual(calls, ["filechooser", "click", "setFiles"]);
+    calls.length = 0;
+    await assert.rejects(adapter.runAction("comparison", { ...action, sha256: digest }), error => assertSanitizedParityError(error, "PARITY_FIXTURE_INVALID"));
+    await writeFile(path.join(temporary, "outside.csv"), bytes);
+    await symlink(path.join(temporary, "outside.csv"), path.join(root, "escape.csv"));
+    await assert.rejects(adapter.runAction("comparison", { ...action, file: "escape.csv" }), error => assertSanitizedParityError(error, "PARITY_FIXTURE_INVALID"));
+    await assert.rejects(adapter.runAction("comparison", { ...action, file: "../outside.csv" }), error => assertSanitizedParityError(error, "PARITY_FIXTURE_INVALID"));
+    assert.deepEqual(calls, []);
+  } finally { await rm(temporary, { recursive: true, force: true }); }
 });
 
 test("IAB-05 action and probe mapping", async () => {
@@ -2304,7 +2407,7 @@ test("lossy JPEG anchors retain visual evidence without claiming pixel equality"
     artifactSink: async (input: Record<string, unknown>) => ({ path: ".codex/parity-runs/run/artifacts/image.jpg", sha256: digest, bytes: 4, kind: input.kind, mediaType: input.mediaType, surface: input.surface, rowId: input.rowId, probeId: input.probeId }) });
   const result = await adapter.runProbe("comparison", { id: "jpeg", kind: "screenshot", mode: "equal", productionSelector: "main", prototypeSelector: "main", required: false, tier: "anchor", options: {} }, {row: {id: "main-default-mobile-light"}, surface: "production"});
   assert.equal(result.unsupported, true);
-  assert.deepEqual(captureOptions, {});
+  assert.deepEqual(captureOptions, { fullPage: true });
   assert.equal(result.artifact.mediaType, "image/jpeg");
   assert.ok(result.artifact.path.endsWith(".jpg"));
 });

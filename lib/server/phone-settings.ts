@@ -10,51 +10,55 @@ import {
   type SiteLocale,
 } from "@/lib/site-settings";
 
+import type { TenantKey } from "@/lib/tenants";
+
 import { withPrisma } from "./prisma";
 
-const SITE_PHONE_SETTING_ID = 1;
+export const getPhoneSettings = cache(
+  async (tenantKey: TenantKey): Promise<PhoneSettings> => {
+    return withPrisma(async (prisma) => {
+      const [sitePhoneSetting, localizedRows] = await Promise.all([
+        prisma.sitePhoneSetting.findUnique({
+          where: { siteKey: tenantKey },
+          select: {
+            representativePhoneDisplay: true,
+            representativePhoneE164: true,
+          },
+        }),
+        prisma.localizedAiPhoneSetting.findMany({
+          where: { siteKey: tenantKey },
+          select: {
+            locale: true,
+            aiPhoneE164: true,
+          },
+        }),
+      ]);
 
-export const getPhoneSettings = cache(async (): Promise<PhoneSettings> => {
-  return withPrisma(async (prisma) => {
-    const [sitePhoneSetting, localizedRows] = await Promise.all([
-      prisma.sitePhoneSetting.findUnique({
-        where: { id: SITE_PHONE_SETTING_ID },
-        select: {
-          representativePhoneDisplay: true,
-          representativePhoneE164: true,
+      if (!sitePhoneSetting) {
+        throw new Error("Site phone settings have not been initialized.");
+      }
+
+      return {
+        representativePhone: {
+          display: sitePhoneSetting.representativePhoneDisplay,
+          e164: sitePhoneSetting.representativePhoneE164,
         },
-      }),
-      prisma.localizedAiPhoneSetting.findMany({
-        select: {
-          locale: true,
-          aiPhoneE164: true,
-        },
-      }),
-    ]);
-
-    if (!sitePhoneSetting) {
-      throw new Error("Site phone settings have not been initialized.");
-    }
-
-    return {
-      representativePhone: {
-        display: sitePhoneSetting.representativePhoneDisplay,
-        e164: sitePhoneSetting.representativePhoneE164,
-      },
-      aiPhoneNumbers: buildAiPhoneNumberRecord(localizedRows),
-    };
-  });
-});
+        aiPhoneNumbers: buildAiPhoneNumberRecord(localizedRows),
+      };
+    });
+  },
+);
 
 export async function savePhoneSettings(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   settings: PhoneSettings,
 ): Promise<PhoneSettings> {
   await prisma.$transaction(async (transaction) => {
     await transaction.sitePhoneSetting.upsert({
-      where: { id: SITE_PHONE_SETTING_ID },
+      where: { siteKey: tenantKey },
       create: {
-        id: SITE_PHONE_SETTING_ID,
+        siteKey: tenantKey,
         representativePhoneDisplay: settings.representativePhone.display,
         representativePhoneE164: settings.representativePhone.e164,
       },
@@ -69,8 +73,10 @@ export async function savePhoneSettings(
       const aiPhoneE164 = settings.aiPhoneNumbers[locale];
 
       await transaction.localizedAiPhoneSetting.upsert({
-        where: { locale: databaseLocale },
-        create: { locale: databaseLocale, aiPhoneE164 },
+        where: {
+          siteKey_locale: { siteKey: tenantKey, locale: databaseLocale },
+        },
+        create: { siteKey: tenantKey, locale: databaseLocale, aiPhoneE164 },
         update: { aiPhoneE164 },
       });
     }

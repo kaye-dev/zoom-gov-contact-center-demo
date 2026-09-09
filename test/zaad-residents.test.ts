@@ -18,6 +18,7 @@ import {
   type ZaadZoomWriteGates,
 } from "../lib/server/zaad/zoom-client";
 import { ZAAD_ERROR_CODES } from "../lib/zaad/contracts";
+import { DEFAULT_TENANT_KEY } from "../lib/tenants";
 
 type ResidentRow = {
   id: string;
@@ -165,13 +166,14 @@ function prismaFixture(input: {
         ]));
       });
     },
-    findUnique: async ({ where }: { where: { id: string } }) => {
-      const row = rows.get(where.id);
-      return row ? cloneResident(row) : null;
+    // テナント境界の導入で、id 指定の参照も siteKey を伴う findFirst になった。
+    findFirst: async ({ where }: { where: ResidentWhere }) => {
+      const row = where.id ? rows.get(where.id) : undefined;
+      return row && matchesWhere(row, where) ? cloneResident(row) : null;
     },
-    findUniqueOrThrow: async ({ where }: { where: { id: string } }) => {
-      const row = rows.get(where.id);
-      if (!row) throw new Error("Resident not found");
+    findFirstOrThrow: async ({ where }: { where: ResidentWhere }) => {
+      const row = where.id ? rows.get(where.id) : undefined;
+      if (!row || !matchesWhere(row, where)) throw new Error("Resident not found");
       return cloneResident(row);
     },
     updateMany: async ({ where, data }: { where: ResidentWhere; data: ResidentUpdate }) => {
@@ -317,7 +319,7 @@ test("resident create normalizes identity and uses the Zoom outbound-campaign co
     { contact: true, tts: false, campaign: false },
   );
 
-  const dto = await withZoom(zoom, () => createZaadResident(fixture.prisma, "actor-001", {
+  const dto = await withZoom(zoom, () => createZaadResident(fixture.prisma, DEFAULT_TENANT_KEY, "actor-001", {
     name: "  山田　花子  ",
     email: " HANAKO.YAMADA@EXAMPLE.JP ",
     phone: "090-1234-5678",
@@ -355,13 +357,13 @@ test("consent and nullable registration setting map to NOT_ELIGIBLE and NOT_ASSI
   const notConsented = prismaFixture();
 
   const [unassignedDto, notConsentedDto] = await withZoom(zoom, async () => [
-    await createZaadResident(unassigned.prisma, "actor-001", {
+    await createZaadResident(unassigned.prisma, DEFAULT_TENANT_KEY, "actor-001", {
       name: "佐藤 健",
       email: "ken@example.jp",
       phone: "080-2345-6789",
       consentStatus: "CONSENTED",
     }),
-    await createZaadResident(notConsented.prisma, "actor-001", {
+    await createZaadResident(notConsented.prisma, DEFAULT_TENANT_KEY, "actor-001", {
       name: "鈴木 美咲",
       email: "misaki@example.jp",
       phone: "070-3456-7890",
@@ -396,7 +398,7 @@ test("resident update rejects unknown fields, stale revisions, and normalized id
   const fixture = prismaFixture({ rows: [first, second] });
 
   await assert.rejects(
-    updateZaadResident(fixture.prisma, "actor-001", first.id, {
+    updateZaadResident(fixture.prisma, DEFAULT_TENANT_KEY, "actor-001", first.id, {
       name: first.name,
       email: first.normalizedEmail,
       phone: first.normalizedPhone,
@@ -407,7 +409,7 @@ test("resident update rejects unknown fields, stale revisions, and normalized id
     (error) => assertResidentError(error, ZAAD_ERROR_CODES.invalidRequest, 400),
   );
   await assert.rejects(
-    updateZaadResident(fixture.prisma, "actor-001", first.id, {
+    updateZaadResident(fixture.prisma, DEFAULT_TENANT_KEY, "actor-001", first.id, {
       name: first.name,
       email: first.normalizedEmail,
       phone: first.normalizedPhone,
@@ -417,7 +419,7 @@ test("resident update rejects unknown fields, stale revisions, and normalized id
     (error) => assertResidentError(error, ZAAD_ERROR_CODES.residentConflict, 409),
   );
   await assert.rejects(
-    updateZaadResident(fixture.prisma, "actor-001", first.id, {
+    updateZaadResident(fixture.prisma, DEFAULT_TENANT_KEY, "actor-001", first.id, {
       name: "重複 住民",
       email: " KEN@EXAMPLE.JP ",
       phone: "080-2345-6789",
@@ -449,7 +451,7 @@ test("resident sync retry enforces revision CAS and blocks RESULT_UNKNOWN while 
 
   await withZoom(zoom, async () => {
     await assert.rejects(
-      retryZaadResidentSync(stale.prisma, "actor-001", base.id, base.revision - 1),
+      retryZaadResidentSync(stale.prisma, DEFAULT_TENANT_KEY, "actor-001", base.id, base.revision - 1),
       (error) => assertResidentError(error, ZAAD_ERROR_CODES.residentConflict, 409),
     );
   });
@@ -464,7 +466,7 @@ test("resident sync retry enforces revision CAS and blocks RESULT_UNKNOWN while 
   });
   await withZoom(zoom, async () => {
     await assert.rejects(
-      retryZaadResidentSync(unknown.prisma, "actor-001", base.id, base.revision),
+      retryZaadResidentSync(unknown.prisma, DEFAULT_TENANT_KEY, "actor-001", base.id, base.revision),
       (error) => assertResidentError(error, ZAAD_ERROR_CODES.zoomResultUnknown, 409),
     );
   });
@@ -473,7 +475,7 @@ test("resident sync retry enforces revision CAS and blocks RESULT_UNKNOWN while 
 
   const known = prismaFixture({ rows: [base] });
   const retried = await withZoom(zoom, () =>
-    retryZaadResidentSync(known.prisma, "actor-001", base.id, base.revision));
+    retryZaadResidentSync(known.prisma, DEFAULT_TENANT_KEY, "actor-001", base.id, base.revision));
   assert.equal(zoomCalls, 1);
   assert.equal(retried.syncStatus, "SYNCED");
   assert.equal(known.get(base.id)?.zoomContactId, "contact-retried");
@@ -512,10 +514,10 @@ test("concurrent resident sync retry claims once and performs exactly one extern
       return "contact-concurrent-winner";
     },
   }, async () => {
-    const winner = retryZaadResidentSync(fixture.prisma, "actor-001", base.id, base.revision);
+    const winner = retryZaadResidentSync(fixture.prisma, DEFAULT_TENANT_KEY, "actor-001", base.id, base.revision);
     await writeStarted;
     await assert.rejects(
-      retryZaadResidentSync(fixture.prisma, "actor-002", base.id, base.revision),
+      retryZaadResidentSync(fixture.prisma, DEFAULT_TENANT_KEY, "actor-002", base.id, base.revision),
       (error) => assertResidentError(error, ZAAD_ERROR_CODES.residentConflict, 409),
     );
     releaseWrite();
@@ -544,7 +546,7 @@ test("consent withdrawal claims the revision before Zoom delete and records fail
       },
     };
 
-    const dto = await withZoom(zoom, () => updateZaadResident(fixture.prisma, "actor-001", current.id, {
+    const dto = await withZoom(zoom, () => updateZaadResident(fixture.prisma, DEFAULT_TENANT_KEY, "actor-001", current.id, {
       name: current.name,
       email: current.normalizedEmail,
       phone: current.normalizedPhone,
@@ -568,7 +570,7 @@ test("consent withdrawal claims the revision before Zoom delete and records fail
     },
   }, async () => {
     await assert.rejects(
-      updateZaadResident(failed.prisma, "actor-001", current.id, {
+      updateZaadResident(failed.prisma, DEFAULT_TENANT_KEY, "actor-001", current.id, {
         name: current.name,
         email: current.normalizedEmail,
         phone: current.normalizedPhone,
@@ -602,7 +604,7 @@ test("resident delete claims the revision before Zoom delete and leaves failures
     };
 
     assert.deepEqual(
-      await withZoom(zoom, () => deleteZaadResident(fixture.prisma, "actor-001", current.id, current.revision)),
+      await withZoom(zoom, () => deleteZaadResident(fixture.prisma, DEFAULT_TENANT_KEY, "actor-001", current.id, current.revision)),
       { deleted: true },
       outcome,
     );
@@ -619,7 +621,7 @@ test("resident delete claims the revision before Zoom delete and leaves failures
     },
   }, async () => {
     await assert.rejects(
-      deleteZaadResident(failed.prisma, "actor-001", current.id, current.revision),
+      deleteZaadResident(failed.prisma, DEFAULT_TENANT_KEY, "actor-001", current.id, current.revision),
       (error) => assertResidentError(error, ZAAD_ERROR_CODES.zoomUnavailable, 502),
     );
   });
@@ -640,7 +642,7 @@ test("initial sync result-unknown is PII-safe audited and cannot be retried auto
     createContact: async () => {
       throw new ZaadZoomError(ZAAD_ERROR_CODES.zoomUnavailable, 502, true);
     },
-  }, () => createZaadResident(fixture.prisma, "actor-001", {
+  }, () => createZaadResident(fixture.prisma, DEFAULT_TENANT_KEY, "actor-001", {
     name: "同期 失敗",
     email: "sync-failure@example.jp",
     phone: "090-9999-0001",
@@ -656,7 +658,7 @@ test("initial sync result-unknown is PII-safe audited and cannot be retried auto
   assert.equal(audit?.stableErrorCode, ZAAD_ERROR_CODES.zoomResultUnknown);
   assert.notEqual(audit?.targetRef, dto.id);
   await assert.rejects(
-    retryZaadResidentSync(fixture.prisma, "actor-001", dto.id, dto.revision),
+    retryZaadResidentSync(fixture.prisma, DEFAULT_TENANT_KEY, "actor-001", dto.id, dto.revision),
     (error) => assertResidentError(error, ZAAD_ERROR_CODES.zoomResultUnknown, 409),
   );
 });
@@ -680,7 +682,7 @@ test("resident contact POST 5xx becomes RESULT_UNKNOWN and blocks a second exter
     { contact: true, tts: false, campaign: false },
   );
 
-  const dto = await withZoom(zoom, () => createZaadResident(fixture.prisma, "actor-001", {
+  const dto = await withZoom(zoom, () => createZaadResident(fixture.prisma, DEFAULT_TENANT_KEY, "actor-001", {
     name: "HTTP 失敗",
     email: "http-failure@example.jp",
     phone: "090-9999-0002",
@@ -690,7 +692,7 @@ test("resident contact POST 5xx becomes RESULT_UNKNOWN and blocks a second exter
   assert.equal(dto.syncErrorCode, ZAAD_ERROR_CODES.zoomResultUnknown);
   await withZoom(zoom, async () => {
     await assert.rejects(
-      retryZaadResidentSync(fixture.prisma, "actor-001", dto.id, dto.revision),
+      retryZaadResidentSync(fixture.prisma, DEFAULT_TENANT_KEY, "actor-001", dto.id, dto.revision),
       (error) => assertResidentError(error, ZAAD_ERROR_CODES.zoomResultUnknown, 409),
     );
   });
@@ -708,7 +710,7 @@ test("delete claim conflict performs zero external writes and is audited as reje
     },
   }, async () => {
     await assert.rejects(
-      deleteZaadResident(fixture.prisma, "actor-001", current.id, current.revision),
+      deleteZaadResident(fixture.prisma, DEFAULT_TENANT_KEY, "actor-001", current.id, current.revision),
       (error) => assertResidentError(error, ZAAD_ERROR_CODES.residentConflict, 409),
     );
   });
@@ -735,7 +737,7 @@ test("remote delete success followed by final CAS conflict leaves FAILED needs-a
     },
   }, async () => {
     await assert.rejects(
-      deleteZaadResident(fixture.prisma, "actor-001", current.id, current.revision),
+      deleteZaadResident(fixture.prisma, DEFAULT_TENANT_KEY, "actor-001", current.id, current.revision),
       (error) => assertResidentError(error, ZAAD_ERROR_CODES.residentConflict, 409),
     );
   });
@@ -766,7 +768,7 @@ test("remote delete success followed by final CAS conflict leaves FAILED needs-a
     },
   }, async () => {
     await assert.rejects(
-      retryZaadResidentSync(fixture.prisma, "actor-001", current.id, latest.revision),
+      retryZaadResidentSync(fixture.prisma, DEFAULT_TENANT_KEY, "actor-001", current.id, latest.revision),
       (error) => assertResidentError(error, ZAAD_ERROR_CODES.residentConflict, 409),
     );
   });
@@ -786,7 +788,7 @@ test("final delete CAS conflict does not clear a concurrently replaced contact l
     },
   }, async () => {
     await assert.rejects(
-      deleteZaadResident(fixture.prisma, "actor-001", current.id, current.revision),
+      deleteZaadResident(fixture.prisma, DEFAULT_TENANT_KEY, "actor-001", current.id, current.revision),
       (error) => assertResidentError(error, ZAAD_ERROR_CODES.residentConflict, 409),
     );
   });
@@ -805,7 +807,7 @@ test("result-unknown remote delete keeps the contact link for operator reconcili
     },
   }, async () => {
     await assert.rejects(
-      deleteZaadResident(fixture.prisma, "actor-001", current.id, current.revision),
+      deleteZaadResident(fixture.prisma, DEFAULT_TENANT_KEY, "actor-001", current.id, current.revision),
       (error) => assertResidentError(error, ZAAD_ERROR_CODES.zoomResultUnknown, 502),
     );
   });
@@ -819,7 +821,7 @@ test("result-unknown remote delete keeps the contact link for operator reconcili
 test("idempotent delete of a missing resident writes an opaque success audit", async () => {
   const fixture = prismaFixture();
   assert.deepEqual(
-    await deleteZaadResident(fixture.prisma, "actor-001", "resident-missing", 1),
+    await deleteZaadResident(fixture.prisma, DEFAULT_TENANT_KEY, "actor-001", "resident-missing", 1),
     { deleted: true },
   );
   const audit = fixture.audits.at(-1);
@@ -864,7 +866,7 @@ test("CSV sync chunks official batch writes and maps partial failures to each re
   });
   const csv = new TextEncoder().encode(["name,email,phone,consent_status", ...rows].join("\n"));
 
-  const result = await withZoom(zoom, () => importZaadResidents(fixture.prisma, "actor-001", csv));
+  const result = await withZoom(zoom, () => importZaadResidents(fixture.prisma, DEFAULT_TENANT_KEY, "actor-001", csv));
   assert.deepEqual(result, { totalRows: 205, createdCount: 205, duplicateCount: 0 });
   assert.deepEqual(batchSizes, [100, 100, 5]);
   assert.equal(listCalls, 2);
@@ -896,7 +898,7 @@ test("CSV batch result-unknown stops later chunks and marks every remaining row 
   });
   const csv = new TextEncoder().encode(["name,email,phone,consent_status", ...rows].join("\n"));
 
-  await withZoom(zoom, () => importZaadResidents(fixture.prisma, "actor-001", csv));
+  await withZoom(zoom, () => importZaadResidents(fixture.prisma, DEFAULT_TENANT_KEY, "actor-001", csv));
   assert.equal(batchCalls, 1);
   assert.equal(fixture.all().filter(({ syncStatus }) => syncStatus === "FAILED").length, 150);
   assert.ok(fixture.all().every(({ syncErrorCode, zoomContactId }) =>

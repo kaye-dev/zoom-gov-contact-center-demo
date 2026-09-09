@@ -22,6 +22,7 @@ import {
   ZAAD_ERROR_CODES,
   ZAAD_LIMITS,
 } from "../lib/zaad/contracts";
+import { DEFAULT_TENANT_KEY } from "../lib/tenants";
 
 const valid = {
   operationKey: "operation-20260901-001",
@@ -164,7 +165,7 @@ function prismaFixture(existing: ReturnType<typeof persistedDispatch> | null = n
       },
     },
     zaadOneTimeDispatch: {
-      findUnique: async () => existing,
+      findFirst: async () => existing,
     },
     disasterRadioSubscription: {
       findMany: async () => residents,
@@ -193,7 +194,7 @@ function writablePrismaFixture(residentCount = valid.residentSelections.length) 
       },
     },
     zaadOneTimeDispatch: {
-      findUnique: async () => stored,
+      findFirst: async () => stored,
       create: async ({ data }: { data: Record<string, unknown> }) => {
         createCount += 1;
         const sourceCreate = (data.sourceLists as { create: Array<{ contactListId: string; selectedOrder: number }> }).create;
@@ -371,7 +372,7 @@ async function expiredPreflight(t: TestContext, prisma: PrismaClient) {
   Date.now = () => originalNow() - 10 * 60 * 1_000;
   t.after(() => { Date.now = originalNow; });
   try {
-    return await preflightZaadOneTime(prisma, valid);
+    return await preflightZaadOneTime(prisma, DEFAULT_TENANT_KEY, valid);
   } finally {
     Date.now = originalNow;
   }
@@ -471,7 +472,7 @@ test("preflight validates every selected list as a contact list before enumerati
     },
   }));
 
-  await preflightZaadOneTime(prisma, valid);
+  await preflightZaadOneTime(prisma, DEFAULT_TENANT_KEY, valid);
 
   assert.deepEqual(calls, ["get:list-001", "get:list-002", "list:list-001", "list:list-002"]);
 });
@@ -493,7 +494,7 @@ test("preflight accepts a safe source profile when display-only campaign metadat
     }),
   }));
 
-  const result = await preflightZaadOneTime(prisma, valid);
+  const result = await preflightZaadOneTime(prisma, DEFAULT_TENANT_KEY, valid);
 
   assert.deepEqual(result.operationProfile, {
     callerIdMasked: null,
@@ -518,7 +519,7 @@ test("preflight rejects a DNC source before listing contacts and writes a PII-sa
   }));
 
   await assert.rejects(
-    preflightZaadOneTime(prisma, valid),
+    preflightZaadOneTime(prisma, DEFAULT_TENANT_KEY, valid),
     (error) => assertOneTimeError(error, ZAAD_ERROR_CODES.oneTimeRecipientsInvalid),
   );
 
@@ -560,7 +561,7 @@ test("a later DNC source prevents contact enumeration for every selected list", 
   }));
 
   await assert.rejects(
-    preflightZaadOneTime(prisma, valid),
+    preflightZaadOneTime(prisma, DEFAULT_TENANT_KEY, valid),
     (error) => assertOneTimeError(error, ZAAD_ERROR_CODES.oneTimeRecipientsInvalid),
   );
 
@@ -574,7 +575,7 @@ test("preflight token uses domain-separated protected digests and contains no se
   const { prisma } = prismaFixture();
   stubZoom(t, workingZoom());
 
-  const preflight = await preflightZaadOneTime(prisma, valid);
+  const preflight = await preflightZaadOneTime(prisma, DEFAULT_TENANT_KEY, valid);
   const [version, encoded] = preflight.preflightToken.split(".");
   assert.equal(version, "v2");
   const signed = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as Record<string, unknown>;
@@ -639,7 +640,7 @@ test("an existing matching dispatch is read back after token expiry with persist
   stubZoom(t, workingZoom());
   const preflight = await expiredPreflight(t, prisma);
 
-  const result = await prepareZaadOneTime(prisma, "actor-user", {
+  const result = await prepareZaadOneTime(prisma, DEFAULT_TENANT_KEY, "actor-user", {
     ...valid,
     preflightToken: preflight.preflightToken,
     acknowledged: true,
@@ -663,7 +664,7 @@ test("idempotent readback fails closed for a different actor or request payload"
   const expired = await expiredPreflight(t, prisma);
 
   await assert.rejects(
-    prepareZaadOneTime(prisma, "different-actor", {
+    prepareZaadOneTime(prisma, DEFAULT_TENANT_KEY, "different-actor", {
       ...valid,
       preflightToken: expired.preflightToken,
       acknowledged: true,
@@ -672,9 +673,9 @@ test("idempotent readback fails closed for a different actor or request payload"
   );
 
   const changed = { ...valid, body: "CHANGED PRIVATE BODY" };
-  const changedPreflight = await preflightZaadOneTime(prisma, changed);
+  const changedPreflight = await preflightZaadOneTime(prisma, DEFAULT_TENANT_KEY, changed);
   await assert.rejects(
-    prepareZaadOneTime(prisma, "actor-user", {
+    prepareZaadOneTime(prisma, DEFAULT_TENANT_KEY, "actor-user", {
       ...changed,
       preflightToken: changedPreflight.preflightToken,
       acknowledged: true,
@@ -693,11 +694,11 @@ test("idempotent readback fails closed for a different actor or request payload"
 test("invalid, stale, and expired prepare rejections are audited against an opaque operation reference", async (t) => {
   const { prisma, audits } = prismaFixture();
   stubZoom(t, workingZoom());
-  const current = await preflightZaadOneTime(prisma, valid);
+  const current = await preflightZaadOneTime(prisma, DEFAULT_TENANT_KEY, valid);
   const expired = await expiredPreflight(t, prisma);
 
   await assert.rejects(
-    prepareZaadOneTime(prisma, "actor-user", {
+    prepareZaadOneTime(prisma, DEFAULT_TENANT_KEY, "actor-user", {
       ...valid,
       acknowledged: false,
       preflightToken: current.preflightToken,
@@ -705,7 +706,7 @@ test("invalid, stale, and expired prepare rejections are audited against an opaq
     (error) => assertOneTimeError(error, ZAAD_ERROR_CODES.invalidRequest),
   );
   await assert.rejects(
-    prepareZaadOneTime(prisma, "actor-user", {
+    prepareZaadOneTime(prisma, DEFAULT_TENANT_KEY, "actor-user", {
       ...valid,
       preflightToken: `v2.${current.preflightToken.split(".")[1]}.${"A".repeat(43)}`,
       acknowledged: true,
@@ -713,7 +714,7 @@ test("invalid, stale, and expired prepare rejections are audited against an opaq
     (error) => assertOneTimeError(error, ZAAD_ERROR_CODES.oneTimeSnapshotStale),
   );
   await assert.rejects(
-    prepareZaadOneTime(prisma, "actor-user", {
+    prepareZaadOneTime(prisma, DEFAULT_TENANT_KEY, "actor-user", {
       ...valid,
       preflightToken: expired.preflightToken,
       acknowledged: true,
@@ -740,9 +741,9 @@ test("prepare checkpoints 100-contact batches through Draft and Ready readback w
   const events: string[] = [];
   const batches: number[] = [];
   stubZoom(t, writableZoom(events, batches));
-  const preflight = await preflightZaadOneTime(fixture.prisma, input);
+  const preflight = await preflightZaadOneTime(fixture.prisma, DEFAULT_TENANT_KEY, input);
 
-  const result = await prepareZaadOneTime(fixture.prisma, "actor-user", {
+  const result = await prepareZaadOneTime(fixture.prisma, DEFAULT_TENANT_KEY, "actor-user", {
     ...input,
     preflightToken: preflight.preflightToken,
     acknowledged: true,
@@ -819,12 +820,12 @@ test("a failed contact batch is terminal FAILED, preserves the last checkpoint, 
         : { success: true as const });
     },
   }));
-  const preflight = await preflightZaadOneTime(fixture.prisma, input);
+  const preflight = await preflightZaadOneTime(fixture.prisma, DEFAULT_TENANT_KEY, input);
   const payload = { ...input, preflightToken: preflight.preflightToken, acknowledged: true as const };
 
   let firstError: unknown;
   try {
-    await prepareZaadOneTime(fixture.prisma, "actor-user", payload);
+    await prepareZaadOneTime(fixture.prisma, DEFAULT_TENANT_KEY, "actor-user", payload);
   } catch (error) {
     firstError = error;
   }
@@ -839,7 +840,7 @@ test("a failed contact batch is terminal FAILED, preserves the last checkpoint, 
   assert.deepEqual(events, ["create-contact-list", "create-contacts-batch", "create-contacts-batch"]);
   assert.deepEqual(batches, [100, 1]);
 
-  const resent = await prepareZaadOneTime(fixture.prisma, "actor-user", payload);
+  const resent = await prepareZaadOneTime(fixture.prisma, DEFAULT_TENANT_KEY, "actor-user", payload);
   assert.equal(resent.state, "FAILED");
   assert.deepEqual(events, ["create-contact-list", "create-contacts-batch", "create-contacts-batch"]);
   assert.equal(fixture.createCount, 1);
@@ -855,12 +856,12 @@ test("a write with an unknown result is terminal RESULT_UNKNOWN with no automati
       throw new ZaadZoomError(ZAAD_ERROR_CODES.zoomUnavailable, 502, true);
     },
   }));
-  const preflight = await preflightZaadOneTime(fixture.prisma, valid);
+  const preflight = await preflightZaadOneTime(fixture.prisma, DEFAULT_TENANT_KEY, valid);
   const payload = { ...valid, preflightToken: preflight.preflightToken, acknowledged: true as const };
 
   let firstError: unknown;
   try {
-    await prepareZaadOneTime(fixture.prisma, "actor-user", payload);
+    await prepareZaadOneTime(fixture.prisma, DEFAULT_TENANT_KEY, "actor-user", payload);
   } catch (error) {
     firstError = error;
   }
@@ -874,7 +875,7 @@ test("a write with an unknown result is terminal RESULT_UNKNOWN with no automati
   });
   assert.deepEqual(events, ["create-contact-list", "create-contacts-batch", "create-tts-asset"]);
 
-  const resent = await prepareZaadOneTime(fixture.prisma, "actor-user", payload);
+  const resent = await prepareZaadOneTime(fixture.prisma, DEFAULT_TENANT_KEY, "actor-user", payload);
   assert.equal(resent.state, "RESULT_UNKNOWN");
   assert.deepEqual(events, ["create-contact-list", "create-contacts-batch", "create-tts-asset"]);
   assert.equal(fixture.audits.at(-1)?.result, "RESULT_UNKNOWN");
@@ -899,11 +900,11 @@ test("a non-Draft campaign readback stops before configure and preserves the cam
       };
     },
   }));
-  const preflight = await preflightZaadOneTime(fixture.prisma, valid);
+  const preflight = await preflightZaadOneTime(fixture.prisma, DEFAULT_TENANT_KEY, valid);
 
   let caught: unknown;
   try {
-    await prepareZaadOneTime(fixture.prisma, "actor-user", {
+    await prepareZaadOneTime(fixture.prisma, DEFAULT_TENANT_KEY, "actor-user", {
       ...valid,
       preflightToken: preflight.preflightToken,
       acknowledged: true,
@@ -946,11 +947,11 @@ test("configuration readback requires play_media and the dedicated asset before 
       };
     },
   }));
-  const preflight = await preflightZaadOneTime(fixture.prisma, valid);
+  const preflight = await preflightZaadOneTime(fixture.prisma, DEFAULT_TENANT_KEY, valid);
 
   let caught: unknown;
   try {
-    await prepareZaadOneTime(fixture.prisma, "actor-user", {
+    await prepareZaadOneTime(fixture.prisma, DEFAULT_TENANT_KEY, "actor-user", {
       ...valid,
       preflightToken: preflight.preflightToken,
       acknowledged: true,
@@ -987,11 +988,11 @@ test("the final readback must match Agentless, Ready, play_media, the temporary 
       };
     },
   }));
-  const preflight = await preflightZaadOneTime(fixture.prisma, valid);
+  const preflight = await preflightZaadOneTime(fixture.prisma, DEFAULT_TENANT_KEY, valid);
 
   let caught: unknown;
   try {
-    await prepareZaadOneTime(fixture.prisma, "actor-user", {
+    await prepareZaadOneTime(fixture.prisma, DEFAULT_TENANT_KEY, "actor-user", {
       ...valid,
       preflightToken: preflight.preflightToken,
       acknowledged: true,
@@ -1028,10 +1029,10 @@ test("campaign profile drift is rejected before the local row and every external
       return contactListFixture("temporary-list-id");
     },
   }));
-  const preflight = await preflightZaadOneTime(fixture.prisma, valid);
+  const preflight = await preflightZaadOneTime(fixture.prisma, DEFAULT_TENANT_KEY, valid);
 
   await assert.rejects(
-    prepareZaadOneTime(fixture.prisma, "actor-user", {
+    prepareZaadOneTime(fixture.prisma, DEFAULT_TENANT_KEY, "actor-user", {
       ...valid,
       preflightToken: preflight.preflightToken,
       acknowledged: true,

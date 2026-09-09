@@ -7,7 +7,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { DeveloperApiSectionTabs, type DeveloperApiSection } from "../app/admin/developer-api/DeveloperApiSectionTabs";
 import { AdminSettingsTabs } from "../app/admin/AdminSettingsTabs";
 
-import { dictionaries, locales } from "../app/i18n/dictionaries";
+import { locales } from "../app/i18n/dictionaries";
+import { defaultTenantDictionaries as dictionaries } from "../app/i18n/build-dictionary";
 import {
   DEVELOPER_API_ERROR_CODES,
   parseDeveloperApiSecretReveal,

@@ -1,4 +1,5 @@
 "use client";
+import { adminFetch as fetch } from "@/lib/admin-fetch";
 
 import Link from "next/link";
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
@@ -15,6 +16,7 @@ import {
   type ReservationApiPermission,
   type ReservationApiUsageLimitDto,
 } from "@/lib/reservation-api";
+import type { TenantKey } from "@/lib/tenants";
 import type { ReservationApiKeyMetadata } from "@/lib/server/reservation-api-keys";
 
 const PERMISSION_ROWS: Array<{ permission: ReservationApiPermission; method: string; endpoint: string }> = [
@@ -42,10 +44,12 @@ const PUBLIC_API_ROWS: Array<{
 ];
 
 export function ReservationApiKeysView({
+  tenantKey,
   initialApiKeys,
   initialUsageLimit,
   canEdit,
 }: {
+  tenantKey: TenantKey;
   initialApiKeys: ReservationApiKeyMetadata[];
   initialUsageLimit: ReservationApiUsageLimitDto;
   canEdit: boolean;
@@ -292,12 +296,12 @@ export function ReservationApiKeysView({
     <div><section id="reservation-api-key-content" className="min-w-0 space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="max-w-3xl space-y-2">
-          <Link id="back-to-reservations" href="/admin/reservations" className="inline-flex items-center gap-1 text-sm font-semibold text-accent hover:underline"><ChevronLeftIcon className="h-5 w-5" />{copy.back}</Link>
+          <Link id="back-to-reservations" href={`/admin/reservations?tenant=${tenantKey}`} className="inline-flex items-center gap-1 text-sm font-semibold text-accent hover:underline"><ChevronLeftIcon className="h-5 w-5" />{copy.back}</Link>
           <h1 className="text-2xl font-bold">{copy.title}</h1>
           <p className="text-sm leading-6 text-fg-muted">{copy.description}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-          <Link id="api-log-list-link" href="/admin/reservations/api-keys/logs" className="rounded-md border border-line bg-surface px-4 py-2.5 text-center text-sm font-semibold text-fg transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">{copy.logs.entry}</Link>
+          <Link id="api-log-list-link" href={`/admin/reservations/api-keys/logs?tenant=${tenantKey}`} className="rounded-md border border-line bg-surface px-4 py-2.5 text-center text-sm font-semibold text-fg transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">{copy.logs.entry}</Link>
           <button id="open-issue-dialog" type="button" onClick={openIssue} disabled={!canEdit} className="cursor-pointer rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50">{copy.issue}</button>
         </div>
       </div>

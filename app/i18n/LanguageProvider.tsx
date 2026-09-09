@@ -10,10 +10,11 @@ import {
 } from 'react';
 import {
   defaultLocale,
-  dictionaries,
   type Dictionary,
   type Locale,
 } from './dictionaries';
+import { buildDictionary } from './build-dictionary';
+import type { TenantKey } from '@/lib/tenants';
 import {
   resolveAvailableLocale,
   toHtmlLanguageTag,
@@ -30,6 +31,8 @@ import {
 
 type LanguageContextValue = {
   locale: Locale;
+  /** Hostが決めた業種テナント。client componentのコンテンツ選択に使う。 */
+  tenantKey: TenantKey;
   availableLocales: readonly Locale[];
   isLocaleReady: boolean;
   setLocale: (locale: Locale) => void;
@@ -44,9 +47,15 @@ function getServerLocaleSnapshot(): Locale {
 
 export function LanguageProvider({
   availableLocales,
+  tenantKey,
   children,
 }: {
   availableLocales: readonly Locale[];
+  /**
+   * Hostから解決した業種テナント。サーバーで決まるためpropで受け取る。
+   * クライアントでlocation.hostnameを読むとhydrationが一致しなくなる。
+   */
+  tenantKey: TenantKey;
   children: ReactNode;
 }) {
   const getStoredLocale = useCallback((): Locale => {
@@ -109,10 +118,11 @@ export function LanguageProvider({
     <LanguageContext.Provider
       value={{
         locale,
+        tenantKey,
         availableLocales,
         isLocaleReady,
         setLocale,
-        t: dictionaries[locale],
+        t: buildDictionary(tenantKey, locale),
       }}
     >
       {children}

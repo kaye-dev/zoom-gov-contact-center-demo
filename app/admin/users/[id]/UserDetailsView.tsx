@@ -1,4 +1,5 @@
 "use client";
+import { adminFetch as fetch } from "@/lib/admin-fetch";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";

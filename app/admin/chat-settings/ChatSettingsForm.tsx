@@ -1,11 +1,14 @@
 "use client";
 
+import { flushSync } from "react-dom";
 import { settingsSectionClassName, settingsInputFocusClassName } from "@/app/components/admin/settings-form-styles";
-import { SettingsSaveScope } from "@/app/components/admin/SettingsSaveScope";
+import { AdminSettingsTenantSelect, AdminSettingsLoadState } from "@/app/components/admin/AdminSettingsTenantSelect";
+import { useAdminSettingsTenant } from "../useAdminSettingsTenant";
+import type { SettingsReviewState } from "@/lib/admin-settings-review";
+import type { TenantKey } from "@/lib/tenants";
 import { AdminPageTitleHelp } from "@/app/components/admin/AdminPageTitleHelp";
 
-import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import {
   MAX_CHAT_MEMO_LENGTH,
@@ -13,7 +16,6 @@ import {
 } from "@/lib/chat-settings";
 import {
   SETTINGS_ERROR_CODES,
-  isSettingsErrorCode,
   type SettingsErrorCode,
 } from "@/lib/site-settings";
 
@@ -23,6 +25,8 @@ import { AdminSettingsPanel, AdminSettingsTabs, validateSettingsTabs } from "../
 type ChatSettingsFormProps = {
   initialSettings: ChatSettings;
   canEdit: boolean;
+  initialTenant: TenantKey;
+  reviewState?: SettingsReviewState;
 };
 
 type Feedback =
@@ -32,19 +36,22 @@ type Feedback =
 export function ChatSettingsForm({
   initialSettings,
   canEdit,
+  initialTenant,
+  reviewState,
 }: ChatSettingsFormProps) {
   const { t } = useI18n();
-  const router = useRouter();
-  const [settings, setSettings] = useState(initialSettings);
-  const [activeSection, setActiveSection] = useState("chat-method");
-  const [feedback, setFeedback] = useState<Feedback | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [invalidField, setInvalidField] = useState<string | null>(reviewState === "validation" ? "chat-settings-campaign-web-tag" : null);
+  useEffect(() => { if (invalidField) document.getElementById(invalidField)?.focus(); }, [invalidField]);
+  const [activeSection, setActiveSection] = useState((reviewState === "detail" || reviewState === "validation") ? "chat-campaign" : reviewState === "third" ? "chat-entry-id" : "chat-method");
+  const [feedback, setFeedback] = useState<Feedback | null>(reviewState === "saved" ? {kind:"success"} : reviewState === "save-error" ? {kind:"error"} : null);
+  const control = useAdminSettingsTenant(initialSettings, initialTenant, "chat-settings", () => { setActiveSection("chat-method"); setFeedback(null); setInvalidField(null); }, reviewState);
+  const { settings, setSettings, isSubmitting } = control;
   const feedbackMessage = feedback
     ? feedback.kind === "success"
-      ? t.admin.settings.saved
+      ? control.copy.saved.replace("{tenant}", control.tenantName)
       : feedback.code
         ? t.admin.settings.errors[feedback.code]
-        : t.admin.settings.saveError
+        : control.copy.saveError
     : null;
   const modeOptions: Array<{
     value: ChatSettings["activeMode"];
@@ -72,6 +79,7 @@ export function ChatSettingsForm({
   const updateActiveMode = (activeMode: ChatSettings["activeMode"]) => {
     setSettings((current) => ({ ...current, activeMode }));
     setFeedback(null);
+    setInvalidField(null);
   };
 
   const updateText = (
@@ -84,13 +92,18 @@ export function ChatSettingsForm({
   ) => {
     setSettings((current) => ({ ...current, [field]: value }));
     setFeedback(null);
+    setInvalidField(null);
   };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!canEdit) return;
-    if (!validateSettingsTabs(event.currentTarget, setActiveSection)) return;
+    if (!canEdit || isSubmitting || control.loading || control.loadError) return;
+    if (!validateSettingsTabs(event.currentTarget, setActiveSection)) {
+      setInvalidField(event.currentTarget.querySelector<HTMLTextAreaElement>("textarea:invalid")?.id ?? null);
+      return;
+    }
     setFeedback(null);
+    setInvalidField(null);
 
     if (
       [settings.campaignMemo, settings.contactCenterEntryIdMemo].some(
@@ -99,59 +112,40 @@ export function ChatSettingsForm({
           Array.from(memo).length > MAX_CHAT_MEMO_LENGTH,
       )
     ) {
-      setFeedback({
-        kind: "error",
-        code: SETTINGS_ERROR_CODES.invalidChatMemo,
+      const campaign = Array.from(settings.campaignMemo ?? "").length > MAX_CHAT_MEMO_LENGTH;
+      flushSync(() => {
+        setActiveSection(campaign ? "chat-campaign" : "chat-entry-id");
+        setInvalidField(campaign ? "chat-settings-campaign-memo" : "chat-settings-contact-center-entry-id-memo");
+        setFeedback({ kind: "error", code: SETTINGS_ERROR_CODES.invalidChatMemo });
       });
       return;
     }
 
-    setIsSubmitting(true);
 
     try {
-      const response = await fetch(
-        "/api/admin/chat-settings",
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(settings),
-        },
-      );
-      const body = (await response.json().catch(() => null)) as
-        | { saved?: boolean; error?: unknown }
-        | null;
-
-      if (!response.ok || body?.saved !== true) {
-        setFeedback({
-          kind: "error",
-          code: isSettingsErrorCode(body?.error) ? body.error : undefined,
-        });
-        return;
-      }
-
+      await control.save(settings);
       setFeedback({ kind: "success" });
-      router.refresh();
     } catch {
       setFeedback({ kind: "error" });
-    } finally {
-      setIsSubmitting(false);
     }
+
   };
 
   return (
-    <section>
+    <section data-industry-state={control.pending ? "confirm-switch" : invalidField ? "validation" : control.invalid ? "invalid" : control.loading ? "loading" : control.loadError ? "load-error" : control.isSubmitting ? "saving" : feedback?.kind === "success" ? "saved" : feedback?.kind === "error" ? "save-error" : control.dirty ? "dirty" : control.reviewIdentity ?? "default"}>
       <div data-admin-page-chrome className="space-y-4">
         <div
           data-admin-page-header
-          className="ml-1 mr-0 max-w-5xl space-y-2"
+          className="ml-1 mr-0 flex flex-col gap-4 md:flex-row md:items-start md:justify-between"
         >
           <AdminPageTitleHelp
             title={t.admin.chatManagement.title}
-            description={t.admin.chatManagement.description}
-            label={t.admin.pageDescriptionLabel.replace("{title}", t.admin.chatManagement.title)}
+            description={control.copy.pageHelpDescription.replace("{title}", t.admin.chatManagement.title)}
+            label={control.copy.pageHelpLabel}
           />
+        <AdminSettingsTenantSelect control={control} resource="chat-settings" />
         </div>
-        <AdminSettingsTabs
+        {!control.invalid && !control.loading && !control.loadError && <AdminSettingsTabs
           activeSection={activeSection}
           onSelect={setActiveSection}
           label={t.admin.chatManagement.title}
@@ -160,18 +154,19 @@ export function ChatSettingsForm({
             { key: "chat-campaign", label: t.admin.chatManagement.campaignTab },
             { key: "chat-entry-id", label: t.admin.chatManagement.contactCenterEntryId.title },
           ]}
-        />
+        />}
       </div>
 
       <div data-admin-page-body className="ml-1 mr-0 mt-6 max-w-5xl">
-      <form noValidate onSubmit={submit} className="space-y-6">
+      <AdminSettingsLoadState control={control} />
+      {!control.invalid && !control.loading && !control.loadError && <form data-admin-form noValidate onSubmit={submit} className="space-y-6">
         <AdminSettingsPanel section="chat-method" activeSection={activeSection}>
         <fieldset
           className={settingsSectionClassName}
           aria-describedby="chat-settings-mode-help"
         >
           <legend className="sr-only">
-            {t.admin.chatManagement.activeModeTitle}
+            {t.admin.chatManagement.methodTab}
           </legend>
           <p
             id="chat-settings-mode-help"
@@ -189,7 +184,7 @@ export function ChatSettingsForm({
                 <label
                   key={value}
                   htmlFor={inputId}
-                  className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-colors has-[:disabled]:cursor-not-allowed focus-within:ring-2 focus-within:ring-accent/40 ${
+                  className={`flex min-w-0 cursor-pointer gap-3 rounded-md border p-4 transition-colors has-[:disabled]:cursor-not-allowed focus-within:ring-2 focus-within:ring-accent/40 ${
                     isSelected
                       ? "border-accent bg-surface-selected"
                       : "border-line bg-surface hover:bg-surface-hover"
@@ -206,11 +201,11 @@ export function ChatSettingsForm({
                     aria-describedby={`${descriptionId} chat-settings-mode-help`}
                     className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                   />
-                  <span className="min-w-0 space-y-1">
-                    <span className="block font-bold">{label}</span>
+                  <span>
+                    <span className="font-semibold">{label}</span>
                     <span
                       id={descriptionId}
-                      className="block text-sm leading-5 text-fg-muted"
+                      className="mt-1 block text-sm leading-5 text-fg-muted"
                     >
                       {description}
                     </span>
@@ -239,7 +234,9 @@ export function ChatSettingsForm({
             </label>
             <textarea
               id="chat-settings-campaign-web-tag"
+              aria-invalid={invalidField === "chat-settings-campaign-web-tag" || undefined}
               name="campaignWebTag"
+              disabled={isSubmitting}
               readOnly={!canEdit}
               value={settings.campaignWebTag ?? ""}
               onChange={(event) =>
@@ -269,7 +266,9 @@ export function ChatSettingsForm({
             </label>
             <textarea
               id="chat-settings-campaign-memo"
+              aria-invalid={invalidField === "chat-settings-campaign-memo" || undefined}
               name="campaignMemo"
+              disabled={isSubmitting}
               readOnly={!canEdit}
               value={settings.campaignMemo ?? ""}
               onChange={(event) =>
@@ -308,7 +307,9 @@ export function ChatSettingsForm({
             </label>
             <textarea
               id="chat-settings-contact-center-entry-id-web-tag"
+              aria-invalid={invalidField === "chat-settings-contact-center-entry-id-web-tag" || undefined}
               name="contactCenterEntryIdWebTag"
+              disabled={isSubmitting}
               readOnly={!canEdit}
               value={settings.contactCenterEntryIdWebTag ?? ""}
               onChange={(event) =>
@@ -343,7 +344,9 @@ export function ChatSettingsForm({
             </label>
             <textarea
               id="chat-settings-contact-center-entry-id-memo"
+              aria-invalid={invalidField === "chat-settings-contact-center-entry-id-memo" || undefined}
               name="contactCenterEntryIdMemo"
+              disabled={isSubmitting}
               readOnly={!canEdit}
               value={settings.contactCenterEntryIdMemo ?? ""}
               onChange={(event) =>
@@ -364,33 +367,34 @@ export function ChatSettingsForm({
 
         </AdminSettingsPanel>
 
+
+
+        <p id="save-scope" className="text-sm leading-6 text-fg-muted">{control.copy.scope.replace("{tenant}", control.tenantName)}</p>
+        {control.dirty && <p className="text-sm text-fg-muted">{control.copy.dirty}</p>}
+        {!canEdit && <p role="status" className="text-sm text-fg-muted">{control.copy.readonly}</p>}
         {feedback ? (
           <p
             id="chat-settings-feedback"
             role={feedback.kind === "error" ? "alert" : "status"}
             aria-live={feedback.kind === "error" ? "assertive" : "polite"}
-            className={`rounded-md px-4 py-3 text-sm ${
-              feedback.kind === "error"
-                ? "bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-200"
-                : "bg-green-50 text-green-800 dark:bg-green-950/50 dark:text-green-200"
-            }`}
+            className={feedback.kind === "error"
+              ? "text-sm text-red-700 dark:text-red-400"
+              : "rounded-md bg-green-50 px-4 py-3 text-sm text-green-900 dark:bg-surface-raised dark:text-green-300"}
           >
             {feedbackMessage}
           </p>
         ) : null}
-
-        <SettingsSaveScope scope="page" id="chat-save-scope" />
         <button
-          aria-describedby="chat-save-scope"
+          aria-describedby="save-scope"
           type="submit"
           disabled={isSubmitting || !canEdit}
           className="cursor-pointer rounded-md bg-primary px-5 py-2.5 font-semibold text-white transition-colors hover:bg-primary-900 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isSubmitting
-            ? t.admin.settings.saving
+            ? control.copy.saving
             : t.admin.settings.save}
         </button>
-      </form>
+      </form>}
       </div>
     </section>
   );

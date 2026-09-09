@@ -17,6 +17,7 @@ import {
   type ReservationDaySummary,
   type ReservationServiceKey,
 } from "@/lib/reservations";
+import type { TenantKey } from "@/lib/tenants";
 
 export type RandomIndex = (maxExclusive: number) => number;
 
@@ -31,6 +32,7 @@ type BookingRecord = {
 
 export async function getReservationCalendarSnapshot(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   input: { service: ReservationServiceKey; month: string; now: Date },
 ): Promise<ReservationCalendarSnapshot> {
   if (!isReservationMonthInRange(input.month, input.now)) {
@@ -40,6 +42,7 @@ export async function getReservationCalendarSnapshot(
   const bounds = getReservationMonthBounds(input.month);
   const bookings = await prisma.reservationBooking.findMany({
     where: {
+      siteKey: tenantKey,
       serviceKey: input.service,
       reservationDate: { gte: bounds.start, lt: bounds.end },
     },
@@ -134,6 +137,7 @@ export function buildReservationCalendarSnapshot(
 
 export async function regenerateDemoReservations(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   input: { month: string; now: Date },
   randomIndex: RandomIndex = randomInt,
 ): Promise<{
@@ -151,13 +155,14 @@ export async function regenerateDemoReservations(
       SELECT 1 AS "locked"
       FROM (
         SELECT pg_advisory_xact_lock(
-          hashtext(${`reservation-demo-fill:${input.month}`})
+          hashtext(${`reservation-demo-fill:${tenantKey}:${input.month}`})
         )
       ) AS "reservationDemoFillLock"
     `);
 
     const nonDemoBookings = await transaction.reservationBooking.findMany({
       where: {
+        siteKey: tenantKey,
         serviceKey: { in: [...RESERVATION_SERVICE_KEYS] },
         reservationDate: { gte: bounds.start, lt: bounds.end },
         isDemo: false,
@@ -170,6 +175,7 @@ export async function regenerateDemoReservations(
     });
     await transaction.reservationBooking.deleteMany({
       where: {
+        siteKey: tenantKey,
         serviceKey: { in: [...RESERVATION_SERVICE_KEYS] },
         reservationDate: { gte: bounds.start, lt: bounds.end },
         isDemo: true,
@@ -184,6 +190,7 @@ export async function regenerateDemoReservations(
 
     const rows: Array<{
       id: string;
+      siteKey: TenantKey;
       serviceKey: ReservationServiceKey;
       reservationDate: Date;
       startMinute: number;
@@ -215,6 +222,7 @@ export async function regenerateDemoReservations(
         for (let count = 0; count < demoCount; count += 1) {
           rows.push({
             id: randomUUID(),
+            siteKey: tenantKey,
             serviceKey: service.key,
             reservationDate: calendarDateToUtc(candidate.date),
             startMinute: candidate.slot.startMinute,
@@ -233,7 +241,7 @@ export async function regenerateDemoReservations(
   const snapshots = await Promise.all(
     RESERVATION_SERVICE_KEYS.map(async (service) => [
       service,
-      await getReservationCalendarSnapshot(prisma, {
+      await getReservationCalendarSnapshot(prisma, tenantKey, {
         service,
         month: input.month,
         now: input.now,

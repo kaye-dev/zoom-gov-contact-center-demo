@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "@/lib/generated/prisma/client";
 import type { ReservationApiPermission } from "@/lib/reservation-api";
+import type { TenantKey } from "@/lib/tenants";
 
 export const RESERVATION_API_REQUEST_LOG_RETENTION_DAYS = 30;
 export const RESERVATION_API_REQUEST_LOG_PAGE_SIZE = 50;
@@ -179,11 +180,13 @@ export function decodeReservationApiRequestLogCursor(
 
 export async function listReservationApiRequestLogs(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   input: ReservationApiRequestLogListInput,
   now = new Date(),
 ): Promise<{ logs: ReservationApiRequestLogSummary[]; nextCursor: string | null }> {
   const statusRange = resultStatusRange(input.result);
   const conditions: Prisma.ReservationApiRequestLogWhereInput[] = [
+    { siteKey: tenantKey },
     { requestedAt: { gte: reservationApiRequestLogCutoff(now) } },
   ];
   if (input.query) {
@@ -243,6 +246,7 @@ export async function listReservationApiRequestLogs(
 
 export async function getReservationApiRequestLog(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   id: string,
   now = new Date(),
 ): Promise<ReservationApiRequestLogDetail | null> {
@@ -250,6 +254,7 @@ export async function getReservationApiRequestLog(
   const row = await prisma.reservationApiRequestLog.findFirst({
     where: {
       id,
+      siteKey: tenantKey,
       requestedAt: { gte: reservationApiRequestLogCutoff(now) },
     },
     select: {
@@ -278,16 +283,21 @@ export async function getReservationApiRequestLog(
 
 export async function recordReservationApiRequestLog(
   prisma: PrismaClient,
+  tenantKey: TenantKey,
   input: ReservationApiRequestLogRecordInput,
   now = input.completedAt,
 ): Promise<void> {
   await prisma.$transaction(async (transaction) => {
     await transaction.reservationApiRequestLog.deleteMany({
-      where: { requestedAt: { lt: reservationApiRequestLogCutoff(now) } },
+      where: {
+        siteKey: tenantKey,
+        requestedAt: { lt: reservationApiRequestLogCutoff(now) },
+      },
     });
     await transaction.reservationApiRequestLog.create({
       data: {
         id: input.id,
+        siteKey: tenantKey,
         apiKeyId: input.apiKeyId,
         apiKeyName: input.apiKeyName,
         apiKeyPreview: input.apiKeyPreview,

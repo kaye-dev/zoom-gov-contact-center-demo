@@ -205,9 +205,9 @@ test("ART-02/03: model images require current per-criterion viewing and cannot c
 test("LAYER-02: command success and SSR/source-text cannot replace a required exact Browser-capable test case", async () => {
   const { validateLayerResult } = await load("../.agents/skills/plan/scripts/parity-model-execution.mjs");
   const { modelDigest } = await load("../.agents/skills/plan/scripts/parity-verification-model.mjs");
-  const expected = { assertion: { kind: "focus", selector: "#save", pure: true }, expected: true, requiredCapabilities: ["real-browser-focus"], test: { path: "focus.test.ts", caseId: "focus-save", input: { tenant: "one" }, environment: { fixture: "one" } } };
+  const expected = { assertion: { kind: "focus", selector: "#save", pure: true }, expected: true, requiredCapabilities: ["real-browser-focus"], test: { command: ["node", "--test", "focus.test.ts"], capabilities: ["real-browser-focus"], path: "focus.test.ts", caseId: "focus-save", input: { tenant: "one" }, environment: { fixture: "one" } } };
   const compiledCase = { layer: "component", reuseKey: "current-key" };
-  const payload = { status: "pass", layer: "component", path: "focus.test.ts", caseId: "focus-save", input: expected.test.input, environment: expected.test.environment, assertion: expected.assertion, expected: true, reuseKey: "current-key", capabilities: ["SSR", "source-text"] };
+  const payload = { status: "pass", exitCode: 0, command: expected.test.command, actual: true, layer: "component", path: "focus.test.ts", caseId: "focus-save", input: expected.test.input, environment: expected.test.environment, assertion: expected.assertion, expected: true, reuseKey: "current-key", capabilities: ["SSR", "source-text"] };
   await assert.rejects(validateLayerResult({ ...payload, digest: await modelDigest(payload) }, expected, compiledCase), { code: "PARITY_REQUIREMENT_GAP" });
   await assert.rejects(validateLayerResult({ exitCode: 0 }, expected, compiledCase), { code: "PARITY_REQUIREMENT_GAP" });
   payload.capabilities = ["real-browser-focus"];

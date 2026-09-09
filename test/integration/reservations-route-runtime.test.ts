@@ -1,3 +1,4 @@
+import { importApiRoute } from "../helpers/import-api-route";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import test from "node:test";
@@ -40,7 +41,7 @@ test(
           await createSession(client, userId, `${userId}-token`);
         }
 
-        const route = await import("../../app/api/[[...route]]/route");
+        const route = await importApiRoute();
         const fullCookie = signedSessionCookie(`${FULL_ADMIN}-token`);
         const viewCookie = signedSessionCookie(`${VIEW_ADMIN}-token`);
         const noAccessCookie = signedSessionCookie(`${NO_ACCESS_ADMIN}-token`);
@@ -88,8 +89,8 @@ test(
         const startMinute = firstDay.slots[0]!.startMinute;
         await client.query(
           `INSERT INTO reservation_bookings
-             (id, "serviceKey", "reservationDate", "startMinute", "isDemo")
-           VALUES ('preserved-booking', 'my-number-card', $1::date, $2, false)`,
+             ("siteKey", id, "serviceKey", "reservationDate", "startMinute", "isDemo")
+           VALUES ('lg', 'preserved-booking', 'my-number-card', $1::date, $2, false)`,
           [firstDay.date, startMinute],
         );
 
@@ -200,7 +201,9 @@ async function invoke(
   const headers = new Headers();
   if (cookie) headers.set("cookie", cookie);
   if (method === "POST") headers.set("content-type", "application/json");
-  return handler(new Request(`http://localhost:3000${path}`, {
+  const url = new URL(`http://localhost:3000${path}`);
+  if (url.pathname.startsWith("/api/admin/") && !url.searchParams.has("tenant")) url.searchParams.set("tenant", "lg");
+  return handler(new Request(url, {
     method,
     headers,
     body: method === "POST" ? JSON.stringify(body) : undefined,
