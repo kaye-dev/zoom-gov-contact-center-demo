@@ -1,9 +1,0 @@
-{
-  "schemaVersion": 1,
-  "basis": "explicit-$implement-invocation",
-  "runId": "implement-20260906075741-jqzynd",
-  "invokedAt": "2026-09-06T07:57:41.495Z",
-  "goalSha256": "sha256:ec6fed8ce4938b733c72d376d9885ee54359e157f9a3d167bedadf18d0de0266",
-  "prototypeRevision": "sha256:b4856a5ce8de52ccf6ba3ebcd3638b25dd8ca8d1845b3e979fb36c8545c2819f",
-  "validationProfileDigest": "sha256:48a2b3622d382a6382be1c21adf8230812c3e133c708e4c6d4267587e087b97c"
-}

@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="title">
-  <title id="title">未来大学</title>
-  <rect width="48" height="48" rx="6" fill="#00118f"/>
-  <path d="M9 16.5 24 9l15 7.5L24 24 9 16.5Z" fill="#fff"/>
-  <path d="M14 21v9.5c4.5 4 15.5 4 20 0V21l-10 5-10-5Z" fill="#9db7f9"/>
-  <path d="M39 17v12" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
-</svg>
