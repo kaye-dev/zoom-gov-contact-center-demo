@@ -59,6 +59,7 @@ export async function loadVerificationModel(target, repositoryRoot) {
     const bytes = await boundedModelRead(scriptRoot, file, false);
     engine[file] = createHash("sha256").update(bytes).digest("hex");
   }
+  engine["scripts/goal-clarification.mjs"] = createHash("sha256").update(await boundedModelRead(path.resolve(scriptRoot, "../../../.."), "scripts/goal-clarification.mjs", false)).digest("hex");
   const compilerDigest = `sha256:${createHash("sha256").update(JSON.stringify(engine)).digest("hex")}`;
   return { contract, profile, requirements, sourceDigests, sourceModes, compilerDigest };
 }

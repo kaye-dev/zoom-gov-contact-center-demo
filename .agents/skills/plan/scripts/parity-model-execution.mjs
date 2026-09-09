@@ -20,7 +20,9 @@ export async function validateLayerResult(result, expected, compiledCase) {
   const test = expected.test;
   requireValue(test && result?.status === "pass" && result.path === test.path && result.caseId === test.caseId && result.layer === compiledCase.layer, "Structured test case was not executed");
   requireValue(result.reuseKey === compiledCase.reuseKey && serialize(result.input) === serialize(test.input) && serialize(result.environment) === serialize(test.environment) && serialize(result.assertion) === serialize(expected.assertion) && serialize(result.expected) === serialize(expected.expected), "Test conditions or result binding differs");
-  requireValue(expected.requiredCapabilities.every((capability) => result.capabilities?.includes(capability)), "Test result lacks required observation capability");
+  requireValue(result.exitCode === 0 && serialize(result.command) === serialize(test.command), "Structured test command did not pass");
+  requireValue(Object.hasOwn(result, "actual") && assertionMatches(result.actual, expected.expected, expected.assertion), "Structured test actual value differs from its required expectation");
+  requireValue(expected.requiredCapabilities.every((capability) => test.capabilities.includes(capability) && result.capabilities?.includes(capability)), "Test result lacks required observation capability");
   const { digest, ...payload } = result;
   requireValue(digest === await modelDigest(payload), "Structured result digest differs");
   return result;
@@ -40,11 +42,13 @@ function assertLocalSurface(url, surface) {
   requireValue(surface === "production" ? (parsed.hostname === "localhost" || /^[a-z0-9-]+\.localhost$/u.test(parsed.hostname)) && port >= 3000 && port <= 3005 : parsed.hostname === "127.0.0.1" && port >= 4000 && port <= 4005, "Model Browser URL must use an owned development surface", "PARITY_MODEL_INVALID");
 }
 
-export async function executeVerificationPlan(runner, { modelInput, definition, tabs, caseIds, layerResults = [], proofResults = [], baseline = null, run = {}, cleanup = true }) {
-  const baseInput = modelInput ?? { contract: definition.contract, profile: definition.spec, requirements: definition.requirements, sourceDigests: definition.sourceDigests, compilerDigest: definition.compilerDigest };
+export async function executeVerificationPlan(runner, { modelInput, definition, tabs, caseIds, layerResults = [], proofResults = [], baseline = null, run = {}, cleanup = true, phase = "final" }) {
+  requireValue(["smoke", "final"].includes(phase), "Model phase must be smoke or final");
+  if (phase === "smoke") requireValue(Array.isArray(caseIds) && caseIds.length > 0, "Plan smoke requires explicit targeted cases");
+  const baseInput = modelInput ?? { contract: definition.contract, profile: definition.spec, requirements: definition.requirements, sourceDigests: definition.sourceDigests, sourceModes: definition.sourceModes, compilerDigest: definition.compilerDigest };
   const input = { ...baseInput, proofResults: proofResults.length ? proofResults : baseInput.proofResults ?? [] };
   // All model/scale checks precede activation, canary, and even cleanup.
-  const { compiled, estimate } = await modelPreflight(input, { baseline, context: "implement" });
+  const { compiled, estimate } = await modelPreflight(input, { baseline, context: phase === "smoke" ? "plan" : "implement" });
   const selected = caseIds ? compiled.cases.filter((item) => caseIds.includes(item.id)) : compiled.cases;
   requireValue(!caseIds || selected.length === new Set(caseIds).size, "Execution includes unknown cases");
   const browserCases = selected.filter((item) => item.layer === "browser");
@@ -53,7 +57,7 @@ export async function executeVerificationPlan(runner, { modelInput, definition, 
     for (const item of browserCases) for (const surface of ["production", "prototype"]) assertLocalSurface(surfaceUrl(item.conditions, surface), surface);
     for (const method of ["runModelAssertion", "captureModelArtifact", "setModelEnvironment"]) requireValue(typeof runner.adapter[method] === "function", `Common Browser adapter lacks ${method}`, "PARITY_REQUIRED_PROBE_UNAVAILABLE");
   }
-  const result = { schemaVersion: 6, kind: "verification-model", phase: "final", runId: run.runId ?? "model-run", generatedAt: new Date().toISOString(), semanticDigest: compiled.semanticDigest, executionPlanDigest: compiled.executionPlanDigest, inputDigests: compiled.inputDigests, compilerVersion: compiled.compilerVersion, estimate, caseResults: [], layerResults: [], artifacts: [], visualAudit: [], proofResults: compiled.proofResults, substitutionCoverage: compiled.substitutionCoverage, capabilities: null, cleanup: null, status: "incomplete" };
+  const result = { schemaVersion: phase === "smoke" ? 1 : 6, kind: phase === "smoke" ? "verification-model-smoke" : "verification-model", phase, runId: run.runId ?? "model-run", generatedAt: new Date().toISOString(), semanticDigest: compiled.semanticDigest, executionPlanDigest: compiled.executionPlanDigest, inputDigests: compiled.inputDigests, compilerVersion: compiled.compilerVersion, estimate, caseResults: [], layerResults: [], artifacts: [], visualAudit: [], proofResults: compiled.proofResults, substitutionCoverage: compiled.substitutionCoverage, capabilities: null, cleanup: /** @type {{status: string, reason?: string} | null} */ (null), status: "incomplete" };
   let startedBrowser = false;
   let executionFailure;
   try {
@@ -110,7 +114,7 @@ export async function executeVerificationPlan(runner, { modelInput, definition, 
             const obligationIds = item.assertionLinks.filter((entry) => entry.assertion.checkpointId === checkpoint.id).map(({ obligationId }) => obligationId);
             const requests = [...new Set(compiled.obligations.filter((entry) => obligationIds.includes(entry.id)).flatMap((entry) => entry.artifactRequests))];
             for (const kind of requests) {
-              const identity = { caseKey: item.caseKey, surface, checkpointId: checkpoint.id, phase: "final", conditionsDigest: await modelDigest(conditions), kind };
+              const identity = { caseKey: item.caseKey, surface, checkpointId: checkpoint.id, phase, conditionsDigest: await modelDigest(conditions), kind };
               const artifact = await runner.call("captureModelArtifact", tabId, kind, { row: { id: item.id.replaceAll(":", "-") }, surface, probeId: (await modelDigest({ checkpointId: checkpoint.id, kind })).slice(7, 31) });
               const bound = { ...artifact, identity, identityDigest: await modelDigest(identity), caseId: item.id };
               record.artifacts.push(bound); result.artifacts.push(bound);
@@ -141,7 +145,7 @@ export async function executeVerificationPlan(runner, { modelInput, definition, 
 /** Recompute the full obligation closure; a single parent/command pass cannot close children. */
 export async function validateModelEvidence(input, evidence, { partial = false, allowPendingVisual = false } = {}) {
   const { compiled } = await modelPreflight({ ...input, proofResults: evidence?.proofResults ?? [] }, { context: "implement" });
-  requireValue(evidence?.schemaVersion === 6 && evidence.kind === "verification-model", "Model evidence schema is invalid");
+  requireValue(evidence?.schemaVersion === 6 && evidence.kind === "verification-model" && evidence.phase === "final", "Model evidence schema is invalid");
   requireValue(evidence.semanticDigest === compiled.semanticDigest, "Evidence semantic binding is stale", "PARITY_CURRENT_STATE_DRIFT");
   requireValue(evidence.cleanup?.status === "pass", "Evidence cleanup is incomplete", "PARITY_CLEANUP_FAILED");
   if (evidence.caseResults.some((item) => item.layer === "browser")) {
@@ -205,6 +209,33 @@ export async function validateModelEvidence(input, evidence, { partial = false, 
     requireValue(compiled.requiredCoverageKeys.every((key) => passedKeys.has(key)), "Required tuple is missing");
   }
   return { status: "pass", caseCount: resultIds.size, obligationCount: passedObligations.size, originalCriterionCount: compiled.originalCriteria.length, requiredCoverageCount: passedKeys.size, semanticDigest: compiled.semanticDigest };
+}
+
+/** Deterministic plan-only representatives, separate from implementation unit coverage.
+ * @param {object} compiled
+ * @param {{targetIds?: string[], stateIds?: string[]}} options
+ */
+export function selectModelSmoke(compiled, { targetIds, stateIds = [] } = {}) {
+  requireValue(Array.isArray(targetIds) && targetIds.length > 0 && new Set(targetIds).size === targetIds.length, "Smoke needs explicit affected targets");
+  requireValue(Array.isArray(stateIds) && new Set(stateIds).size === stateIds.length, "Invalid affected state list");
+  const cases = compiled.cases.filter(item => item.layer === "browser" && targetIds.includes(item.targetId)).sort((a, b) => a.id.localeCompare(b.id));
+  requireValue(targetIds.every(id => cases.some(item => item.targetId === id)), "Unknown Browser smoke target");
+  requireValue(stateIds.every(id => cases.some(item => item.conditions.state === id)), "Unknown Browser smoke state");
+  const applicable = cases.filter(item => !stateIds.length || stateIds.includes(item.conditions.state));
+  requireValue(targetIds.every(id => applicable.some(item => item.targetId === id)), "Smoke state does not apply to target");
+  const selected = new Map();
+  for (const item of applicable) {
+    const key = `${item.targetId}:${item.conditions.state}`;
+    if (!selected.has(key)) selected.set(key, item);
+  }
+  const risks = new Set(compiled.obligations.filter(item => targetIds.includes(item.targetId)).flatMap(item => item.riskIds));
+  for (const risk of risks) {
+    const obligationIds = compiled.obligations.filter(item => item.riskIds.includes(risk)).map(item => item.id);
+    const representative = cases.find(item => item.obligationIds.some(id => obligationIds.includes(id)));
+    requireValue(representative, "Smoke risk has no reachable representative");
+    selected.set(`risk:${risk}`, representative);
+  }
+  return { phase: "smoke", matrixScope: "targeted", caseIds: [...new Set([...selected.values()].map(item => item.id))].sort() };
 }
 
 /** Stage scope is a subset of the full contract, never plan-smoke selection. */

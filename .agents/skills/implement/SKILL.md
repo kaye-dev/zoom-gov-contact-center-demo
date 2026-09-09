@@ -7,8 +7,6 @@ description: "Implement and verify one repository goal; explicit $implement invo
 
 Treat the resolved goal as the specification. The current agent owns implementation and verification; do not delegate implementation to a custom agent or route it through lifecycle machinery.
 
-## Approved implementation units
-
 When the adopted goal declares independently verifiable units and local stage commits, follow [implementation-checkpoints.md](../plan/references/implementation-checkpoints.md). Complete each unit's checks and any model stage coverage, create a content-bound receipt, commit only its verified scope, and continue without asking again. Do not invoke shipping for a local stage commit. Preserve generated goal/evidence and unrelated changes outside the index.
 
 For contract 3/profile 5, use full-model estimate/preflight and `prepare-run --unit` / `verify-stage`; stage output is `checkpoint-verification.json`, not overall completion. Import only content/condition/expectation-identical stage results into the final union, execute missing or invalidated obligations, and require public `verify-run` evidence 6. This model path supersedes the legacy matrix-specific instructions below; existing contract 1/2 and profile 1–4 retain their own supported readers and are not silently migrated. A non-UI goal may explicitly require an owned development-tool Browser fixture; keep it separate from product UI approval.
@@ -17,17 +15,17 @@ For contract 3/profile 5, use full-model estimate/preflight and `prepare-run --u
 
 1. Use the explicit `plans/<slug>/goal.md`, or the only `plans/*/goal.md`; stop for zero or multiple candidates. Reject invalid or reserved slugs.
 2. Read repository rules, the complete goal, current Git status, affected implementation, [goal-quality.md](../plan/references/goal-quality.md), and applicable UI references.
-3. Validate the six goal headings, requirement closure, interfaces, completion criteria, unresolved decisions, independently classified UI impact, and `## ユーザー動作確認` handoff.
-4. For current UI work, require `ui-contract.json` version 1 and `parity-spec.json` version 4. Run one `parity-runner.mjs preflight plans/<slug>/prototype --context implement` and require its goal, revision, profile, source inventory, invariant/probe, and coverage selection checks to pass; never rebuild the approved prototype; open it only at the final verification boundary. Versions 1, 2, and 3 remain legacy read-only inputs and are not migrated during implementation.
-5. Create a fresh run ID. Hash the complete goal, capture the current prototype revision and validation-profile digest, and use `createApprovalEvidence` plus `writeRunEvidence` from [parity-runner.md](../plan/references/parity-runner.md) to write `plans/<slug>/evidence/<run-id>/approval.json`.
+3. Independently classify UI impact and resolve the regular goal and prototype/profile files. Capture validation issues for the next gate; do not edit production yet.
+4. For UI work whose artifact identities can be resolved, create a fresh run ID and write `plans/<slug>/evidence/<run-id>/approval.json` from this explicit invocation before preflight. Use `createApprovalEvidence` plus `writeRunEvidence` from [parity-runner.md](../plan/references/parity-runner.md), binding the complete goal hash, actual current prototype revision and profile digest. Model approval also binds `semanticDigest`; set `allowExplanatoryRestatement: true` only if the adopted goal authorizes that policy. Capture provenance even when the goal's recorded revision is stale; it does not permit proceeding past a failed gate.
+5. Now validate the six goal headings, closure, interfaces, completion criteria, unresolved decisions, UI impact, and user-check handoff. Run one `parity-runner.mjs preflight plans/<slug>/prototype --context implement`. New UI work uses contract 3/profile 5; existing matrix plans retain their supported contract 1/2 and profile 1–4. Require current goal, revision, profile, source, and selection checks to pass before production editing. Never rebuild the approved prototype; open it only at a completed unit or final verification boundary.
 
 Write `approval.json` before source-drift and other start gates. A later gate failure keeps this invocation-bound evidence but stops production editing. The explicit `$implement` invocation is the approval basis; do not request a second approval, manual parity field, or revision transcription. Approval does not authorize deployment, destructive data changes, secrets, external writes, or GitHub mutations.
 
-For non-UI work, require `UI変更: なし` and `- 対象外: UI変更なし`; do not create a prototype, Browser session, approval evidence, or `implementation-parity.json`. Use goal-specific static/runtime verification instead.
+For non-UI work, require `UI変更: なし` and `- 対象外: UI変更なし`; do not create product prototypes, UI approval evidence, or `implementation-parity.json`. Use goal-specific static/runtime verification. Browser is permitted only for an owned development-tool fixture expressly required by the adopted goal.
 
-## Coverage scope and start gate
+## Legacy matrix scope and shared start gates
 
-New UI runs use `matrixScope: coverage` by default. The deterministic covering matrix must include, for every target, every declared state, viewport, and light/dark theme at least once. Execute every declared risk row and at least one anchor row per target. Do not reduce axis coverage because a change is local.
+Legacy matrix UI runs use `matrixScope: coverage` by default. The deterministic covering matrix must include, for every target, every declared state, viewport, and light/dark theme at least once. Execute every declared risk row and at least one anchor row per target. Do not reduce axis coverage because a change is local.
 
 Use `matrixScope: full` only for `release`, `ci`, `scheduled`, or user-`explicit` execution. A concrete cross-cutting risk may require full parity, but run it as a separate non-LLM verification task rather than an interactive feature turn. Never describe coverage evidence as full parity. `targeted` remains available only for `$plan` smoke and legacy profiles.
 
@@ -51,7 +49,7 @@ Browser availability is not a start gate. Do not probe Browser capability or cre
 - Reuse a passing check only when its command, scope, status, and validated diff digest match. Full test and build each run at most once per digest; after a source fix rerun only affected checks, and never rerun static checks for a Browser-only failure.
 - Review the final diff against the goal, requirement closure, exact task scope, and user-check handoff before starting runtime verification.
 
-## Final coverage run
+## Final coverage run (legacy matrix protocol)
 
 For UI work, only after implementation, static checks, any justified build, and diff review are complete:
 
@@ -88,8 +86,10 @@ Treat exact phrase `確認セッションを保持` as an opt-in only when it ap
 
 ## Finish
 
-Complete UI work only when current schema-version-5 evidence has `automationCoverageStatus=pass`, complete recomputed `interactionCoverage`, and all `auditStatus` fields equal `pass`; human visual approval may remain pending and full parity may remain not-run. Non-UI work completes through its goal-specific checks without Browser or parity evidence.
+Complete model UI work only with public `verify-run` evidence 6 after the current full obligation union passes. Complete legacy matrix UI work only when schema-version-5 evidence has `automationCoverageStatus=pass`, complete recomputed `interactionCoverage`, and all `auditStatus` fields equal `pass`; human visual approval may remain pending and full parity may remain not-run. Non-UI work completes through its goal-specific checks, including an expressly required owned tool fixture; it does not require product UI parity evidence.
 
 Report changed paths, commands/results, runtime checks, evidence paths, coverage results, unchecked user checks, human-review status, full-parity status, risks, and preserved unrelated changes. Do not mutate the goal for progress, ship automatically, push, or create a pull request. Stage/commit only when the adopted goal explicitly authorizes local stage commits, using the content-bound checkpoint workflow above.
 
 At the transition to independent review, follow [the manual model handoff](../review/references/model-handoff.md): finish required implementation verification first, then return the target model and populated continuation prompt before any independent review. Keep `$review` optional unless requested; do not start it automatically.
+
+新規UIのcontract version 3 / profile version 5、Browser前のestimate、consumer接続、段階集約のschema 6、`goal-clarification.mjs`による限定承認継承は[共通検証契約](../plan/references/workflow-verification-contract.md)に従う。

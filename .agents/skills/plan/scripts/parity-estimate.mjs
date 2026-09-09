@@ -73,7 +73,12 @@ export async function estimateVerification(input, { measurements = {}, baseline 
   counts.cli += replacementChecks.filter((item) => !["browser", "visual"].includes(item.layer)).length;
   const estimate = timeEstimate(counts, measurements);
   const unitIds = [...new Set(compiled.cases.flatMap((item) => item.unitIds))].sort();
-  const units = unitIds.map((id) => { const cases = browserCases.filter((item) => item.unitIds.includes(id)); return { id, executionCount: cases.length, ...timeEstimate(count(cases), measurements) }; });
+  const units = unitIds.map((id) => {
+    const allCases = compiled.cases.filter((item) => item.unitIds.includes(id));
+    const cases = browserCases.filter((item) => item.unitIds.includes(id));
+    const unitCounts = count(cases); unitCounts.cli = allCases.length - cases.length;
+    return { id, executionCount: allCases.length, browserExecutionCount: cases.length, cliCount: unitCounts.cli, ...timeEstimate(unitCounts, measurements) };
+  });
   const imageCount = browserCases.filter((item) => item.artifactRequests.includes("screenshot")).length;
   const bytes = { low: counts.capture * 16 * 1024, central: counts.capture * 256 * 1024, high: counts.capture * 1024 * 1024 };
   const report = { version: 1, compilerVersion: COMPILER_VERSION, status: "complete", inputDigests: compiled.inputDigests, policyDigest, semanticDigest: compiled.semanticDigest, executionPlanDigest: compiled.executionPlanDigest,

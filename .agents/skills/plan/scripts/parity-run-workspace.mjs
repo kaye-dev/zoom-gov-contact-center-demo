@@ -1034,12 +1034,12 @@ async function nextRunBatch({ repositoryRootPath, runId }) {
 
 // Execute the immutable workspace batch through the common Browser runner.
 // Only compact summaries cross the caller boundary; raw artifacts stay in the sink.
-async function executeBrowserBatch({ repositoryRootPath, runId, runner, tabs }) {
+async function executeBrowserBatch({ repositoryRootPath, runId, runner, tabs, layerResults = [] }) {
   const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
   const { value: manifest } = await readManifest(path.join(paths.runRoot, "manifest.json"), {
     limit: maxManifestBytes, parentIdentity: paths.runIdentity,
   });
-  if (manifest.schemaVersion === 3) { const { executeModelBatch } = await import("./parity-model-workspace.mjs"); return executeModelBatch({ repositoryRootPath, runId, runner, tabs }); }
+  if (manifest.schemaVersion === 3) { const { executeModelBatch } = await import("./parity-model-workspace.mjs"); return executeModelBatch({ repositoryRootPath, runId, runner, tabs, layerResults }); }
   const next = await nextRunBatch({ repositoryRootPath, runId });
   if (!next.batch) return next;
   const descriptor = manifest.batches.find(({ batchId }) => batchId === next.batch.batchId);

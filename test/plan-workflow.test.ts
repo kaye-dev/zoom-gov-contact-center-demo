@@ -133,7 +133,7 @@ test("planはproduction-parity prototypeと返却前smokeを維持する", async
   assert.match(plan, /user can give feedback|user.*feedback/iu);
   assert.match(plan, /Browser unavailability does not block a reviewable plan/);
   assert.match(plan, /Do not open the Browser while authoring/);
-  assert.match(plan, /otherwise ready to return/);
+  assert.match(plan, /after all authoring/);
   assert.match(plan, /at most one fresh no-history `project_explorer` custom agent/);
   assert.match(plan, /multiple independent subsystems or a large code\/document inventory/);
   assert.match(plan, /If it is unavailable, continue the investigation locally and report/);
@@ -180,7 +180,7 @@ test("implementは静的検証後にUI final coverageを完了ゲートとする
   assert.match(implement, /explicit `\$implement` invocation is the approval basis/);
   assert.match(implement, /approval\.json/);
   assert.match(implement, /implementation-parity\.json/);
-  assert.match(implement, /Coverage scope and start gate/);
+  assert.match(implement, /Legacy matrix scope and shared start gates/);
   assert.match(implement, /focused tests/);
   assert.match(implement, /applicable lint\/typecheck/);
   assert.match(implement, /run the full suite only when/);
@@ -194,11 +194,11 @@ test("implementは静的検証後にUI final coverageを完了ゲートとする
   assert.match(implement, /\.\/dev-compose\.sh ensure/);
   assert.match(implement, /A missing Browser capability[\s\S]*prevents an automated-coverage completion claim/);
   assert.match(implement, /do not delegate implementation to a custom agent/);
-  assert.match(workflow, /Browser capability、runtime、prototype、parity lifecycleはUI実装と静的check後のfinal boundary/);
+  assert.match(workflow, /Browser capability、runtime、prototype、parity lifecycleは完成したUI単位の静的check後またはfinal boundary/);
   assert.match(workflow, /schema version 5のcoverage証跡を実装・通常review・shippingの完了条件/);
   assert.match(workflow, /全testは[\s\S]*場合[\s\S]*production buildは[\s\S]*場合/);
-  assert.match(devServer, /UI変更の`\$implement`は実装・静的検証・diff確認が完了した後のfinal boundary/);
-  assert.match(agents, /final Browser coverage/);
+  assert.match(devServer, /UI変更の`\$implement`は各単位の実装・静的検証・diff確認が完了した後、または全体のfinal boundary/);
+  assert.match(agents, /current schema 6/);
 });
 
 test("parity runnerはUI final coverageと独立検証で共有しlegacyをread-onlyに保つ", async () => {
@@ -211,7 +211,7 @@ test("parity runnerはUI final coverageと独立検証で共有しlegacyをread-
     read(".gitignore"),
   ]);
   assert.match(plan, /parity-spec\.json` version 4/u);
-  assert.match(plan, /browserSetups/u);
+  assert.match(plan, /layer capabilities/u);
   for (const contract of [reference]) {
     assert.match(contract, /prepare-run/u);
     assert.match(contract, /next-batch/u);
@@ -464,15 +464,15 @@ test("workflow-performance-auditは3ファイルだけのread-only明示skillで
 test("workflow skillと直接referenceのinstruction量は明示budget内に収まる", async () => {
   const budgets: Record<string, number> = {
     ".agents/skills/plan/SKILL.md": 29,
-    ".agents/skills/implement/SKILL.md": 60,
-    ".agents/skills/review/SKILL.md": 27,
+    ".agents/skills/implement/SKILL.md": 61,
+    ".agents/skills/review/SKILL.md": 28,
     ".agents/skills/git-commit-push-pr/SKILL.md": 135,
     ".agents/skills/plan-finalize/SKILL.md": 35,
     ".agents/skills/git-commit-push-pr/references/base-sync-contract.md": 30,
-    ".agents/skills/plan/references/goal-quality.md": 44,
-    ".agents/skills/plan/references/ui-prototype-quality.md": 71,
-    ".agents/skills/plan/references/parity-runner.md": 95,
-    ".agents/skills/review/references/review-contract.md": 57,
+    ".agents/skills/plan/references/goal-quality.md": 46,
+    ".agents/skills/plan/references/ui-prototype-quality.md": 72,
+    ".agents/skills/plan/references/parity-runner.md": 115,
+    ".agents/skills/review/references/review-contract.md": 58,
   };
   for (const [relative, maximum] of Object.entries(budgets)) {
     const nonblank = (await read(relative)).split("\n").filter((line) => line.trim() !== "").length;
@@ -775,4 +775,19 @@ test("NIST fidelity gates synchronize plan, implementation, review and shipping"
   for (const required of ["NIST", "equivalence", "boundaries", "interactionGroups", "strength", "runtimeChecks", "visualChecks", "auditStatus", "not-run", "five seconds", "Human approval"]) assert.ok(reference.includes(required), required);
   const ui = await read(".agents/skills/plan/references/ui-prototype-quality.md");
   assert.doesNotMatch(ui, /static verification only|static-only completion/u);
+});
+
+test("FLOW-03: model estimate, bounded inheritance and final aggregation are shared across entrypoints", async () => {
+  for (const file of ["AGENTS.md", "docs/development/codex-development-workflow.md", ".claude/rules/dev-server.md", ".agents/skills/implement/SKILL.md", ".agents/skills/review/SKILL.md", ".agents/skills/git-commit-push-pr/SKILL.md", ".agents/skills/plan/references/goal-quality.md", ".agents/skills/plan/references/ui-prototype-quality.md"]) {
+    const content = await read(file);
+    assert.match(content, /version 3.*version 5/u);
+    assert.match(content, /estimate/u);
+    assert.match(content, /schema 6/u);
+    assert.match(content, /goal-clarification\.mjs/u);
+    assert.match(content, /consumer/u);
+  }
+  const template = await read("plans/template.md");
+  assert.equal([...template.matchAll(/^# /gmu)].length, 6);
+  assert.match(template, /検証規模と因子根拠/u);
+  assert.match(template, /実装単位と段階検証/u);
 });

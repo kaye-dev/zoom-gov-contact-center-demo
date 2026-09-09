@@ -34,3 +34,9 @@ contract 3/profile 5 の `prepare-run --unit <id>`（反復可）と `select --u
 次のrunは `prepare-run --import-stage <run-id>`（反復可）で同goalのimmutable stageを参照する。元証跡を保持し、現在のcaseKey/reuseKey、期待値、環境、全依存content/mode、compilerが一致するcaseだけを新runへ取り込む。失効したcaseを予定から削らず、pendingとして実行する。未登録・unknown依存がある場合は広く失効させる。sourceが変わった進行中runは正規 `invalidate-run` により実際の差分と依存閉包を再計算し、影響しないfragmentを保持する。
 
 全Browser caseが再利用可能でも、現在世代のbootstrapと共通canary/cleanupは必要。全required集合に対する不足・失効caseと横断flowを補ってから、全体 `finalize-run` / `verify-run` でevidence 6を確定する。stage、human approval、coverage、full parityは別の状態として扱う。旧runはそのschemaのreaderで読み、互換性を証明できない結果は診断として保持して再実行する。
+
+## Goal clarification without changing approval meaning
+
+`recordGoalClarification` / `verifyGoalClarification` in `scripts/goal-clarification.mjs` support one bounded explanatory addition per original goal. The approved invocation must explicitly carry `allowExplanatoryRestatement: true`. Keep the complete original goal unchanged and append `## 承認済み要件の説明補足` with blockquotes of complete existing non-heading lines. Only exact restatements are mechanically provable; new prose and deletions require a new invocation. This intentionally does not classify arbitrary natural-language edits by line count.
+
+The immutable private receipt holds both full texts, their digests, exact append diff, classification, original invocation and invariant binding. Checkpoint readers bind `acceptanceDigest`; model readers bind `semanticDigest`, `prototypeRevision`, and `validationProfileDigest`. Readers reclassify the actual diff and verify current bytes. Original receipts and manifests remain unchanged. Product fixes within adopted acceptance proceed with affected revalidation without editing the goal.

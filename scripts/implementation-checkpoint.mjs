@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /** Local, content-bound stage commits. No remote, reset, amend, or hook bypass. */
 import path from "node:path";
+import { verifyGoalClarification } from "./goal-clarification.mjs";
 import { lstat, open, realpath } from "node:fs/promises";
 import { constants } from "node:fs";
 import { createHash } from "node:crypto";
@@ -165,7 +166,7 @@ async function goalState(root, goalPath, unitId) {
   const unit = definition.units.find(({ id }) => id === unitId);
   ensure(unit, "Unknown implementation unit");
   const closure = dependencyPaths(definition, unit);
-  return { definition, unit, goalDigest: digest(bytes), acceptanceDigest: jsonDigest({ unit, sources: definition.sourceInventory.filter(({ path }) => closure.includes(path)) }) };
+  return { definition, unit, goalBytes: bytes, goalDigest: digest(bytes), acceptanceDigest: jsonDigest({ unit, sources: definition.sourceInventory.filter(({ path }) => closure.includes(path)) }) };
 }
 const scoped = (file, scope) => scope.some((entry) => file === entry || file.startsWith(`${entry}/`));
 async function changedPaths(root) {
@@ -193,11 +194,12 @@ async function readOptionalPrivate(target, identity) {
   try { return (await storage.readJsonFile(target, { parentIdentity: identity, limit: MAX_RECEIPT })).value; }
   catch (error) { if (error.code === "ENOENT") return null; throw error; }
 }
-function validateReceiptShape(receipt, { root, goalPath, unitId, state }) {
+async function validateReceiptShape(receipt, { root, goalPath, unitId, state }) {
+  await verifyGoalClarification({ repositoryRoot: root, goalPath, originalDigest: receipt.goal?.digest, currentBytes: state.goalBytes, invocation: receipt.invocation, invariantBinding: { acceptanceDigest: state.acceptanceDigest } });
   ensure(receipt.schemaVersion === 1 && receipt.kind === "implementation-checkpoint" && receipt.unitId === unitId && receipt.status === "pass", "Receipt is not a passed implementation checkpoint");
   ensure(receipt.checkout === root && receipt.goal.path === goalPath, "Receipt belongs to another checkout/goal");
-  ensure(receipt.goal.digest === state.goalDigest && receipt.acceptanceDigest === state.acceptanceDigest, "Goal or acceptance contract changed", "CHECKPOINT_APPROVAL_CHANGED");
-  ensure(receipt.invocation?.basis === "explicit-$implement-invocation" && receipt.invocation.goalDigest === state.goalDigest, "Receipt lacks explicit invocation provenance");
+  ensure(receipt.acceptanceDigest === state.acceptanceDigest, "Goal or acceptance contract changed", "CHECKPOINT_APPROVAL_CHANGED");
+  ensure(receipt.invocation?.basis === "explicit-$implement-invocation" && receipt.invocation.goalDigest === receipt.goal.digest, "Receipt lacks explicit invocation provenance");
   ensure(list(receipt.selectedPaths) && receipt.selectedPaths.every((file) => scoped(file, state.unit.scope) && !generated(file)), "Receipt has invalid commit paths");
   ensure(Array.isArray(receipt.checks) && receipt.checks.length === state.unit.checks.length, "Check inventory differs");
   for (const expected of state.unit.checks) {
@@ -269,7 +271,7 @@ async function validateCommitTree(root, head, receipt, parent) {
 export async function verifyImplementationCheckpoint({ repository = ".", goalPath, unitId, receiptPath, runtime }) {
   const root = await repositoryRoot(repository), state = await goalState(root, goalPath, unitId);
   const file = await readReceipt(root, goalPath, receiptPath), receipt = file.receipt;
-  validateReceiptShape(receipt, { root, goalPath, unitId, state });
+  await validateReceiptShape(receipt, { root, goalPath, unitId, state });
   ensure(receipt.verifierDigest === await verifierDigest(), "Verifier dependencies changed", "CHECKPOINT_CONTENT_CHANGED");
   ensure(receipt.runtimeDigest === jsonDigest(receipt.runtime) && serialize(receipt.runtime.system) === serialize(systemRuntime()), "Runtime binding differs", "CHECKPOINT_CONTENT_CHANGED");
   if (runtime !== undefined) ensure(serialize(receipt.runtime.declared) === serialize(runtime), "Declared runtime conditions changed", "CHECKPOINT_CONTENT_CHANGED");
@@ -302,7 +304,7 @@ export async function commitImplementationCheckpoint({ repository = ".", goalPat
   if (binding) { const result = await verifyImplementationCheckpoint({ repository: root, goalPath, unitId, receiptPath }); return { ...result, status: "committed" }; }
   if (attempt) {
     const state = await goalState(root, goalPath, unitId);
-    validateReceiptShape(file.receipt, { root, goalPath, unitId, state });
+    await validateReceiptShape(file.receipt, { root, goalPath, unitId, state });
     ensure(await gitText(root, ["symbolic-ref", "--short", "HEAD"]) === file.receipt.branch && !protectedBranch(file.receipt.branch), "Commit attempt belongs to another branch", "CHECKPOINT_PROTECTED_BRANCH");
     ensure(serialize(await sourceSnapshots(root, state.definition, state.unit)) === serialize(file.receipt.sources), "Commit attempt contents changed", "CHECKPOINT_CONTENT_CHANGED");
     ensure(attempt.receiptDigest === file.receiptDigest, "Commit attempt receipt differs");

@@ -155,3 +155,25 @@ test("ISO-01: Git command spy sees zero remote operations during verification an
   finally { process.env.PATH = prior; }
   assert.equal(await readFile(log, "utf8"), "");
 });
+
+test("REPAIR-01/02: immutable explanatory inheritance preserves checks and rejects semantic edits", async (context) => {
+  const f = await fixture(context), api = await helper;
+  const repair = await import(pathToFileURL(path.resolve(import.meta.dirname, "../scripts/goal-clarification.mjs")).href);
+  const before = `既存の計算結果を維持する。\n${f.goal}`;
+  await writeFile(path.join(f.root, goalPath), before);
+  await f.update("a.js"); const receipt = await f.capture("A", { authorization: { basis: "explicit-$implement-invocation", goalDigest: sha(before), allowExplanatoryRestatement: true } });
+  const original = await readFile(path.join(f.root, f.receiptPath("A")));
+  const after = `${before}\n## 承認済み要件の説明補足\n\n> 既存の計算結果を維持する。\n`;
+  await writeFile(path.join(f.root, goalPath), after);
+  await assert.rejects(api.verifyImplementationCheckpoint(f.args("A")));
+  const input = { repositoryRoot: f.root, goalPath, before, after, invocation: { basis: "explicit-$implement-invocation", goalDigest: sha(before), allowExplanatoryRestatement: true }, invariantBinding: { acceptanceDigest: receipt.acceptanceDigest } };
+  const binding = await repair.recordGoalClarification(input);
+  assert.equal((await api.verifyImplementationCheckpoint(f.args("A"))).status, "verified");
+  assert.deepEqual(await readFile(path.join(f.root, f.receiptPath("A"))), original);
+  await assert.rejects(repair.recordGoalClarification(input));
+  assert.throws(() => repair.classifyGoalClarification(before, after.replace("> 既存の計算結果を維持する。", "> 権限を拡張する。")), { code: "GOAL_APPROVAL_CHANGED" });
+  assert.throws(() => repair.classifyGoalClarification(before, after.replace('"acceptance":', '"relaxed":')), { code: "GOAL_APPROVAL_CHANGED" });
+  await writeFile(path.join(f.root, goalPath), after + "期待値を緩和する。\n");
+  await assert.rejects(api.verifyImplementationCheckpoint(f.args("A")), { code: "GOAL_APPROVAL_CHANGED" });
+  assert.match(binding.path, /goal-clarifications/u);
+});

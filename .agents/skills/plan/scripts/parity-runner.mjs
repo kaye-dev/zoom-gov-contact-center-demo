@@ -251,7 +251,7 @@ function mentionsCountOrIds(value, count, ids) {
   return ids.every((id) => value.includes(id));
 }
 
-function validateGoalContract({ goalText, slug, prototypeRevision, contract, spec }) {
+function validateGoalContract({ goalText, slug, prototypeRevision, contract, spec, requirements }) {
   const actualHeadings = goalText.match(/^# .+$/gmu) ?? [];
   ensure(
     stableStringify(actualHeadings) === stableStringify(goalHeadings),
@@ -265,7 +265,7 @@ function validateGoalContract({ goalText, slug, prototypeRevision, contract, spe
     "validation profile",
     "prototype revision",
     "comparison targets",
-    "parity matrix",
+    ...(contract.version === 3 ? [] : ["parity matrix"]),
   ]) {
     ensure(fields.has(field), `goal.md UI契約 is missing ${field}`);
   }
@@ -273,8 +273,8 @@ function validateGoalContract({ goalText, slug, prototypeRevision, contract, spe
   const approval = normalizeGoalValue(fields.get("approval contract"));
   const profile = normalizeGoalValue(fields.get("validation profile"));
   ensure(
-    approval.includes(`plans/${slug}/prototype/ui-contract.json`) && /version\s*1/iu.test(approval),
-    "goal.md approval contract must reference ui-contract.json version 1",
+    approval.includes(`plans/${slug}/prototype/ui-contract.json`) && new RegExp(`version\\s*${contract.version}(?:\\D|$)`, "iu").test(approval),
+    "goal.md approval contract must reference the current ui-contract.json version",
   );
   ensure(
     profile.includes(`plans/${slug}/prototype/parity-spec.json`) && new RegExp(`version\\s*${spec.version}`, "iu").test(profile),
@@ -292,6 +292,7 @@ function validateGoalContract({ goalText, slug, prototypeRevision, contract, spe
     ),
     "goal.md comparison targets do not match ui-contract.json",
   );
+  if (contract.version !== 3) {
   ensure(
     mentionsCountOrIds(
       normalizeGoalValue(fields.get("parity matrix")),
@@ -300,12 +301,25 @@ function validateGoalContract({ goalText, slug, prototypeRevision, contract, spe
     ),
     "goal.md parity matrix count does not match ui-contract.json",
   );
+  }
   const implementation = markdownSection(goalText, "# 実装方針");
   ensure(
     !/^\s*(?:[-*]\s*)?(?:`{1,3})?(?:node|npx|npm\s+exec)\s+[^\n`]*build-prototype-css\.mjs/imu.test(implementation) &&
       !/`build-prototype-css\.mjs`\s*を\s*(?:再)?実行/u.test(implementation),
     "goal.md must not instruct implement to rebuild an approved prototype",
   );
+  if (contract.version === 3) {
+    ensure(spec.version === 5 && Array.isArray(requirements?.requirements), "Model goal requires its authoritative requirements bundle");
+    const closure = markdownSection(goalText, "## 要件クロージャ");
+    const ids = [...new Set([...closure.matchAll(/\bREQ-[A-Za-z0-9-]+\b/gu)].map(match => match[0]))].sort();
+    ensure(stableStringify(ids) === stableStringify([...requirements.requirements].sort()), "Model goal requirement IDs differ from its authoritative bundle");
+    const userChecks = markdownSection(goalText, "## ユーザー動作確認").split("\n").filter(line => /^- \[ \] /u.test(line));
+    const checkIds = userChecks.map(line => /UI-CHECK-[0-9]{2,}/u.exec(line)?.[0]);
+    ensure(userChecks.length > 0 && checkIds.every(Boolean) && new Set(checkIds).size === checkIds.length, "Model UI goal needs stable unchecked user checks");
+    for (const check of userChecks) for (const field of ["対象", "前提", "操作", "期待結果"]) ensure(new RegExp(`${field}:\\s*[^;；\\n]+`, "u").test(check), `Model user check lacks ${field}`);
+    for (const target of contract.comparisonTargets) ensure(userChecks.some(check => check.includes(target.route) || check.includes(target.id)), "Model user checks omit a target");
+    return { status: "pass", requirementRows, userCheckCount: userChecks.length };
+  }
   ensure(spec.version >= 3, "preflight requires parity-spec.json version 3");
   if (spec.version === 4) {
     const closure = markdownSection(goalText, "## 要件クロージャ");
@@ -361,9 +375,12 @@ async function createPreflightSummary({
 }) {
   ensure(context === "plan" || context === "implement", "--context must be plan or implement");
   if (definition.spec.version === 5) {
-    const { modelPreflight } = await import("./parity-model-execution.mjs");
+    const { modelPreflight, selectModelSmoke } = await import("./parity-model-execution.mjs");
     const result = await modelPreflight({ contract: definition.contract, profile: definition.spec, requirements: definition.requirements, sourceDigests: definition.sourceDigests, sourceModes: definition.sourceModes, compilerDigest: definition.compilerDigest }, { context });
-    return { schemaVersion: 1, status: "pass", prototypeRevision: definition.prototypeRevision, validationProfileDigest: definition.validationProfileDigest, semanticDigest: result.compiled.semanticDigest, estimate: result.estimate };
+    const goalText = await readFile(path.join(repositoryRootPath, "plans", definition.slug, "goal.md"), "utf8");
+    const goalContract = validateGoalContract({ goalText, slug: definition.slug, prototypeRevision: definition.prototypeRevision, contract: definition.contract, spec: definition.spec, requirements: definition.requirements });
+    const selection = context === "plan" ? selectModelSmoke(result.compiled, { targetIds: changedTargetIds, stateIds: changedStates }) : null;
+    return { schemaVersion: 1, status: "pass", prototypeRevision: definition.prototypeRevision, validationProfileDigest: definition.validationProfileDigest, semanticDigest: result.compiled.semanticDigest, goalContract, selection, estimate: result.estimate };
   }
   const goalText = await readFile(path.join(repositoryRootPath, "plans", definition.slug, "goal.md"), "utf8");
   const goalContract = validateGoalContract({
@@ -437,15 +454,18 @@ function createApprovalEvidence({
   validationProfileDigest,
   invokedAt = new Date().toISOString(),
   semanticDigest,
+  allowExplanatoryRestatement = false,
 }) {
   requireNonEmptyString(runId, "runId");
+  ensure(typeof allowExplanatoryRestatement === "boolean" && (!allowExplanatoryRestatement || semanticDigest), "Explanatory policy requires an explicit model approval");
+  if (semanticDigest) requireSha256(semanticDigest, "semanticDigest");
   requireSha256(goalSha256, "goalSha256");
   requireSha256(prototypeRevision, "prototypeRevision");
   requireSha256(validationProfileDigest, "validationProfileDigest");
   ensure(!Number.isNaN(Date.parse(invokedAt)), "invokedAt must be an ISO-compatible timestamp");
   return {
     schemaVersion: semanticDigest ? 2 : 1,
-    ...(semanticDigest ? { semanticDigest } : {}),
+    ...(semanticDigest ? { semanticDigest, ...(allowExplanatoryRestatement ? { allowExplanatoryRestatement: true } : {}) } : {}),
     basis: "explicit-$implement-invocation",
     runId,
     invokedAt,
@@ -466,12 +486,15 @@ function validateApprovalEvidence(evidence) {
       "goalSha256",
       "prototypeRevision",
       "validationProfileDigest",
-      ...(evidence?.schemaVersion === 2 ? ["semanticDigest"] : []),
+      ...(evidence?.schemaVersion === 2 ? ["semanticDigest", ...(Object.hasOwn(evidence, "allowExplanatoryRestatement") ? ["allowExplanatoryRestatement"] : [])] : []),
     ],
     "approval evidence",
   );
   ensure([1, 2].includes(evidence.schemaVersion), "approval evidence schemaVersion must be 1 or 2");
-  if (evidence.schemaVersion === 2) requireSha256(evidence.semanticDigest, "approval semanticDigest");
+  if (evidence.schemaVersion === 2) {
+    requireSha256(evidence.semanticDigest, "approval semanticDigest");
+    if (Object.hasOwn(evidence, "allowExplanatoryRestatement")) ensure(evidence.allowExplanatoryRestatement === true, "Invalid explanatory inheritance policy");
+  }
   ensure(evidence.basis === "explicit-$implement-invocation", "approval evidence basis is invalid");
   requireNonEmptyString(evidence.runId, "approval evidence runId");
   ensure(!Number.isNaN(Date.parse(evidence.invokedAt)), "approval evidence invokedAt must be a timestamp");

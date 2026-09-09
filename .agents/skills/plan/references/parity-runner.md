@@ -1,6 +1,6 @@
 # UI parity runner contract
 
-Use this reference when authoring UI plans, running normal UI `$implement` final coverage, reviewing that evidence, or performing release, CI, scheduled, or user-explicit parity verification. Normal UI `$implement` starts with static preflight and approval, then runs the Browser lifecycle only after implementation and static checks are complete. Normal UI `$review` requires current final parity evidence. `ui-contract.json` version 1 is the complete UI acceptance contract. Current Browser-enabled plans use `parity-spec.json` version 4 and final `implementation-parity.json` schema version 5. Older profiles and evidence remain read-only compatibility inputs.
+Use this reference when authoring UI plans, running normal UI `$implement` final coverage, reviewing that evidence, or performing release, CI, scheduled, or user-explicit parity verification. Normal UI `$implement` starts with static preflight and approval, then runs the Browser lifecycle at a completed implementation unit or the final boundary after its static checks. Normal UI `$review` requires current final parity evidence. Legacy `ui-contract.json` version 1 is the complete matrix acceptance contract. New authoring uses contract 3/profile 5 and evidence 6 in the model sections below. Existing matrix plans use `parity-spec.json` version 4 and final `implementation-parity.json` schema version 5. Older profiles and evidence remain read-only compatibility inputs.
 
 ## Contract, profile, and coverage
 
@@ -126,7 +126,7 @@ Each command returns a compact summary only: planned/executed/passed counts, fai
 
 ## Evidence and independent statuses
 
-The invocation-bound `approval.json` remains schema version 1. Current final evidence is schema version 5 and records:
+The invocation-bound `approval.json` remains schema version 1. Legacy matrix final evidence is schema version 5 and records:
 
 - `matrixScope: coverage | full`, execution context, and exact row IDs;
 - recomputable target-state, target-viewport, and target-theme coverage;
@@ -144,7 +144,7 @@ Stable failure codes include `BROWSER_DOCUMENTATION_REQUIRED`, `BROWSER_PERMISSI
 
 ## Legacy compatibility
 
-Profile versions 1, 2, and 3 and parity evidence schemas 1, 2, 3, and 4 remain read-only compatible. Validate existing evidence against its historical row, digest, runtime, and cleanup contract without migrating or adding fields. New Browser-enabled plans use profile version 4; independently requested new final runs use evidence schema 5. A migration changes workflow text, skills, profile, runner, evidence schema, tests, and evaluator together. Rollback must restore that entire compatible set; never roll back only a writer or reader.
+Profile versions 1, 2, and 3 and parity evidence schemas 1, 2, 3, and 4 remain read-only compatible. Validate existing evidence against its historical row, digest, runtime, and cleanup contract without migrating or adding fields. Existing matrix plans retain profile version 4 and evidence schema 5. A migration changes workflow text, skills, profile, runner, evidence schema, tests, and evaluator together. Rollback must restore that entire compatible set; never roll back only a writer or reader.
 
 ## 機能別モデルの見積もり（contract 3 / profile 5）
 
@@ -178,3 +178,6 @@ Browser APIの文書receiptは現在のadapter module/runtime世代で取得し�
 finalizerは必要ケース・assertion・原観点・substitution・画像・目視・cleanupを再計算する。証跡とartifactをprivateな最終保存先へ書き終えてからworkspaceを消し、public `verify-run` で再読込する。`coverage` はfull parityやhuman承認と区別する。失敗は元のexecution codeを保持し、cleanupにも失敗した場合は追加診断を残す。
 
 段階scope、`--unit` / `--import-stage` / `verify-stage`、content bindingと不足分だけの集約は [implementation-checkpoints.md](implementation-checkpoints.md) を参照する。
+
+
+Structured unit/API/DB results passed to `executeBrowserBatch({layerResults})` must come from actual declared commands and include the exact argv, exitCode 0, case ID, actual value, input/environment/capabilities, current reuse key and result digest; status or expected value alone cannot close an obligation. Plan preflight validates the six goal headings, UI version/revision bindings, exact requirement IDs and unchecked target handoff, then returns `selection` for explicit `--target` / optional `--state` inputs. Call the same `BrowserParityRunner.runModel({modelInput, tabs, phase: "smoke", caseIds: selection.caseIds})` only at the final plan boundary. For requested smoke images, create one fresh private run directory with the common `modelWorkspaceStorage.resolveWorkspacePaths(root, runId, {createRoot: true, createRun: true})`, use `createWorkspaceArtifactSink`, inspect the returned images, then call `abortRunWorkspace` in cleanup. Do not create approval or implementation evidence for this temporary plan workspace. Its `verification-model-smoke` output is transient plan verification, not evidence 6, an implementation stage, or reusable final evidence. It uses declared assertions under the selected conditions; an unmet production expectation remains a reported smoke failure. Do not silently weaken the approved final expectation for planning.

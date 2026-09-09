@@ -1,5 +1,6 @@
 /** Schema 3 workspace uses the existing bounded, atomic private-file store. */
 import path from "node:path";
+import { verifyGoalClarification } from "../../../../scripts/goal-clarification.mjs";
 import { lstat, writeFile, rm, realpath } from "node:fs/promises";
 import { modelWorkspaceStorage as store } from "./parity-run-workspace.mjs";
 import { prototypeRevisionInRepository } from "./prototype-revision.mjs";
@@ -16,7 +17,13 @@ async function assertApprovalFiles(root, slug, approval) {
   const target = targetFor(slug);
   const goal = await boundedModelRead(root, `plans/${slug}/goal.md`, false);
   const profile = await boundedModelRead(root, `${target}/parity-spec.json`, false);
-  ensure(hash(goal) === approval.goalSha256 && hash(profile) === approval.validationProfileDigest && await prototypeRevisionInRepository(target, root) === approval.prototypeRevision, "Goal or prototype/profile approval binding changed", "PARITY_CURRENT_STATE_DRIFT");
+  await verifyGoalClarification({ repositoryRoot: root, goalPath: `plans/${slug}/goal.md`, originalDigest: approval.goalSha256, currentBytes: goal, invocation: approval, invariantBinding: { semanticDigest: approval.semanticDigest, prototypeRevision: approval.prototypeRevision, validationProfileDigest: approval.validationProfileDigest } });
+  const contract = await boundedModelRead(root, `${target}/ui-contract.json`);
+  const requirements = await boundedModelRead(root, `${target}/${contract.requirementsBundle.path}`);
+  const { validateGoalContract, validateApprovalEvidence } = await import("./parity-runner.mjs");
+  validateApprovalEvidence(approval);
+  validateGoalContract({ goalText: goal.toString("utf8"), slug, prototypeRevision: approval.prototypeRevision, contract, spec: JSON.parse(profile.toString("utf8")), requirements });
+  ensure(hash(profile) === approval.validationProfileDigest && await prototypeRevisionInRepository(target, root) === approval.prototypeRevision, "Goal or prototype/profile approval binding changed", "PARITY_CURRENT_STATE_DRIFT");
 }
 async function load(repositoryRootPath, runId, { allowContentDrift = false } = {}) {
   const paths = await store.resolveWorkspacePaths(repositoryRootPath, runId);

@@ -137,3 +137,44 @@ export async function liveVerificationFixture({ appPort, artifactPort }) {
   await rebindFixture(fixture);
   return fixture;
 }
+
+export function modelGoalFixture({ slug, revision, contract, requirements }) {
+  return `# 目的と完了条件
+
+Approved test fixture requirements
+
+## 要件クロージャ
+
+| 要件 | goal内の設計 | prototype | テスト | 完了条件 |
+| --- | --- | --- | --- | --- |
+${requirements.requirements.map(id => `| ${id} | 承認済みfixtureの表示 | plans/${slug}/prototype/index.html | model fixture assertion | 定義した期待値に一致 |`).join("\n")}
+
+# 現状と根拠
+
+所有する合成fixture。
+
+# 実装方針
+
+## UI契約
+
+- UI変更: あり
+- approval contract: plans/${slug}/prototype/ui-contract.json — version 3
+- validation profile: plans/${slug}/prototype/parity-spec.json — version 5
+- prototype revision: ${revision}
+- comparison targets: ${contract.comparisonTargets.map(item => item.id).join(", ")}
+
+# インターフェースとデータフロー
+
+承認されたmodelを共通runnerへ渡す。
+
+# テスト計画
+
+## ユーザー動作確認
+
+${contract.comparisonTargets.map((target, index) => `- [ ] UI-CHECK-${String(index + 1).padStart(2, "0")} — 対象: ${target.route}; 前提: 承認済みprototypeと同じfixture; 操作: 両surfaceで${target.id}を表示して比較; 期待結果: 定義した状態と表示が一致`).join("\n")}
+
+# 前提・対象外・リスク
+
+実製品や外部環境を操作しない。
+`;
+}

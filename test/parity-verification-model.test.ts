@@ -257,3 +257,42 @@ test("REUSE-01: dependency mode, expectation, fixture and environment changes ca
   await rebindFixture(changed);
   assert.equal((await reusableModelResults(changed, input, old)).reused.length, old.caseResults.length / 2);
 });
+
+test("FLOW-01: targeted model smoke preserves selected assertions and cannot become final or reusable evidence", async () => {
+  const { compileVerificationModel } = await modulePromise;
+  const { verificationFixture, modelAdapterSpy } = await fixturePromise;
+  const execution = await import("../.agents/skills/plan/scripts/parity-model-execution.mjs");
+  const { BrowserParityRunner } = await import("../.agents/skills/plan/scripts/parity-runner-core.mjs");
+  const input = await verificationFixture({ targets: 3, states: 3 });
+  const compiled = await compileVerificationModel(input);
+  const selection = execution.selectModelSmoke(compiled, { targetIds: ["feature-0"], stateIds: ["state-0"] });
+  assert.equal(selection.caseIds.length, 1);
+  assert.ok(compiled.cases.filter((item: { id: string }) => selection.caseIds.includes(item.id)).every((item: { targetId: string }) => item.targetId === "feature-0"));
+  const adapter = modelAdapterSpy();
+  const runner = new BrowserParityRunner(adapter);
+  const result = await runner.runModel({ modelInput: input, tabs: { production: "left", prototype: "right" }, ...selection });
+  assert.equal(result.kind, "verification-model-smoke");
+  assert.equal(result.phase, "smoke");
+  assert.equal(result.caseResults.length, selection.caseIds.length);
+  assert.equal(result.cleanup?.status, "pass");
+  await assert.rejects(execution.validateModelEvidence(input, result, { partial: true }), { code: "PARITY_REQUIREMENT_GAP" });
+  await assert.rejects(execution.reusableModelResults(input, input, result), { code: "PARITY_REQUIREMENT_GAP" });
+  await assert.rejects(runner.runModel({ modelInput: input, tabs: { production: "left", prototype: "right" }, phase: "smoke" }), /explicit targeted cases/u);
+  assert.throws(() => execution.selectModelSmoke(compiled, { targetIds: ["unknown"] }), /Unknown Browser smoke target/u);
+});
+
+test("LAYER-01/02: layer result needs actual output, the exact passed command and each executed case", async () => {
+  const { modelDigest } = await modulePromise;
+  const { validateLayerResult } = await import("../.agents/skills/plan/scripts/parity-model-execution.mjs");
+  const testCase = { path: "domain.test.mjs", caseId: "SAVE-01", command: ["node", "domain.test.mjs"], input: { value: 7 }, environment: { fixture: "persisted" }, capabilities: ["domain"] };
+  const expected = { test: testCase, assertion: { kind: "value", selector: "result", pure: true }, expected: 7, requiredCapabilities: ["domain"] };
+  const compiledCase = { layer: "unit", reuseKey: "sha256:current-input" };
+  const payload = { ...testCase, layer: "unit", status: "pass", reuseKey: compiledCase.reuseKey, assertion: expected.assertion, expected: 7, actual: 7, exitCode: 0 };
+  const signed = async (value: object) => ({ ...value, digest: await modelDigest(value) });
+  assert.equal((await validateLayerResult(await signed(payload), expected, compiledCase)).actual, 7);
+  for (const change of [{ actual: 8 }, { command: ["node", "other.test.mjs"] }, { exitCode: 1 }, { caseId: "SAVE-02" }, { capabilities: ["SSR"] }]) {
+    await assert.rejects(validateLayerResult(await signed({ ...payload, ...change }), expected, compiledCase), { code: "PARITY_REQUIREMENT_GAP" });
+  }
+  const { actual: omitted, ...missing } = payload; assert.equal(omitted, 7);
+  await assert.rejects(validateLayerResult(await signed(missing), expected, compiledCase), /actual value/u);
+});

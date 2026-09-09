@@ -6,7 +6,7 @@ Use this contract for new UI plans, normal UI implementation, and current review
 
 Follow [NIST's DOs and DON'Ts](https://csrc.nist.gov/Projects/automated-combinatorial-testing-for-software/software-testing-methodology/dos-and-don-ts-of-testing): derive factors from requirements, include abstract properties, choose equivalence classes and boundaries, and choose an appropriate interaction strength rather than assuming pairwise is sufficient. Four to six values is a modelling guideline, not permission to remove required states or known reproduction cases.
 
-Current axis coverage is not a pairwise guarantee. Keep the complete Cartesian UI contract v1 and stable row IDs. Start from existing axis/risk/anchor coverage plus declared runtime/visual rows. Supplement feasible t-way tuples greedily by greatest missing-tuple coverage, resolving ties by case ID lexical order. Report actual counts, not a fixed 63-case limit or a mathematical minimum. Full UI Cartesian runs remain independent explicit/release/CI/scheduled tasks.
+Legacy matrix axis coverage is not a pairwise guarantee. Keep its complete Cartesian UI contract v1 and stable row IDs. Start from existing axis/risk/anchor coverage plus declared runtime/visual rows. Supplement feasible t-way tuples greedily by greatest missing-tuple coverage, resolving ties by case ID lexical order. Report actual counts, not a fixed 63-case limit or a mathematical minimum. Full UI Cartesian runs remain independent explicit/release/CI/scheduled tasks.
 
 Profile v4 retains every v3 field and adds exactly one `fidelity` object:
 
@@ -47,7 +47,7 @@ Smoke evidence uses schema v5 with `audit: null` and all audit statuses `not-run
 
 `automationCoverageStatus=pass` alone is insufficient. Human approval and full parity are independent optional states; they may remain pending/not-run. Do not relabel Codex visual inspection as human approval or tick the optional user's checklist. Report requirement and Codex visual completion explicitly so a human-pending label does not imply required work remains.
 
-Historical profile v1–3 and evidence v1–4 remain read-only compatibility inputs. New current plans use profile v4; new current final runs and shipping require schema v5. Never rewrite an old result as newly verified. Synchronize writers, readers, skills, references, templates, fixtures and behavioral evaluations together. Product APIs, DB schema, and the two-stage archive/finalize shipping protocol are unchanged.
+Historical profile v1–3 and evidence v1–4 remain read-only compatibility inputs. New current plans use contract v3/profile v5; final runs and shipping require schema v6. Existing matrix plans keep profile v4/schema v5. Never rewrite an old result as newly verified. Synchronize writers, readers, skills, references, templates, fixtures and behavioral evaluations together. Product APIs, DB schema, and the two-stage archive/finalize shipping protocol are unchanged.
 
 
 ## Fresh-task handoff after CDP failure

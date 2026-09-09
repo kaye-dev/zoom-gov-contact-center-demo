@@ -1471,3 +1471,15 @@ test("model navigation precedes DPR on each fresh surface and cleanup retains th
   await assert.rejects(runner.runModel({ modelInput: input, tabs: { production: "left", prototype: "right" } }),
     (error: unknown) => (error as { code: string; cleanupFailure: { code: string } }).code === "PARITY_REQUIRED_PROBE_UNAVAILABLE" && (error as { cleanupFailure: { code: string } }).cleanupFailure.code === "PARITY_CLEANUP_FAILED");
 });
+
+test("REPAIR-01: explanatory policy is explicit, model-only, and preserved by approval validation", async () => {
+  const facade = await parityModulePromise;
+  const base = { runId: "approval-policy", goalSha256: "sha256:" + "a".repeat(64), prototypeRevision: "sha256:" + "b".repeat(64), validationProfileDigest: "sha256:" + "c".repeat(64) };
+  const approval = facade.createApprovalEvidence({ ...base, semanticDigest: "sha256:" + "d".repeat(64), allowExplanatoryRestatement: true });
+  assert.equal(approval.schemaVersion, 2);
+  assert.equal(approval.allowExplanatoryRestatement, true);
+  assert.deepEqual(facade.validateApprovalEvidence(approval), approval);
+  assert.throws(() => facade.createApprovalEvidence({ ...base, allowExplanatoryRestatement: true }), /explicit model approval/u);
+  assert.throws(() => facade.validateApprovalEvidence({ ...approval, allowExplanatoryRestatement: "true" }), /inheritance policy/u);
+  assert.throws(() => facade.validateApprovalEvidence({ ...approval, arbitraryPolicy: true }), /approval evidence must contain exactly/u);
+});

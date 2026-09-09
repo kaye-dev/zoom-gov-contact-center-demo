@@ -98,3 +98,16 @@ test("EST-03: pending calibrations add cost and resource-limited selection never
   assert.equal(report.status, "resource-limit"); assert.equal(report.executionCount, null);
   assert.ok(BigInt(report.candidateCount) > BigInt(1_000_000));
 });
+
+test("EST-01/SCALE-01: per-unit time includes CLI layers and cannot bypass the unit budget", async () => {
+  const { estimateVerification } = await estimator;
+  const { verificationFixture, rebindFixture } = await fixtures;
+  const input = await verificationFixture({ targets: 1, states: 1 });
+  for (const obligation of input.profile.obligations) Object.assign(obligation, { layer: "unit", requiredCapabilities: ["domain"], test: { path: "unit.test.mjs", caseId: "UNIT-01", command: ["node", "unit.test.mjs"], input: {}, environment: { fixture: "unit" }, capabilities: ["domain"] } });
+  await rebindFixture(input);
+  const report = await estimateVerification(input, { measurements: { cli: { sampleCount: 20, scope: "current-environment", p50: 400, p90: 500 } } });
+  assert.equal(report.units[0].browserExecutionCount, 0);
+  assert.equal(report.units[0].cliCount, report.executionCount);
+  assert.equal(report.units[0].time.high, report.executionCount * 500);
+  assert.ok(report.diagnostics.some((item: { metric: string }) => item.metric === "unit:feature-0:highSeconds"));
+});

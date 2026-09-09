@@ -2,13 +2,13 @@
 
 ## 実アプリ
 
-- UI変更の`$implement`は実装・静的検証・diff確認が完了した後のfinal boundaryでだけ実アプリ、prototype、Codexアプリ内Browser、parity lifecycleを起動し、coverageを検証する。authoring中のBrowser反復、pre-edit parity、追加manual sweepは行わない。非UI変更とfull parityには、それぞれgoal固有の静的検証とrelease、CI、定期、明示要求の独立taskを適用する。
+- UI変更の`$implement`は各単位の実装・静的検証・diff確認が完了した後、または全体のfinal boundaryで実アプリ、prototype、Codexアプリ内Browser、parity lifecycleを起動し、coverageを検証する。authoring中のBrowser反復、pre-edit parity、追加manual sweepは行わない。非UI変更とfull parityには、それぞれgoal固有の静的検証とrelease、CI、定期、明示要求の独立taskを適用する。
 - preflightのprocess起動・再利用より前に`./dev-compose.sh status`とread-onlyなprocess・Docker inspectionでbaselineを採る。Localはport 3000、worktreeは`.codex/runtime.local.env`の割当portについて、LISTEN address、PIDまたはcontainer ID、cwd、command、runtime owner、Compose project、checkout mount、service、volume、network、dependency artifactのstable IDまたはpathを記録する。各項目が既存か今回起動・生成かを区別し、この完全なbaselineを所有権判断とcleanupの正本にする。
 - 正しい既存serverは再利用する。Localでは同じcheckoutのhealthyなnative Next.js processまたは正しいCompose project・mountの`web`を`http://localhost:3000`で再利用する。worktreeでは`./dev-compose.sh prepare`が割り当てた固有Compose project、DB、volume、networkと、[利用範囲と割り当て](../../docs/development/development-ports.md#利用範囲と割り当て)に従う`http://localhost:<allocated-port>`を使い、別checkoutの3000を使わない。起動が必要な場合だけ`./dev-compose.sh ensure`を使う。通常変更はHMRに任せ、自動的な`web`再起動はpending migration適用後にwrapperが所有するCompose runtimeへ反映する場合だけとする。migration以外のstale cache・package・設定変更では理由を報告し、明示的な`./dev-compose.sh restart web`操作なしに再起動しない。
 - 独立runtime検証では、`./dev-compose.sh ensure`を1回実行し、その最終出力が返した所有権検証済みURLと必要なprototype URLを開く。runtime owner・checkout・commit・mount・route、fixture・authorization・query、`window.scrollX`/`window.scrollY`実測値、その他のBrowser条件と選択rowを確認する。ensure進行中の外側status、固定sleep、poll、追尾logは禁止し、失敗時だけ同じprojectのbounded diagnosticを各1回取得する。
 - checkoutまたはruntime outputを共有・置換し得るbuildの前には、preflightで今回のagentが起動・所有したと確認できる実アプリだけを、PID・cwd・command・container identity・service identityを再照合して停止する。対象checkoutまたはoutputを使うユーザー所有のdev serverとbuildを同時実行せず、そのserverも停止しない。現在の変更を正確に含む安全な隔離buildを使うか、ユーザーへ停止を依頼し、どちらもできなければbuildはblockedと報告する。
 - buildを実行した場合の最終確認では、agent所有の実アプリを`./dev-compose.sh ensure`で同じcheckout固有runtimeへ戻す。ユーザー所有serverを再利用する場合も含め、同commandの最終statusにある割当portのLISTEN address、PIDまたはcontainer ID、cwd、command、runtime owner、Compose project、checkout mount、`PRODUCTION_URL`、fixture・authorizationなどの比較条件を再確認してからparityを実行する。`finalize-run`直前のdrift readback以外に外側statusを重ねない。
-- 独立parity検証ではCodexアプリ内Browserで宣言されたscopeを確認する。`coverage`は各targetの全state、全viewport、light/darkを最低1回含み、具体的なresponsive・permission・failure・dialog・keyboard・focus・networkの交互作用はrisk row、詳細な視覚/DOM/a11y/style/geometryはanchor rowで補完する。full Cartesian parityはrelease、CI、定期、明示要求に限定する。`curl`やtestだけで実画面確認済みとしない。
+- 独立parity検証ではCodexアプリ内Browserで宣言されたscopeを確認する。旧matrixの`coverage`は各targetの全state、全viewport、light/darkを最低1回含み、具体的なresponsive・permission・failure・dialog・keyboard・focus・networkの交互作用はrisk row、詳細な視覚/DOM/a11y/style/geometryはanchor rowで補完する。full Cartesian parityはrelease、CI、定期、明示要求に限定する。`curl`やtestだけで実画面確認済みとしない。
 
 ## 管理画面ログイン
 
@@ -49,16 +49,16 @@ node scripts/serve-plan-artifact.mjs plans/<slug>/review
 ```
 
 - 出力された`127.0.0.1`のURLをCodexアプリ内Browserで開く。
-- UI`$implement`は実装・静的check・diff確認後のfinal coverageでだけ`dev-compose.sh`、`dev-prototype.sh`、parity lifecycleを実行する。`dev-confirmation.sh`は現在のinvocationにexact phrase `確認セッションを保持`がある場合だけfinal coverage後に使う。非UI`$implement`ではいずれも実行しない。承認digest取得後にartifact、goal、またはvalidation profileが変わった場合は、新しい`$implement`実行を必要とする。
+- UI`$implement`は完成した単位の静的check・diff確認後またはfinal coverageで`dev-compose.sh`、`dev-prototype.sh`、parity lifecycleを実行する。`dev-confirmation.sh`は現在のinvocationにexact phrase `確認セッションを保持`がある場合だけfinal coverage後に使う。非UI`$implement`では採用goalが開発ツールfixtureの検証を明記する場合だけ、所有する固定範囲で実行する。承認後に受入意味・artifact・profileが変わった場合は新しいinvocationを必要とする。承認済みの逐語説明補足だけは共通readerによる追加bindingで継承できる。
 - UI planは返却直前のsmoke後に`./dev-prototype.sh --retain <slug>`を使い、URL、PID、owner、停止commandを返す。`$review`は現在のinvocationにexact phrase `確認セッションを保持`がある場合だけHTML reportのretain入口を使う。保持surfaceのlive状態はproduction UIのverification合格を意味しない。
 - UI prototypeは作成前に最も近い実画面、shell、token、共通componentを確認する。mockにしてよいのはdata、永続化、authorization、backend side effectだけであり、brand、navigation、layout、typography、color、control、icon、responsive behaviorは本番相当とする。
-- prototypeは本番と同じTailwind foundationである`app/styles/ui-foundation.css`を使い、prototype自身だけをTailwind sourceとして探索する。plan中は変更target/stateを代表desktopと390×844でtargeted smoke確認し、具体的なtheme・responsive・interaction riskだけを追加する。coverageはUI `$implement`のfinal検証で実行し、fullは独立した明示要求に限定する。
-- prototypeの最終CSS build後に`prototype-revision.mjs`を実行し、goalの`approval contract: plans/<slug>/prototype/ui-contract.json — version 1`、`validation profile: plans/<slug>/prototype/parity-spec.json — version 4`、`prototype revision`を照合する。`ui-contract.json`は完全な`sources` inventory、runtime identity、comparison conditions、comparison target、不変なCartesian matrix rowを保持する。`parity-spec.json`はstate setup/assertion、coverage/anchor probe、risk row、source impact、batch/artifact policyを保持する。
+- prototypeは本番と同じTailwind foundationである`app/styles/ui-foundation.css`を使い、prototype自身だけをTailwind sourceとして探索する。plan中は変更target/stateをsource由来のviewport/themeでtargeted smoke確認し、具体的なtheme・responsive・interaction riskだけを追加する。coverageはUI `$implement`のfinal検証で実行し、fullは独立した明示要求に限定する。
+- prototypeの最終CSS build後に`prototype-revision.mjs`を実行し、goalの`approval contract: plans/<slug>/prototype/ui-contract.json — version 3`、`validation profile: plans/<slug>/prototype/parity-spec.json — version 5`、`prototype revision`を照合する。`ui-contract.json`は完全な`sources` inventory、runtime identity、comparison conditions、comparison target、適用状態と原要件bundleへの対応を保持する。`parity-spec.json`はstate setup/assertion、coverage/anchor probe、risk row、source impact、batch/artifact policyを保持する。
 - HTML reviewのcanonical assetsが未変更ならdesktopと390×844のload、console、networkだけを確認する。リスクfilter、判断button、コメント、Markdown生成・copy、keyboard、focusの全確認はassetsまたはruntime contractが変わった場合だけ行う。
 - `file://`、外部CDN、外部API、analytics、repo全体を公開するserverは使わない。
 - prototype確認、HTML review、独立runtime検証は別の証拠として扱う。
 - Browserを利用できない場合は未検証と報告する。
-- 新規UI`$implement`は承認境界で`plans/<slug>/evidence/<run-id>/approval.json`を作り、final coverageとcleanupがpassした場合だけ同runへschema-version-5 `implementation-parity.json`を作成する。最終fileはcoverage/full scope、exact row、全軸coverage、risk、anchor、checkpoint、artifact、cleanupと自動coverage・人間承認・fullの独立statusを持つ。既存schema version 1から4はread-only互換として扱い、task固有adapterやruntime shimをfeature実装中に作らない。
+- 新規UI`$implement`は承認境界で`plans/<slug>/evidence/<run-id>/approval.json`を作り、final coverageとcleanupがpassした場合だけ同runへschema-version-6 `implementation-parity.json`を作成する。最終fileはcoverage/full scope、exact row、全軸coverage、risk、anchor、checkpoint、artifact、cleanupと自動coverage・人間承認・fullの独立statusを持つ。既存schema version 1から5はread-only互換として扱い、task固有adapterやruntime shimをfeature実装中に作らない。
 - 終了時は完全なbaselineとの差分だけをcleanupする。worktreeは`./dev-compose.sh cleanup`でsession baseline差分とruntime/session labelが一致するcontainer・networkだけを削除し、named volumeを保持する。exact runtimeをactive confirmation sessionが保持している間のenvironment cleanupは削除0件でskipし、`./dev-confirmation.sh stop <slug>`から一致するsession IDが渡された場合だけ通常のownership guardを通す。Local cleanupはno-opとする。広域な`docker compose down`、`docker compose down -v`、project全体のstop、volume削除は実行せず、既存またはユーザー所有のprocess、container、service、volume、network、dependencyを停止・削除しない。
 
 Codexのproject-local設定は`.codex/config.toml`を参照する。`.mcp.json`はClaude Code用である。
@@ -76,3 +76,13 @@ bootstrap完了後にも残るCDP capability／DPRのterminal failureでは、�
 利用範囲、起動・再利用・停止、予約解放、Browser権限、移行・保全・rollbackは[開発用ポートの固定範囲](../../docs/development/development-ports.md)に従う。出力URLがBrowser利用範囲外ならBrowserを開かず作業を止める。
 
 非UIの起動ツール変更でgoalが限定runtime確認を要求する場合は、所有権baselineを採り、隔離fixtureまたは所有slotで起動・再利用・cleanupを検証できる。BrowserやUI parityは起動しない。
+
+## 機能別検証・段階実装の共通契約
+
+新規UI計画は `ui-contract.json` version 3 / `parity-spec.json` version 5を使う。原要件bundleから適用状態、層別obligation、visual family、因子・制約・次数・回帰seed、観測時点を定義する。画面・状態・境界値・locale・代表条件は各goalの入力とsourceから解決し、共通処理へ製品固有値を固定しない。異なる機能のstateを全画面へ直積展開しない。同条件・同時点の実行共有でも元の全assertionを維持する。
+
+Browser起動前に共通 `parity-runner.mjs estimate` とpreflightを実行する。全source global、全行画像、過大な因子展開は依存関係と能力の証明に基づき整理し、再estimateする。費用だけを理由にREQ、risk、境界、consumer接続、期待値を削らない。承認時からの費用増加や必要な大型unitは共通budget判定と理由付きoverrideで扱う。代表hostの成功だけで全consumerを合格にせず、SSRを実Browserのfocus/layout/eventへ代用しない。画像共有は条件・phase・時点が一致する原観点だけとし、全指定観点をCodexが確認する。
+
+採用goalが段階commitを明記する場合、単位の目的・依存・scope・静的check・Browser obligation・完了条件を定義し、各単位の検証、内容binding、限定local commitを終えて次へ継続する。新たなpush/PR/merge承認にはならない。詳細は `.agents/skills/plan/references/implementation-checkpoints.md`。段階receiptは全体完了ではない。current sourceに対する不足・失効結果を埋め、全REQ・risk・境界・実操作・目視・cleanupを再計算したschema 6 `implementation-parity.json`を公開 `verify-run` で検証する。契約1/2・profile1〜4・evidence1〜5は従来のreaderで検証し、暗黙変換しない。
+
+採用目的・外部期待結果・権限・データ正本・API/DB互換性・検証水準を保つscope内の不具合修正は、理由・影響・対象再検証を記録して継続する。goalを進捗記録にしない。説明補足の自動承認継承は `scripts/goal-clarification.mjs` が機械的に証明できる既存要件の逐語引用だけとし、元のinvocationがこの方針を承認している場合に限る。前後全文・digest・差分・分類・不変契約を容量上限付きの追加証跡へ保存し、元approval/manifestを変更しない。新規文章の意味同一性、仕様・権限・受入水準の変更は自動継承せず依存作業を止める。
