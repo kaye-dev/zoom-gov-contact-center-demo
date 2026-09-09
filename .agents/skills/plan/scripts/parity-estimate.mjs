@@ -1,4 +1,4 @@
-import { COMPILER_VERSION, compileVerificationModel, invalidationForSources, modelDigest, verifySubstitutions, VerificationModelError } from "./parity-verification-model.mjs";
+import { COMPILER_VERSION, compileVerificationModel, invalidationForSources, modelDigest, VerificationModelError } from "./parity-verification-model.mjs";
 export const DEFAULT_COST_POLICY = Object.freeze({ duplicateRate: 0.1, duplicateCount: 10, imageMinimumCases: 20, imageRate: 0.9, globalRate: 0.25, unitHighSeconds: 900, totalHighSeconds: 5400, artifactBytes: 64 * 1024 * 1024, driftRate: 0.2, driftCount: 10, driftHighSeconds: 300, driftBytes: 25 * 1024 * 1024 });
 const ranges = Object.freeze({ execution: [1, 2, 3], toolBoundary: [3, 6.5, 10], action: [0.2, 1, 2], visualPair: [10, 20, 30], capture: [0.1, 0.5, 1.5], assertion: [0.01, 0.05, 0.15], bootstrapCleanup: [5, 15, 45], cli: [0.1, 1, 10] });
 export function resolveCostPolicy(policy = {}) {
@@ -60,7 +60,7 @@ export async function estimateVerification(input, { measurements = {}, baseline 
   }
   const policyDigest = await modelDigest(input.profile.costPolicy);
   if (compiled.status !== "complete") return { version: 1, compilerVersion: COMPILER_VERSION, status: compiled.status, inputDigests: compiled.inputDigests, policyDigest, candidateCount: compiled.candidateCount, applicableCount: null, executionCandidateCount: null, executionCount: null, groups: compiled.groups, diagnostics: compiled.diagnostics, unresolvedReason: "Selection not completed; no partial pass" };
-  const substitutions = await verifySubstitutions(input.profile, compiled, { context });
+  const substitutions = compiled.substitutions;
   const browserCases = compiled.cases.filter((item) => ["browser", "visual"].includes(item.layer));
   const count = (cases) => ({ execution: cases.length * 2, toolBoundary: Math.ceil(cases.length * 2 / 2), action: cases.reduce((total, item) => total + item.conditions.checkpoints.reduce((n, checkpoint) => n + checkpoint.actions.length, 0) * 2, 0), visualPair: cases.filter((item) => item.artifactRequests.includes("screenshot")).length, capture: cases.reduce((n, item) => n + item.artifactRequests.length * 2, 0), assertion: cases.reduce((n, item) => n + item.assertions.length * 2, 0), bootstrapCleanup: cases.length > 0 ? 1 : 0, cli: 0 });
   const counts = count(browserCases);

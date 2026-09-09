@@ -187,7 +187,7 @@ async function createRepositoryFixture(context: test.TestContext): Promise<Repos
   await mkdir(path.dirname(script), { recursive: true });
   await copyFile(sourceScript, script);
   await copyFile(sourceCore, path.join(path.dirname(script), "parity-runner-core.mjs"));
-  for (const dependency of ["browser-api-bootstrap.mjs", "parity-verification-model.mjs", "parity-estimate.mjs", "parity-model-files.mjs"]) {
+  for (const dependency of ["browser-api-bootstrap.mjs", "parity-verification-model.mjs", "parity-estimate.mjs", "parity-model-files.mjs", "parity-model-execution.mjs", "in-app-browser-parity-adapter.mjs", "browser-screenshot.mjs"]) {
     await copyFile(path.join(path.dirname(sourceCore), dependency), path.join(path.dirname(script), dependency));
   }
   await copyFile(path.join(path.dirname(sourceCore), "parity-fidelity.mjs"), path.join(path.dirname(script), "parity-fidelity.mjs"));

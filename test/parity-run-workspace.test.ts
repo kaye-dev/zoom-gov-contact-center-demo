@@ -2143,3 +2143,65 @@ test("BOOT-LEGACY: old DPR terminal needs a digest-bound workspace record provin
   const checkpoint = JSON.parse(await readFile(path.join(path.dirname(proofPath), "checkpoint.json"), "utf8"));
   assert.equal(checkpoint.batches[0].documentationRecovery.legacyProof.sha256, sha256(before.toString()));
 });
+
+async function modelWorkspaceFixture(context: test.TestContext) {
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), "model-workspace-")));
+  context.after(() => rm(root, { recursive: true, force: true }));
+  const slug = "model-fixture", runId = "model-run";
+  const target = `plans/${slug}/prototype`;
+  await mkdir(path.join(root, target), { recursive: true });
+  await mkdir(path.join(root, ".codex"));
+  const fixtures = await import(pathToFileURL(path.resolve(import.meta.dirname, "fixtures/parity-verification-model.mjs")).href);
+  const input = await fixtures.verificationFixture({ targets: 2, states: 1 });
+  for (const source of input.profile.sourceInventory) {
+    const bytes = `fixture source ${source.id}`;
+    await writeFile(path.join(root, source.id), bytes);
+    source.digest = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+  }
+  await writeFile(path.join(root, target, "index.html"), "<main>Model fixture</main>");
+  for (const [name, value] of Object.entries({ "ui-contract.json": input.contract, "parity-spec.json": input.profile, "requirements.json": input.requirements })) await writeFile(path.join(root, target, name), JSON.stringify(value));
+  const goal = "# Model fixture\n\nApproved test fixture requirements\n";
+  await writeFile(path.join(root, "plans", slug, "goal.md"), goal);
+  const facade = await runnerModulePromise;
+  const definition = await facade.loadParityDefinition(target, root);
+  const { compileVerificationModel } = await import(pathToFileURL(path.resolve(import.meta.dirname, "../.agents/skills/plan/scripts/parity-verification-model.mjs")).href);
+  const compiled = await compileVerificationModel(input);
+  const current = { goalSha256: `sha256:${createHash("sha256").update(goal).digest("hex")}`, prototypeRevision: definition.prototypeRevision, validationProfileDigest: definition.validationProfileDigest, runtime: { owner: "fixture", checkout: root }, sources: [] };
+  const approval = facade.createApprovalEvidence({ runId, ...current, semanticDigest: compiled.semanticDigest });
+  return { root, slug, runId, target, input, definition, current, approval, fixtures };
+}
+
+test("FINAL-01/MIG-01: model workspace batches aggregate once and public reader checks current closure", async (context) => {
+  const fixture = await modelWorkspaceFixture(context);
+  const workspace = await workspaceModulePromise;
+  const facade = await runnerModulePromise;
+  const options = { repositoryRootPath: fixture.root, slug: fixture.slug, runId: fixture.runId, definition: fixture.definition, approval: fixture.approval, current: fixture.current, baseUrls: { production: "http://localhost:3001", prototype: "http://127.0.0.1:4001" } };
+  const prepared = await workspace.prepareRunWorkspace(options);
+  assert.equal(prepared.schemaVersion, 3);
+  const runner = new facade.BrowserParityRunner(fixture.fixtures.modelAdapterSpy());
+  const tabs = { production: "left", prototype: "right" };
+  await assert.rejects(workspace.finalizeRunWorkspace(options), { code: "PARITY_REQUIREMENT_GAP" });
+  const first = await workspace.executeBrowserBatch({ repositoryRootPath: fixture.root, runId: fixture.runId, runner, tabs });
+  assert.equal(first.summary.passed, 1);
+  const resumed = await workspace.resumeRunWorkspace({ repositoryRootPath: fixture.root, runId: fixture.runId });
+  assert.equal(resumed.summary.passed, 1);
+  for (let i = 1; i < prepared.summary.total; i++) await workspace.executeBrowserBatch({ repositoryRootPath: fixture.root, runId: fixture.runId, runner, tabs });
+  const finished = await workspace.finalizeRunWorkspace(options);
+  assert.equal(finished.schemaVersion, 6);
+  const result = await facade.verifyCurrentRun({ target: fixture.target, definition: fixture.definition, options: { runId: fixture.runId }, repositoryRootPath: fixture.root });
+  assert.equal(result.status, "pass");
+  await assert.rejects(access(path.join(fixture.root, ".codex", "parity-runs", fixture.runId)), { code: "ENOENT" });
+  await writeFile(path.join(fixture.root, "feature-0.tsx"), "changed implementation");
+  await assert.rejects(facade.verifyCurrentRun({ target: fixture.target, definition: fixture.definition, options: { runId: fixture.runId }, repositoryRootPath: fixture.root }), { code: "PARITY_REQUIREMENT_GAP" });
+});
+test("CERT-01: changed requirements fail before workspace mutation and prior run bytes survive", async (context) => {
+  const fixture = await modelWorkspaceFixture(context);
+  const workspace = await workspaceModulePromise;
+  await workspace.prepareRunWorkspace({ repositoryRootPath: fixture.root, slug: fixture.slug, runId: fixture.runId, definition: fixture.definition, approval: fixture.approval, current: fixture.current, baseUrls: { production: "http://localhost:3001", prototype: "http://127.0.0.1:4001" } });
+  const checkpointPath = path.join(fixture.root, ".codex", "parity-runs", fixture.runId, "checkpoint.json");
+  const bytes = await readFile(checkpointPath);
+  fixture.input.profile.obligations.pop();
+  await writeFile(path.join(fixture.root, fixture.target, "parity-spec.json"), JSON.stringify(fixture.input.profile));
+  await assert.rejects(workspace.resumeRunWorkspace({ repositoryRootPath: fixture.root, runId: fixture.runId }), { code: "PARITY_CURRENT_STATE_DRIFT" });
+  assert.deepEqual(await readFile(checkpointPath), bytes);
+});

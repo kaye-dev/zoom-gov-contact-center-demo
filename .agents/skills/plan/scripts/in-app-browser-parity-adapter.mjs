@@ -981,6 +981,26 @@ function createSingleTabParityAdapter({
       return state.cleanupResult;
     }
     const errors = [];
+    if (state.modelTouchApplied) {
+      try {
+        const cdp = await getCdpCapability();
+        if (state.modelTouchActive) await cdp.send("Input.dispatchTouchEvent", { type: "touchCancel", touchPoints: [] });
+        await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: false });
+        state.modelTouchApplied = false;
+        state.modelTouchActive = false;
+      } catch (error) { rethrowBrowserAccessError(error, "touch cleanup"); errors.push("model touch cleanup failed"); }
+    }
+    if (state.modelEnvironmentApplied) {
+      try {
+        const cdp = await getCdpCapability();
+        await cdp.send("Emulation.setLocaleOverride", { locale: "" });
+        await cdp.send("Emulation.setTimezoneOverride", { timezoneId: "" });
+        state.modelEnvironmentApplied = false;
+      } catch (error) {
+        rethrowBrowserAccessError(error, "model environment cleanup");
+        errors.push("model locale/timezone cleanup failed");
+      }
+    }
     if (state.navigationTimedOut) errors.push("comparison tab remains quarantined after navigation timeout");
     let cdpCleared = !state.deviceMetricsApplied;
     let cdpClearFailed = false;
@@ -1070,6 +1090,7 @@ function createSingleTabParityAdapter({
       viewportReset,
       baseline: viewportState.initialViewport,
       readback,
+      ...(errors.length ? { errors } : {}),
     };
     if (errors.length > 0) fail("PARITY_CLEANUP_FAILED", errors.join("; "), state.cleanupResult);
     return state.cleanupResult;
@@ -1087,9 +1108,9 @@ function createSingleTabParityAdapter({
       // emulation. Use the advertised, origin-scoped CDP capability once, and
       // require the requested pixel dimensions rather than accepting that image.
       const cdp = await getCdpCapability();
-      const scroll = await adapter.measureScroll(requestedTabId);
-      const capture = await cdp.send("Page.captureScreenshot", { format: "png", fromSurface: true,
-        captureBeyondViewport: true, clip: { x: scroll.x, y: scroll.y, width: viewport.width, height: viewport.height, scale: 1 } });
+      // Use the current viewport surface. Explicit CSS clipping can produce a
+      // correctly sized canvas with half-scale contents on this backend.
+      const capture = await cdp.send("Page.captureScreenshot", { format: "png", fromSurface: true });
       if (typeof capture?.data !== "string" || capture.data.length > 22 * 1024 * 1024 || !/^[A-Za-z0-9+/]*={0,2}$/u.test(capture.data)) {
         fail("PARITY_REQUIRED_PROBE_UNAVAILABLE", "CDP screenshot returned invalid image data", { operation: "screenshot" });
       }
@@ -1203,6 +1224,32 @@ function createSingleTabParityAdapter({
     setTheme,
     async runAction(requestedTabId, action) {
       await comparisonTab(requestedTabId);
+      if (action.type === "hover" || action.type === "tap") {
+        const point = await tab.playwright.evaluate((selector) => {
+          const element = document.querySelector(selector);
+          if (!(element instanceof Element)) throw new Error("Input selector is missing");
+          const box = element.getBoundingClientRect();
+          if (box.width <= 0 || box.height <= 0) throw new Error("Input target is hidden");
+          return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+        }, action.selector);
+        const cdp = await getCdpCapability();
+        if (action.type === "hover") await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", ...point, pointerType: "mouse" });
+        else {
+          state.modelTouchApplied = true;
+          await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
+          try {
+            await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ ...point, id: 1 }] });
+            state.modelTouchActive = true;
+            await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+            state.modelTouchActive = false;
+          } catch (error) {
+            rethrowBrowserAccessError(error, "touch input");
+            fail("PARITY_REQUIRED_PROBE_UNAVAILABLE", "Declared touch input could not be dispatched", { operation: "touch input", command: "Input.dispatchTouchEvent" });
+          }
+        }
+        await comparisonTab(requestedTabId);
+        return;
+      }
       if (action.type === "reload") {
         await advanceNetworkCursor();
         await navigateAndVerify(requestedTabId, await tab.url());
@@ -1236,6 +1283,75 @@ function createSingleTabParityAdapter({
         await locator.waitFor({ state: "visible", timeoutMs: resolvedTimeouts.actionMs });
       }
       await comparisonTab(requestedTabId);
+    },
+    async bootstrapStatus() { return requireBrowserDocumentation(browser); },
+    async setModelViewport(requestedTabId, viewport, dpr) {
+      if (!Number.isFinite(dpr) || dpr <= 0) fail("PARITY_DPR_MISMATCH", "Model DPR must be positive");
+      expectedDpr = dpr;
+      return adapter.setViewport(requestedTabId, viewport);
+    },
+    async setModelEnvironment(requestedTabId, conditions) {
+      await comparisonTab(requestedTabId);
+      if (conditions.environment.nativeZoom !== undefined && conditions.environment.nativeZoom !== 1) fail("PARITY_REQUIRED_PROBE_UNAVAILABLE", "Native Browser zoom is not supported by this adapter");
+      const cdp = await getCdpCapability();
+      state.modelEnvironmentApplied = true;
+      try {
+        await cdp.send("Emulation.setLocaleOverride", { locale: conditions.locale.replaceAll("-", "_") });
+        await cdp.send("Emulation.setTimezoneOverride", { timezoneId: conditions.timezone });
+      } catch (error) {
+        rethrowBrowserAccessError(error, "model environment");
+        fail("PARITY_REQUIRED_PROBE_UNAVAILABLE", "Declared locale/timezone could not be applied");
+      }
+      // Browser evaluate exposes DOM observations, not every page global (Intl is
+      // unavailable in the in-app bridge). Preserve the CDP acknowledgement as
+      // application evidence; locale-sensitive UI remains a model assertion.
+      return { locale: conditions.locale, timezone: conditions.timezone, status: "applied", observation: "cdp-command-acknowledgement" };
+    },
+    async runModelAssertion(requestedTabId, assertion) {
+      await comparisonTab(requestedTabId);
+      const supported = ["visibility", "text", "attribute", "value", "disabled", "count", "geometry", "computedStyle", "focus", "route", "overflow", "console", "network"];
+      if (!supported.includes(assertion.kind)) fail("PARITY_REQUIRED_PROBE_UNAVAILABLE", "Unsupported model assertion");
+      if (assertion.kind === "console" || assertion.kind === "network") {
+        const probe = { id: "model-log", kind: assertion.kind, productionSelector: "body", prototypeSelector: "body", required: true, options: assertion.options ?? {} };
+        const result = await adapter.runProbe(requestedTabId, probe, { surface: "production", row: { id: "model-log" }, networkSource: "browser-network-log" });
+        return { ...result, capabilities: assertion.kind === "network" ? ["API", "DOM-event"] : ["DOM-event"] };
+      }
+      const value = await tab.playwright.evaluate((request) => {
+        if (request.kind === "route") return location.pathname + location.search;
+        const elements = document.querySelectorAll(request.selector);
+        if (request.kind === "count") return elements.length;
+        if (request.kind === "visibility" && elements.length === 0) return false;
+        if (elements.length !== 1) throw new Error("Model selector must identify one element");
+        const element = elements[0];
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        if (request.kind === "visibility") return !element.hidden && style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0" && rect.width > 0 && rect.height > 0;
+        if (request.kind === "text") return element.innerText;
+        if (request.kind === "attribute") return element.getAttribute(request.name ?? request.options?.name);
+        if (request.kind === "value") return element.value ?? null;
+        if (request.kind === "disabled") return element.matches(":disabled") || element.getAttribute("aria-disabled") === "true";
+        if (request.kind === "focus") return document.activeElement === element;
+        if (request.kind === "geometry") return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+        if (request.kind === "computedStyle") return Object.fromEntries((request.properties ?? request.options?.properties ?? []).map((property) => [property, style.getPropertyValue(property)]));
+        if (request.kind === "overflow") return { document: Math.max(0, document.documentElement.scrollWidth - innerWidth), element: Math.max(0, element.scrollWidth - element.clientWidth) };
+        throw new Error("Unsupported model observation");
+      }, assertion);
+      if (JSON.stringify(value).length > 16384) fail("PARITY_REQUIRED_PROBE_UNAVAILABLE", "Model observation exceeds the lightweight bound");
+      return { value, capabilities: ["DOM-event", ...(["geometry", "computedStyle", "overflow", "visibility"].includes(assertion.kind) ? ["real-browser-layout"] : []), ...(assertion.kind === "focus" ? ["real-browser-focus"] : [])] };
+    },
+    async captureModelArtifact(requestedTabId, kind, context) {
+      await comparisonTab(requestedTabId);
+      const probe = { id: context.probeId, kind, tier: "anchor", productionSelector: "body", prototypeSelector: "body", required: true, options: {} };
+      if (kind === "screenshot") {
+        const bytes = await viewportScreenshot(requestedTabId);
+        const dimensions = screenshotDimensions(bytes);
+        if (!dimensions || dimensions.width === 0 || dimensions.height === 0) fail("PARITY_REQUIRED_PROBE_UNAVAILABLE", "Model screenshot is not a valid image");
+        return storeArtifact({ probe, context, content: bytes, mediaType: bytes[0] === 0xff ? "image/jpeg" : "image/png" });
+      }
+      if (!["dom", "accessibility"].includes(kind)) fail("PARITY_REQUIRED_PROBE_UNAVAILABLE", "Unknown model artifact kind");
+      const result = await adapter.runProbe(requestedTabId, probe, context);
+      if (!result.artifact) fail("PARITY_ARTIFACT_SINK_UNAVAILABLE", "Model artifact was not retained");
+      return result.artifact;
     },
     async runProbe(requestedTabId, probe, context) {
       await comparisonTab(requestedTabId);
@@ -1874,6 +1990,11 @@ function createSingleTabParityAdapter({
 }
 
 const routedTabOperations = Object.freeze([
+  "bootstrapStatus",
+  "setModelViewport",
+  "setModelEnvironment",
+  "runModelAssertion",
+  "captureModelArtifact",
   "stabilizeContext",
   "setViewport",
   "measureViewport",
@@ -1956,6 +2077,7 @@ function createInAppBrowserParityAdapter(options) {
     requiresBrowserSetups: true,
     sessionId: browser.browserId ?? "iab",
     comparisonTabId: productionTab.id,
+    async bootstrapStatus() { return requireBrowserDocumentation(browser); },
     comparisonTabIds: {
       production: productionTab.id,
       prototype: prototypeTab.id,
@@ -2004,6 +2126,7 @@ function createInAppBrowserParityAdapter(options) {
     },
   };
   for (const operation of routedTabOperations) {
+    if (operation === "bootstrapStatus") continue;
     adapter[operation] = async (requestedTabId, ...args) =>
       activeAdapter(requestedTabId)[operation](requestedTabId, ...args);
   }

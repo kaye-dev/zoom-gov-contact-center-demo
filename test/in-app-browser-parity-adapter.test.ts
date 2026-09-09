@@ -2369,8 +2369,7 @@ test("BOOT-IMAGE: scaled backing-window image is replaced only by a verified ori
   const send = context.mock.method(fixture.cdp, "send", async (method: string, params?: Record<string, unknown>) => {
     if (method !== "Page.captureScreenshot") return originalSend(method, params);
     captures++;
-    assert.deepEqual(params, { format: "png", fromSurface: true, captureBeyondViewport: true,
-      clip: { x: 0, y: 0, width: 390, height: 844, scale: 1 } });
+    assert.deepEqual(params, { format: "png", fromSurface: true });
     return { data: Buffer.from(full).toString("base64") };
   });
   assert.deepEqual(screenshotDimensions(await adapter.viewportScreenshot(fixture.tab.id)),
@@ -2381,4 +2380,40 @@ test("BOOT-IMAGE: scaled backing-window image is replaced only by a verified ori
   send.mock.mockImplementation(async () => { throw Object.assign(new Error("private rejection"), { code: "PERMISSION_DENIED" }); });
   await assert.rejects(adapter.viewportScreenshot(fixture.tab.id), (error: unknown) =>
     assertSanitizedParityError(error, "BROWSER_PERMISSION_DENIED", ["private rejection"]));
+});
+
+test("model environment applies declared CDP settings without relying on unavailable Intl globals", async (context) => {
+  const fixture = createFakeBrowser();
+  const { createInAppBrowserParityAdapter } = await adapterModulePromise;
+  const adapter = createInAppBrowserParityAdapter({ browser: fixture.browser, tab: fixture.tab });
+  await adapter.navigate(fixture.tab.id, "http://localhost:3000/fixture");
+  await adapter.setModelViewport(fixture.tab.id, { width: 620, height: 844 }, 1);
+  const send = context.mock.method(fixture.cdp, "send", fixture.cdp.send.bind(fixture.cdp));
+  assert.deepEqual(await adapter.setModelEnvironment(fixture.tab.id, { environment: {}, locale: "en-US", timezone: "UTC" }),
+    { locale: "en-US", timezone: "UTC", status: "applied", observation: "cdp-command-acknowledgement" });
+  assert.equal((await adapter.cleanup()).status, "pass");
+  for (const [method, params] of [["Emulation.setLocaleOverride", { locale: "en_US" }], ["Emulation.setTimezoneOverride", { timezoneId: "UTC" }], ["Emulation.setLocaleOverride", { locale: "" }], ["Emulation.setTimezoneOverride", { timezoneId: "" }]]) {
+    assert.ok(send.mock.calls.some((call) => JSON.stringify(call.arguments) === JSON.stringify([method, params])));
+  }
+});
+
+test("unsupported touch input fails without replacing it with click and still disables emulation", async (context) => {
+  const fixture = createFakeBrowser();
+  const { createInAppBrowserParityAdapter } = await adapterModulePromise;
+  const adapter = createInAppBrowserParityAdapter({ browser: fixture.browser, tab: fixture.tab });
+  await adapter.navigate(fixture.tab.id, "http://localhost:3000/fixture");
+  await adapter.setModelViewport(fixture.tab.id, { width: 620, height: 844 }, 1);
+  const originalEvaluate = fixture.tab.playwright.evaluate.bind(fixture.tab.playwright);
+  context.mock.method(fixture.tab.playwright, "evaluate", async (fn: (...args: never[]) => unknown, arg?: unknown) =>
+    fn.toString().includes("box.x + box.width / 2") ? { x: 10, y: 10 } : originalEvaluate(fn, arg));
+  const originalSend = fixture.cdp.send.bind(fixture.cdp);
+  const send = context.mock.method(fixture.cdp, "send", async (method: string, params?: Record<string, unknown>) => {
+    if (method === "Input.dispatchTouchEvent") throw new Error("Browser Use CDP method is not supported in the in-app browser: Input.dispatchTouchEvent");
+    return originalSend(method, params);
+  });
+  await assert.rejects(adapter.runAction(fixture.tab.id, { type: "tap", selector: "button" }), { code: "PARITY_REQUIRED_PROBE_UNAVAILABLE" });
+  assert.equal((await adapter.cleanup()).status, "pass");
+  assert.ok(send.mock.calls.some((call) => call.arguments[0] === "Emulation.setTouchEmulationEnabled" && call.arguments[1]?.enabled === false));
+  assert.equal(send.mock.calls.filter((call) => call.arguments[0] === "Input.dispatchTouchEvent").length, 1);
+  assert.equal(fixture.state.actions.filter((action) => action.startsWith("click:")).length, 0);
 });

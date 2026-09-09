@@ -2,7 +2,7 @@
 export const COMPILER_VERSION = "1.0.0";
 export const RESOURCE_LIMITS = Object.freeze({ candidates: 1_000_000, cases: 100_000, bytes: 256 * 1024 * 1024 });
 const layers = new Set(["unit", "component", "api", "db", "browser", "visual", "static"]);
-const actions = new Set(["click", "press", "focus", "fill", "waitForVisible", "waitForHidden"]);
+const actions = new Set(["click", "press", "focus", "fill", "waitForVisible", "waitForHidden", "reload", "hover", "tap"]);
 export class VerificationModelError extends Error {
   constructor(code, message, details = {}) { super(message); this.name = "VerificationModelError"; this.code = code; this.details = details; }
 }
@@ -77,7 +77,7 @@ function normalizedUrl(raw) {
 }
 export function executionConditions(scenario, factors, targetId) {
   const conditions = resolve(scenario.conditions, factors);
-  hasFields(conditions, ["route", "surfaces", "fixture", "authorization", "locale", "timezone", "setup", "reset", "isolation", "viewport", "dpr", "scroll", "theme", "environment"], "scenario.conditions");
+  hasFields(conditions, ["route", "surfaces", "fixture", "authorization", "locale", "timezone", "setup", "reset", "isolation", "viewport", "dpr", "scroll", "theme", "environment", "props", "portal", "ancestor", "dictionary"], "scenario.conditions");
   hasFields(conditions.fixture, ["id", "seed", "dataDigest"], "fixture");
   hasFields(conditions.authorization, ["profile", "role", "tenant"], "authorization");
   hasFields(conditions.surfaces, ["production", "prototype"], "surfaces");
@@ -133,6 +133,8 @@ export function validateVerificationSchema(contract, profile, requirements) {
     const scenario = scenarios.get(obligation.scenarioId);
     valid(scenario?.targetId === obligation.targetId && scenario.checkpoints.some((item) => item.id === obligation.checkpointId), "Unreachable obligation checkpoint");
     hasFields(obligation.assertion, ["kind", "selector", "pure"], "assertion");
+    valid(["visibility", "text", "attribute", "value", "disabled", "count", "geometry", "computedStyle", "focus", "route", "overflow", "console", "network", "screenshot"].includes(obligation.assertion.kind), "Unsupported model assertion kind");
+    if (obligation.assertion.kind === "screenshot") valid(obligation.layer === "visual", "Screenshot assertion requires a visual obligation");
     valid(typeof obligation.assertion.pure === "boolean", "Assertion purity must be explicit");
     if (!["browser", "visual"].includes(obligation.layer)) hasFields(obligation.test, ["path", "caseId", "command", "input", "environment", "capabilities"], "layer test");
     for (const request of obligation.artifactRequests) valid(["screenshot", "dom", "accessibility"].includes(request), "Unknown artifact request");
@@ -218,14 +220,17 @@ function tupleKeys(group, values) {
   return [...result].sort();
 }
 
-export async function compileVerificationModel({ contract, profile, requirements, mode = "coverage", context = "plan" }) {
+export async function compileVerificationModel({ contract, profile, requirements, sourceDigests = {}, proofResults = [], compilerDigest = null, mode = "coverage", context = "plan" }) {
   const { targets, scenarios, obligations } = validateVerificationSchema(contract, profile, requirements);
   valid(["coverage", "full"].includes(mode), "Invalid model selection mode");
   if (mode === "full") valid(["release", "ci", "scheduled", "explicit"].includes(context), "Full selection requires explicit full context");
   for (const criterion of profile.originalCriteria) valid(criterion.textDigest === await modelDigest(criterion.text), `Criterion text digest changed ${criterion.id}`, "PARITY_REQUIREMENT_GAP");
   const inputDigests = { contract: await modelDigest(contract), profile: await modelDigest(profile), requirements: await modelDigest(requirements) };
   valid(contract.requirementsBundle.digest === inputDigests.requirements, "Requirements bundle digest differs", "PARITY_REQUIREMENT_GAP");
-  const dependencies = sourceClosures(profile, obligations);
+  const currentProfile = { ...profile, sourceInventory: profile.sourceInventory.map((source) => ({ ...source, digest: sourceDigests[source.id] ?? source.digest })) };
+  const dependencies = sourceClosures(currentProfile, obligations);
+  inputDigests.sources = await modelDigest(currentProfile.sourceInventory);
+  inputDigests.compiler = compilerDigest ?? await modelDigest(COMPILER_VERSION);
   let candidateCount = 0n;
   const groupCounts = profile.groups.map((group) => {
     const count = Object.values(group.factors).reduce((total, values) => total * BigInt(values.length), 1n);
@@ -240,7 +245,7 @@ export async function compileVerificationModel({ contract, profile, requirements
     evaluations++;
     if (evaluations > RESOURCE_LIMITS.candidates) fail("PARITY_MODEL_RESOURCE_LIMIT", "Candidate evaluation budget exceeded; split the model", { groupId, candidateCount: candidateCount.toString(), evaluations, limits: RESOURCE_LIMITS });
   };
-  const selected = []; const requiredTokens = new Set(); const coveredObligations = new Set(); let applicableCount = 0; let bytes = 0;
+  const selected = []; const requiredCoverageKeys = new Set(); const coveredObligations = new Set(); let applicableCount = 0; let bytes = 0;
   for (const group of [...profile.groups].sort((a, b) => a.id.localeCompare(b.id))) {
     const candidates = [];
     const target = targets.get(group.targetId);
@@ -259,7 +264,7 @@ export async function compileVerificationModel({ contract, profile, requirements
       applicableCount++;
       const tuples = tupleKeys(group, factors).map((key) => `tuple:${group.id}:${key}`);
       const tokens = new Set([...tuples, ...active.map((item) => `obligation:${item.id}`)]);
-      tokens.forEach((token) => requiredTokens.add(token));
+      tokens.forEach((token) => requiredCoverageKeys.add(token));
       const candidate = { groupId: group.id, targetId: group.targetId, unitId: group.unitId, factors, obligationIds: active.map(({ id }) => id).sort(), tokens, stateIdentity: resolve(state.identity, factors) };
       bytes += serialize({ ...candidate, tokens: [...tokens] }).length * 2;
       if (bytes > RESOURCE_LIMITS.bytes) fail("PARITY_MODEL_RESOURCE_LIMIT", "Working set limit exceeded", { groupId: group.id, candidateCount: candidateCount.toString(), unresolvedTokens: [...tokens], limits: RESOURCE_LIMITS });
@@ -306,11 +311,11 @@ export async function compileVerificationModel({ contract, profile, requirements
         const key = pure ? conditionKey : `${conditionKey}:${candidate.groupId}:${serialize(candidate.factors)}:${serialize(groupObligations.map(({ id }) => id).sort())}`;
         let execution = executions.get(key);
         if (!execution) {
-          execution = { targetId: candidate.targetId, unitIds: [], groupIds: [], layer, executionKey, conditions, stateIdentity: candidate.stateIdentity, assertions: [], assertionLinks: [], factorAssignments: [], obligationIds: [], coverageTokens: [], artifactRequests: [], dependencySources: [], separationKey: pure ? null : key, separationReason: pure ? null : "Observation purity or side-effect isolation is unproven" };
+          execution = { targetId: candidate.targetId, unitIds: [], groupIds: [], layer, executionKey, conditions, stateIdentity: candidate.stateIdentity, assertions: [], assertionLinks: [], factorAssignments: [], obligationIds: [], coverageKeys: [], artifactRequests: [], dependencySources: [], separationKey: pure ? null : key, separationReason: pure ? null : "Observation purity or side-effect isolation is unproven" };
           executions.set(key, execution);
         }
         execution.factorAssignments.push(candidate.factors);
-        execution.unitIds.push(candidate.unitId); execution.groupIds.push(candidate.groupId); execution.coverageTokens.push(...candidate.tokens);
+        execution.unitIds.push(candidate.unitId); execution.groupIds.push(candidate.groupId); execution.coverageKeys.push(...candidate.tokens);
         for (const obligation of groupObligations) {
           const assertion = { checkpointId: obligation.checkpointId, assertion: resolve(obligation.assertion, candidate.factors), expected: resolve(obligation.expected, candidate.factors), requiredCapabilities: obligation.requiredCapabilities, test: obligation.test ?? null };
           const conflict = execution.assertions.find((entry) => entry.checkpointId === assertion.checkpointId && serialize(entry.assertion) === serialize(assertion.assertion) && serialize(entry.expected) !== serialize(assertion.expected));
@@ -323,22 +328,45 @@ export async function compileVerificationModel({ contract, profile, requirements
   }
   const cases = [];
   for (const execution of executions.values()) {
-    for (const field of ["unitIds", "groupIds", "obligationIds", "coverageTokens", "artifactRequests"]) execution[field] = [...new Set(execution[field])].sort();
+    for (const field of ["unitIds", "groupIds", "obligationIds", "coverageKeys", "artifactRequests"]) execution[field] = [...new Set(execution[field])].sort();
     for (const field of ["assertions", "assertionLinks", "factorAssignments", "dependencySources"]) execution[field] = [...new Map(execution[field].map((entry) => [serialize(entry), entry])).entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, entry]) => entry);
     const caseKey = await modelDigest({ executionKey: execution.executionKey, layer: execution.layer, assertions: execution.assertions, stateIdentity: execution.stateIdentity, separationKey: execution.separationKey });
-    const reuseKey = await modelDigest({ caseKey, dependencySources: execution.dependencySources, artifactRequests: execution.artifactRequests });
+    const reuseKey = await modelDigest({ caseKey, compilerDigest: inputDigests.compiler, dependencySources: execution.dependencySources, artifactRequests: execution.artifactRequests });
     cases.push({ ...execution, id: `${execution.targetId}:${caseKey.slice(7, 31)}`, caseKey, reuseKey });
   }
   cases.sort((a, b) => a.id.localeCompare(b.id));
-  const compiled = { version: 1, compilerVersion: COMPILER_VERSION, status: "complete", inputDigests, candidateCount: candidateCount.toString(), applicableCount, executionCandidateCount, conditionDuplicateCandidates, executionCount: cases.length, safeMergedCount: executionCandidateCount - cases.length, groups: groupCounts, evaluations, cases, obligations: profile.obligations, originalCriteria: profile.originalCriteria, requiredTokens: [...requiredTokens].sort(), dependencies, diagnostics: [] };
+  const compiled = { version: 1, compilerVersion: COMPILER_VERSION, status: "complete", inputDigests, candidateCount: candidateCount.toString(), applicableCount, executionCandidateCount, conditionDuplicateCandidates, executionCount: cases.length, safeMergedCount: executionCandidateCount - cases.length, groups: groupCounts, evaluations, cases, obligations: profile.obligations, originalCriteria: profile.originalCriteria, requiredCoverageKeys: [...requiredCoverageKeys].sort(), dependencies, diagnostics: [] };
   const semanticProfile = { ...profile };
   delete semanticProfile.costPolicy;
   delete semanticProfile.batchPolicy;
   for (const field of ["groups", "scenarios", "obligations", "originalCriteria", "substitutions", "boundaryInventory", "interactionObligations", "sourceInventory", "sourceImpactMap"]) semanticProfile[field] = [...semanticProfile[field]].sort((a, b) => a.id.localeCompare(b.id));
   compiled.semanticDigest = await modelDigest({ contract: { ...contract, comparisonTargets: [...contract.comparisonTargets].sort((a, b) => a.id.localeCompare(b.id)) }, profile: semanticProfile });
   compiled.executionPlanDigest = await modelDigest({ cases, mode });
-  compiled.substitutions = await verifySubstitutions(profile, compiled, { context });
+  compiled.substitutions = await verifySubstitutions(currentProfile, compiled, { context, results: proofResults });
   validateBoundaryCoverage(profile, compiled);
+  compiled.allCases = compiled.cases;
+  compiled.substitutionCoverage = [];
+  for (const certificate of profile.substitutions) {
+    const verified = compiled.substitutions.find((item) => item.id === certificate.id);
+    if (verified.status !== "certified") continue;
+    for (const item of compiled.cases) {
+      if (!item.obligationIds.every((id) => certificate.originalObligationIds.includes(id)) ||
+        !certificate.originalConditions.some((conditions) => serialize(conditions) === serialize(item.conditions)) ||
+        !item.assertions.every((assertion) => certificate.observationPoints.includes(assertion.checkpointId) && certificate.expectedResults.some((expected) => serialize(expected) === serialize(assertion.expected)))) continue;
+      const applicable = item.assertions.every((assertion) => certificate.applicability.some((scope) => {
+        const conditions = item.conditions;
+        const expectedScope = { targetId: item.targetId, state: scope.state, props: conditions.props, tenant: conditions.authorization.tenant, role: conditions.authorization.role, locale: conditions.locale, dictionary: conditions.dictionary, fixture: conditions.fixture, viewport: conditions.viewport, dpr: conditions.dpr, theme: conditions.theme, portal: conditions.portal, ancestor: conditions.ancestor, scroll: conditions.scroll, actions: conditions.checkpoints.flatMap((checkpoint) => checkpoint.actions), checkpointId: assertion.checkpointId };
+        return item.factorAssignments.some((factors) => factors.state === scope.state) && serialize(scope) === serialize(expectedScope);
+      }));
+      valid(applicable, "Certificate applicability does not include the full original conditions", "PARITY_SUBSTITUTION_INVALID");
+      compiled.substitutionCoverage.push({ caseId: item.id, certificateId: certificate.id, obligationIds: item.obligationIds, coverageKeys: item.coverageKeys, resultDigests: verified.resultDigests });
+    }
+  }
+  const replacedIds = new Set(compiled.substitutionCoverage.map((item) => item.caseId));
+  compiled.cases = compiled.cases.filter((item) => !replacedIds.has(item.id));
+  compiled.executionCount = compiled.cases.length;
+  compiled.executionPlanDigest = await modelDigest({ cases: compiled.cases, substitutionCoverage: compiled.substitutionCoverage, mode });
+  compiled.proofResults = proofResults;
   return compiled;
 }
 
@@ -399,18 +427,20 @@ export async function verifySubstitutions(profile, compiled, { results = [], con
     const requiredCapabilities = new Set(originals.flatMap((item) => item.requiredCapabilities));
     const supported = new Set(certificate.replacementChecks.flatMap((item) => item.capabilities));
     subset(requiredCapabilities, supported, "Replacement lacks observation capability");
-    let pending = false;
+    let pending = false; const resultDigests = [];
     for (const check of certificate.replacementChecks) {
       hasFields(check, ["path", "caseId", "layer", "command", "input", "assertion", "expected", "environment", "capabilities", "resultDigest"], "replacement check", code);
       valid(layers.has(check.layer), "Unknown replacement layer", code);
       const source = sources.get(check.path); valid(source, "Replacement test missing from inventory", code);
-      if (check.resultDigest === null) { pending = true; continue; }
-      const result = results.find((entry) => entry.digest === check.resultDigest);
+      const result = results.find((entry) => check.resultDigest !== null ? entry.digest === check.resultDigest : entry.path === check.path && entry.caseId === check.caseId && serialize(entry.input) === serialize(check.input) && serialize(entry.environment) === serialize(check.environment));
+      if (!result && check.resultDigest === null) { pending = true; continue; }
       valid(result && result.status === "pass" && result.caseId === check.caseId && result.path === check.path && result.layer === check.layer && result.sourceDigest === source.digest && serialize(result.input) === serialize(check.input) && serialize(result.expected) === serialize(check.expected) && serialize(result.assertion) === serialize(check.assertion) && serialize(result.environment) === serialize(check.environment), "Missing/fake/stale replacement result", code);
       const { digest: ignored, ...payload } = result;
       void ignored;
       valid(await modelDigest(payload) === result.digest, "Replacement result digest mismatch", code);
       subset(check.capabilities, new Set(result.capabilities), "Actual result lacks capability");
+      valid(serialize(result.dependencyDigests) === serialize(Object.fromEntries(certificate.evidenceSources.map((entry) => [entry.path, entry.digest]))), "Replacement result dependency closure differs", code);
+      resultDigests.push(result.digest);
     }
     if (certificate.kind === "factor-split") {
       hasFields(certificate, ["tupleMapping", "calibration", "coupledProperties"], "factor split", code);
@@ -421,7 +451,7 @@ export async function verifySubstitutions(profile, compiled, { results = [], con
       if (certificate.calibration.resultDigest === null) pending = true;
       else valid(results.some((entry) => entry.digest === certificate.calibration.resultDigest && entry.status === "pass"), "Missing calibration result", code);
     }
-    output.push({ id: certificate.id, semanticDigest: await modelDigest(certificate), status: pending ? "pending" : "certified", originalObligationIds: certificate.originalObligationIds, fallbackObligationIds: certificate.fallbackObligationIds, consumerIntegrationObligationIds: certificate.consumerIntegrationObligationIds, unresolvedReasons: pending ? ["Replacement or calibration has not run; original fallback remains required"] : [], context });
+    output.push({ id: certificate.id, semanticDigest: await modelDigest(certificate), status: pending ? "pending" : "certified", originalObligationIds: certificate.originalObligationIds, fallbackObligationIds: certificate.fallbackObligationIds, consumerIntegrationObligationIds: certificate.consumerIntegrationObligationIds, resultDigests, unresolvedReasons: pending ? ["Replacement or calibration has not run; original fallback remains required"] : [], context });
   }
   return output;
 }

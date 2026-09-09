@@ -74,3 +74,9 @@ Use this shape, filling the actual values and remaining work:
 再失敗したら原因を断定せず診断と未完了範囲を記録してください。別Browser、権限回避、CLIだけの代替完了はしないでください。
 検証記録を更新し、今回のタブ・server・viewport/DPRをcleanupしてください。既存資源と無関係な変更を保全し、commit/push/PRは行わないでください。
 ```
+
+## Model evidence 6 の監査
+
+contract 3/profile 5 では `parity-model-execution.mjs` と public `verify-run` で元bundleから必要集合を再計算する。親REQのpass、画像の存在、CLIの成功codeだけで子観点を閉じない。test case、能力、入力・期待結果・環境とsource依存が一致するcurrent結果だけを採用する。currentな証明のない代替は元obligationのfallbackを必要とする。
+
+画像はcase/surface/checkpoint/phase/conditionsのidentityを照合し、両surfaceを閲覧してcriterion別に判定する。サイズの一致と内容の倍率一致は別に確認する。古い画像、別条件の画像、未閲覧、空の判定ではfinalizeしない。UI接続・focus・keyboard・layoutをsource-text/SSRへ代用しない。実環境で未対応と判明した操作はそのcodeと未完了scopeを保持し、別入力方式へ黙って置き換えない。

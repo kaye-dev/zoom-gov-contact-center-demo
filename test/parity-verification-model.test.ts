@@ -89,9 +89,9 @@ test("COMBO-01: mixed strength, constraints and regression seeds preserve reacha
   group.constraints = { any: [{ eq: ["mode", "read"] }, { eq: ["locale", "ja"] }] };
   group.seeds = [{ when: { all: [{ eq: ["mode", "edit"] }, { eq: ["theme", "dark"] }] }, reason: "Regression" }];
   const result = await compileVerificationModel(fixture);
-  assert.ok(result.requiredTokens.some((token: string) => token.includes('"mode","edit"')));
-  assert.ok(!result.requiredTokens.some((token: string) => token.includes('"mode","edit"') && token.includes('"locale","en"')));
-  assert.ok(result.cases.flatMap((item: { coverageTokens: string[] }) => item.coverageTokens).length >= result.requiredTokens.length);
+  assert.ok(result.requiredCoverageKeys.some((token: string) => token.includes('"mode","edit"')));
+  assert.ok(!result.requiredCoverageKeys.some((token: string) => token.includes('"mode","edit"') && token.includes('"locale","en"')));
+  assert.ok(result.cases.flatMap((item: { coverageKeys: string[] }) => item.coverageKeys).length >= result.requiredCoverageKeys.length);
 });
 test("IMPACT-01: direct and transitive source invalidation stays scoped", async () => {
   const { compileVerificationModel, invalidationForSources } = await modulePromise;
@@ -213,4 +213,24 @@ test("MODEL-04 legacy: contract 2/profile 4 retains existing selection without r
   const rows = core.selectRows({ phase: "final", contract, spec, matrixScope: "coverage" });
   assert.equal(rows.length, 8);
   assert.equal(JSON.stringify({ contract, spec }), before);
+});
+
+test("CERT-01 execution: only a current exact replacement can omit original execution", async () => {
+  const { compileVerificationModel, modelDigest } = await modulePromise;
+  const { certificateFixture } = await fixturePromise;
+  const fixture = await certificateFixture();
+  const before = await compileVerificationModel(fixture);
+  const certificate = fixture.profile.substitutions[0];
+  certificate.consumerIntegrationObligationIds = certificate.consumerIntegrationObligationIds.filter((id: string) => !certificate.originalObligationIds.includes(id));
+  certificate.originalConditions = before.cases.filter((item: { obligationIds: string[] }) => item.obligationIds.every((id: string) => certificate.originalObligationIds.includes(id))).map((item: { conditions: unknown }) => item.conditions);
+  certificate.applicability = certificate.originalConditions.map((conditions: { targetId: string; state: string; props: unknown; authorization: { tenant: string; role: string }; locale: string; dictionary: string; fixture: unknown; viewport: unknown; dpr: number; theme: string; portal: string; ancestor: string; scroll: unknown; checkpoints: { actions: unknown[] }[] }) => ({ targetId: conditions.targetId, state: conditions.state, props: conditions.props, tenant: conditions.authorization.tenant, role: conditions.authorization.role, locale: conditions.locale, dictionary: conditions.dictionary, fixture: conditions.fixture, viewport: conditions.viewport, dpr: conditions.dpr, theme: conditions.theme, portal: conditions.portal, ancestor: conditions.ancestor, scroll: conditions.scroll, actions: conditions.checkpoints.flatMap((checkpoint) => checkpoint.actions), checkpointId: "ready" }));
+  const check = certificate.replacementChecks[0];
+  const payload = { status: "pass", path: check.path, caseId: check.caseId, layer: check.layer, sourceDigest: "sha256:replacement", input: check.input, assertion: check.assertion, expected: check.expected, environment: check.environment, capabilities: check.capabilities, dependencyDigests: Object.fromEntries(certificate.evidenceSources.map((entry: { path: string; digest: string }) => [entry.path, entry.digest])) };
+  const proof = { ...payload, digest: await modelDigest(payload) };
+  const after = await compileVerificationModel({ ...fixture, proofResults: [proof] });
+  assert.equal(after.substitutions[0].status, "certified");
+  assert.ok(after.cases.length < before.cases.length);
+  assert.equal(after.obligations.length, before.obligations.length);
+  const stale = { ...payload, dependencyDigests: {} };
+  await assert.rejects(compileVerificationModel({ ...fixture, proofResults: [{ ...stale, digest: await modelDigest(stale) }] }), { code: "PARITY_SUBSTITUTION_INVALID" });
 });

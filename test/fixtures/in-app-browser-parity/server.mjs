@@ -15,8 +15,11 @@ const files = new Map([
   ["/fixture.css", ["fixture.css", "text/css"]], ["/fixture.js", ["fixture.js", "text/javascript"]],
   ["/fidelity.html", ["fidelity.html", "text/html"]], ["/fidelity.js", ["fidelity.js", "text/javascript"]],
   ["/fidelity-copy.txt", ["fidelity-copy.txt", "text/plain"]],
+  ["/model.html", ["model.html", "text/html"]],
+  ["/model-components.mjs", ["model-components.mjs", "text/javascript"]],
+  ["/model-fixture.mjs", ["model-fixture.mjs", "text/javascript"]],
 ]);
-const server = createServer(async (request, response) => {
+const handler = async (request, response) => {
   const file = files.get(new URL(request.url, "http://fixture.invalid").pathname);
   if (!file || !["GET", "HEAD"].includes(request.method)) { response.writeHead(404).end(); return; }
   try {
@@ -24,9 +27,12 @@ const server = createServer(async (request, response) => {
     response.writeHead(200, { "Content-Type": `${file[1]}; charset=utf-8`, "Cache-Control": "no-store" });
     response.end(request.method === "HEAD" ? undefined : bytes);
   } catch { response.writeHead(500).end(); }
-});
+};
+const server = createServer(handler);
+const artifactServer = createServer(handler);
+artifactServer.listen(lease.artifactPort, "127.0.0.1");
 server.listen(lease.appPort, "127.0.0.1", () => console.log(JSON.stringify({
   owner: lease.owner, checkout, fixture: root, port: lease.appPort, pid: process.pid,
   url: `http://127.0.0.1:${lease.appPort}/fixture`,
 })));
-for (const signal of ["SIGINT", "SIGTERM"]) process.once(signal, () => server.close());
+for (const signal of ["SIGINT", "SIGTERM"]) process.once(signal, () => { server.close(); artifactServer.close(); });

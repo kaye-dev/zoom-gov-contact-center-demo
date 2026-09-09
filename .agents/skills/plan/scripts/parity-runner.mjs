@@ -161,7 +161,12 @@ async function loadParityDefinition(requestedDirectory, requestedRoot = reposito
   } catch {
     throw new Error("parity-spec.json must contain valid JSON");
   }
-  validateParitySpec(spec, contract);
+  let model;
+  if (spec.version === 5 || contract.version === 3) {
+    const { loadVerificationModel } = await import("./parity-model-files.mjs");
+    model = await loadVerificationModel(requestedDirectory, root);
+    validateParitySpec(spec, contract, model.requirements);
+  } else validateParitySpec(spec, contract);
   const afterRevision = await prototypeRevisionInRepository(requestedDirectory, root);
   ensure(beforeRevision === afterRevision, "prototype changed while loading parity definition");
   return {
@@ -171,6 +176,7 @@ async function loadParityDefinition(requestedDirectory, requestedRoot = reposito
     spec,
     prototypeRevision: afterRevision,
     validationProfileDigest: sha256(specText),
+    ...(model ? { requirements: model.requirements, sourceDigests: model.sourceDigests, compilerDigest: model.compilerDigest } : {}),
   };
 }
 
@@ -354,6 +360,11 @@ async function createPreflightSummary({
   repositoryRootPath = repositoryRoot,
 }) {
   ensure(context === "plan" || context === "implement", "--context must be plan or implement");
+  if (definition.spec.version === 5) {
+    const { modelPreflight } = await import("./parity-model-execution.mjs");
+    const result = await modelPreflight({ contract: definition.contract, profile: definition.spec, requirements: definition.requirements, sourceDigests: definition.sourceDigests, compilerDigest: definition.compilerDigest }, { context });
+    return { schemaVersion: 1, status: "pass", prototypeRevision: definition.prototypeRevision, validationProfileDigest: definition.validationProfileDigest, semanticDigest: result.compiled.semanticDigest, estimate: result.estimate };
+  }
   const goalText = await readFile(path.join(repositoryRootPath, "plans", definition.slug, "goal.md"), "utf8");
   const goalContract = validateGoalContract({
     goalText,
@@ -425,6 +436,7 @@ function createApprovalEvidence({
   prototypeRevision,
   validationProfileDigest,
   invokedAt = new Date().toISOString(),
+  semanticDigest,
 }) {
   requireNonEmptyString(runId, "runId");
   requireSha256(goalSha256, "goalSha256");
@@ -432,7 +444,8 @@ function createApprovalEvidence({
   requireSha256(validationProfileDigest, "validationProfileDigest");
   ensure(!Number.isNaN(Date.parse(invokedAt)), "invokedAt must be an ISO-compatible timestamp");
   return {
-    schemaVersion: 1,
+    schemaVersion: semanticDigest ? 2 : 1,
+    ...(semanticDigest ? { semanticDigest } : {}),
     basis: "explicit-$implement-invocation",
     runId,
     invokedAt,
@@ -453,10 +466,12 @@ function validateApprovalEvidence(evidence) {
       "goalSha256",
       "prototypeRevision",
       "validationProfileDigest",
+      ...(evidence?.schemaVersion === 2 ? ["semanticDigest"] : []),
     ],
     "approval evidence",
   );
-  ensure(evidence.schemaVersion === 1, "approval evidence schemaVersion must be 1");
+  ensure([1, 2].includes(evidence.schemaVersion), "approval evidence schemaVersion must be 1 or 2");
+  if (evidence.schemaVersion === 2) requireSha256(evidence.semanticDigest, "approval semanticDigest");
   ensure(evidence.basis === "explicit-$implement-invocation", "approval evidence basis is invalid");
   requireNonEmptyString(evidence.runId, "approval evidence runId");
   ensure(!Number.isNaN(Date.parse(evidence.invokedAt)), "approval evidence invokedAt must be a timestamp");
@@ -735,7 +750,8 @@ function validateRowEvidence(rowEvidence, manifestRow, contract, expectedProbes,
   ensure(rowEvidence.status === (hasFailure ? "fail" : "pass"), `${label} status does not match its probe results`);
 }
 
-function validateParityEvidence(evidence, contract, spec) {
+function validateParityEvidence(evidence, contract, spec, requirements, sourceDigests, compilerDigest) {
+  if (evidence?.schemaVersion === 6 || spec?.version === 5) return import("./parity-model-execution.mjs").then(({ validateModelEvidence }) => validateModelEvidence({ contract, profile: spec, requirements, sourceDigests, compilerDigest }, evidence));
   if (spec) validateParitySpec(spec, contract);
   assertPersistedJsonSecretFree(evidence, "parity evidence");
   ensure(isPlainObject(evidence), "parity evidence must be an object");
@@ -994,7 +1010,14 @@ function validateParityEvidence(evidence, contract, spec) {
   return evidence;
 }
 
-function validateEvidenceBundle({ approval, preEdit, implementation, contract, spec, current }) {
+function validateEvidenceBundle({ approval, preEdit, implementation, contract, spec, current, requirements, sourceDigests, compilerDigest }) {
+  if (implementation?.schemaVersion === 6) {
+    validateApprovalEvidence(approval);
+    ensure(approval.semanticDigest === implementation.semanticDigest, "Model approval semantic binding differs");
+    ensure(preEdit === undefined, "Model completion must not include pre-edit evidence");
+    for (const field of ["goalSha256", "prototypeRevision", "validationProfileDigest"]) ensure(approval[field] === current[field], `Model approval ${field} differs`);
+    return validateParityEvidence(implementation, contract, spec, requirements, sourceDigests, compilerDigest);
+  }
   validateApprovalEvidence(approval);
   validateParityEvidence(implementation, contract, spec);
   ensure(implementation.phase === "final", "implementation evidence has the wrong phase");
@@ -1260,6 +1283,10 @@ async function readOptionalJsonRegular(target, label) {
 }
 
 async function verifyCurrentRun({ target, definition, options, repositoryRootPath = repositoryRoot }) {
+  if (definition.spec.version === 5) {
+    const { verifyModelRun } = await import("./parity-model-workspace.mjs");
+    return verifyModelRun({ repositoryRootPath, slug: planSlugFromTarget(target), runId: options.runId });
+  }
   const slug = planSlugFromTarget(target);
   ensure(options.runId, "--run-id is required");
   const root = await realpath(repositoryRootPath);
@@ -1427,7 +1454,7 @@ async function runCli({
       options,
       repositoryRootPath: root,
     });
-    ensure(definition.spec.version === 4, "new runs require parity-spec.json version 4");
+    ensure([4, 5].includes(definition.spec.version), "new runs require parity-spec.json version 4 or 5");
     const output = await prepareRunWorkspace({
       repositoryRootPath: root,
       slug,
@@ -1478,6 +1505,13 @@ async function runCli({
       repositoryRootPath: root,
     }), null, 2)}\n`);
     return;
+  }
+  if (definition.spec.version === 5) {
+    const { modelPreflight } = await import("./parity-model-execution.mjs");
+    const result = await modelPreflight({ contract: definition.contract, profile: definition.spec, requirements: definition.requirements, sourceDigests: definition.sourceDigests, compilerDigest: definition.compilerDigest });
+    const output = { prototypeRevision: definition.prototypeRevision, validationProfileDigest: definition.validationProfileDigest, caseCount: result.compiled.cases.length, ...(command === "select" ? { caseIds: result.compiled.cases.map(({ id }) => id) } : {}) };
+    stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+    return output;
   }
   const output = {
     prototypeRevision: definition.prototypeRevision,

@@ -1421,3 +1421,53 @@ test("PORT-09: current origin boundaries and read-only legacy URLs are separate"
   assert.equal(requireLoopbackBaseUrl("http://localhost:3142", "production", { legacy: true }).port, "3142");
   assert.equal(requireLoopbackBaseUrl("http://127.0.0.1:60237", "prototype", { legacy: true }).port, "60237");
 });
+
+test("MERGE-02/ART-01: model runner shares actions, preserves both REQs and captures no lightweight artifacts", async () => {
+  const { BrowserParityRunner } = await parityModulePromise;
+  const fixtures = await import(pathToFileURL(path.resolve(import.meta.dirname, "fixtures/parity-verification-model.mjs")).href);
+  const input = await fixtures.verificationFixture({ targets: 2, states: 1 });
+  const extra = { ...structuredClone(input.profile.obligations[0]), id: "second-req", requirementIds: ["REQ-second"], assertion: { kind: "visibility", selector: "#extra", pure: true }, expected: true };
+  input.profile.obligations.push(extra); input.profile.groups[0].obligationIds.push(extra.id);
+  input.profile.scenarios[0].type = "flow";
+  input.profile.scenarios[0].checkpoints[0].actions = [{ type: "click", selector: "#open" }];
+  await fixtures.rebindFixture(input);
+  const adapter = fixtures.modelAdapterSpy();
+  const runner = new BrowserParityRunner(adapter);
+  const evidence = await runner.run({ modelInput: input, tabs: { production: "left", prototype: "right" } });
+  assert.equal(evidence.schemaVersion, 6);
+  assert.equal(evidence.status, "pass");
+  assert.equal(adapter.calls.filter(([operation]: string[]) => operation === "capture").length, 0);
+  const shared = evidence.caseResults.filter((item: { obligationIds: string[] }) => item.obligationIds.includes(extra.id));
+  assert.ok(shared.every((item: { obligationIds: string[] }) => item.obligationIds.length === 2));
+  assert.equal(adapter.calls.filter(([operation, , action]: [string, string, { type: string }]) => operation === "action" && action.type === "click").length, shared.length * 2);
+  const { validateModelEvidence } = await import(pathToFileURL(path.resolve(import.meta.dirname, "../.agents/skills/plan/scripts/parity-model-execution.mjs")).href);
+  assert.equal((await validateModelEvidence(input, evidence)).status, "pass");
+  evidence.caseResults[0].assertions.pop();
+  await assert.rejects(validateModelEvidence(input, evidence), { code: "PARITY_REQUIREMENT_GAP" });
+});
+test("SCALE-01: invalid model cannot activate or clean up a Browser", async () => {
+  const { BrowserParityRunner } = await parityModulePromise;
+  const { verificationFixture, modelAdapterSpy } = await import(pathToFileURL(path.resolve(import.meta.dirname, "fixtures/parity-verification-model.mjs")).href);
+  const input = await verificationFixture(); input.profile.obligations.pop();
+  const adapter = modelAdapterSpy(); const runner = new BrowserParityRunner(adapter);
+  await assert.rejects(runner.run({ modelInput: input, tabs: { production: "left", prototype: "right" } }), { code: "PARITY_REQUIREMENT_GAP" });
+  assert.equal(adapter.calls.length, 0);
+});
+
+test("model navigation precedes DPR on each fresh surface and cleanup retains the original execution failure", async () => {
+  const { BrowserParityRunner, ParityRunError } = await parityModulePromise;
+  const { verificationFixture, modelAdapterSpy } = await import(pathToFileURL(path.resolve(import.meta.dirname, "fixtures/parity-verification-model.mjs")).href);
+  const input = await verificationFixture({ targets: 1, states: 1 });
+  const adapter = modelAdapterSpy();
+  const navigated = new Set<string>();
+  const originalNavigate = adapter.navigate;
+  adapter.navigate = async (id: string, url: string) => { navigated.add(id); return originalNavigate(id, url); };
+  const originalViewport = adapter.setViewport;
+  adapter.setViewport = async (id: string, value: unknown) => { assert.ok(navigated.has(id)); return originalViewport(id, value); };
+  const runner = new BrowserParityRunner(adapter);
+  await runner.runModel({ modelInput: input, tabs: { production: "left", prototype: "right" } });
+  adapter.runModelAssertion = async () => { throw new ParityRunError("PARITY_REQUIRED_PROBE_UNAVAILABLE", "declared input unavailable"); };
+  adapter.cleanup = async () => { throw new ParityRunError("PARITY_CLEANUP_FAILED", "cleanup also failed"); };
+  await assert.rejects(runner.runModel({ modelInput: input, tabs: { production: "left", prototype: "right" } }),
+    (error: unknown) => (error as { code: string; cleanupFailure: { code: string } }).code === "PARITY_REQUIRED_PROBE_UNAVAILABLE" && (error as { cleanupFailure: { code: string } }).cleanupFailure.code === "PARITY_CLEANUP_FAILED");
+});

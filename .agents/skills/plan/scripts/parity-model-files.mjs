@@ -3,6 +3,7 @@ import { lstat, open, realpath } from "node:fs/promises";
 import { constants } from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { estimateVerification } from "./parity-estimate.mjs";
 import { VerificationModelError } from "./parity-verification-model.mjs";
 export async function boundedModelRead(root, relative, json = true) {
@@ -34,12 +35,30 @@ export async function loadVerificationModel(target, repositoryRoot) {
   const contract = await boundedModelRead(root, `${target}/ui-contract.json`);
   const profile = await boundedModelRead(root, `${target}/parity-spec.json`);
   const requirements = await boundedModelRead(root, `${target}/${contract.requirementsBundle.path}`);
+  const sourceDigests = {};
+  const sourceIds = new Set(profile.sourceInventory.map(({ id }) => id));
   for (const source of profile.sourceInventory) {
     const data = await boundedModelRead(root, source.id, false);
     const digest = `sha256:${createHash("sha256").update(data).digest("hex")}`;
-    if (source.digest !== digest) throw new VerificationModelError("PARITY_SUBSTITUTION_INVALID", `Source digest changed: ${source.id}`);
+    sourceDigests[source.id] = digest;
+    if (/\.[cm]?[jt]sx?$/u.test(source.id)) {
+      const imports = [...data.toString("utf8").matchAll(/(?:from\s*|import\s*(?:\(\s*)?)["'](\.[^"']+)["']/gu)].map((match) => match[1]);
+      for (const specifier of imports) {
+        const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(source.id), specifier));
+        const candidates = [resolved, ...[".ts", ".tsx", ".js", ".mjs", "/index.ts", "/index.tsx"].map((extension) => resolved + extension)];
+        const dependency = candidates.find((candidate) => sourceIds.has(candidate));
+        if (!dependency || !source.dependencies.includes(dependency)) throw new VerificationModelError("PARITY_REQUIREMENT_GAP", `Actual import is missing from dependency inventory: ${source.id}`);
+      }
+    }
   }
-  return { contract, profile, requirements };
+  const scriptRoot = await realpath(path.dirname(fileURLToPath(import.meta.url)));
+  const engine = {};
+  for (const file of ["parity-verification-model.mjs", "parity-estimate.mjs", "parity-runner-core.mjs", "parity-model-execution.mjs", "in-app-browser-parity-adapter.mjs", "browser-api-bootstrap.mjs", "browser-screenshot.mjs", "parity-model-files.mjs", "parity-runner.mjs", "parity-model-workspace.mjs", "parity-run-workspace.mjs"]) {
+    const bytes = await boundedModelRead(scriptRoot, file, false);
+    engine[file] = createHash("sha256").update(bytes).digest("hex");
+  }
+  const compilerDigest = `sha256:${createHash("sha256").update(JSON.stringify(engine)).digest("hex")}`;
+  return { contract, profile, requirements, sourceDigests, compilerDigest };
 }
 export async function estimateFromFiles({ target, repositoryRoot, context = "plan", baselineReport, changedSources = [], legacyAnalysis = false }) {
   if (!["plan", "implement"].includes(context)) throw new VerificationModelError("PARITY_MODEL_INVALID", "Estimate context must be plan or implement");

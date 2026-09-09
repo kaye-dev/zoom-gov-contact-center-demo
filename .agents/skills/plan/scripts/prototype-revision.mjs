@@ -4,7 +4,6 @@ import { createHash } from "node:crypto";
 import { constants as fsConstants } from "node:fs";
 import { lstat, open, readdir, realpath } from "node:fs/promises";
 import path from "node:path";
-import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { requireAuthorizationProfile, validateParitySpec } from "./parity-runner-core.mjs";
 
@@ -921,7 +920,7 @@ async function prototypeRevision(requestedDirectory) {
 }
 
 async function main() {
-  const args = process.argv.slice(2);
+  const args = globalThis.process.argv.slice(2);
   if (args.length !== 1) {
     throw new Error(
       "usage: node .agents/skills/plan/scripts/prototype-revision.mjs plans/<slug>/prototype",
@@ -931,9 +930,9 @@ async function main() {
 }
 
 async function isMainModule() {
-  if (!process.argv[1]) return false;
+  if (!globalThis.process?.argv?.[1]) return false;
   try {
-    return (await realpath(process.argv[1])) === (await realpath(fileURLToPath(import.meta.url)));
+    return (await realpath(globalThis.process.argv[1])) === (await realpath(fileURLToPath(import.meta.url)));
   } catch {
     return false;
   }
@@ -942,7 +941,7 @@ async function isMainModule() {
 if (await isMainModule()) {
   main().catch((error) => {
     console.error(error instanceof Error ? error.message : String(error));
-    process.exitCode = 1;
+    globalThis.process.exitCode = 1;
   });
 }
 

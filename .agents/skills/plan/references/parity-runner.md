@@ -164,3 +164,15 @@ estimateはstdoutのみを書き、Browser・DB・run workspaceを操作しな�
 候補数はBigIntで集計し、機能ごとの和を取る。candidate評価100万、選択10万、推定working set 256 MiBはcompiler資源上限であり、cost overrideでは緩和しない。超過は未算出の件数をnullとしてモデル分割へ戻す。通常の15分/unit、90分/全体、64 MiB/証跡、承認時比20%かつ10件等の運用閾値は `parity-estimate.mjs` の共通評価で判定する。overrideにはmetric/value/reason/evidence/unitIdsを全て宣言する。要件・期待値・riskを削って費用に合わせない。
 
 原観点は全文とhash、条件、REQ、全子obligationを保持する。代表化証明は元条件、能力、source依存閉包、正確な代替test、consumer接続、残存risk、fallback、失効条件を全て持つ。未実行のtest/calibrationはpendingとし追加費用へ加算する。source-textやSSRの成功を実Browserのlayout/focus/eventへ代用しない。pendingの証明で元条件を省略しない。
+
+## モデルの共通実行と evidence 6
+
+contract 3/profile 5 の current writer は workspace/fragment 3、evidence 6 を使う。`prepare-run` → `next-batch` / `executeBrowserBatch` → `record-batch` → `recordRunAudit` → `finalize-run` → `verify-run` は同じ model preflight と全obligation closure を使う。`BrowserParityRunner.runModel` がブラウザ操作を担い、Node側の `parity-model-workspace.mjs` が境界付きprivate file、digest、atomic writeと承認bindingを担う。新経路を旧schemaへ書き戻さない。上記の旧profile/evidence説明は各legacy readerの契約として維持する。
+
+Browser APIの文書receiptは現在のadapter module/runtime世代で取得し、全文提示と別tool呼出しでのacknowledge後に使う。freshな両surfaceはHTTP navigationを終えてからCDP/DPRを設定する。`Intl` 等の任意page globalはBrowserのDOM評価APIで利用可能とは限らない。locale/timezoneはCDPコマンドの適用応答を記録し、locale依存の画面結果は別のDOM assertionで確認する。未対応のtouch等をclickへ置換して成功扱いしない。
+
+`artifactRequests` の既定は空。画像が必要なcheckpointだけ取得し、case条件・surface・checkpoint・phaseのdigestで識別する。画像サイズの一致だけで視覚passにしない。取得surfaceの倍率・内容もCodexが見る。CDPによるviewport captureは `Page.captureScreenshot` の `fromSurface: true` を使い、明示clipで内容が縮小されるbackendを正常画像として受理しない。`fromSurface: false` はアプリwindowを取得し得るため使用しない。
+
+層別結果は正確なtest path/case ID/input/expected/environment/能力/result digestを必要とする。command exit 0だけでは未実行caseを満たさない。visualは現在の両surface画像を実際に見てから、case ID/obligation ID/criterion ID、artifact digest、viewer、reviewedAtと判定を `recordRunAudit` へ渡す。同じ画像を複数criterionで参照しても各criterionの判定を省略しない。
+
+finalizerは必要ケース・assertion・原観点・substitution・画像・目視・cleanupを再計算する。証跡とartifactをprivateな最終保存先へ書き終えてからworkspaceを消し、public `verify-run` で再読込する。`coverage` はfull parityやhuman承認と区別する。失敗は元のexecution codeを保持し、cleanupにも失敗した場合は追加診断を残す。

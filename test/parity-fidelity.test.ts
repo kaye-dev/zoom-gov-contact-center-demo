@@ -174,3 +174,44 @@ test("REQ-07/09: runner executes normal-route actions and schema v5 audit is ind
   const promotedSmoke = { ...smoke, phase: "final" };
   assert.throws(() => facade.validateParityEvidence(promotedSmoke, contract, spec));
 });
+
+test("ART-02/03: model images require current per-criterion viewing and cannot cross conditions", async () => {
+  const [core] = await modules;
+  const { verificationFixture, rebindFixture, modelAdapterSpy } = await load("fixtures/parity-verification-model.mjs");
+  const { modelDigest } = await load("../.agents/skills/plan/scripts/parity-verification-model.mjs");
+  const { validateModelEvidence } = await load("../.agents/skills/plan/scripts/parity-model-execution.mjs");
+  const input = await verificationFixture({ states: 1 });
+  const obligation = input.profile.obligations[0];
+  obligation.layer = "visual"; obligation.assertion = { kind: "screenshot", selector: "body", pure: true }; obligation.expected = "readable layout"; obligation.artifactRequests = ["screenshot"]; obligation.criterionIds = ["layout", "readability"]; obligation.requiredCapabilities = ["visual"];
+  input.profile.originalCriteria = await Promise.all(["layout", "readability"].map(async (id) => ({ id, text: id, textDigest: await modelDigest(id), requirementIds: obligation.requirementIds, conditions: obligation.when, childObligationIds: [obligation.id] })));
+  await rebindFixture(input);
+  const evidence = await new core.BrowserParityRunner(modelAdapterSpy()).run({ modelInput: input, tabs: { production: "left", prototype: "right" } });
+  assert.equal(evidence.status, "pending-visual");
+  await assert.rejects(validateModelEvidence(input, evidence), { code: "PARITY_REQUIREMENT_GAP" });
+  evidence.visualAudit = evidence.caseResults.filter((item: { obligationIds: string[] }) => item.obligationIds.includes(obligation.id)).flatMap((item: { caseId: string }) => obligation.criterionIds.map((criterionId: string) => ({ caseId: item.caseId, obligationId: obligation.id, criterionId, status: "pass", viewer: "codex", reviewedAt: "2026-09-09T00:00:00Z", artifactDigests: evidence.artifacts.filter((artifact: { caseId: string }) => artifact.caseId === item.caseId).map((artifact: { sha256: string }) => artifact.sha256) })));
+  assert.equal((await validateModelEvidence(input, evidence)).status, "pass");
+  assert.equal(evidence.visualAudit.length, evidence.artifacts.length);
+  for (const field of ["hash", "empty", "checkpoint", "phase", "condition", "criterion"]) {
+    const changed = structuredClone(evidence);
+    if (field === "hash") changed.visualAudit[0].artifactDigests = ["sha256:" + "a".repeat(64)];
+    if (field === "empty") changed.artifacts[0].bytes = 0;
+    if (field === "checkpoint") changed.artifacts[0].identity.checkpointId = "other-time";
+    if (field === "phase") changed.artifacts[0].identity.phase = "smoke";
+    if (field === "condition") changed.artifacts[0].identity.conditionsDigest = "sha256:" + "a".repeat(64);
+    if (field === "criterion") changed.visualAudit.pop();
+    await assert.rejects(validateModelEvidence(input, changed), { code: "PARITY_REQUIREMENT_GAP" });
+  }
+});
+test("LAYER-02: command success and SSR/source-text cannot replace a required exact Browser-capable test case", async () => {
+  const { validateLayerResult } = await load("../.agents/skills/plan/scripts/parity-model-execution.mjs");
+  const { modelDigest } = await load("../.agents/skills/plan/scripts/parity-verification-model.mjs");
+  const expected = { assertion: { kind: "focus", selector: "#save", pure: true }, expected: true, requiredCapabilities: ["real-browser-focus"], test: { path: "focus.test.ts", caseId: "focus-save", input: { tenant: "one" }, environment: { fixture: "one" } } };
+  const compiledCase = { layer: "component", reuseKey: "current-key" };
+  const payload = { status: "pass", layer: "component", path: "focus.test.ts", caseId: "focus-save", input: expected.test.input, environment: expected.test.environment, assertion: expected.assertion, expected: true, reuseKey: "current-key", capabilities: ["SSR", "source-text"] };
+  await assert.rejects(validateLayerResult({ ...payload, digest: await modelDigest(payload) }, expected, compiledCase), { code: "PARITY_REQUIREMENT_GAP" });
+  await assert.rejects(validateLayerResult({ exitCode: 0 }, expected, compiledCase), { code: "PARITY_REQUIREMENT_GAP" });
+  payload.capabilities = ["real-browser-focus"];
+  assert.equal((await validateLayerResult({ ...payload, digest: await modelDigest(payload) }, expected, compiledCase)).status, "pass");
+  payload.caseId = "not-executed-case";
+  await assert.rejects(validateLayerResult({ ...payload, digest: await modelDigest(payload) }, expected, compiledCase), { code: "PARITY_REQUIREMENT_GAP" });
+});

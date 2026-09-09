@@ -1801,7 +1801,13 @@ class BrowserParityRunner {
     return evidence;
   }
 
+  async runModel(input) {
+    const { executeVerificationPlan } = await import("./parity-model-execution.mjs");
+    return executeVerificationPlan(this, input);
+  }
+
   async run(input) {
+    if (input.modelInput || input.definition?.spec?.version === 5) return this.runModel(input);
     this.canary = undefined;
     this.surfaceContexts = new Map();
     this.operations = 0;
