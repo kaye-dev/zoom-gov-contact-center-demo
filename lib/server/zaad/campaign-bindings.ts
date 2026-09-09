@@ -65,7 +65,7 @@ export async function bindCampaigns(db: PrismaClient, scope: OutreachScope, payl
     return await db.$transaction(async tx => {
       for (const campaign of observed) {
         const where = { accountId: client.accountId, resourceType: "CAMPAIGN", zoomId: campaign.id };
-        const binding = await tx.zoomResourceBinding.findUnique({ where: { accountId_resourceType_zoomId: where } });
+        const binding = await tx.zoomResourceBinding.findFirst({ where: { ...where, ...(where.resourceType === "CONTACT_LIST" ? { ownerSiteKey: scope.siteKey } : {}) } });
         if (binding && (binding.ownerSiteKey !== scope.siteKey || binding.purpose !== "REGULAR" || binding.tombstone)) throw new OutreachContractError("RESOURCE_OWNERSHIP_CONFLICT", 409);
         if (!binding) await tx.zoomResourceBinding.create({ data: { ...where, ownerSiteKey: scope.siteKey, purpose: "REGULAR", observedDigest: digest(campaign) } });
       }

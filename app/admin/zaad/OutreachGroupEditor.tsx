@@ -8,7 +8,7 @@ import { outreachMutation } from "./outreach-client";
 import type { OutreachPanelProps } from "./OutreachView";
 import { registrationInputClass as input, outreachPrimary as primary, outreachSecondary as secondary } from "@/app/notifications/register/StudentNotificationRegistration";
 
-export type OutreachGroup = { id: string; name: string; description: string; departmentKey: string | null; version: number; revision: string; contactCount: number; mutationBlock?: "GROUP_IN_USE" | "CAMPAIGN_REFERENCE_UNKNOWN" | null };
+export type OutreachGroup = { id: string; name: string; description: string; departmentKey: string | null; version: number; revision: string; updatedAt?: string | null; contactCount: number | null; mutationBlock?: "GROUP_IN_USE" | "CAMPAIGN_REFERENCE_UNKNOWN" | null };
 export function OutreachGroupEditor({ group, close, saved, tenant, departments, permissions, setDirty, setSaving }: OutreachPanelProps & { group: OutreachGroup | null; close: () => void; saved: () => void }) {
   const { t } = useI18n(), z = t.admin.zaad, d = t.outreachCommon;
   const [draft, setDraft] = useState(() => group ?? { id: "", name: "", description: "", departmentKey: departments[0], version: 0, revision: "", contactCount: 0 });
@@ -30,13 +30,14 @@ export function OutreachGroupEditor({ group, close, saved, tenant, departments, 
   return <section className="max-w-3xl space-y-6" aria-labelledby="group-page-title">
     <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="group-page-title" className="text-lg font-bold">{group ? d.groupEdit : d.groupCreate}</h2><button className={secondary} disabled={busy} onClick={requestClose}>{d.backToContacts}</button></div>
     <form className="space-y-5" onSubmit={event => { event.preventDefault(); void save(); }}>
+      {group && <p className="text-sm leading-7 text-fg-muted">{d.groupSync.sharedEdit}</p>}
       {group?.mutationBlock && <p role="alert" className="text-sm leading-7">{d.groupMutationBlocks[group.mutationBlock]}</p>}
       {error && <p role="alert">{error}</p>}
       <fieldset className="space-y-5" disabled={busy || !writable}><legend className="sr-only">{group ? d.groupEdit : d.groupCreate}</legend>
         {tenant === "univ" && !group && <label className="block">{d.examples}<Select defaultValue="" onChange={event => { const example = CASES.find(row => row.id === event.target.value); if (example) change({ name: t.universityOutreach.templateText[example.name], description: t.universityOutreach.templateText[example.purpose] }); }}><option value="">{d.select}</option>{CASES.map(example => <option key={example.id} value={example.id}>{t.universityOutreach.templateText[example.name]}</option>)}</Select></label>}
         <label className="block">{d.groupName}<input required className={input} maxLength={100} value={draft.name} onChange={event => change({ name: event.target.value })} /></label>
         <label className="block">{z.contactLists.descriptionLabel}<textarea className={input} maxLength={500} value={draft.description} onChange={event => change({ description: event.target.value })} /></label>
-        <label className="block">{d.department}<Select value={draft.departmentKey ?? ""} onChange={event => change({ departmentKey: event.target.value })}>{departments.map(key => <option key={key} value={key}>{d.departments[key] ?? d.unknown}</option>)}</Select></label>
+        <label className="block">{d.department}<Select required value={draft.departmentKey ?? ""} onChange={event => change({ departmentKey: event.target.value })}><option value="" disabled>{d.groupSync.unassigned}</option>{departments.map(key => <option key={key} value={key}>{d.departments[key] ?? d.unknown}</option>)}</Select></label>
       </fieldset>
       {!group && <p className="text-sm leading-7 text-fg-muted">{d.emptyGroupHelp}</p>}
       {writable && <button className={primary} disabled={busy}>{busy ? t.admin.industrySettings.saving : group ? z.common.save : z.common.create}</button>}

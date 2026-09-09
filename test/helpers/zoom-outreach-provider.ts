@@ -5,8 +5,8 @@ export type ZoomOutreachSnapshot = {
   members: Record<string, Record<string, unknown>[]>;
   campaigns: Record<string, unknown>[];
   campaignPageSize?: number;
-  readFailures?: Array<{ path: string; remaining: number; skip?: number }>;
-  requestDelays?: Array<{ path: string; method: string; remaining: number; milliseconds: number; skip?: number }>;
+  readFailures?: Array<{ path: string; remaining: number; skip?: number; pageSize?: number }>;
+  requestDelays?: Array<{ path: string; method: string; remaining: number; milliseconds: number; skip?: number; pageSize?: number }>;
 };
 
 const fixturePath = /^\/v2\/contact_center\/outbound_campaign\/(?:campaigns(?:\/fixture-campaign-[a-z0-9-]+)?|contact_lists(?:\/fixture-list-\d+(?:\/contacts(?:\/fixture-contact-\d+)?)?)?)$/;
@@ -22,7 +22,7 @@ export class ZoomOutreachProvider {
   private members = new Map<string, Map<string, Record<string, unknown>>>();
   private campaigns = new Map<string, Record<string, unknown>>();
   private campaignPageSize = 100;
-  private readFailures: Array<{ path: string; remaining: number; skip?: number }> = [];
+  private readFailures: Array<{ path: string; remaining: number; skip?: number; pageSize?: number }> = [];
   private requestDelays: NonNullable<ZoomOutreachSnapshot["requestDelays"]> = [];
 
   constructor(readonly accountId: string, snapshot?: ZoomOutreachSnapshot, private readonly wait: (milliseconds: number) => Promise<void> = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))) {
@@ -36,11 +36,13 @@ export class ZoomOutreachProvider {
     for (const failure of copy.readFailures ?? []) {
       if (!fixturePath.test(failure.path) || !Number.isInteger(failure.remaining) || failure.remaining < 0 || failure.remaining > 100) throw new Error("Invalid fixture read failure");
       if (failure.skip !== undefined && (!Number.isInteger(failure.skip) || failure.skip < 0 || failure.skip > 100)) throw new Error("Invalid fixture failure offset");
+      if (failure.pageSize !== undefined && (!Number.isInteger(failure.pageSize) || failure.pageSize < 1 || failure.pageSize > 100)) throw new Error("Invalid fixture page size filter");
       this.readFailures.push(failure);
     }
     for (const delay of copy.requestDelays ?? []) {
       if (!fixturePath.test(delay.path) || !["GET", "POST", "PATCH", "DELETE"].includes(delay.method) || !Number.isInteger(delay.remaining) || delay.remaining < 0 || delay.remaining > 10 || !Number.isInteger(delay.milliseconds) || delay.milliseconds < 1 || delay.milliseconds > 15000) throw new Error("Invalid fixture request delay");
       if (delay.skip !== undefined && (!Number.isInteger(delay.skip) || delay.skip < 0 || delay.skip > 100)) throw new Error("Invalid fixture delay offset");
+      if (delay.pageSize !== undefined && (!Number.isInteger(delay.pageSize) || delay.pageSize < 1 || delay.pageSize > 100)) throw new Error("Invalid fixture page size filter");
       this.requestDelays.push(delay);
     }
     if (copy.sequence !== undefined) {
@@ -87,10 +89,10 @@ export class ZoomOutreachProvider {
     }
     if (request.headers.get("authorization") !== `Bearer fixture-${this.accountId}`)
       return Response.json({ code: 124 }, { status: 401 });
-    const delay = this.requestDelays.find(row => row.path === path && row.method === method && row.remaining > 0);
+    const delay = this.requestDelays.find(row => row.path === path && row.method === method && row.remaining > 0 && (row.pageSize === undefined || url.searchParams.get("page_size") === String(row.pageSize)));
     if (delay && delay.skip) delay.skip--;
     else if (delay) { delay.remaining--; await this.wait(delay.milliseconds); }
-    const failure = method === "GET" && this.readFailures.find(row => row.path === path && row.remaining > 0);
+    const failure = method === "GET" && this.readFailures.find(row => row.path === path && row.remaining > 0 && (row.pageSize === undefined || url.searchParams.get("page_size") === String(row.pageSize)));
     if (failure && failure.skip) failure.skip--;
     else if (failure) { failure.remaining--; return Response.json({ code: "FIXTURE_READ_UNAVAILABLE" }, { status: 503 }); }
     if (path === "/v2/contact_center/outbound_campaign/campaigns" && method === "GET") {

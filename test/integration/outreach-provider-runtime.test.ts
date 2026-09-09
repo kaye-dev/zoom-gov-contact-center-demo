@@ -66,9 +66,11 @@ test("stateful provider exercises the real client and database write/readback bo
         assert.equal(uncertainProvider.requests.filter(request => request.method === "PATCH").length, writes);
         assert.equal((await db.outreachOperation.findUniqueOrThrow({ where: { id: operation.id } })).status, "UNKNOWN");
       });
-      await t.test("deletion checks absence at the provider and tombstones the binding", async () => {
+      await t.test("detach retains the provider list and tombstones only the binding", async () => {
+        const providerBefore = provider.snapshot();
         await deleteZoomGroup(db, scope, row.id, { operationKey: "fixture_group_delete", version: row.version }, client);
         assert.equal((await listZoomGroups(db, scope, client)).total, 0);
+        assert.deepEqual(provider.snapshot(), providerBefore);
         assert.equal((await db.zoomResourceBinding.findUniqueOrThrow({ where: { id: row.bindingId } })).tombstone, true);
       });
       await t.test("unknown endpoints and external origins never fall back to live network", async () => {

@@ -20,7 +20,8 @@ export async function previewResourceBinding(db: PrismaClient, scope: OutreachSc
   const value = record(payload); fields(value, ["resourceType", "zoomId"]);
   const resourceType = choice(value.resourceType, RESOURCE_TYPES), zoomId = stringValue(value.zoomId);
   const client = injected ?? await ZaadZoomClient.fromDatabase(db, scope.siteKey);
-  const binding = await db.zoomResourceBinding.findUnique({ where: { accountId_resourceType_zoomId: { accountId: client.accountId, resourceType, zoomId } } });
+  const binding = await db.zoomResourceBinding.findFirst({ where: { accountId: client.accountId, resourceType, zoomId, ...(resourceType === "CONTACT_LIST" ? { ownerSiteKey: scope.siteKey } : {}) } })
+    ?? (resourceType === "CONTACT_LIST" ? await db.zoomResourceBinding.findFirst({ where: { accountId: client.accountId, resourceType, zoomId } }) : null);
   // Reject foreign IDs before retrieving even metadata from the provider.
   if (binding && (binding.ownerSiteKey !== scope.siteKey || binding.tombstone || binding.dispatchId)) throw new OutreachContractError("NOT_FOUND", 404);
   const observed = resourceType === "CONTACT_LIST" ? await client.getContactList(zoomId) : resourceType === "CAMPAIGN" ? await client.getCampaign(zoomId) : resourceType === "FLOW" ? await client.getFlow(zoomId) : await client.getTtsAsset(zoomId);
@@ -46,7 +47,7 @@ export async function saveResourceBinding(db: PrismaClient, scope: OutreachScope
   try {
     return await db.$transaction(async tx => {
       const where = { accountId: observed.accountId, resourceType: observed.resourceType, zoomId: observed.zoomId };
-      const current = await tx.zoomResourceBinding.findUnique({ where: { accountId_resourceType_zoomId: where } });
+      const current = await tx.zoomResourceBinding.findFirst({ where: { ...where, ...(where.resourceType === "CONTACT_LIST" ? { ownerSiteKey: scope.siteKey } : {}) } });
       if (current && (current.ownerSiteKey !== scope.siteKey || current.tombstone || current.dispatchId || current.version !== version)) throw new OutreachContractError("RESOURCE_OWNERSHIP_CONFLICT", 409);
       if (!current && version !== 0) throw new OutreachContractError("VERSION_CONFLICT", 409);
       const result = current ? await tx.zoomResourceBinding.update({ where: { id: current.id, version }, data: { departmentKey, notificationTopic, observedDigest: observed.observedDigest, version: { increment: 1 } } }) : await tx.zoomResourceBinding.create({ data: { ...where, ownerSiteKey: scope.siteKey, departmentKey, notificationTopic, observedDigest: observed.observedDigest, purpose: "REGULAR" } });
