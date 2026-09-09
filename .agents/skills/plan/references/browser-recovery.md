@@ -1,5 +1,7 @@
 # Browser recovery
 
+> Historical reference only. This document describes stored detailed-parity tooling and records. Plan, implement, review, and shipping use the smoke contract in `workflow-verification-contract.md`; do not execute or require the procedures below for feature work.
+
 After an explicitly requested DPR recovery, the common Browser executor may call `recoverDprTerminalBatch({ repositoryRootPath, runId, batchId, adapter, tabs })` once for a terminal `PARITY_DPR_OVERRIDE_UNAVAILABLE` batch with no result fragment. Run current contract/source preflight and runtime ownership checks first. The function uses fresh `BrowserParityRunner` canaries on both manifest origins through the common two-tab adapter, requires 390×844 / DPR 1, screenshot digests, declared network capability, and validated cleanup. It checks manifest/checkpoint drift before writing. Failed canary or cleanup leaves the checkpoint untouched. Success retains previous attempts and failure provenance in that batch's `dprRecovery`, preserves all passed batches/fragments/artifacts, and makes only the named batch pending. It does not reserve work: call `executeBrowserBatch` next, without `resume-run` or `next-batch`. A repeated DPR failure, another terminal error, an existing result, or concurrent running work cannot use this recovery. Canary success authorizes only resumption, never coverage completion.
 
 ### Interrupted navigation recovery

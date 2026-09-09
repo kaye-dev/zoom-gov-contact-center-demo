@@ -1,6 +1,6 @@
 interface:
   display_name: "Start Implementation"
-  short_description: "Approve, implement, then run one final review"
-  default_prompt: "Use $implement to approve plans/<slug>/goal.md, implement it without Browser checks during editing, and run one proportional final review."
+  short_description: "Implement, check, and smoke the main UI flow"
+  default_prompt: "Use $implement to approve plans/<slug>/goal.md, implement it without Browser checks during editing, and check major UI breakage and main happy paths with a brief in-app Browser smoke."
 policy:
   allow_implicit_invocation: false

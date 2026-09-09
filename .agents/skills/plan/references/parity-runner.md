@@ -1,5 +1,7 @@
 # UI parity runner contract
 
+> Historical reference only. This document describes stored detailed-parity tooling and records. Plan, implement, review, and shipping use the smoke contract in `workflow-verification-contract.md`; do not execute or require the procedures below for feature work.
+
 Use this reference when authoring UI plans, running normal UI `$implement` final coverage, reviewing that evidence, or performing release, CI, scheduled, or user-explicit parity verification. Normal UI `$implement` starts with static preflight and approval, then runs the Browser lifecycle at a completed implementation unit or the final boundary after its static checks. Normal UI `$review` requires current final parity evidence. Legacy `ui-contract.json` version 1 is the complete matrix acceptance contract. New authoring uses contract 3/profile 5 and evidence 6 in the model sections below. Existing matrix plans use `parity-spec.json` version 4 and final `implementation-parity.json` schema version 5. Older profiles and evidence remain read-only compatibility inputs.
 
 ## Contract, profile, and coverage

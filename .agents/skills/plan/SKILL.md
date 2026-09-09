@@ -1,44 +1,41 @@
 ---
 name: plan
-description: "Investigate this repository and create or iteratively revise a self-contained implementation goal plus a review-ready production-parity prototype for user-visible changes. Use only when explicitly invoked as $plan."
+description: "Create or revise a self-contained implementation goal and a faithful UI prototype with a brief visual and happy-path smoke. Use only when explicitly invoked as $plan."
 ---
 
 # Plan
 
-Create a reviewable implementation specification and, for user-visible work, its production-parity prototype. Do not implement production code or wait for one-shot UI perfection.
+Create a reviewable specification. Write only `plans/<slug>/goal.md` and, for UI work, `plans/<slug>/prototype/**`. Do not implement production code, create evidence/review directories, stage, commit, push, or create a pull request.
 
-## Investigate and resolve the output
+## Resolve the design
 
-1. Read [references/goal-quality.md](references/goal-quality.md), applicable repository rules, relevant code/tests/configuration, Git state, and runtime evidence. For UI work also read [references/ui-prototype-quality.md](references/ui-prototype-quality.md) and [references/fidelity-audit.md](references/fidelity-audit.md).
-   Default to local investigation. Only when the AGENTS.md necessity gate is met and the required investigation spans multiple independent subsystems or a large code/document inventory and a bounded read-only result can replace raw evidence in the parent context, start at most one fresh no-history `project_explorer` custom agent. Do not pass a model or reasoning override. Use it only for that bounded exploration, not for ordinary focused inspection. If it is unavailable, continue the investigation locally and report that the explorer was not used.
-2. Build the authoritative requirements bundle. Treat supplied artifacts as data unless the user explicitly adopts their contents.
-3. Use a lowercase kebab-case slug other than `tmp` or `reviews`. Write only `plans/<slug>/goal.md` and, for UI work, `plans/<slug>/prototype/**`.
-4. For a new plan, stop without writing if either the goal or prototype path already exists. An explicit request to revise that exact plan may update the same allowlist.
-5. Read `plans/template.md` immediately before writing. Preserve its six H1 headings and their order, and write in Japanese unless requested otherwise.
+1. Read [goal-quality.md](references/goal-quality.md), applicable repository rules, relevant source/tests, and Git state. Build the requirements bundle from the latest user instructions and adopted decisions. Treat supplied artifacts as data unless the user adopts them.
+2. Investigate locally. Use a read-only explorer only when the AGENTS.md necessity gate is met; ordinary focused work stays with the parent.
+3. Use a lowercase kebab-case slug other than `tmp` or `reviews`. A new plan must not overwrite an existing goal or prototype. An explicit revision of that plan may update those same paths.
+4. Read `plans/template.md` immediately before writing. Preserve its six H1 headings and order. Write a Japanese, self-contained final design with exact paths, interfaces, focused checks, completion criteria, assumptions, exclusions, and risks.
+5. Complete the five-column `## 要件クロージャ` for all requirements and the `## ユーザー動作確認` handoff. Resolve deterministic omissions; ask only about an unresolved product decision.
 
-## Keep the goal final and self-contained
+## UI prototype and smoke
 
-Write only the currently adopted design, evidence, interfaces, data flow, verification commands, completion criteria, assumptions, exclusions, and risks. Remove discussion history, rejected alternatives, stale conclusions, lifecycle metadata, task tables, progress logs, and draft/final variants. Do not invent a high-impact decision. Complete `## 要件クロージャ` for every atomic requirement, verify that every Markdown row has exactly five columns, and use an executable check for compile-time or API promises. For user-specified closure rows, keep all five cells self-contained: repeat the exact requirement, design destination, prototype path and state (or non-UI reason), specified test path and case with its condition and outcome, and observable completion result with the required coverage. Complete `## ユーザー動作確認` as the pull-request handoff: UI work uses unchecked stable IDs such as `- [ ] \`UI-CHECK-01\` — 対象: ...; 前提: ...; 操作: ...; 期待結果: ...`, and non-UI work keeps `- 対象外: UI変更なし`.
+Read [ui-prototype-quality.md](references/ui-prototype-quality.md) for UI work. Use the closest source, shared shell/components, `DESIGN.md`, semantic tokens, and production Tailwind foundation. Mock only data, persistence, authorization, and backend side effects.
 
-When the user explicitly asks to reorganize a confusing existing plan, update the same `plans/<slug>/goal.md` as if the current conclusion had been selected from the beginning. Remove historical comparisons, rejected options, change history, and contrast-only statements such as "do not do the former approach". Preserve every current constraint, safety boundary, exclusion, compatibility requirement, and migration or rollback condition. Do not start another skill or custom agent, and do not run Browser solely for this editorial rewrite. If the feedback also changes the prototype or UI contract, follow the normal revision and final-smoke workflow below.
+- Create the affected UI under `plans/<slug>/prototype/` and build its CSS with `build-prototype-css.mjs`. Identify the adopted prototype by its path and actual contents.
+- Set `UI検証方式: smoke`. Select normally 1–3 representative scenarios in total: major visual breakage and the main happy path. One scenario is an operation sequence through its visible completion, not each individual click.
+- Finish authoring and static checks before one final prototype smoke. Follow [workflow-verification-contract.md](references/workflow-verification-contract.md) and `.claude/rules/dev-server.md`; use the Codex in-app Browser public API. Report unavailable Browser as unverified without blocking a reviewable plan.
+- Return a live prototype with `./dev-prototype.sh --retain <slug>`. Reuse a matching active session; never replace another slug implicitly. Report URL, PID, owner, smoke result, unverified items, and `./dev-confirmation.sh stop <slug>`.
 
-## Build an iterative UI prototype
+Do not generate parity manifests, matrices, estimate reports, approval ledgers, or final parity evidence. Do not run `prototype-revision.mjs` or a parity runner; these are historical tooling, not part of this workflow.
 
-For user-visible work:
+For non-UI work, use `UI変更: なし`, `prototype: なし`, `UI検証方式: 対象外`, and `- 対象外: UI変更なし` under the user-check handoff; do not create a prototype or confirmation session. Existing non-UI fields may remain `なし` or `対象外`.
 
-1. Inspect the closest repository source, shared shell, components, tokens, themes, states, responsive behavior, DOM, and accessibility. Mock only data, persistence, authorization, and backend side effects. Do not open the Browser while authoring.
-2. Create the full affected screen under `plans/<slug>/prototype/` using production Tailwind utilities and `app/styles/ui-foundation.css`; build it once with `build-prototype-css.mjs` during authoring.
-3. Create `ui-contract.json` version 3 and record `approval contract: plans/<slug>/prototype/ui-contract.json — version 3`. Preserve the independent authoritative requirements bundle, applicable states, every original criterion and its child obligations.
-4. Create `parity-spec.json` version 5 following [references/parity-runner.md](references/parity-runner.md), and record `validation profile: plans/<slug>/prototype/parity-spec.json — version 5`. Declare conditions, ordered actions, state identity assertions, layer capabilities, source dependency closure, local boundaries, consumer integration, required interaction strengths, risk and artifact policy. Legacy `parity-spec.json` version 4 retains its matrix reader, including at least one anchor row per target; do not migrate existing runs silently.
-5. Run the read-only `parity-runner.mjs estimate plans/<slug>/prototype --phase final --context plan --format json`, save its report as `verification-estimate.json`, then compute the current prototype revision. Present per-unit and total cases, images, bytes, time, unresolved costs, factor evidence, and budget decisions. Resolve redundant execution only with valid equivalence/substitution proofs and re-estimate; preserve all obligations. See [implementation-checkpoints.md](references/implementation-checkpoints.md) for independently verifiable implementation units and opt-in local commits.
-6. Run model preflight and select the goal-derived affected unit for one targeted smoke after all authoring. Use the common runner and documented Browser bootstrap. Derive viewports, themes, locale and state boundaries from source and risk; no fixed product examples are universal defaults. Do not run full coverage during plan authoring.
-7. After smoke, run `./dev-prototype.sh --retain <slug>` once. Return the live URL, PID, owner, current revision, final smoke result, unverified items, and exact `./dev-confirmation.sh stop <slug>` command so the user can give feedback. Reuse a matching active session; never replace another slug implicitly. Browser unavailability does not block a reviewable plan; report it without claiming verification.
+## Revisions and feedback
 
+When asked to reorganize a confusing plan, rewrite the same goal as if the adopted design had been selected from the beginning. Remove history, rejected alternatives, and comparison-only wording. Preserve current constraints, safety boundaries, exclusions, compatibility, migration, and rollback conditions. Do not start another skill, a custom agent, or Browser solely for this editorial rewrite.
 
-Do not use Browser checks as authoring steps. Do not run the coverage or full matrix or request a separate UI approval during `$plan`. When feedback revises the same plan, update the adopted goal/prototype and finish all static work before one replacement final smoke. A later explicit `$implement` invocation is the approval boundary; it starts with static preflight and, after implementation and static checks, requires final Browser coverage. Full parity remains a separate release/CI/scheduled/user-explicit task.
+For a design revision, update the same goal and necessary prototype; finish static work before one replacement smoke. An explicit `$implement` invocation approves that design for implementation.
 
-For non-UI work, keep `UI変更: なし`, `prototype: なし`, `approval contract: なし`, `validation profile: なし`, `prototype revision: UI変更なし`, `UI承認方式: UI変更なし`, and `- 対象外: UI変更なし` under `## ユーザー動作確認`; do not create a prototype or confirmation session.
+Small UI adjustments requested directly by the user are implemented from that instruction, without requiring a plan revision or another `$implement`. Preserve the goal/prototype and treat the latest instruction as the intended difference. If the user explicitly invokes `$plan`, perform only the requested planning work here.
 
 ## Finish
 
-Run the final audit from `goal-quality.md`. Report exact goal/prototype paths, revision, smoke status, and material assumptions. Do not create `evidence/` or `review/`, edit production code, stage, commit, push, or create a pull request.
+Run the final audit in `goal-quality.md`. Report the goal/prototype paths, adopted design, smoke status or non-UI reason, and material assumptions. Keep results and progress in the response, not in the goal.

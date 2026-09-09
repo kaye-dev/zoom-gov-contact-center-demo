@@ -14,7 +14,7 @@ const evaluator = path.join(root, "scripts/eval-plan-skills.mjs");
 type PreparedFixture = {
   fixtureRoot: string;
   repo: string;
-  scenario: { simulate(repo: string): Promise<void> };
+  scenario: { simulate(repo: string): Promise<void>; simulatedFinal?: string };
 };
 type EvaluatorModule = {
   assertConfirmationHandoffSkillContracts(root?: string): Promise<void>;
@@ -24,7 +24,7 @@ type EvaluatorModule = {
   executeScenario(name: string): Promise<{ name: string; status: string; durationMs: number }>;
   failedScenariosFromManifest(manifest: unknown): string[];
   fixtureGitEnvironment(): Record<string, string>;
-  gradePreparedScenario(fixture: PreparedFixture, final: string): Promise<void>;
+  gradePreparedScenario(fixture: PreparedFixture, final: string, commands?: string[], observations?: unknown[]): Promise<void>;
   parseArguments(argv: string[]): {
     selected: string[];
     all: boolean;
@@ -127,7 +127,7 @@ async function assertRetryableFailure(
   assert.doesNotMatch(`${failure.stdout}\n${failure.stderr}\n${manifestText}`, new RegExp(privateMarker, "u"));
 }
 
-test("plan skill behavioral evalは実promptの35 scenarioを公開する", async () => {
+test("plan skill behavioral evalは実promptの41 scenarioを公開する", async () => {
   const { stdout } = await execFileAsync(process.execPath, [evaluator, "--list"], { cwd: root });
   assert.deepEqual(stdout.trim().split("\n"), [
     "plan-canonical",
@@ -144,6 +144,7 @@ test("plan skill behavioral evalは実promptの35 scenarioを公開する", asyn
     "workflow-performance-audit-no-bottleneck",
     "workflow-performance-audit-insufficient-data",
     ...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).workflowScenarioNames,
+    ...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).smokeScenarioNames,
   ]);
 });
 
@@ -208,6 +209,7 @@ test("plan skill behavioral evalはsymlink経由のCLI起動でもmainを実行�
     "workflow-performance-audit-no-bottleneck",
     "workflow-performance-audit-insufficient-data",
     ...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).workflowScenarioNames,
+    ...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).smokeScenarioNames,
   ]);
 });
 
@@ -218,7 +220,7 @@ test("forward evalは変更pathから関連scenarioだけを選び、共通契�
   }
   assert.deepEqual(
     evaluatorModule.selectAffectedScenarios([".agents/skills/review/references/review-contract.md"]),
-    ["review-ui-evidence-required", ...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).workflowScenarioNames],
+    ["review-ui-evidence-required", ...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).workflowScenarioNames, ...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).smokeScenarioNames],
   );
   assert.deepEqual(
     evaluatorModule.selectAffectedScenarios(["app/styles/ui-foundation.css"]),
@@ -338,7 +340,7 @@ test("plan skill behavioral evalのartifact graderはpositive/negative control�
     cwd: root,
     timeout: 180_000,
   });
-  assert.match(stdout, /self-test passed: 35 scenarios/);
+  assert.match(stdout, /self-test passed: 41 scenarios/);
 });
 
 test("version 3のUI eval fixtureは各rowでcontract IDと同名のrequired probeを対応する", async (context) => {
@@ -396,14 +398,45 @@ test("CS-EVAL-01〜04: skill evalはconfirmation handoff契約を全scenarioのg
   assert.match(source, /assertConfirmationHandoffSkillContracts\(fixture\.repo\)/u);
 });
 
-test("STATIC-EVAL-01〜06: skill evalは静的実装契約を全scenarioのgrade前に固定する", async () => {
+test("SMOKE-EVAL: current skill entrypoints use smoke and preserve the PR handoff", async () => {
   const evaluatorModule = await evaluatorModulePromise;
   await evaluatorModule.assertStaticImplementationSkillContracts(root);
   const source = await readFile(evaluator, "utf8");
-  for (const caseId of ["STATIC-EVAL-01", "STATIC-EVAL-02", "STATIC-EVAL-03", "STATIC-EVAL-04", "STATIC-EVAL-05", "STATIC-EVAL-06"]) {
-    assert.match(source, new RegExp(caseId, "u"));
-  }
+  assert.match(source, /SMOKE-EVAL/u);
   assert.match(source, /assertStaticImplementationSkillContracts\(fixture\.repo\)/u);
+});
+
+test("SMOKE-EVAL: 保存成功の報告は実際の公開API操作traceを必要とする", async (context) => {
+  const evaluatorModule = await evaluatorModulePromise;
+  const fixture = await evaluatorModule.prepareScenario("smoke-implement-default", `save-trace-${process.pid}`);
+  context.after(() => rm(fixture.fixtureRoot, { recursive: true, force: true }));
+  await fixture.scenario.simulate(fixture.repo);
+  const commands = [
+    "node workflow-fixture.mjs docs",
+    "node --test fixture.test.mjs",
+    "node workflow-fixture.mjs browser open app",
+    "node workflow-fixture.mjs browser save",
+  ];
+  const final = fixture.scenario.simulatedFinal!;
+  await evaluatorModule.gradePreparedScenario(fixture, final, commands);
+  await assert.rejects(
+    evaluatorModule.gradePreparedScenario(fixture, final, commands.slice(0, -1)),
+    /actual public operations do not match/u,
+  );
+  const { extractSmokeObservations } = await import("../scripts/eval-workflow-scenarios.mjs");
+  const observations = (await readFile(path.join(fixture.repo, "observed-actions.jsonl"), "utf8")).trim().split("\n").map(line => JSON.parse(line));
+  const documentCommand = "cat <<'DOC'\nnode workflow-fixture.mjs browser save\nDOC";
+  const events = [
+    { type: "item.completed", item: { type: "command_execution", command: documentCommand, exit_code: 0, aggregated_output: "node workflow-fixture.mjs browser save\n" } },
+    ...observations.map((observation, index) => ({ type: "item.completed", item: { type: "command_execution", command: commands.filter(command => command.includes("workflow-fixture"))[index], exit_code: 0, aggregated_output: JSON.stringify(observation) } })),
+  ];
+  const captured = extractSmokeObservations(events.map(event => JSON.stringify(event)).join("\n"));
+  assert.deepEqual(captured, observations, "documented commands must not become executed operations");
+  await evaluatorModule.gradePreparedScenario(fixture, final, [documentCommand, ...commands], captured);
+  await assert.rejects(
+    evaluatorModule.gradePreparedScenario(fixture, final, commands, captured.slice(0, -1)),
+    /actual public operations do not match/u,
+  );
 });
 
 test("eval fixtureは外部MCPなしで必要なcustom agent定義を読み込める", async (context) => {

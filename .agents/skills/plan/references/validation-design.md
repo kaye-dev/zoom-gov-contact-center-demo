@@ -1,5 +1,7 @@
 ## 適用状態・画像・再利用の設計
 
+> Historical reference only. This document describes stored detailed-parity tooling and records. Plan, implement, review, and shipping use the smoke contract in `workflow-verification-contract.md`; do not execute or require the procedures below for feature work.
+
 - contract v2のcoverageは、各画面の全stateを`viewportOrder[0]`・`themeOrder[0]`で確認し、最初のstateを全viewport × themeで確認する。関連する状態・表示の交互作用はrisk/anchor/fidelity groupへ明示する。v1の選択手順は保持する。
 - 業務因子と表示因子を目的ごとに定義する。因子が2つなら全2因子の積であり、多因子の検査を一律pairwiseへ弱める根拠にはしない。保存・再読込・権限・境界・未保存・競合・失敗時の入力保持・二重実行を要件へ対応付ける。
 - screenshotはvisual checkまたは画像を必要とするrisk/anchorのrowに限る。assertion・期待値・失敗状態を画像削減と一緒に削除しない。

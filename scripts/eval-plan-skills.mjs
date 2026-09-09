@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { createWorkflowScenarios, extractWorkflowCommands } from "./eval-workflow-scenarios.mjs";
+import { createSmokeScenarios, createWorkflowScenarios, extractSmokeObservations, extractWorkflowCommands } from "./eval-workflow-scenarios.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -838,36 +838,8 @@ function testPlanSection(goal) {
 }
 
 function assertNonUiUiContract(goal) {
-  for (const field of [
-    "production baseline",
-    "comparison conditions",
-    "baseline state inventory",
-    "theme contract",
-    "responsive contract",
-    "styling pipeline",
-    "視覚的不変条件",
-    "意図した差分",
-    "stateとinteraction",
-    "comparison targets",
-    "parity matrix",
-  ]) {
-    ensure(
-      new RegExp(`^- ${field}:\\s*(?:なし|対象外)`, "mu").test(goal),
-      `non-UI goal did not close UI契約 field: ${field}`,
-    );
-  }
-  for (const [field, value] of [
-    ["UI変更", "なし"],
-    ["prototype", "なし"],
-    ["approval contract", "なし"],
-    ["validation profile", "なし"],
-    ["UI承認方式", "UI変更なし"],
-    ["prototype revision", "UI変更なし"],
-  ]) {
-    ensure(
-      new RegExp(`^- ${field}:\\s*${value}`, "mu").test(goal),
-      `non-UI goal did not record ${field}: ${value}`,
-    );
+  for (const [field, value] of [["UI変更", "なし"], ["prototype", "なし"], ["UI検証方式", "対象外"]]) {
+    ensure(new RegExp(`^- ${field}:\\s*${value}`, "mu").test(goal), `non-UI goal did not record ${field}: ${value}`);
   }
 }
 
@@ -2833,6 +2805,7 @@ test("UI-01", async () => {
 };
 
 Object.assign(scenarios, createWorkflowScenarios({ write, run, ensure, assertOnlyPaths }));
+Object.assign(scenarios, createSmokeScenarios({ write, run, ensure, assertOnlyPaths }));
 
 const commonAffectedPaths = [
   ".agents/skills/git-commit-push-pr/SKILL.md",
@@ -3071,7 +3044,7 @@ async function assertConfirmationHandoffSkillContracts(root = repositoryRoot) {
     /exact phrase `確認セッションを保持` as an opt-in only when it appears in the current invocation/u.test(implement)
       && /\.\/dev-confirmation\.sh attach-app <slug>/u.test(implement)
       && /\.\/dev-compose\.sh ensure/u.test(implement),
-    "CS-EVAL-02: implement retention must require current-invocation opt-in after final coverage",
+    "CS-EVAL-02: implement retention must require current-invocation opt-in after smoke",
   );
   ensure(
     /retain only the local HTML report/u.test(review)
@@ -3080,66 +3053,23 @@ async function assertConfirmationHandoffSkillContracts(root = repositoryRoot) {
   );
   ensure(
     /Browser result covers the report only/u.test(review)
-      && /does not replace verified production parity evidence/u.test(review),
+      && /does not validate the production UI/u.test(review),
     "CS-EVAL-04: review report Browser checks must not validate production UI",
   );
 }
 
 async function assertStaticImplementationSkillContracts(root = repositoryRoot) {
-  const [plan, implement, review, workflow, reference, shipping, prTemplate] = await Promise.all([
-    readFile(path.join(root, ".agents/skills/plan/SKILL.md"), "utf8"),
-    readFile(path.join(root, ".agents/skills/implement/SKILL.md"), "utf8"),
-    readFile(path.join(root, ".agents/skills/review/SKILL.md"), "utf8"),
-    readFile(path.join(root, "docs/development/codex-development-workflow.md"), "utf8"),
-    readFile(path.join(root, ".agents/skills/plan/references/parity-runner.md"), "utf8"),
-    readFile(path.join(root, ".agents/skills/git-commit-push-pr/SKILL.md"), "utf8"),
-    readFile(path.join(root, ".github/PULL_REQUEST_TEMPLATE/ja.md"), "utf8"),
-  ]);
-  ensure(
-    /parity-spec\.json` version 4/u.test(plan) &&
-      /state identity assertions/u.test(plan) &&
-      /at least one anchor row per target/u.test(plan) &&
-      /UI-CHECK-(?:01|XX)/u.test(plan) &&
-      /same-ID required `equal` probe/u.test(reference) &&
-      /same-ID required `different` probe/u.test(reference) &&
-      /cannot stand in for multiple contract IDs/u.test(reference),
-    "STATIC-EVAL-01: plan must preserve the production-parity prototype and user-check handoff",
-  );
-  ensure(
-    /Final coverage run/u.test(implement) &&
-      /focused tests/u.test(implement) &&
-      /applicable lint\/typecheck/u.test(implement) &&
-      /git diff --check/u.test(implement),
-    "STATIC-EVAL-02: implement must complete static verification before final coverage",
-  );
-  ensure(
-    /prepare-run/u.test(implement) && /next-batch/u.test(implement) &&
-      /finalize-run/u.test(implement) && /in-app-browser-parity-adapter/u.test(implement) &&
-      /only after implementation, static checks/u.test(implement),
-    "STATIC-EVAL-03: UI implement must defer Browser and parity lifecycle to the final boundary",
-  );
-  ensure(
-    /schema-version-6 model or legacy schema-version-5 `implementation-parity\.json` before reviewer work/u.test(review) &&
-      /parity-runner\.mjs verify-run/u.test(review) &&
-      /mandatory major findings/u.test(review),
-    "STATIC-EVAL-04: review must require current final parity evidence",
-  );
-  ensure(
-    /144 coverage rows and 1,440 full rows/u.test(reference) &&
-      /running normal UI `\$implement` final coverage/u.test(reference) &&
-      /schemas 1, 2, 3, and 4 remain read-only compatible/u.test(reference),
-    "STATIC-EVAL-05: final coverage and independent parity compatibility must remain available",
-  );
-  ensure(
-    /final Browser coverage/u.test(workflow) &&
-      /schema version 5のcoverage証跡を実装・通常review・shippingの完了条件/u.test(workflow) &&
-      /Copy every applicable stable `UI-CHECK-XX` item/u.test(shipping) &&
-      /^### 自動確認$/mu.test(prTemplate) && /^### ユーザー動作確認$/mu.test(prTemplate),
-    "STATIC-EVAL-06: workflow, shipping, and PR template must stay synchronized",
-  );
+  const files = ["plan", "implement", "review", "git-commit-push-pr"];
+  for (const name of files) {
+    const content = await readFile(path.join(root, `.agents/skills/${name}/SKILL.md`), "utf8");
+    ensure(/smoke/iu.test(content), `SMOKE-EVAL: ${name} omitted smoke policy`);
+    ensure(!/\[[^\]]*\]\([^)]*(?:parity-runner|manifest-storage|validation-design)\.md\)/u.test(content), `SMOKE-EVAL: ${name} routes to historical parity`);
+  }
+  const template = await readFile(path.join(root, ".github/PULL_REQUEST_TEMPLATE/ja.md"), "utf8");
+  ensure(/^### 自動確認$/mu.test(template) && /^### ユーザー動作確認$/mu.test(template), "SMOKE-EVAL: PR handoff missing");
 }
 
-async function gradePreparedScenario(fixture, final, commands) {
+async function gradePreparedScenario(fixture, final, commands, observations) {
   await assertConfirmationHandoffSkillContracts(fixture.repo);
   await assertStaticImplementationSkillContracts(fixture.repo);
   await assertFixtureHistoryUnchanged(
@@ -3154,7 +3084,7 @@ async function gradePreparedScenario(fixture, final, commands) {
     current: currentTree,
   });
   try {
-    await fixture.scenario.grade(fixture.repo, final, commands);
+    await fixture.scenario.grade(fixture.repo, final, commands, observations);
   } finally {
     activeFixtureTreeComparisons.delete(fixture.repo);
   }
@@ -3175,12 +3105,12 @@ async function executeScenario(name, { keepOnFailure = false } = {}) {
   const fixture = await prepareScenario(name);
   let succeeded = false;
   try {
-    const execution = await run(
+    let execution = await run(
       "codex",
       [
         "exec",
         "--ephemeral",
-        ...(name.startsWith("workflow-") && !name.startsWith("workflow-performance-") ? ["--json"] : []),
+        ...((fixture.scenario.captureCommands || (name.startsWith("workflow-") && !name.startsWith("workflow-performance-"))) ? ["--json"] : []),
         "--ignore-user-config",
         ...codexScenarioConfig(name, fixture.repo),
         "--sandbox",
@@ -3198,17 +3128,26 @@ async function executeScenario(name, { keepOnFailure = false } = {}) {
         cwd: fixture.repo,
         env: codexEnvironment(),
         containmentRoot: fixture.fixtureRoot,
-        preserveBoundedOutput: name.startsWith("workflow-") && !name.startsWith("workflow-performance-"),
+        preserveBoundedOutput: (fixture.scenario.captureCommands || (name.startsWith("workflow-") && !name.startsWith("workflow-performance-"))),
       },
     );
-    if (keepOnFailure && name.startsWith("workflow-") && !name.startsWith("workflow-performance-")) {
+    if (fixture.scenario.continuation) {
+      await fixture.scenario.continuation.check(fixture.repo);
+      const next = await run("codex", ["exec", "--ephemeral", "--json", "--ignore-user-config", "--sandbox", "workspace-write", "--skip-git-repo-check", "--color", "never", "--cd", fixture.repo, "--output-last-message", fixture.finalPath, fixture.scenario.continuation.prompt], {
+        cwd: fixture.repo, env: codexEnvironment(), containmentRoot: fixture.fixtureRoot, preserveBoundedOutput: true,
+      });
+      execution = { stdout: `${execution.stdout}\n${next.stdout}`, stderr: `${execution.stderr}\n${next.stderr}` };
+    }
+    if (keepOnFailure && (fixture.scenario.captureCommands || (name.startsWith("workflow-") && !name.startsWith("workflow-performance-")))) {
       const commandEvents = execution.stdout.split("\n").filter(Boolean).map(line => JSON.parse(line)).filter(event => event.type === "item.completed" && event.item?.type === "command_execution" && event.item.command.includes("workflow-fixture.mjs")).map(event => ({ command: event.item.command, exitCode: event.item.exit_code, output: event.item.aggregated_output }));
       await writeFile(path.join(fixture.fixtureRoot, "workflow-command-events.json"), JSON.stringify(commandEvents), { flag: "wx", mode: 0o600 });
     }
     const final = (await exists(fixture.finalPath))
       ? await readBoundedRegularFile(fixture.finalPath, defaultMaxOutputBytes)
       : "";
-    await gradePreparedScenario(fixture, final, name.startsWith("workflow-") && !name.startsWith("workflow-performance-") ? extractWorkflowCommands(execution.stdout) : undefined);
+    await gradePreparedScenario(fixture, final,
+      (fixture.scenario.captureCommands || (name.startsWith("workflow-") && !name.startsWith("workflow-performance-"))) ? extractWorkflowCommands(execution.stdout) : undefined,
+      fixture.scenario.captureCommands ? extractSmokeObservations(execution.stdout) : undefined);
     succeeded = true;
     process.stdout.write(`PASS ${name}\n`);
     return { name, status: "pass", durationMs: Date.now() - startedAt };

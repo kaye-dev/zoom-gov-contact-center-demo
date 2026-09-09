@@ -389,7 +389,7 @@ Zoom AI、Zoom Virtual Agent、Zoom Contact Center、Zoom Phone への導線は�
 2. 現在のsourceと承認済み参照から、最も近い画面、コンポーネント、トークンを特定する。Browserの時点と範囲は`.claude/rules/dev-server.md`に従う。
 3. 通常、ホバー、フォーカス、押下、無効、処理中、成功、エラー、空状態を洗い出す。
 4. デスクトップ、モバイル、多言語、ダークモードで変わる点を整理する。
-5. `docs/development/codex-development-workflow.md`を正本とする。`$plan`はcanonical prototype、完全Cartesian契約v1、検証profile v3、source inventoryとrevisionを作り、静的検証後に一度だけtargeted smokeを行う。明示的な`$implement`を承認境界とし、通常実装はfocused test・contract test・lint・typecheck・必要時だけfull test/build・diff checkで完了する。実装中のBrowserや全row再実行を必須にしない。
+5. `docs/development/codex-development-workflow.md`を正本とする。`$plan`で忠実なprototypeと代表確認項目を作り、明示`$implement`で実装する。完成時はfocused test・適用lint/typecheck・必要時だけfull test/build・diff checkと、Codexアプリ内Browserの短いsmokeを行う。
 
 prototypeは見た目だけでなく、次を確認できる状態にする。
 
@@ -405,29 +405,19 @@ prototypeは見た目だけでなく、次を確認できる状態にする。
 - 新しい色、余白、角丸、影を導入する場合は、既存トークンで表現できない理由を説明できるようにする。
 - UI ライブラリやアニメーション依存を、単一画面の都合だけで追加しない。
 - 機能実装と視覚調整を分離せず、すべての状態を同じ変更内で完成させる。
-- 承認済みprototypeまたは実装計画との差異が必要になった場合は、独断で変更せず理由と代案を提示する。
+- 設計を見直す依頼ではplanと必要なprototypeを更新し、明示implementで反映する。機能・権限・データ契約を保つ軽微なUI調整は直接指示で実装し、goal/prototype更新やskill再送を必須にしない。最新指示の差分を意図したUIとして扱う。
 
 ### 11.3 実装後
 
-通常の実装は静的検証結果と未チェックの`UI-CHECK-XX`を引き渡す。実アプリのBrowser確認はrelease・CI・定期・独立した明示要求で行い、`.claude/rules/dev-server.md`に従う。下記はその確認範囲であり、通常の`$implement`をruntime確認待ちにしない。テスト、型検査、`curl`だけで実画面確認済みとはしない。
+`.claude/rules/dev-server.md`に従い、通常1〜3代表シナリオで大きなUI崩れと主要な正常系操作を確認する。画面の欠落・重なり・切れ・重大なはみ出しを見て、主要フローを画面上の完了状態まで操作する。responsiveやthemeが変更の主題なら代表条件に含める。
 
-最低限の確認項目は次のとおり。
+全state・幅・theme・localeの総当たりや厳密なpixel/DOM一致はBrowser確認の対象外である。各状態の実装要件は変更に応じた静的・統合testとdiff確認で支える。prototypeやfixture表示だけで実アプリの保存成功とは報告しない。
 
-- デスクトップと `390 × 844`
-- ライトモードとダークモード
-- 日本語と、長い文言を含む別ロケール
-- マウス、タッチ相当、キーボード操作
-- 通常、ホバー、フォーカス、無効、処理中、成功、エラー、空状態
-- 主要な遷移、戻る操作、ダイアログやメニューの開閉
-- 画面全体の横スクロール、文字切れ、重なり、レイアウトシフトの有無
-- Console のエラーと警告、失敗した Network request の有無
-- 承認済みプロトタイプまたは参照画面との視覚比較
-
-Browser を利用できなかった場合は、実画面未確認であることを明記する。
+静的check、smoke結果、未チェックの`UI-CHECK-XX`を分けて引き渡す。reviewと出荷は有効な結果を再利用する。Browserを利用できなかった場合はUI未確認と明記し、出荷先にも引き継ぐ。詳細parityは開発手順と完了条件に含めない。
 
 ## 12. UI 完了条件
 
-UI 変更は、次の条件をすべて満たして完了とする。
+UI変更は次の実装要件を満たす。確認手段は11.3の範囲に従い、Browser利用不可は未確認として報告する。
 
 - 依頼された機能が期待どおり動作する
 - 本規約と、ユーザーが承認した具体的なデザインに一致する

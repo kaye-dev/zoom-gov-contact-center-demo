@@ -54,12 +54,10 @@ Copy every file from `assets/review-report/` to `plans/<slug>/review/`, then rep
 - Risk is `critical`, `high`, `medium`, `low`, or `none`. Severity is `blocker`, `major`, `minor`, or `note`.
 - A group describes one intent, not one file. Rename/import follow-ups and similar mechanical edits belong with their purpose. `files` across all groups exactly equals `reviewedPaths`.
 - Locations use `path:line`, `path:start-end`, or `path@file`. If the intent cannot be explained, set the group summary to `要改善: 変更意図を説明できない` and assign an appropriate risk.
-- Validation status is `passed`, `failed`, `skipped`, or `unverified`, and records commands actually run or a reused command whose scope, passed status, and validated diff digest exactly match the reviewed snapshot.
-- For current UI work, use validation entries for the goal/prototype preflight, approval digest, schema-version-6 model or legacy schema-version-5 `implementation-parity.json`, automated state/viewport/theme coverage, risk rows, anchor rows, artifact digests, checkpoint history, terminal cleanup, and checklist contract. Missing, malformed, stale, incomplete, failed, or ambiguous evidence is a failed validation and a separate goal-conformance major finding.
-- Use separate validation entries for `automationCoverageStatus`, `humanVisualApprovalStatus`, and `fullParityStatus`; never collapse them into one pass/fail statement. Pending human approval and not-run full parity are valid alongside passing required coverage. Evidence lists may reference representative screenshot/URL and compact artifact records; do not copy raw screenshot bytes, raw DOM, accessibility trees, workspace fragments, or large runner JSON into `review-data.json`.
+- Validation status is `passed`, `failed`, `skipped`, or `unverified`. Record actual commands or reused checks whose paths, content, and execution time still apply. A digest is optional supporting information.
+- UI validations describe the representative smoke: major visual breakage and main happy paths, with the latest direct UI instructions as accepted expectations. Separate failures from unavailable Browser and unchecked human review. Detailed-parity records are historical inputs only and are not required validations.
+- Evidence may reference safe screenshots/URLs and compact observations; do not copy raw screenshot bytes, DOM, accessibility trees, workspace fragments, or large runner output into the report.
 - Screen all strings before writing. Never include credentials, tokens, environment values, private keys, cookies, or raw reviewer transcripts.
 - Replace every `UNREPLACED_TEMPLATE` value. `normalizeData` deliberately rejects a copied placeholder or malformed shape.
 
 The report uses only local files, `fetch("review-data.json")`, and DOM text APIs. Keep its Content Security Policy effective: no external network, inline scripts, `eval`, or `innerHTML`.
-
-新規UIのcontract version 3 / profile version 5、Browser前のestimate、consumer接続、段階集約のschema 6、`goal-clarification.mjs`による限定承認継承は[共通検証契約](../../plan/references/workflow-verification-contract.md)に従う。
