@@ -14,7 +14,23 @@ const corePath = path.resolve(
   import.meta.dirname,
   "../.agents/skills/plan/scripts/parity-runner-core.mjs",
 );
-const adapterModulePromise = import(pathToFileURL(adapterPath).href);
+const fakeBootstraps = new WeakMap<object, Promise<void>>();
+const bootstrapModule = import("../.agents/skills/plan/scripts/browser-api-bootstrap.mjs");
+// Existing adapter tests use a complete mock tool publication before exercising
+// their specific API boundary. BOOT/ERR tests use the raw factory independently.
+const adapterModulePromise = import(pathToFileURL(adapterPath).href).then((module) => ({
+  ...module,
+  createInAppBrowserParityAdapter: (options: Parameters<typeof module.createInAppBrowserParityAdapter>[0]) => {
+    const adapter = module.createInAppBrowserParityAdapter(options);
+    for (const [name, implementation] of Object.entries(adapter)) {
+      if (typeof implementation === "function") adapter[name] = async (...args: unknown[]) => {
+        await fakeBootstraps.get((options as { browser: object }).browser);
+        return implementation.apply(adapter, args);
+      };
+    }
+    return adapter;
+  },
+}));
 const coreModulePromise = import(pathToFileURL(corePath).href);
 const digest = `sha256:${"a".repeat(64)}`;
 const expectedCdpRemediation = {
@@ -85,7 +101,7 @@ function createFakeBrowser() {
     ]),
   };
   const cdp = {
-    async send(method: string, params?: Record<string, unknown>) {
+    async send(method: string, params?: Record<string, unknown>): Promise<unknown> {
       if (method === "Emulation.setDeviceMetricsOverride") {
         state.cdpSet += 1;
         state.width = Number(params?.width);
@@ -102,6 +118,7 @@ function createFakeBrowser() {
         state.selectedId = tab.id;
         state.activations.push(tab.id);
       }
+      return undefined;
     },
     async readEvents(options: {
       afterSequence?: number;
@@ -311,7 +328,11 @@ function createFakeBrowser() {
       return state.url;
     },
     async screenshot() {
-      return new Uint8Array([1, 2, 3, 4]);
+      const bytes = new Uint8Array(24);
+      bytes.set([137, 80, 78, 71]); bytes.set([73, 72, 68, 82], 12);
+      const view = new DataView(bytes.buffer);
+      view.setUint32(16, state.width * state.dpr); view.setUint32(20, state.height * state.dpr);
+      return bytes;
     },
   };
   const browser = {
@@ -335,6 +356,14 @@ function createFakeBrowser() {
       },
     },
   };
+  fakeBootstraps.set(browser, (async () => {
+    const bootstrap = await bootstrapModule;
+    bootstrap.beginBrowserBootstrap(browser, { sessionId: browser.browserId, generation: "one", requiredDocumentIds: ["browser"] });
+    const receipt = await bootstrap.publishBrowserDocumentation(browser, {
+      invocationId: "fixture-publication", documents: [{ id: "browser", text: "Mock Browser API documentation", complete: true }], publish: () => {},
+    });
+    bootstrap.acknowledgeBrowserDocumentation(browser, { receipt, invocationId: "fixture-execution", displayedDocumentDigests: receipt.documents });
+  })());
   return { browser, tab, state, cdp, viewport };
 }
 
@@ -2383,31 +2412,111 @@ test("lossy JPEG anchors retain visual evidence without claiming pixel equality"
   assert.ok(result.artifact.path.endsWith(".jpg"));
 });
 
-
-test("IAB-SELECT uses native selection and rejects ambiguous targets before interaction", async () => {
+test("ERR-02: navigate/evaluate/screenshot/network/cleanup preserve access errors", async (context) => {
   const { createInAppBrowserParityAdapter } = await adapterModulePromise;
-  const fixture = createFakeBrowser(), original = fixture.tab.playwright.locator;
-  const selections: string[] = [];
-  fixture.tab.playwright.locator = (selector: string) => ({ ...original(selector), async selectOption(value: string) { selections.push(value); } });
-  const adapter = createInAppBrowserParityAdapter({ browser: fixture.browser, tab: fixture.tab });
-  await adapter.runAction("comparison", { type: "selectOption", selector: "#field", value: "FLOW" });
-  assert.deepEqual(selections, ["FLOW"]);
-  await assert.rejects(adapter.runAction("comparison", { type: "selectOption", selector: "#multiple", value: "MEDIA" }));
-  assert.deepEqual(selections, ["FLOW"]);
-  fixture.tab.playwright.locator = original;
-  await assert.rejects(adapter.runAction("comparison", { type: "selectOption", selector: "#field", value: "FLOW" }), (error: unknown) => assertSanitizedParityError(error, "PARITY_SELECT_UNAVAILABLE"));
+  for (const boundary of ["navigate", "evaluate", "screenshot", "network", "cleanup"] as const) {
+    for (const code of ["BROWSER_DOCUMENTATION_REQUIRED", "BROWSER_PERMISSION_DENIED"]) {
+      await context.test(`${boundary}:${code}`, async () => {
+        const fixture = createFakeBrowser();
+        const adapter = createInAppBrowserParityAdapter({ browser: fixture.browser, tab: fixture.tab });
+        await adapter.setViewport(fixture.tab.id, { width: 390, height: 844 });
+        const underlying = Object.assign(new Error("password=must-never-leak"), { code });
+        let operation: () => Promise<unknown>;
+        if (boundary === "navigate") {
+          fixture.tab.goto = async () => { throw underlying; };
+          operation = () => adapter.navigate(fixture.tab.id, "http://localhost:3002/fixture");
+        } else if (boundary === "evaluate") {
+          fixture.tab.playwright.evaluate = async () => { throw underlying; };
+          operation = () => adapter.measureViewport(fixture.tab.id);
+        } else if (boundary === "screenshot") {
+          fixture.tab.screenshot = async () => { throw underlying; };
+          operation = () => adapter.screenshotDigest(fixture.tab.id);
+        } else if (boundary === "network") {
+          fixture.cdp.send = async () => { throw underlying; };
+          operation = () => adapter.networkEntries(fixture.tab.id);
+        } else {
+          fixture.viewport.reset = async () => { throw underlying; };
+          operation = () => adapter.cleanup();
+        }
+        await assert.rejects(operation(), (error: unknown) => assertSanitizedParityError(error, code, ["must-never-leak", "password"]));
+      });
+    }
+  }
 });
 
-test("IAB-DOUBLE-CLICK uses one native double click and fails closed without support", async () => {
+test("ERR-03: common canary must not downgrade an unread network error", async () => {
   const { createInAppBrowserParityAdapter } = await adapterModulePromise;
-  const fixture = createFakeBrowser(), original = fixture.tab.playwright.locator;
-  let count = 0;
-  fixture.tab.playwright.locator = (selector: string) => ({ ...original(selector), async dblclick() { count++; } });
+  const { BrowserParityRunner, ParityRunError } = await coreModulePromise;
+  const fixture = createFakeBrowser();
   const adapter = createInAppBrowserParityAdapter({ browser: fixture.browser, tab: fixture.tab });
-  await adapter.runAction("comparison", { type: "dblclick", selector: "#field" });
-  assert.equal(count, 1);
-  await assert.rejects(adapter.runAction("comparison", { type: "dblclick", selector: "#multiple" }));
-  assert.equal(count, 1);
-  fixture.tab.playwright.locator = original;
-  await assert.rejects(adapter.runAction("comparison", { type: "dblclick", selector: "#field" }), (error: unknown) => assertSanitizedParityError(error, "PARITY_DOUBLE_CLICK_UNAVAILABLE"));
+  adapter.performanceEntries = async () => { throw new ParityRunError("BROWSER_DOCUMENTATION_REQUIRED", "Browser documentation required"); };
+  let fallbackCalls = 0;
+  adapter.networkEntries = async () => { fallbackCalls++; return []; };
+  const runner = new BrowserParityRunner(adapter);
+  await assert.rejects(runner.capabilityCanary({ tabId: fixture.tab.id, viewport: { width: 390, height: 844 }, dpr: 1, requiresNetwork: true }), { code: "BROWSER_DOCUMENTATION_REQUIRED" });
+  assert.equal(fallbackCalls, 0);
+});
+
+test("BOOT-IMAGE: scaled backing-window image is replaced only by a verified origin-scoped capture", async (context) => {
+  const { createInAppBrowserParityAdapter } = await adapterModulePromise;
+  const { screenshotDimensions } = await import("../.agents/skills/plan/scripts/browser-screenshot.mjs");
+  const fixture = createFakeBrowser();
+  const adapter = createInAppBrowserParityAdapter({ browser: fixture.browser, tab: fixture.tab });
+  await adapter.setViewport(fixture.tab.id, { width: 390, height: 844 });
+  const full = await fixture.tab.screenshot();
+  const scaled = full.slice();
+  new DataView(scaled.buffer).setUint32(20, 219);
+  fixture.tab.screenshot = async () => scaled;
+  const originalSend = fixture.cdp.send.bind(fixture.cdp);
+  let captures = 0;
+  const send = context.mock.method(fixture.cdp, "send", async (method: string, params?: Record<string, unknown>) => {
+    if (method !== "Page.captureScreenshot") return originalSend(method, params);
+    captures++;
+    assert.deepEqual(params, { format: "png", fromSurface: true });
+    return { data: Buffer.from(full).toString("base64") };
+  });
+  assert.deepEqual(screenshotDimensions(await adapter.viewportScreenshot(fixture.tab.id)),
+    { width: 390, height: 844, mediaType: "image/png" });
+  assert.equal(captures, 1);
+  send.mock.mockImplementation(async () => ({ data: Buffer.from(scaled).toString("base64") }));
+  await assert.rejects(adapter.viewportScreenshot(fixture.tab.id), { code: "PARITY_VIEWPORT_MISMATCH" });
+  send.mock.mockImplementation(async () => { throw Object.assign(new Error("private rejection"), { code: "PERMISSION_DENIED" }); });
+  await assert.rejects(adapter.viewportScreenshot(fixture.tab.id), (error: unknown) =>
+    assertSanitizedParityError(error, "BROWSER_PERMISSION_DENIED", ["private rejection"]));
+});
+
+test("model environment applies declared CDP settings without relying on unavailable Intl globals", async (context) => {
+  const fixture = createFakeBrowser();
+  const { createInAppBrowserParityAdapter } = await adapterModulePromise;
+  const adapter = createInAppBrowserParityAdapter({ browser: fixture.browser, tab: fixture.tab });
+  await adapter.navigate(fixture.tab.id, "http://localhost:3000/fixture");
+  await adapter.setModelViewport(fixture.tab.id, { width: 620, height: 844 }, 1);
+  const send = context.mock.method(fixture.cdp, "send", fixture.cdp.send.bind(fixture.cdp));
+  assert.deepEqual(await adapter.setModelEnvironment(fixture.tab.id, { environment: {}, locale: "en-US", timezone: "UTC" }),
+    { locale: "en-US", timezone: "UTC", status: "applied", observation: "cdp-command-acknowledgement" });
+  assert.equal((await adapter.cleanup()).status, "pass");
+  for (const [method, params] of [["Emulation.setLocaleOverride", { locale: "en_US" }], ["Emulation.setTimezoneOverride", { timezoneId: "UTC" }], ["Emulation.setLocaleOverride", { locale: "" }], ["Emulation.setTimezoneOverride", { timezoneId: "" }]]) {
+    assert.ok(send.mock.calls.some((call) => JSON.stringify(call.arguments) === JSON.stringify([method, params])));
+  }
+});
+
+test("unsupported touch input fails without replacing it with click and still disables emulation", async (context) => {
+  const fixture = createFakeBrowser();
+  const { createInAppBrowserParityAdapter } = await adapterModulePromise;
+  const adapter = createInAppBrowserParityAdapter({ browser: fixture.browser, tab: fixture.tab });
+  await adapter.navigate(fixture.tab.id, "http://localhost:3000/fixture");
+  await adapter.setModelViewport(fixture.tab.id, { width: 620, height: 844 }, 1);
+  const originalEvaluate = fixture.tab.playwright.evaluate.bind(fixture.tab.playwright);
+  context.mock.method(fixture.tab.playwright, "evaluate", async (fn: (...args: never[]) => unknown, arg?: unknown) =>
+    fn.toString().includes("box.x + box.width / 2") ? { x: 10, y: 10 } : originalEvaluate(fn, arg));
+  const originalSend = fixture.cdp.send.bind(fixture.cdp);
+  const send = context.mock.method(fixture.cdp, "send", async (method: string, params?: Record<string, unknown>) => {
+    if (method === "Input.dispatchTouchEvent") throw new Error("Browser Use CDP method is not supported in the in-app browser: Input.dispatchTouchEvent");
+    return originalSend(method, params);
+  });
+  await assert.rejects(adapter.runAction(fixture.tab.id, { type: "tap", selector: "button" }), { code: "PARITY_REQUIRED_PROBE_UNAVAILABLE" });
+  assert.equal((await adapter.cleanup()).status, "pass");
+  assert.ok(send.mock.calls.some((call) => call.arguments[0] === "Emulation.setTouchEmulationEnabled" && call.arguments[1]?.enabled === false));
+  assert.equal(send.mock.calls.filter((call) => call.arguments[0] === "Input.dispatchTouchEvent").length, 1);
+  assert.equal(fixture.state.actions.filter((action) => action.startsWith("click:")).length, 0);
 });

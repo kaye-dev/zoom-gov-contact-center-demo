@@ -4,7 +4,6 @@ import { createHash } from "node:crypto";
 import { constants as fsConstants } from "node:fs";
 import { lstat, open, readdir, realpath } from "node:fs/promises";
 import path from "node:path";
-import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { requireAuthorizationProfile, validateParitySpec } from "./parity-runner-core.mjs";
 
@@ -393,7 +392,16 @@ async function assertFinalInputsUnchanged(
 
 async function validateContract(contract, availableFiles, repositoryRealPath) {
   if (!isPlainObject(contract)) throw new Error("ui-contract.json must contain a JSON object");
-  if (![1, 2].includes(contract.version)) throw new Error("ui-contract.json version must be 1 or 2");
+  if (![1, 2, 3].includes(contract.version)) throw new Error("ui-contract.json version must be 1, 2, or 3");
+  if (contract.version === 3) {
+    for (const key of evidenceOnlyContractKeys) if (Object.hasOwn(contract, key)) throw new Error(`ui-contract.json must not contain revision or evidence field: ${key}`);
+    if (!contract.requirementsBundle?.path || !Array.isArray(contract.comparisonTargets)) throw new Error("Model contract requires requirements bundle and targets");
+    for (const target of contract.comparisonTargets) {
+      requireCanonicalArtifactEntry(target.entry, "comparisonTargets.entry", availableFiles);
+      requireOriginRelativeRoute(target.route, "comparisonTargets.route");
+    }
+    return { sourceSnapshots: await captureRepositorySourceSnapshots(contract.productionBaseline?.sources, repositoryRealPath) };
+  }
   for (const key of evidenceOnlyContractKeys) {
     if (Object.hasOwn(contract, key)) {
       throw new Error(`ui-contract.json must not contain revision or evidence field: ${key}`);
@@ -518,9 +526,8 @@ async function validateContract(contract, availableFiles, repositoryRealPath) {
     if (!isPlainObject(target)) throw new Error(`comparisonTargets[${index}] must be an object`);
     requireExactKeys(target, ["id", "entry", "route", "surface", ...(contract.version === 2 ? ["states"] : [])], `comparisonTargets[${index}]`);
     if (contract.version === 2) {
-      for (const state of requireUniqueStrings(target.states, `comparisonTargets[${index}].states`)) {
-        if (!states.includes(state)) throw new Error(`comparison target state is not declared: ${state}`);
-      }
+      const applicable = requireUniqueStrings(target.states, `comparisonTargets[${index}].states`);
+      if (applicable.some((state) => !states.includes(state))) throw new Error("Target state is absent from baseline inventory");
     }
     const id = requireNonEmptyString(target.id, `comparisonTargets[${index}].id`);
     requireCanonicalArtifactEntry(
@@ -537,10 +544,8 @@ async function validateContract(contract, availableFiles, repositoryRealPath) {
     targetTuples.add(targetTuple);
   }
   if (contract.version === 2) {
-    const applicableStates = new Set([...comparisonTargets.values()].flatMap((target) => target.states));
-    if (states.some((state) => !applicableStates.has(state))) {
-      throw new Error("baselineStateInventory must equal the union of comparison target states");
-    }
+    const union = new Set([...comparisonTargets.values()].flatMap((target) => target.states));
+    if (states.some((state) => !union.has(state))) throw new Error("State inventory must equal applicable target state union");
   }
   if (![...comparisonTargets.values()].some((target) => target.entry === "index.html")) {
     throw new Error("comparisonTargets must include index.html");
@@ -578,9 +583,7 @@ async function validateContract(contract, availableFiles, repositoryRealPath) {
     if (rowIds.has(row.id)) throw new Error("parityMatrix row IDs must be unique");
     rowIds.add(row.id);
     if (!states.includes(row.state)) throw new Error(`parityMatrix state is not declared: ${row.state}`);
-    if (contract.version === 2 && !target.states.includes(row.state)) {
-      throw new Error(`parityMatrix state is not applicable to target: ${row.id}`);
-    }
+    if (contract.version === 2 && !target.states.includes(row.state)) throw new Error(`parityMatrix state is not applicable to target: ${row.id}`);
     if (!themes.includes(row.theme)) throw new Error(`parityMatrix theme is not declared: ${row.theme}`);
     if (!breakpointViewport.has(row.breakpoint)) {
       throw new Error(`parityMatrix breakpoint is not declared: ${row.breakpoint}`);
@@ -606,8 +609,8 @@ async function validateContract(contract, availableFiles, repositoryRealPath) {
     if (tuples.has(tuple)) throw new Error(`parityMatrix duplicates a comparison tuple: ${row.id}`);
     tuples.add(tuple);
   }
-  for (const [targetId, target] of comparisonTargets) {
-    for (const state of contract.version === 2 ? target.states : states) {
+  for (const targetId of comparisonTargets.keys()) {
+    for (const state of contract.version === 2 ? comparisonTargets.get(targetId).states : states) {
       for (const breakpoint of breakpointViewport.keys()) {
         for (const theme of themes) {
           const tuple = JSON.stringify([targetId, state, breakpoint, theme]);
@@ -876,6 +879,7 @@ async function prototypeRevisionInRepository(requestedDirectory, requestedRoot) 
   );
 
   const profileFile = files.find((file) => file.relativeEntry === "parity-spec.json");
+  if (contract.version === 3 && !profileFile) throw new Error("Model contract requires profile 5");
   if (profileFile) {
     const profileContents = await readStableRegularFile(profileFile, prototypeRealPath);
     let profile;
@@ -884,7 +888,12 @@ async function prototypeRevisionInRepository(requestedDirectory, requestedRoot) 
     } catch {
       throw new Error("parity-spec.json must contain valid JSON");
     }
-    validateParitySpec(profile, contract);
+    if (contract.version === 3) {
+      const { loadVerificationModel } = await import("./parity-model-files.mjs");
+      const { compileVerificationModel } = await import("./parity-verification-model.mjs");
+      const model = await loadVerificationModel(relativeTarget, repositoryRealPath);
+      await compileVerificationModel(model);
+    } else validateParitySpec(profile, contract);
   }
 
   const revision = await hashCollectedFiles(files, prototypeRealPath);
@@ -911,7 +920,7 @@ async function prototypeRevision(requestedDirectory) {
 }
 
 async function main() {
-  const args = process.argv.slice(2);
+  const args = globalThis.process.argv.slice(2);
   if (args.length !== 1) {
     throw new Error(
       "usage: node .agents/skills/plan/scripts/prototype-revision.mjs plans/<slug>/prototype",
@@ -921,9 +930,9 @@ async function main() {
 }
 
 async function isMainModule() {
-  if (!process.argv[1]) return false;
+  if (!globalThis.process?.argv?.[1]) return false;
   try {
-    return (await realpath(process.argv[1])) === (await realpath(fileURLToPath(import.meta.url)));
+    return (await realpath(globalThis.process.argv[1])) === (await realpath(fileURLToPath(import.meta.url)));
   } catch {
     return false;
   }
@@ -932,7 +941,7 @@ async function isMainModule() {
 if (await isMainModule()) {
   main().catch((error) => {
     console.error(error instanceof Error ? error.message : String(error));
-    process.exitCode = 1;
+    globalThis.process.exitCode = 1;
   });
 }
 

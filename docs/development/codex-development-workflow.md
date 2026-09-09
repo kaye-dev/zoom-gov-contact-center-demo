@@ -80,7 +80,7 @@ plan cleanupは`$plan-finalize`だけの削除権限であり、archiveされて
 1. 最新要求、確定済み判断、採用済み資料を整理する。
 2. repository、runtime、code、testを確認し、UI変更時はclosest live UIも確認する。複数subsystemまたは大量資料を横断し、独立した要約で親のcontextを節約できる場合だけ、最大1体の`project_explorer`を使う。
 3. 自己完結した最終設計、`## 要件クロージャ`、PRへ渡す`## ユーザー動作確認`を`plans/<slug>/goal.md`へ書く。UI項目は安定した`UI-CHECK-XX` ID、対象、前提、操作、期待結果を持つ未チェック形式にし、非UIは`対象外: UI変更なし`とする。
-4. UI変更時は完成UI、画面別の適用状態による完全なmatrixを持つ`ui-contract.json` version 2、coverage/risk/anchorを宣言する`parity-spec.json` version 4を作る。
+4. 新規UI変更時は完成UI、機能別適用状態を持つ`ui-contract.json` version 3、層別obligationと費用を宣言する`parity-spec.json` version 5を作る。estimateを保存してrevisionを計算する。
 5. goalを監査し、UI変更時はauthoring中のCSS buildを1回だけ行う。revisionをgoalへ記録後、`parity-runner.mjs preflight ... --context plan`を1回実行してgoal、contract/profile、source inventory、invariant/probe、coverage/full/selected行数をまとめて検証し、返却直前に影響scopeのtargeted smokeを1回行う。
 6. UI planは`./dev-prototype.sh --retain <slug>`でprototypeを確認可能な状態にし、goal、live URL、PID、owner、revision、smoke結果、未確認事項、停止commandを返す。非UI planは確認セッションを作らない。
 
@@ -107,18 +107,18 @@ plan cleanupは`$plan-finalize`だけの削除権限であり、archiveされて
 2. HEAD、task scope、source、contract/profile、要件クロージャ、`## ユーザー動作確認`を静的に照合する。UI checklistは安定した`UI-CHECK-XX` ID、対象、前提、操作、期待結果を持ち、すべて未チェックとする。
 3. goalとUI契約に従って実装し、対象unit/contract testで確認する。
 4. `validation-digest.mjs`でHEAD、task scope、staged/unstaged/untrackedを含むvalidated diff digestを記録し、変更riskに比例するfocused test、lint、typecheck、必要な場合だけfull test/build、diff checkを行う。同じdigestではfull test/buildを各1回までとし、command・scope・pass statusが一致する結果を後工程で再利用する。
-5. UI変更では完了候補に対してtask-owned productionとprototypeを同一条件でcoverage実行し、全required row、risk、anchor、artifact、cleanupがpassした場合だけschema version 5の`implementation-parity.json`を確定する。
+5. UI変更では完成した単位をtask-owned productionとprototypeで同条件検証する。採用goalの限定stage commit後に次の単位へ進み、全体obligation・risk・操作・目視・cleanupの集約がpassした場合だけschema version 6の`implementation-parity.json`を確定する。
 6. 最終diffをgoal、要件クロージャ、task scope、ユーザー確認checklistと照合し、自動coverageと未実施の人間確認、full parityを分けて報告する。
 
-明示的な`$implement`実行自体を現在のgoal、revision、profile digestへの承認とする。「承認します」という別回答やrevision転記は不要である。静的gateの失敗はproduction差分0件のまま停止する。Browser capability、runtime、prototype、parity lifecycleはUI実装と静的check後のfinal boundaryでだけ使い、authoring中や非UI変更では使わない。`確認セッションを保持`は現在のinvocationにある場合だけfinal coverage後のtask-owned surface保持を許可する。
+明示的な`$implement`実行自体を現在のgoal、revision、profile digestへの承認とする。「承認します」という別回答やrevision転記は不要である。静的gateの失敗はproduction差分0件のまま停止する。Browser capability、runtime、prototype、parity lifecycleは完成したUI単位の静的check後またはfinal boundaryで使う。非UI変更では採用goalが開発ツールの所有fixtureを受入条件に含める場合だけ、その範囲を検証する。`確認セッションを保持`は現在のinvocationにある場合だけfinal coverage後のtask-owned surface保持を許可する。
 
 局所変更は対象testとlint、typecheck、diff checkを基本とする。全testは無関係suiteへ波及し得る場合または信頼できる対象testがない場合、production buildはroute、configuration、bundling、server boundaryを変える場合またはrepositoryの明示要件がある場合だけ行う。source修正後は影響checkだけを再実行する。
 
-coverage/full runner、adapter、schemaはUI`$implement`のfinal coverageとrelease、CI、定期、ユーザー明示要求の独立parity taskで共有する。currentな計画駆動UI変更ではschema version 5のcoverage証跡を実装・通常review・shippingの完了条件とし、schema version 1から4はlegacy read-only互換として扱う。
+coverage/full runner、adapter、schemaはUI`$implement`のfinal coverageとrelease、CI、定期、ユーザー明示要求の独立parity taskで共有する。新規モデルはschema 6の全体集約、既存matrixはschema version 5のcoverage証跡を実装・通常review・shippingの完了条件とし、schema version 1から4はlegacy read-only互換として扱う。
 
 ### `$review`
 
-1. exact diffとvalidated diff digestを固定し、実装済みcheckはcommand・scope・pass status・digest一致時に再実行せず、UI影響、goal/prototype/approval、ユーザー確認checklistを監査する。UI変更ではcurrentなschema version 5 `implementation-parity.json`を必須とし、coverage、risk、anchor、artifact、checkpoint、cleanup、digestをread-only検証する。
+1. exact diffとvalidated diff digestを固定し、実装済みcheckはcommand・scope・pass status・digest一致時に再実行せず、UI影響、goal/prototype/approval、ユーザー確認checklistを監査する。新規UIモデルではcurrentなschema version 6 `implementation-parity.json`を必須とし、coverage、risk、anchor、artifact、checkpoint、cleanup、digestをread-only検証する。
 2. 通常は親がdiffとgoal適合の2観点を確認する。独立判断が必要な場合のみ、理由を示して履歴なし`independent_reviewer`で並行実行する。親だけの結果を独立・blind検証済みと表現しない。
 3. `plans/<slug>/review/`へHTML reportを作り、desktopと390×844でreport自体を確認する。これはproduction UI検証ではない。現在のinvocationにexact phrase `確認セッションを保持`がある場合だけ、review reportを同じslugの確認セッションへhandoffする。
 
@@ -201,11 +201,11 @@ node .agents/skills/plan/scripts/parity-runner.mjs preflight plans/<slug>/protot
 ./dev-prototype.sh <slug>
 ```
 
-`ui-contract.json` version 2には完全なproduction `sources` inventory、runtime owner、checkout、route、state、theme、responsive、interaction、安定したtargetとmatrix行を記録する。比較条件はviewport、DPR、locale、theme、fixture、authorization、queryと、両surfaceの`window.scrollX` / `window.scrollY`から実測したexact `scroll: {x, y}`を一致させる。
+旧matrixの`ui-contract.json` version 1には完全なproduction `sources` inventory、runtime owner、checkout、route、state、theme、responsive、interaction、安定したtargetとmatrix行を記録する。比較条件はviewport、DPR、locale、theme、fixture、authorization、queryと、両surfaceの`window.scrollX` / `window.scrollY`から実測したexact `scroll: {x, y}`を一致させる。
 
-`parity-spec.json` version 4にはdeterministic setup、state identity assertion、targetごとの`browserSetups`、全row mapping、coverage/anchor probe tier、axis順序、targetごとのanchor、risk row、全sourceのimpact、固定batch、artifact policyを記録する。coverage probeは全rowでroute、setup、state、viewport、theme、control、overflow、consoleをrequiredにし、screenshot・DOM・accessibility・style・geometry・focus・keyboard・networkはanchorへ限定する。version 1から3はlegacy read-only互換として維持する。正本は`.agents/skills/plan/references/parity-runner.md`とする。
+旧matrixの`parity-spec.json` version 4にはdeterministic setup、state identity assertion、targetごとの`browserSetups`、全row mapping、coverage/anchor probe tier、axis順序、targetごとのanchor、risk row、全sourceのimpact、固定batch、artifact policyを記録する。coverage probeは全rowでroute、setup、state、viewport、theme、control、overflow、consoleをrequiredにし、screenshot・DOM・accessibility・style・geometry・focus・keyboard・networkはanchorへ限定する。version 1から3はlegacy read-only互換として維持する。正本は`.agents/skills/plan/references/parity-runner.md`とする。
 
-plan中のsmokeはtargetedな代表desktopと390×844を基本とし、具体的なtheme、breakpoint、dialog、menu、keyboard、focusリスクだけを追加する。coverageとfullは`$plan`では実行しない。
+plan中のsmokeはsourceとriskから選んだtargetedなtarget/state/viewport/themeを対象とし、具体的なtheme、breakpoint、dialog、menu、keyboard、focusリスクだけを追加する。coverageとfullは`$plan`では実行しない。
 
 ### Manifestのサイズ超過への対応
 
@@ -221,7 +221,7 @@ plan中のsmokeはtargetedな代表desktopと390×844を基本とし、具体的
 
 - `approval.json`: goal digest、prototype revision、profile digest
 
-UI`$implement`と独立parity taskで作る新規parity fileはfinal-onlyのschema version 5とし、`matrixScope: coverage | full`、exact row、全target-state/viewport/theme coverage、risk、anchor、checkpoint/resume、required probe、digest、artifact index、cleanupを記録する。通常UI実装はcoverageを必須とし、自動coverage、人間のUI承認、full parityは独立statusにする。既存schema version 1から4はread-only互換で暗黙に書き換えない。`$review`はcurrent UI変更についてこのfileを要求する。
+旧matrixを維持するUI`$implement`と独立parity taskのparity fileはfinal-onlyのschema version 5とし、`matrixScope: coverage | full`、exact row、全target-state/viewport/theme coverage、risk、anchor、checkpoint/resume、required probe、digest、artifact index、cleanupを記録する。通常UI実装はcoverageを必須とし、自動coverage、人間のUI承認、full parityは独立statusにする。既存schema version 1から4はread-only互換で暗黙に書き換えない。`$review`はcurrent UI変更についてこのfileを要求する。
 
 各targetのcovering matrix基本行数は`max(state数, viewport数, theme数)`である。18 target、5 state、8 viewport、2 themeの基準profileは通常144行、full 1,440行になる。risk/anchor座標が基本selection内なら重複させず昇格し、外なら一意な追加rowにする。
 
@@ -247,7 +247,7 @@ Localでは同じcheckoutのhealthyなnative Next.jsまたは正しいCompose `w
 
 CLI evalはUI`$implement`または独立parity taskのCodexアプリ内Browserを代替しない。runtime所有権、build、migration起因のverified Compose `web` restart、live parity、cleanupの契約を変えた場合は、shipping前にCodex Desktopで成功・停止経路をmanual確認する。
 
-contract testはUI`$implement`がstatic preflight、approval、focused test、lint、typecheck、必要時だけfull test/build、diff check後にcoverage lifecycleへ進み、schema version 5 evidenceなしで完了しないことを決定的に検証する。runner互換testは18×5×8×2 profileのcoverage 144行/full 1,440行、schema version 1から4のread-only互換とversion 4 writerを維持する。PR shipping evalはUI evidence fail-closed、goal archive、限定cleanup、UI checklistの未チェック転記、Draft作成、既存PRのdraft/ready・手動メモ・check状態保持を検証する。
+contract testはUI`$implement`がstatic preflight、approval、focused test、lint、typecheck、必要時だけfull test/build、diff check後にcoverage lifecycleへ進み、新規モデルはschema 6 evidenceなしで完了しないことを決定的に検証する。runner互換testは18×5×8×2 profileのcoverage 144行/full 1,440行、schema version 1から4のread-only互換とversion 4 writerを維持する。PR shipping evalはUI evidence fail-closed、goal archive、限定cleanup、UI checklistの未チェック転記、Draft作成、既存PRのdraft/ready・手動メモ・check状態保持を検証する。
 
 ## 権限とcleanup
 
@@ -265,7 +265,7 @@ active confirmation sessionのslugが削除候補に含まれる場合、apply�
 
 `$plan`はREQ ID、phase比較、static checks、interaction groups、通常画面でのruntime checks、Codex visual checksをprofile v4に明示する。`$implement`はCLI検証後、実アプリとBrowser/CDPで選択行を実行し、通常操作・必要な再読込を確認し、Codexが選定画像を閲覧する。変更前との差を求めるsmokeと、承認済みprototypeへの一致を求めるfinalを区別する。承認後の期待値を弱めて合格させない。
 
-schema v5は`interactionCoverage`を実行成功probeから再計算し、`auditStatus`のstatic/runtime/requirements/visualがすべてpassの場合だけ完了する。`$review`とshippingも同じ条件を使う。旧profile v1〜3/evidence v1〜4は履歴のread-only互換であり、新しい監査へ合格した証拠として扱わない。製品API/DBと二段階Git出荷は変更しない。
+旧matrixのschema v5は`interactionCoverage`を実行成功probeから再計算し、`auditStatus`のstatic/runtime/requirements/visualがすべてpassの場合だけ完了する。`$review`とshippingも同じ条件を使う。旧profile v1〜3/evidence v1〜4は履歴のread-only互換であり、新しい監査へ合格した証拠として扱わない。製品API/DBと二段階Git出荷は変更しない。
 
 CDP capability／DPRのterminal failureでは、設定無効やセッション不調と断定せず、新規Codexタスクで同条件を再検証することを案内し、対象goal・証跡・成功済みcheck/digest・未実施項目・cleanupを埋めたコピー可能な継続プロンプトを必ず返す。現在タスクのIDが取得できる場合は `codex://threads/<current-thread-id>` をプロンプト内に記載し、不明な場合のみ「前タスクのディープリンク: ［ユーザーが入力］」を用意する。詳細は `.agents/skills/plan/references/fidelity-audit.md` のfresh-task handoffに従う。新規タスクの自動作成、権限拒否の回避、繰り返しのセッション切替、直接CDP成功だけによる全体完了は行わない。
 
@@ -273,4 +273,12 @@ CDP capability／DPRのterminal failureでは、設定無効やセッション�
 
 Browserの利用範囲と出力URLを照合し、範囲外ならBrowserを開かず作業を止める。起動・保持・予約解放、権限登録、移行・保全・rollbackは[開発用ポートの固定範囲](development-ports.md)に従う。非UIの起動ツール変更ではgoalが要求する限定runtime確認だけを行い、BrowserやUI parityは開始しない。
 
-検証定義は、画面ごとの実在する状態と要件対応から作る。同一実行条件はassertionの和集合を保持して統合し、業務因子と表示因子を分ける。contract v2では全stateの固定条件baselineと代表stateの全幅・明暗を選び、必要な交互作用をrisk/anchor/groupで補完する。旧contract v1の検証と証跡は保持する。画像は要件に必要な代表・重要状態へ限定し、source impactは実依存のconsumerを根拠とする。旧runの再利用は依存fingerprint・条件・期待値・fixture・artifactの同値性と現在性を証明できる場合だけ行い、証明できない結果は再実行する。
+## 機能別検証・段階実装の共通契約
+
+新規UI計画は `ui-contract.json` version 3 / `parity-spec.json` version 5を使う。原要件bundleから適用状態、層別obligation、visual family、因子・制約・次数・回帰seed、観測時点を定義する。画面・状態・境界値・locale・代表条件は各goalの入力とsourceから解決し、共通処理へ製品固有値を固定しない。異なる機能のstateを全画面へ直積展開しない。同条件・同時点の実行共有でも元の全assertionを維持する。
+
+Browser起動前に共通 `parity-runner.mjs estimate` とpreflightを実行する。全source global、全行画像、過大な因子展開は依存関係と能力の証明に基づき整理し、再estimateする。費用だけを理由にREQ、risk、境界、consumer接続、期待値を削らない。承認時からの費用増加や必要な大型unitは共通budget判定と理由付きoverrideで扱う。代表hostの成功だけで全consumerを合格にせず、SSRを実Browserのfocus/layout/eventへ代用しない。画像共有は条件・phase・時点が一致する原観点だけとし、全指定観点をCodexが確認する。
+
+採用goalが段階commitを明記する場合、単位の目的・依存・scope・静的check・Browser obligation・完了条件を定義し、各単位の検証、内容binding、限定local commitを終えて次へ継続する。新たなpush/PR/merge承認にはならない。詳細は `.agents/skills/plan/references/implementation-checkpoints.md`。段階receiptは全体完了ではない。current sourceに対する不足・失効結果を埋め、全REQ・risk・境界・実操作・目視・cleanupを再計算したschema 6 `implementation-parity.json`を公開 `verify-run` で検証する。契約1/2・profile1〜4・evidence1〜5は従来のreaderで検証し、暗黙変換しない。
+
+採用目的・外部期待結果・権限・データ正本・API/DB互換性・検証水準を保つscope内の不具合修正は、理由・影響・対象再検証を記録して継続する。goalを進捗記録にしない。説明補足の自動承認継承は `scripts/goal-clarification.mjs` が機械的に証明できる既存要件の逐語引用だけとし、元のinvocationがこの方針を承認している場合に限る。前後全文・digest・差分・分類・不変契約を容量上限付きの追加証跡へ保存し、元approval/manifestを変更しない。新規文章の意味同一性、仕様・権限・受入水準の変更は自動継承せず依存作業を止める。

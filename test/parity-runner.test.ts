@@ -1450,82 +1450,64 @@ test("PORT-09: current origin boundaries and read-only legacy URLs are separate"
   assert.equal(requireLoopbackBaseUrl("http://127.0.0.1:60237", "prototype", { legacy: true }).port, "60237");
 });
 
-
-test("target productionHost selects the navigation and stabilized origin while preserving port", async () => {
-  const { productionBaseForTarget } = await import("../.agents/skills/plan/scripts/parity-runner-core.mjs");
-  const { BrowserParityRunner, validateParitySpec } = await parityModulePromise;
-  const hostSpec = { ...clone(spec), version: 2, browserSetups: [{ targetId: "main", productionHost: "univ.localhost", production: { type: "query", parameter: "theme" }, prototype: { type: "query", parameter: "theme" } }] };
-  validateParitySpec(hostSpec, contract);
-  assert.equal(productionBaseForTarget("http://localhost:3004/", hostSpec, "main"), "http://univ.localhost:3004/");
-  assert.equal(productionBaseForTarget("http://localhost:3004/", spec, "main"), "http://localhost:3004/");
-  for (const host of ["example.com", "univ.localhost:3000", "a.b.localhost", "https://univ.localhost", "univ.localhost/path", "univ.localhost@evil.com", "", null]) {
-    const invalid = clone(hostSpec); invalid.browserSetups[0].productionHost = host as string;
-    assert.throws(() => validateParitySpec(invalid, contract), /productionHost/);
-    assert.throws(() => productionBaseForTarget("http://localhost:3004/", invalid, "main"), /productionHost/);
-  }
-  const urls: string[] = [], origins: string[] = [];
-  const runner = new BrowserParityRunner(createAdapter({ async navigate(_tab: string, url: string) { urls.push(url); }, async stabilizeContext(_tab: string, context: { origin: string }) { origins.push(context.origin); } }));
-  await runner.run({ definition: {contract, spec: hostSpec, prototypeRevision: revision, validationProfileDigest: digest}, phase: "final", changedTargetIds: ["main"], changedStates: ["default"], tabs: {production: "production", prototype: "prototype"}, baseUrls: {production: "http://localhost:3004/", prototype: "http://127.0.0.1:4004/"}, run: {runId: "hosts", goalSha256: digest, runtime: {owner: "fixture", checkout: "/fixture"}, sources: [{path: "src/ui.ts", sha256: digest}]} });
-  assert(urls.some(url => url.startsWith("http://univ.localhost:3004/fixture?")));
-  assert(!urls.some(url => url.startsWith("http://localhost:")));
-  assert(origins.includes("http://univ.localhost:3004"));
-  urls.length = 0;
-  await runner.runRuntimeChecks({ definition: {contract, spec: {...hostSpec, fidelity: {runtimeChecks: [{id: "runtime-host", rowId: contract.parityMatrix[0].id, query: {}, steps: []}]}}}, row: contract.parityMatrix[0], tabs: {production: "production", prototype: "prototype"}, baseUrls: {production: "http://localhost:3004/", prototype: "http://127.0.0.1:4004/"}, canary: {networkSource: "not-required"} });
-  assert(urls.every(url => new URL(url).hostname === "univ.localhost"));
-  assert.equal(urls.length, 1);
-});
-
-test("contract v2 separates fixed state coverage from complete representative layout coverage", async () => {
-  const { selectRows } = await parityModulePromise;
-  const fixture = createCoverageFixture();
-  const scoped = {
-    ...fixture.contract,
-    version: 2,
-    comparisonTargets: fixture.contract.comparisonTargets.map(target => ({ ...target, states: fixture.states })),
-  };
-  const rows = selectRows({ phase: "final", contract: scoped, spec: fixture.spec });
-  const coordinates = new Set(rows.map((row: { targetId: string; state: string; viewport: string; theme: string }) => JSON.stringify([row.targetId, row.state, row.viewport, row.theme])));
-  for (const target of fixture.targets) {
-    for (const state of fixture.states) {
-      assert.ok(coordinates.has(JSON.stringify([target.id, state, fixture.viewports[0], fixture.themes[0]])));
-    }
-    for (const viewport of fixture.viewports) for (const theme of fixture.themes) {
-      assert.ok(coordinates.has(JSON.stringify([target.id, fixture.states[0], viewport, theme])));
-    }
-  }
-  assert.equal(coordinates.size, rows.length);
-  for (const risk of fixture.spec.coverage.riskRows) {
-    assert.ok(coordinates.has(JSON.stringify([risk.targetId, risk.state, risk.viewport, risk.theme])));
-  }
-  for (const anchor of fixture.spec.coverage.anchorRows) assert.ok(rows.some((row: { id: string }) => row.id === anchor.rowId));
-});
-
-test("declared state teardown clears a dirty surface before its next navigation", async () => {
+test("MERGE-02/ART-01: model runner shares actions, preserves both REQs and captures no lightweight artifacts", async () => {
   const { BrowserParityRunner } = await parityModulePromise;
-  const events: string[] = [];
-  let dirty = false;
-  const runner = new BrowserParityRunner(createAdapter({
-    async navigate() { assert.equal(dirty, false, "must use UI teardown before navigating"); events.push("navigate"); },
-    async runAction(_tab: string, action: { type: string }) { events.push(action.type); dirty = action.type === "fill"; },
-  }));
-  const base = { tabId: "production", row: contract.parityMatrix[0], surface: "production", authorizationProfile: "admin", baseUrl: "http://localhost:3000/", dpr: 1, expectedScroll: { x: 0, y: 0 } };
-  await runner.prepareSurface({ ...base, setup: { query: {}, actions: [{ type: "fill", selector: "input", value: "fixture" }], teardownActions: [{ type: "click", selector: "#discard" }] } });
-  assert.equal(dirty, true);
-  await runner.prepareSurface({ ...base, setup: { query: {}, actions: [] } });
-  assert.deepEqual(events, ["navigate", "fill", "click", "navigate"]);
+  const fixtures = await import(pathToFileURL(path.resolve(import.meta.dirname, "fixtures/parity-verification-model.mjs")).href);
+  const input = await fixtures.verificationFixture({ targets: 2, states: 1 });
+  const extra = { ...structuredClone(input.profile.obligations[0]), id: "second-req", requirementIds: ["REQ-second"], assertion: { kind: "visibility", selector: "#extra", pure: true }, expected: true };
+  input.profile.obligations.push(extra); input.profile.groups[0].obligationIds.push(extra.id);
+  input.profile.scenarios[0].type = "flow";
+  input.profile.scenarios[0].checkpoints[0].actions = [{ type: "click", selector: "#open" }];
+  await fixtures.rebindFixture(input);
+  const adapter = fixtures.modelAdapterSpy();
+  const runner = new BrowserParityRunner(adapter);
+  const evidence = await runner.run({ modelInput: input, tabs: { production: "left", prototype: "right" } });
+  assert.equal(evidence.schemaVersion, 6);
+  assert.equal(evidence.status, "pass");
+  assert.equal(adapter.calls.filter(([operation]: string[]) => operation === "capture").length, 0);
+  const shared = evidence.caseResults.filter((item: { obligationIds: string[] }) => item.obligationIds.includes(extra.id));
+  assert.ok(shared.every((item: { obligationIds: string[] }) => item.obligationIds.length === 2));
+  assert.equal(adapter.calls.filter(([operation, , action]: [string, string, { type: string }]) => operation === "action" && action.type === "click").length, shared.length * 2);
+  const { validateModelEvidence } = await import(pathToFileURL(path.resolve(import.meta.dirname, "../.agents/skills/plan/scripts/parity-model-execution.mjs")).href);
+  assert.equal((await validateModelEvidence(input, evidence)).status, "pass");
+  evidence.caseResults[0].assertions.pop();
+  await assert.rejects(validateModelEvidence(input, evidence), { code: "PARITY_REQUIREMENT_GAP" });
+});
+test("SCALE-01: invalid model cannot activate or clean up a Browser", async () => {
+  const { BrowserParityRunner } = await parityModulePromise;
+  const { verificationFixture, modelAdapterSpy } = await import(pathToFileURL(path.resolve(import.meta.dirname, "fixtures/parity-verification-model.mjs")).href);
+  const input = await verificationFixture(); input.profile.obligations.pop();
+  const adapter = modelAdapterSpy(); const runner = new BrowserParityRunner(adapter);
+  await assert.rejects(runner.run({ modelInput: input, tabs: { production: "left", prototype: "right" } }), { code: "PARITY_REQUIREMENT_GAP" });
+  assert.equal(adapter.calls.length, 0);
 });
 
-test("state teardown failure cannot pass a run and still performs adapter cleanup", async () => {
-  const { BrowserParityRunner } = await parityModulePromise;
-  let cleaned = false;
-  const runner = new BrowserParityRunner(createAdapter({
-    async runAction() { throw new Error("cancel control unavailable"); },
-    async cleanup() { cleaned = true; return { status: "pass" }; },
-  }));
-  runner.runWithoutCleanup = async () => {
-    runner.surfaceTeardowns.set("production", { label: "fixture", actions: [{ type: "click", selector: "#discard" }] });
-    return { schemaVersion: 4, cleanup: { status: "pending" } };
-  };
-  await assert.rejects(runner.run({}), (error: unknown) => (error as { code?: string }).code === "PARITY_STATE_TEARDOWN_FAILED");
-  assert.equal(cleaned, true);
+test("model navigation precedes DPR on each fresh surface and cleanup retains the original execution failure", async () => {
+  const { BrowserParityRunner, ParityRunError } = await parityModulePromise;
+  const { verificationFixture, modelAdapterSpy } = await import(pathToFileURL(path.resolve(import.meta.dirname, "fixtures/parity-verification-model.mjs")).href);
+  const input = await verificationFixture({ targets: 1, states: 1 });
+  const adapter = modelAdapterSpy();
+  const navigated = new Set<string>();
+  const originalNavigate = adapter.navigate;
+  adapter.navigate = async (id: string, url: string) => { navigated.add(id); return originalNavigate(id, url); };
+  const originalViewport = adapter.setViewport;
+  adapter.setViewport = async (id: string, value: unknown) => { assert.ok(navigated.has(id)); return originalViewport(id, value); };
+  const runner = new BrowserParityRunner(adapter);
+  await runner.runModel({ modelInput: input, tabs: { production: "left", prototype: "right" } });
+  adapter.runModelAssertion = async () => { throw new ParityRunError("PARITY_REQUIRED_PROBE_UNAVAILABLE", "declared input unavailable"); };
+  adapter.cleanup = async () => { throw new ParityRunError("PARITY_CLEANUP_FAILED", "cleanup also failed"); };
+  await assert.rejects(runner.runModel({ modelInput: input, tabs: { production: "left", prototype: "right" } }),
+    (error: unknown) => (error as { code: string; cleanupFailure: { code: string } }).code === "PARITY_REQUIRED_PROBE_UNAVAILABLE" && (error as { cleanupFailure: { code: string } }).cleanupFailure.code === "PARITY_CLEANUP_FAILED");
+});
+
+test("REPAIR-01: explanatory policy is explicit, model-only, and preserved by approval validation", async () => {
+  const facade = await parityModulePromise;
+  const base = { runId: "approval-policy", goalSha256: "sha256:" + "a".repeat(64), prototypeRevision: "sha256:" + "b".repeat(64), validationProfileDigest: "sha256:" + "c".repeat(64) };
+  const approval = facade.createApprovalEvidence({ ...base, semanticDigest: "sha256:" + "d".repeat(64), allowExplanatoryRestatement: true });
+  assert.equal(approval.schemaVersion, 2);
+  assert.equal(approval.allowExplanatoryRestatement, true);
+  assert.deepEqual(facade.validateApprovalEvidence(approval), approval);
+  assert.throws(() => facade.createApprovalEvidence({ ...base, allowExplanatoryRestatement: true }), /explicit model approval/u);
+  assert.throws(() => facade.validateApprovalEvidence({ ...approval, allowExplanatoryRestatement: "true" }), /inheritance policy/u);
+  assert.throws(() => facade.validateApprovalEvidence({ ...approval, arbitraryPolicy: true }), /approval evidence must contain exactly/u);
 });

@@ -187,6 +187,9 @@ async function createRepositoryFixture(context: test.TestContext): Promise<Repos
   await mkdir(path.dirname(script), { recursive: true });
   await copyFile(sourceScript, script);
   await copyFile(sourceCore, path.join(path.dirname(script), "parity-runner-core.mjs"));
+  for (const dependency of ["browser-api-bootstrap.mjs", "parity-verification-model.mjs", "parity-estimate.mjs", "parity-model-files.mjs", "parity-model-execution.mjs", "in-app-browser-parity-adapter.mjs", "browser-screenshot.mjs"]) {
+    await copyFile(path.join(path.dirname(sourceCore), dependency), path.join(path.dirname(script), dependency));
+  }
   await copyFile(path.join(path.dirname(sourceCore), "parity-fidelity.mjs"), path.join(path.dirname(script), "parity-fidelity.mjs"));
   await mkdir(path.join(root, "src"), { recursive: true });
   await writeFile(path.join(root, "src/ui.ts"), "export const ui = true;\n");
@@ -974,35 +977,15 @@ test("symlink経由のCLI起動でもrevisionを出力する", async (context) =
   );
 });
 
-
-test("contract v2 requires the complete feasible product of each target's own states", async (context) => {
+test("MODEL-04 contract 2 keeps target-local state applicability", async (context) => {
   const fixture = await createRepositoryFixture(context);
-  const prototype = await createPrototype(fixture, "target-states", [["index.html", "<!doctype html>\n"], ["other.html", "<!doctype html>\n"]]);
-  const baseline = JSON.parse(defaultUiContract);
-  const contract = {
-    ...baseline,
-    version: 2,
-    baselineStateInventory: ["default", "error"],
-    comparisonTargets: [
-      { ...baseline.comparisonTargets[0], states: ["default"] },
-      { id: "other", entry: "other.html", route: "/other", surface: "page", states: ["error"] },
-    ],
-    parityMatrix: [
-      ...baseline.parityMatrix,
-      ...baseline.parityMatrix.map((row: Record<string, unknown>) => ({ ...row, id: `other-${row.id}`, targetId: "other", entry: "other.html", route: "/other", state: "error" })),
-    ],
-  };
-  const contractPath = path.join(prototype.absolute, "ui-contract.json");
-  await writeFile(contractPath, JSON.stringify(contract));
+  const contract = { ...structuredClone(defaultContractObject), version: 2, comparisonTargets: defaultContractObject.comparisonTargets.map((target) => ({ ...target, states: ["default"] })) };
+  const prototype = await createPrototype(fixture, "legacy-applicable", [
+    ["index.html", "<main>Fixture</main>"],
+    ["ui-contract.json", JSON.stringify(contract)],
+  ]);
   revisionFrom(runRevision(fixture, [prototype.relative]));
-  for (const [invalid, expected] of [
-    [{ ...contract, parityMatrix: contract.parityMatrix.slice(1) }, /missing target\/state\/breakpoint\/theme coverage/i],
-    [{ ...contract, parityMatrix: [{ ...contract.parityMatrix[0], state: "error" }, ...contract.parityMatrix.slice(1)] }, /state is not applicable to target/i],
-    [{ ...contract, baselineStateInventory: ["default", "error", "unused"] }, /must equal the union/i],
-    [{ ...contract, comparisonTargets: [{ ...contract.comparisonTargets[0], states: [] }, contract.comparisonTargets[1]] }, /states.*non-empty array/i],
-    [{ ...contract, comparisonTargets: [{ ...contract.comparisonTargets[0], states: ["unknown"] }, contract.comparisonTargets[1]] }, /target state is not declared/i],
-  ] as const) {
-    await writeFile(contractPath, JSON.stringify(invalid));
-    assertRejected(runRevision(fixture, [prototype.relative]), expected);
-  }
+  contract.comparisonTargets[0].states = ["other"];
+  await writeFile(path.join(prototype.absolute, "ui-contract.json"), JSON.stringify(contract));
+  assertRejected(runRevision(fixture, [prototype.relative]), /state/i);
 });

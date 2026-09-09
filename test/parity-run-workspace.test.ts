@@ -2558,29 +2558,327 @@ test("PORT-09: retired-origin workspace stays readable and resumption never rewr
   }
 });
 
-
-test("large coverage checkpoint retains the complete artifact inventory across resume", async context => {
+test("BOOT-RECOVER: current documentation and common canary recover only the proven failed batch", async (context) => {
   const workspace = await workspaceModulePromise;
-  const fixture = await createFixture(context, "large-checkpoint");
+  const bootstrap = await import("../.agents/skills/plan/scripts/browser-api-bootstrap.mjs");
+  const { createInAppBrowserParityAdapter } = await import("../.agents/skills/plan/scripts/in-app-browser-parity-adapter.mjs");
+  const { BrowserParityRunner } = await import("../.agents/skills/plan/scripts/parity-runner-core.mjs");
+  const fixture = await createFixture(context, "boot-recover");
   const definition = createCoverageWorkspaceDefinition();
-  const handshake = await workspace.prepareRunWorkspace({ repositoryRootPath: fixture.root,
-    slug: "fixture", runId: "large-checkpoint", definition, approval: fixture.approval,
-    current: fixture.current, baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
+  const handshake = await workspace.prepareRunWorkspace({ repositoryRootPath: fixture.root, slug: "fixture",
+    runId: "boot-recover", definition, approval: fixture.approval, current: fixture.current,
+    baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
     matrixScope: "coverage", validateApproval: fixture.runner.validateApprovalEvidence });
-  const checkpointPath = path.join(path.dirname(handshake.manifestPath), "checkpoint.json");
-  const checkpoint = JSON.parse(await readFile(checkpointPath, "utf8"));
-  // Thousands of rows each contribute a production/prototype screenshot and a11y record.
-  checkpoint.artifactIndex = Array.from({ length: 3671 * 4 }, (_, index) => ({
-    path: `.codex/parity-runs/large-checkpoint/artifacts/row-${index}--screen--production.jpg`,
-    sha256: digest, bytes: 44177, kind: "screenshot", mediaType: "image/jpeg",
-    surface: "production", rowId: `row-${index}`, probeId: "screen",
+  const first = await workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId });
+  await workspace.recordBatchResult({ repositoryRootPath: fixture.root, runId: handshake.runId,
+    batchId: first.batch.batchId, input: JSON.stringify(coverageFragment(handshake, first.batch, definition)) });
+  const second = await workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId });
+  await workspace.recordBatchFailure({ repositoryRootPath: fixture.root, runId: handshake.runId,
+    batchId: second.batch.batchId, code: "BROWSER_DOCUMENTATION_REQUIRED", transient: false });
+  const browser = { browserId: "boot-recover" };
+  const adapter = createInAppBrowserParityAdapter({ browser, tab: { id: "owned" } });
+  const runner = new BrowserParityRunner(adapter);
+  const args = { repositoryRootPath: fixture.root, runId: handshake.runId,
+    batchId: second.batch.batchId, browser, runner, tabId: "owned" };
+  await assert.rejects(workspace.recoverDocumentationFailure(args), { code: "BROWSER_DOCUMENTATION_REQUIRED" });
+  bootstrap.beginBrowserBootstrap(browser, { sessionId: browser.browserId, generation: "one", requiredDocumentIds: ["mock"] });
+  const receipt = await bootstrap.publishBrowserDocumentation(browser, { invocationId: "publish",
+    documents: [{ id: "mock", text: "Full mock Browser documentation", complete: true }], publish: () => {} });
+  bootstrap.acknowledgeBrowserDocumentation(browser, { receipt, invocationId: "acknowledge", displayedDocumentDigests: receipt.documents });
+  const canary = context.mock.method(runner, "capabilityCanary", async () => { throw new Error("canary failed"); });
+  await assert.rejects(workspace.recoverDocumentationFailure(args), /canary failed/u);
+  assert.equal((await workspace.nextRunBatch(args)).status, "terminal");
+  canary.mock.mockImplementation(async (input: { viewport: object; dpr: number }) => {
+    assert.deepEqual(input.viewport, { width: 390, height: 844 });
+    assert.equal(input.dpr, 1);
+    return { status: "pass", sessionId: browser.browserId, tabId: "owned", viewport: input.viewport, networkSource: "browser-network-log" };
+  });
+  const result = await workspace.recoverDocumentationFailure(args);
+  assert.equal(result.status, "recovered");
+  assert.equal(result.summary.passedRows, 2);
+  const resumed = await workspace.nextRunBatch(args);
+  assert.equal(resumed.batch.batchId, second.batch.batchId);
+  assert.equal(resumed.batch.attempt, 2);
+  assert.equal(resumed.summary.passedRows, 2);
+  await workspace.recordBatchFailure({ ...args, code: "PARITY_DPR_OVERRIDE_UNAVAILABLE", transient: false });
+  await assert.rejects(workspace.recoverDocumentationFailure(args), /proven documentation failure/u);
+  await assert.rejects(workspace.recoverDocumentationFailure({ ...args, legacyDiagnosticFile: "../foreign.json" }), /workspace failure record/u);
+});
+
+test("BOOT-LEGACY: old DPR terminal needs a digest-bound workspace record proving unread documentation", async (context) => {
+  const workspace = await workspaceModulePromise;
+  const { createInAppBrowserParityAdapter, browserBootstrap } = await import("../.agents/skills/plan/scripts/in-app-browser-parity-adapter.mjs");
+  const { BrowserParityRunner } = await import("../.agents/skills/plan/scripts/parity-runner-core.mjs");
+  const fixture = await createFixture(context, "boot-legacy");
+  const handshake = await workspace.prepareRunWorkspace({ repositoryRootPath: fixture.root, slug: "fixture",
+    runId: "boot-legacy", definition: createCoverageWorkspaceDefinition(), approval: fixture.approval, current: fixture.current,
+    baseUrls: { production: "http://localhost:3002/", prototype: "http://127.0.0.1:4002/" },
+    matrixScope: "coverage", validateApproval: fixture.runner.validateApprovalEvidence });
+  const next = await workspace.nextRunBatch({ repositoryRootPath: fixture.root, runId: handshake.runId });
+  const args = { repositoryRootPath: fixture.root, runId: handshake.runId, batchId: next.batch.batchId };
+  await workspace.recordBatchFailure({ ...args, code: "PARITY_DPR_OVERRIDE_UNAVAILABLE", transient: false });
+  const browser = { browserId: "boot-legacy" };
+  const runner = new BrowserParityRunner(createInAppBrowserParityAdapter({ browser, tab: { id: "owned" } }));
+  browserBootstrap.beginBrowserBootstrap(browser, { sessionId: browser.browserId, generation: "one", requiredDocumentIds: ["mock"] });
+  const receipt = await browserBootstrap.publishBrowserDocumentation(browser, { invocationId: "read",
+    documents: [{ id: "mock", text: "Complete mock documentation", complete: true }], publish: () => {} });
+  browserBootstrap.acknowledgeBrowserDocumentation(browser, { receipt, invocationId: "next", displayedDocumentDigests: receipt.documents });
+  context.mock.method(runner, "capabilityCanary", async () => ({ status: "pass", sessionId: browser.browserId,
+    tabId: "owned", viewport: { width: 390, height: 844, dpr: 1 }, networkSource: "browser-network-log" }));
+  const legacyDiagnosticFile = `failure-${args.batchId}-1.json`;
+  const proofPath = path.join(path.dirname(next.batch.path), legacyDiagnosticFile);
+  await writeFile(proofPath, JSON.stringify({ code: "PARITY_DPR_OVERRIDE_UNAVAILABLE", diagnostic: "Unknown failure" }), { mode: 0o600 });
+  const recovery = { ...args, browser, runner, tabId: "owned", legacyDiagnosticFile };
+  await assert.rejects(workspace.recoverDocumentationFailure(recovery), /does not prove/u);
+  await writeFile(proofPath, JSON.stringify({ code: "PARITY_DPR_OVERRIDE_UNAVAILABLE",
+    diagnostic: 'Required documentation has not been read: "confirmations"' }), { mode: 0o600 });
+  const before = await readFile(proofPath);
+  assert.equal((await workspace.recoverDocumentationFailure(recovery)).status, "recovered");
+  assert.deepEqual(await readFile(proofPath), before);
+  const checkpoint = JSON.parse(await readFile(path.join(path.dirname(proofPath), "checkpoint.json"), "utf8"));
+  assert.equal(checkpoint.batches[0].documentationRecovery.legacyProof.sha256, sha256(before.toString()));
+});
+
+async function modelWorkspaceFixture(context: test.TestContext, targets = 2) {
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), "model-workspace-")));
+  context.after(() => rm(root, { recursive: true, force: true }));
+  const slug = "model-fixture", runId = "model-run";
+  const target = `plans/${slug}/prototype`;
+  await mkdir(path.join(root, target), { recursive: true });
+  await mkdir(path.join(root, ".codex"));
+  const fixtures = await import(pathToFileURL(path.resolve(import.meta.dirname, "fixtures/parity-verification-model.mjs")).href);
+  const input = await fixtures.verificationFixture({ targets, states: 1 });
+  for (const source of input.profile.sourceInventory) {
+    const bytes = `fixture source ${source.id}`;
+    await writeFile(path.join(root, source.id), bytes);
+    source.digest = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+  }
+  await writeFile(path.join(root, target, "index.html"), "<main>Model fixture</main>");
+  for (const [name, value] of Object.entries({ "ui-contract.json": input.contract, "parity-spec.json": input.profile, "requirements.json": input.requirements })) await writeFile(path.join(root, target, name), JSON.stringify(value));
+  const facade = await runnerModulePromise;
+  const definition = await facade.loadParityDefinition(target, root);
+  const goal = fixtures.modelGoalFixture({ slug, revision: definition.prototypeRevision, contract: input.contract, requirements: input.requirements });
+  await writeFile(path.join(root, "plans", slug, "goal.md"), goal);
+  const { compileVerificationModel } = await import(pathToFileURL(path.resolve(import.meta.dirname, "../.agents/skills/plan/scripts/parity-verification-model.mjs")).href);
+  const compiled = await compileVerificationModel(input);
+  const current = { goalSha256: `sha256:${createHash("sha256").update(goal).digest("hex")}`, prototypeRevision: definition.prototypeRevision, validationProfileDigest: definition.validationProfileDigest, runtime: { owner: "fixture", checkout: root }, sources: [] };
+  const approval = facade.createApprovalEvidence({ runId, ...current, semanticDigest: compiled.semanticDigest });
+  return { root, slug, runId, target, input, definition, current, approval, fixtures };
+}
+
+test("FINAL-01/MIG-01: model workspace batches aggregate once and public reader checks current closure", async (context) => {
+  const fixture = await modelWorkspaceFixture(context);
+  const workspace = await workspaceModulePromise;
+  const facade = await runnerModulePromise;
+  const options = { repositoryRootPath: fixture.root, slug: fixture.slug, runId: fixture.runId, definition: fixture.definition, approval: fixture.approval, current: fixture.current, baseUrls: { production: "http://localhost:3001", prototype: "http://127.0.0.1:4001" } };
+  const prepared = await workspace.prepareRunWorkspace(options);
+  assert.equal(prepared.schemaVersion, 3);
+  const runner = new facade.BrowserParityRunner(fixture.fixtures.modelAdapterSpy());
+  const tabs = { production: "left", prototype: "right" };
+  await assert.rejects(workspace.finalizeRunWorkspace(options), { code: "PARITY_REQUIREMENT_GAP" });
+  const first = await workspace.executeBrowserBatch({ repositoryRootPath: fixture.root, runId: fixture.runId, runner, tabs });
+  assert.equal(first.summary.passed, 1);
+  const resumed = await workspace.resumeRunWorkspace({ repositoryRootPath: fixture.root, runId: fixture.runId });
+  assert.equal(resumed.summary.passed, 1);
+  for (let i = 1; i < prepared.summary.total; i++) await workspace.executeBrowserBatch({ repositoryRootPath: fixture.root, runId: fixture.runId, runner, tabs });
+  const finished = await workspace.finalizeRunWorkspace(options);
+  assert.equal(finished.schemaVersion, 6);
+  const result = await facade.verifyCurrentRun({ target: fixture.target, definition: fixture.definition, options: { runId: fixture.runId }, repositoryRootPath: fixture.root });
+  assert.equal(result.status, "pass");
+  await assert.rejects(access(path.join(fixture.root, ".codex", "parity-runs", fixture.runId)), { code: "ENOENT" });
+  await writeFile(path.join(fixture.root, "feature-0.tsx"), "changed implementation");
+  await assert.rejects(facade.verifyCurrentRun({ target: fixture.target, definition: fixture.definition, options: { runId: fixture.runId }, repositoryRootPath: fixture.root }), { code: "PARITY_REQUIREMENT_GAP" });
+});
+test("CERT-01: changed requirements fail before workspace mutation and prior run bytes survive", async (context) => {
+  const fixture = await modelWorkspaceFixture(context);
+  const workspace = await workspaceModulePromise;
+  await workspace.prepareRunWorkspace({ repositoryRootPath: fixture.root, slug: fixture.slug, runId: fixture.runId, definition: fixture.definition, approval: fixture.approval, current: fixture.current, baseUrls: { production: "http://localhost:3001", prototype: "http://127.0.0.1:4001" } });
+  const checkpointPath = path.join(fixture.root, ".codex", "parity-runs", fixture.runId, "checkpoint.json");
+  const bytes = await readFile(checkpointPath);
+  fixture.input.profile.obligations.pop();
+  await writeFile(path.join(fixture.root, fixture.target, "parity-spec.json"), JSON.stringify(fixture.input.profile));
+  await assert.rejects(workspace.resumeRunWorkspace({ repositoryRootPath: fixture.root, runId: fixture.runId }), { code: "PARITY_CURRENT_STATE_DRIFT" });
+  assert.deepEqual(await readFile(checkpointPath), bytes);
+});
+
+test("COVER/FINAL/REUSE-01: stage receipts remain partial; final union executes only the missing unit", async (context) => {
+  const f = await modelWorkspaceFixture(context, 3), workspace = await workspaceModulePromise, facade = await runnerModulePromise;
+  const model = await import("../.agents/skills/plan/scripts/parity-model-workspace.mjs");
+  const options = (runId: string, extra = {}) => ({ repositoryRootPath: f.root, slug: f.slug, runId, definition: f.definition, approval: { ...f.approval, runId }, current: f.current, baseUrls: { production: "http://localhost:3001", prototype: "http://127.0.0.1:4001" }, ...extra });
+  const tabs = { production: "left", prototype: "right" };
+  const oldBytes: Array<{ file: string; bytes: Buffer }> = [];
+  for (const unit of [0, 1]) {
+    const runId = `stage-${unit}`;
+    const prepared = await workspace.prepareRunWorkspace(options(runId, { unitIds: [`feature-${unit}`] }));
+    const runner = new facade.BrowserParityRunner(f.fixtures.modelAdapterSpy());
+    for (let i = 0; i < prepared.summary.total; i++) await workspace.executeBrowserBatch({ ...options(runId), runner, tabs });
+    const saved = await workspace.finalizeRunWorkspace(options(runId));
+    assert.equal(saved.kind, "checkpoint-verification");
+    const verification = await model.verifyModelStage(options(runId));
+    assert.deepEqual(verification.unitIds, [`feature-${unit}`]); assert.equal(verification.caseIds.length, 4);
+    await assert.rejects(facade.verifyCurrentRun({ target: f.target, definition: f.definition, options: { runId }, repositoryRootPath: f.root }));
+    const file = path.join(f.root, saved.evidencePath); oldBytes.push({ file, bytes: await readFile(file) });
+  }
+  const prepared = await workspace.prepareRunWorkspace(options("union", { importStages: ["stage-0", "stage-1"] }));
+  assert.equal(prepared.summary.passed, 2); assert.equal(prepared.summary.pending, 1);
+  await assert.rejects(workspace.finalizeRunWorkspace(options("union")), { code: "PARITY_REQUIREMENT_GAP" });
+  const adapter = f.fixtures.modelAdapterSpy(), runner = new facade.BrowserParityRunner(adapter);
+  await workspace.executeBrowserBatch({ ...options("union"), runner, tabs });
+  const performed = adapter.calls.filter(([operation]: string[]) => operation === "assertion");
+  assert.equal(performed.length, 16); // Four required cases, identity + assertion, both surfaces.
+  const finished = await workspace.finalizeRunWorkspace(options("union"));
+  assert.equal(finished.schemaVersion, 6);
+  assert.equal((await facade.verifyCurrentRun({ target: f.target, definition: f.definition, options: { runId: "union" }, repositoryRootPath: f.root })).status, "pass");
+  for (const original of oldBytes) assert.deepEqual(await readFile(original.file), original.bytes);
+});
+
+test("IMPACT/MIG-01: changed local source invalidates that stage, while other immutable stage results survive", async (context) => {
+  const f = await modelWorkspaceFixture(context), workspace = await workspaceModulePromise, facade = await runnerModulePromise;
+  const options = (runId: string, extra = {}) => ({ repositoryRootPath: f.root, slug: f.slug, runId, definition: f.definition, approval: { ...f.approval, runId }, current: f.current, baseUrls: { production: "http://localhost:3001", prototype: "http://127.0.0.1:4001" }, ...extra });
+  const tabs = { production: "left", prototype: "right" };
+  for (const unit of [0, 1]) {
+    const runId = `prior-${unit}`;
+    const prepared = await workspace.prepareRunWorkspace(options(runId, { unitIds: [`feature-${unit}`] }));
+    const runner = new facade.BrowserParityRunner(f.fixtures.modelAdapterSpy());
+    for (let i = 0; i < prepared.summary.total; i++) await workspace.executeBrowserBatch({ ...options(runId), runner, tabs });
+    await workspace.finalizeRunWorkspace(options(runId));
+  }
+  await writeFile(path.join(f.root, "feature-0.tsx"), "changed implementation only");
+  const prepared = await workspace.prepareRunWorkspace(options("changed", { importStages: ["prior-0", "prior-1"] }));
+  assert.equal(prepared.summary.passed, 1); assert.equal(prepared.summary.pending, 1);
+  const manifest = JSON.parse(await readFile(path.join(f.root, ".codex/parity-runs/changed/manifest.json"), "utf8"));
+  assert.equal(manifest.importBindings[0].caseIds.length, 0); assert.equal(manifest.importBindings[0].invalidatedCaseIds.length, 4);
+  assert.equal(manifest.importBindings[1].caseIds.length, 4);
+  await workspace.abortRunWorkspace(options("changed"));
+  await writeFile(path.join(f.root, "shared.css"), "shared changed");
+  const shared = await workspace.prepareRunWorkspace(options("shared-change", { importStages: ["prior-0", "prior-1"] }));
+  assert.equal(shared.summary.passed, 0); assert.equal(shared.summary.pending, 2);
+});
+
+test("REUSE-01: a new Browser generation needs one fresh canary even when every case is reused", async (context) => {
+  const f = await modelWorkspaceFixture(context), workspace = await workspaceModulePromise, facade = await runnerModulePromise;
+  const options = (runId: string, extra = {}) => ({ repositoryRootPath: f.root, slug: f.slug, runId, definition: f.definition, approval: { ...f.approval, runId }, current: f.current, baseUrls: { production: "http://localhost:3001", prototype: "http://127.0.0.1:4001" }, ...extra });
+  const tabs = { production: "left", prototype: "right" };
+  const prepared = await workspace.prepareRunWorkspace(options("all-stage", { unitIds: ["feature-0", "feature-1"] }));
+  const runner = new facade.BrowserParityRunner(f.fixtures.modelAdapterSpy());
+  for (let i = 0; i < prepared.summary.total; i++) await workspace.executeBrowserBatch({ ...options("all-stage"), runner, tabs });
+  await workspace.finalizeRunWorkspace(options("all-stage"));
+  const reused = await workspace.prepareRunWorkspace(options("all-reuse", { importStages: ["all-stage"] }));
+  assert.equal(reused.summary.pending, 0);
+  await assert.rejects(workspace.finalizeRunWorkspace(options("all-reuse")), { code: "PARITY_BROWSER_SETUP_REQUIRED" });
+  const adapter = f.fixtures.modelAdapterSpy();
+  const previousBootstrap = adapter.bootstrapStatus;
+  adapter.bootstrapStatus = async () => ({ ...await previousBootstrap(), generation: "new-generation" });
+  const currentRunner = new facade.BrowserParityRunner(adapter);
+  await workspace.executeBrowserBatch({ ...options("all-reuse"), runner: currentRunner, tabs });
+  assert.equal(adapter.calls.filter(([operation]: string[]) => operation === "assertion").length, 0);
+  assert.equal(adapter.calls.filter(([operation]: string[]) => operation === "canary-image").length, 1);
+  assert.equal((await workspace.finalizeRunWorkspace(options("all-reuse"))).schemaVersion, 6);
+});
+
+test("IMPACT-01: live workspace source drift requires scoped invalidation and preserves unrelated fragments", async (context) => {
+  const f = await modelWorkspaceFixture(context), workspace = await workspaceModulePromise, facade = await runnerModulePromise;
+  const options = { repositoryRootPath: f.root, slug: f.slug, runId: f.runId, definition: f.definition, approval: f.approval, current: f.current, baseUrls: { production: "http://localhost:3001", prototype: "http://127.0.0.1:4001" } };
+  const prepared = await workspace.prepareRunWorkspace(options);
+  const runner = new facade.BrowserParityRunner(f.fixtures.modelAdapterSpy()), tabs = { production: "left", prototype: "right" };
+  for (let i = 0; i < prepared.summary.total; i++) await workspace.executeBrowserBatch({ ...options, runner, tabs });
+  const runRoot = path.join(f.root, ".codex/parity-runs", f.runId);
+  const before = JSON.parse(await readFile(path.join(runRoot, "checkpoint.json"), "utf8"));
+  const last = before.batches[1].fragment; const untouched = await readFile(path.join(runRoot, last.fileName));
+  await writeFile(path.join(f.root, "feature-0.tsx"), "new local source");
+  await assert.rejects(workspace.nextRunBatch(options), { code: "PARITY_CURRENT_STATE_DRIFT" });
+  const invalidated = await workspace.invalidateRunWorkspace({ ...options, source: "feature-0.tsx", scope: "target", targetIds: [] });
+  assert.equal(invalidated.summary.passed, 1); assert.equal(invalidated.summary.pending, 1);
+  await workspace.executeBrowserBatch({ ...options, runner, tabs });
+  assert.deepEqual(await readFile(path.join(runRoot, last.fileName)), untouched);
+  assert.equal((await workspace.finalizeRunWorkspace(options)).schemaVersion, 6);
+});
+
+test("stage CLI reports only selected units and never certifies a partial stage as full completion", async (context) => {
+  const f = await modelWorkspaceFixture(context), workspace = await workspaceModulePromise, facade = await runnerModulePromise;
+  const output = captureOutput();
+  await facade.runCli({ repositoryRootPath: f.root, argv: ["select", f.target, "--phase", "final", "--unit", "feature-0"], stdout: output.stream });
+  assert.equal(JSON.parse(output.read()).caseCount, 4);
+  const options = { repositoryRootPath: f.root, slug: f.slug, runId: f.runId, definition: f.definition, approval: f.approval, current: f.current, baseUrls: { production: "http://localhost:3001", prototype: "http://127.0.0.1:4001" }, unitIds: ["feature-0"] };
+  const prepared = await workspace.prepareRunWorkspace(options), runner = new facade.BrowserParityRunner(f.fixtures.modelAdapterSpy());
+  for (let i = 0; i < prepared.summary.total; i++) await workspace.executeBrowserBatch({ ...options, runner, tabs: { production: "left", prototype: "right" } });
+  await workspace.finalizeRunWorkspace(options);
+  const verified = captureOutput();
+  await facade.runCli({ repositoryRootPath: f.root, argv: ["verify-stage", f.target, "--run-id", f.runId], stdout: verified.stream });
+  assert.equal(JSON.parse(verified.read()).kind, "checkpoint-verification");
+  await assert.rejects(facade.runCli({ repositoryRootPath: f.root, argv: ["verify-run", f.target, "--run-id", f.runId], stdout: captureOutput().stream }));
+});
+
+test("REPAIR-01/02: model resume and final reader verify original approval policy and immutable clarification", async (context) => {
+  const f = await modelWorkspaceFixture(context, 1), workspace = await workspaceModulePromise, facade = await runnerModulePromise;
+  const repair = await import("../scripts/goal-clarification.mjs");
+  const goalPath = `plans/${f.slug}/goal.md`, before = await readFile(path.join(f.root, goalPath), "utf8");
+  const approval = { ...f.approval, allowExplanatoryRestatement: true };
+  const options = { repositoryRootPath: f.root, slug: f.slug, runId: f.runId, definition: f.definition, approval, current: f.current, baseUrls: { production: "http://localhost:3001", prototype: "http://127.0.0.1:4001" } };
+  const prepared = await workspace.prepareRunWorkspace(options);
+  const manifestPath = path.join(f.root, ".codex/parity-runs", f.runId, "manifest.json");
+  const manifest = await readFile(manifestPath);
+  const after = `${before}\n## 承認済み要件の説明補足\n\n> Approved test fixture requirements\n`;
+  await writeFile(path.join(f.root, goalPath), after);
+  await assert.rejects(workspace.resumeRunWorkspace({ repositoryRootPath: f.root, runId: f.runId }));
+  await repair.recordGoalClarification({ repositoryRoot: f.root, goalPath, before, after, invocation: approval, invariantBinding: { semanticDigest: approval.semanticDigest, prototypeRevision: approval.prototypeRevision, validationProfileDigest: approval.validationProfileDigest } });
+  assert.equal((await workspace.resumeRunWorkspace({ repositoryRootPath: f.root, runId: f.runId })).summary.pending, prepared.summary.total);
+  assert.deepEqual(await readFile(manifestPath), manifest);
+  const runner = new facade.BrowserParityRunner(f.fixtures.modelAdapterSpy());
+  for (let i = 0; i < prepared.summary.total; i++) await workspace.executeBrowserBatch({ repositoryRootPath: f.root, runId: f.runId, runner, tabs: { production: "left", prototype: "right" } });
+  await workspace.finalizeRunWorkspace(options);
+  assert.equal((await facade.verifyCurrentRun({ target: f.target, definition: f.definition, options: { runId: f.runId }, repositoryRootPath: f.root })).status, "pass");
+  await writeFile(path.join(f.root, goalPath), after + "新しい権限を追加する。\n");
+  await assert.rejects(facade.verifyCurrentRun({ target: f.target, definition: f.definition, options: { runId: f.runId }, repositoryRootPath: f.root }), { code: "GOAL_APPROVAL_CHANGED" });
+  await assert.rejects(repair.verifyGoalClarification({ repositoryRoot: f.root, goalPath, originalDigest: f.approval.goalSha256, currentBytes: Buffer.from(after), invocation: f.approval, invariantBinding: {} }), { code: "GOAL_APPROVAL_CHANGED" });
+});
+
+test("FLOW-01: model preflight validates the actual goal revision, requirement closure and targeted smoke", async (context) => {
+  const f = await modelWorkspaceFixture(context, 2), facade = await runnerModulePromise;
+  const args = { definition: f.definition, context: "plan", repositoryRootPath: f.root, changedTargetIds: ["feature-0"], changedStates: ["state-0"] };
+  const result = await facade.createPreflightSummary(args);
+  assert.equal(result.goalContract.status, "pass");
+  assert.equal(result.selection.phase, "smoke");
+  const goalPath = path.join(f.root, "plans", f.slug, "goal.md");
+  const before = await readFile(goalPath, "utf8");
+  await writeFile(goalPath, before.replace(f.definition.prototypeRevision, "sha256:" + "0".repeat(64)));
+  await assert.rejects(facade.createPreflightSummary(args), /prototype revision/u);
+  await writeFile(goalPath, before.replace("REQ-feature-0-state-0", "REQ-absent"));
+  await assert.rejects(facade.createPreflightSummary(args), /requirement IDs/u);
+  await writeFile(goalPath, before.replace("- [ ] UI-CHECK-01", "- [x] UI-CHECK-01"));
+  await assert.rejects(facade.createPreflightSummary(args), /omit a target/u);
+});
+
+test("LAYER-01: common workspace forwards actually executed structured unit results without Browser operations", async (context) => {
+  const f = await modelWorkspaceFixture(context, 1), workspace = await workspaceModulePromise, facade = await runnerModulePromise;
+  const { compileVerificationModel, modelDigest } = await import("../.agents/skills/plan/scripts/parity-verification-model.mjs");
+  const source = "console.log(JSON.stringify({caseId:'UNIT-01',actual:7}));\n";
+  await writeFile(path.join(f.root, "unit-check.mjs"), source);
+  f.input.profile.sourceInventory.push({ id: "unit-check.mjs", digest: sha256(source), dependencies: [] });
+  f.input.profile.sourceImpactMap.push({ id: "unit-check.mjs", scope: "target", targetIds: ["feature-0"] });
+  f.input.contract.productionBaseline.sources.push("unit-check.mjs");
+  const obligation = f.input.profile.obligations[0];
+  Object.assign(obligation, { layer: "unit", expected: 7, assertion: { kind: "value", selector: "result", pure: true }, requiredCapabilities: ["domain"], sourcePaths: [...obligation.sourcePaths, "unit-check.mjs"], test: { path: "unit-check.mjs", caseId: "UNIT-01", command: [process.execPath, "unit-check.mjs"], input: { value: 7 }, environment: { node: process.versions.node }, capabilities: ["domain"] } });
+  await f.fixtures.rebindFixture(f.input);
+  for (const [name, value] of Object.entries({ "ui-contract.json": f.input.contract, "parity-spec.json": f.input.profile, "requirements.json": f.input.requirements })) await writeFile(path.join(f.root, f.target, name), JSON.stringify(value));
+  const definition = await facade.loadParityDefinition(f.target, f.root);
+  const goal = f.fixtures.modelGoalFixture({ slug: f.slug, revision: definition.prototypeRevision, contract: f.input.contract, requirements: f.input.requirements });
+  await writeFile(path.join(f.root, "plans", f.slug, "goal.md"), goal);
+  const compiled = await compileVerificationModel({ ...f.input, compilerDigest: definition.compilerDigest, sourceDigests: definition.sourceDigests, sourceModes: definition.sourceModes });
+  assert.ok(compiled.cases && "semanticDigest" in compiled);
+  const current = { ...f.current, goalSha256: sha256(goal), prototypeRevision: definition.prototypeRevision, validationProfileDigest: definition.validationProfileDigest };
+  const approval = facade.createApprovalEvidence({ ...current, runId: f.runId, semanticDigest: compiled.semanticDigest });
+  const options = { repositoryRootPath: f.root, slug: f.slug, runId: f.runId, definition, current, approval, baseUrls: { production: "http://localhost:3001", prototype: "http://127.0.0.1:4001" } };
+  const prepared = await workspace.prepareRunWorkspace(options);
+  const observed = JSON.parse((await execFileAsync(process.execPath, ["unit-check.mjs"], { cwd: f.root })).stdout);
+  const layerResults = await Promise.all(compiled.cases.map(async item => {
+    const expected = item.assertions[0];
+    const payload = { ...expected.test, layer: item.layer, status: "pass", reuseKey: item.reuseKey, assertion: expected.assertion, expected: expected.expected, caseId: observed.caseId, actual: observed.actual, exitCode: 0 };
+    return { ...payload, digest: await modelDigest(payload) };
   }));
-  const serialized = JSON.stringify(checkpoint);
-  assert.ok(Buffer.byteLength(serialized) > 2 * 1024 * 1024);
-  await writeFile(checkpointPath, serialized, { mode: 0o600 });
-  const resumed = await workspace.resumeRunWorkspace({ repositoryRootPath: fixture.root, runId: handshake.runId });
-  assert.equal(resumed.status, "ready");
-  const after = JSON.parse(await readFile(checkpointPath, "utf8"));
-  assert.deepEqual(after.artifactIndex, checkpoint.artifactIndex);
-  assert.equal(after.batches.filter((entry: { status: string }) => entry.status === "passed").length, 0);
+  const adapter = f.fixtures.modelAdapterSpy(), runner = new facade.BrowserParityRunner(adapter);
+  for (let i = 0; i < prepared.summary.total; i++) await workspace.executeBrowserBatch({ repositoryRootPath: f.root, runId: f.runId, runner, layerResults });
+  await workspace.finalizeRunWorkspace(options);
+  assert.equal((await facade.verifyCurrentRun({ target: f.target, definition, options: { runId: f.runId }, repositoryRootPath: f.root })).status, "pass");
+  assert.equal(adapter.calls.length, 0);
 });

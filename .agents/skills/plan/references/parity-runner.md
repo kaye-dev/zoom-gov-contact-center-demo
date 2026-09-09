@@ -1,6 +1,6 @@
 # UI parity runner contract
 
-Use this reference when authoring UI plans, running normal UI `$implement` final coverage, reviewing that evidence, or performing release, CI, scheduled, or user-explicit parity verification. Normal UI `$implement` starts with static preflight and approval, then runs the Browser lifecycle only after implementation and static checks are complete. Normal UI `$review` requires current final parity evidence. `ui-contract.json` version 2 is the complete UI acceptance contract. Current Browser-enabled plans use `parity-spec.json` version 4 and final `implementation-parity.json` schema version 5. Older profiles and evidence remain read-only compatibility inputs.
+Use this reference when authoring UI plans, running normal UI `$implement` final coverage, reviewing that evidence, or performing release, CI, scheduled, or user-explicit parity verification. Normal UI `$implement` starts with static preflight and approval, then runs the Browser lifecycle at a completed implementation unit or the final boundary after its static checks. Normal UI `$review` requires current final parity evidence. Legacy `ui-contract.json` version 1 is the complete matrix acceptance contract. New authoring uses contract 3/profile 5 and evidence 6 in the model sections below. Existing matrix plans use `parity-spec.json` version 4 and final `implementation-parity.json` schema version 5. Older profiles and evidence remain read-only compatibility inputs.
 
 ## Contract, profile, and coverage
 
@@ -74,8 +74,7 @@ For normal UI `$implement` or an independently requested parity task, prepare on
 Local uses `http://localhost:3000` or an ownership-verified single-label tenant origin such as `http://univ.localhost:3000`; worktrees use the ownership-verified allocated port within the [Browser operating range](../../../../docs/development/development-ports.md#利用範囲と割り当て). Obtain owner, process/container, mount, health, and `PRODUCTION_URL` from one completed `./dev-compose.sh ensure`; do not wrap it in status polling, fixed sleep, or follow-log commands. Matching CLI arguments do not prove ownership. Check both surface URLs against that range before Browser use; stop if either is outside it. The linked document also defines artifact reuse, release, migration, data preservation, rollback, and evidence handling.
 
 ```sh
-node .agents/skills/plan/scripts/parity-runner.mjs prepare-run plans/<slug>/prototype \
-  --run-id <run-id> \
+node .agents/skills/plan/scripts/parity-runner.mjs prepare-run plans/<slug>/prototype --run-id <run-id> \
   --production-url <verified-loopback-url> \
   --prototype-url <verified-loopback-url> \
   --runtime-owner <verified-owner> --runtime-checkout <verified-checkout> \
@@ -88,16 +87,14 @@ The common `executeBrowserBatch({ repositoryRootPath, runId, runner, tabs })` ex
 
 ```sh
 node .agents/skills/plan/scripts/parity-runner.mjs next-batch plans/<slug>/prototype --run-id <run-id>
-node .agents/skills/plan/scripts/parity-runner.mjs record-batch plans/<slug>/prototype \
-  --run-id <run-id> --batch-id <batch-id>
+node .agents/skills/plan/scripts/parity-runner.mjs record-batch plans/<slug>/prototype --run-id <run-id> --batch-id <batch-id>
 node .agents/skills/plan/scripts/parity-runner.mjs resume-run plans/<slug>/prototype --run-id <run-id>
 ```
 
 Record tool failure without raw output:
 
 ```sh
-node .agents/skills/plan/scripts/parity-runner.mjs record-failure plans/<slug>/prototype \
-  --run-id <run-id> --batch-id <batch-id> \
+node .agents/skills/plan/scripts/parity-runner.mjs record-failure plans/<slug>/prototype --run-id <run-id> --batch-id <batch-id> \
   --failure-code <stable-code> --diagnostic <bounded-text> --transient true
 ```
 
@@ -108,8 +105,7 @@ Before a terminal recovery, read [Browser recovery](browser-recovery.md); its on
 After implementation fixes, invalidate by exact impact and resume:
 
 ```sh
-node .agents/skills/plan/scripts/parity-runner.mjs invalidate-run plans/<slug>/prototype \
-  --run-id <run-id> --invalidation-scope target --target <target-id>
+node .agents/skills/plan/scripts/parity-runner.mjs invalidate-run plans/<slug>/prototype --run-id <run-id> --invalidation-scope target --target <target-id>
 node .agents/skills/plan/scripts/parity-runner.mjs invalidate-run plans/<slug>/prototype \
   --run-id <run-id> --invalidation-scope shared --source <production-source>
 node .agents/skills/plan/scripts/parity-runner.mjs invalidate-run plans/<slug>/prototype \
@@ -136,19 +132,58 @@ Each command returns a compact summary only: planned/executed/passed counts, fai
 
 ## Evidence and independent statuses
 
-The invocation-bound `approval.json` remains schema version 1. Current final evidence is schema version 5 and records `matrixScope: coverage | full`, execution context and exact row IDs; recomputable target-state/viewport/theme coverage; risk/anchor required-probe results; checkpoint/resume/attempt/invalidation history; runtime/source/goal/revision/profile digests; capability/artifact-index/cleanup/readback/metrics; and independent `automationCoverageStatus`, `humanVisualApprovalStatus`, and `fullParityStatus`.
+The invocation-bound `approval.json` remains schema version 1. Legacy matrix final evidence is schema version 5 and records:
+
+- `matrixScope: coverage | full`, execution context, and exact row IDs;
+- recomputable target-state, target-viewport, and target-theme coverage;
+- risk and anchor rows with required probe results;
+- checkpoint/resume/attempt/invalidation history;
+- runtime, source, goal, revision, and profile digests;
+- capability, artifact index, cleanup/readback, and metrics;
+- `automationCoverageStatus`, `humanVisualApprovalStatus`, and `fullParityStatus`.
 
 Coverage evidence sets full parity to `not-run`; only a complete full run may set it to `pass`. Codex visual/requirement audit, real actions, static checks and t-way coverage are required by schema v5; human approval is independent and optional. Missing/duplicate/extra/failed rows, stale digest, condition drift, missing artifact, or failed cleanup prevents automated completion.
 
-Stable failure codes include `PARITY_SELECTED_TAB_DRIFT`, `PARITY_COMPARISON_TAB_REQUIRED`, `PARITY_VIEWPORT_CAPABILITY_UNAVAILABLE`, `PARITY_CDP_CAPABILITY_UNAVAILABLE`, `PARITY_DPR_OVERRIDE_UNAVAILABLE`, `PARITY_VIEWPORT_MISMATCH`, `PARITY_DPR_MISMATCH`, `PARITY_BROWSER_SETUP_REQUIRED`, `PARITY_THEME_SETUP_FAILED`, `PARITY_REQUIRED_PROBE_UNAVAILABLE`, `PARITY_ARTIFACT_SINK_UNAVAILABLE`, `PARITY_BATCH_INVALID`, `PARITY_BATCH_INCOMPLETE`, `PARITY_CURRENT_STATE_DRIFT`, and `PARITY_CLEANUP_FAILED`.
+Before Browser operations, use [Browser documentation bootstrap](browser-api-bootstrap.md); static CLI work does not require it. The guarded `recoverDocumentationFailure` API reopens only a proven unread batch after a fresh common canary and preserves passed fragments.
+
+Stable failure codes include `BROWSER_DOCUMENTATION_REQUIRED`, `BROWSER_PERMISSION_DENIED`, `PARITY_SELECTED_TAB_DRIFT`, `PARITY_COMPARISON_TAB_REQUIRED`, `PARITY_VIEWPORT_CAPABILITY_UNAVAILABLE`, `PARITY_CDP_CAPABILITY_UNAVAILABLE`, `PARITY_DPR_OVERRIDE_UNAVAILABLE`, `PARITY_VIEWPORT_MISMATCH`, `PARITY_DPR_MISMATCH`, `PARITY_BROWSER_SETUP_REQUIRED`, `PARITY_THEME_SETUP_FAILED`, `PARITY_REQUIRED_PROBE_UNAVAILABLE`, `PARITY_ARTIFACT_SINK_UNAVAILABLE`, `PARITY_BATCH_INVALID`, `PARITY_BATCH_INCOMPLETE`, `PARITY_CURRENT_STATE_DRIFT`, and `PARITY_CLEANUP_FAILED`.
 
 ## Legacy compatibility
 
-Profile versions 1, 2, and 3 and parity evidence schemas 1, 2, 3, and 4 remain read-only compatible. Validate existing evidence against its historical row, digest, runtime, and cleanup contract without migrating or adding fields. New Browser-enabled plans use profile version 4; independently requested new final runs use evidence schema 5. A migration changes workflow text, skills, profile, runner, evidence schema, tests, and evaluator together. Rollback must restore that entire compatible set; never roll back only a writer or reader.
+Profile versions 1, 2, and 3 and parity evidence schemas 1, 2, 3, and 4 remain read-only compatible. Validate existing evidence against its historical row, digest, runtime, and cleanup contract without migrating or adding fields. Existing matrix plans retain profile version 4 and evidence schema 5. A migration changes workflow text, skills, profile, runner, evidence schema, tests, and evaluator together. Rollback must restore that entire compatible set; never roll back only a writer or reader.
 
-## Development origins
+## 機能別モデルの見積もり（contract 3 / profile 5）
 
-Use the app and artifact origins in [Development ports](../../../../docs/development/development-ports.md). Check the reported allocation against the Browser operating range before opening either surface; stop the task if it is outside that range. The same document defines artifact reuse, explicit release, migration, data preservation, rollback, and evidence handling.
+新規モデルは `parity-verification-model.mjs` の純粋compilerを共用する。`requirementsBundle.path/digest` で承認入力を独立に固定し、profileの削減済み一覧だけから要件を再定義しない。targetは `states`（`id/when/identity/scenarioIds`）と `applicableStateIds` を持つ。groupは有限factor、宣言的constraints、理由付き1〜4次interaction、回帰seed、scenarioとobligationへの参照を持つ。任意JavaScript・default stateへの代入は受理しない。
+
+`scenario.conditions` は両surface、fixture seed/data digest、認可profile/role/tenant、locale/timezone、setup/reset/isolation、viewport/DPR/scroll/theme、環境を省略しない。ordered checkpointごとにaction/waitとassertionを結び、snapshotをflowへ昇格させない。純粋な同時点assertionのみ共有し、元obligationとexpectedの対応を保存する。観測や副作用の独立性が不明なら分離する。
+
+```sh
+node .agents/skills/plan/scripts/parity-runner.mjs estimate plans/<slug>/prototype --phase final --context plan --format json
+node .agents/skills/plan/scripts/parity-runner.mjs estimate plans/<slug>/prototype --phase final --context implement --baseline-report plans/<slug>/prototype/verification-estimate.json --changed-source src/example.ts --format json
+```
+
+estimateはstdoutのみを書き、Browser・DB・run workspaceを操作しない。作者が最終authoring後、smoke前にstdoutを `verification-estimate.json` へ保存し、その後prototype revisionを計算する。report自身、goal、revisionをreportの入力digestへ含めない。`--legacy-analysis` はcontract 1/2とprofile 1〜4を読む診断専用で、旧runを移行・再選択しない。新schemaでのBrowser実行は共通runnerの対応経路だけを使う。
+
+`sourceInventory` は `id/digest/dependencies` と未解決依存を持ち、`sourceImpactMap` は同じID集合を持つ。scopeは実際の推移的consumerからtarget/shared/global/unknownへ分類する。globalには全consumerの根拠を付ける。境界の値・軸・適用state/consumerと期待する両側は、当該goalのsourceから解決し、固定の製品名・幅・state数を生成器へ入れない。
+
+候補数はBigIntで集計し、機能ごとの和を取る。candidate評価100万、選択10万、推定working set 256 MiBはcompiler資源上限であり、cost overrideでは緩和しない。超過は未算出の件数をnullとしてモデル分割へ戻す。通常の15分/unit、90分/全体、64 MiB/証跡、承認時比20%かつ10件等の運用閾値は `parity-estimate.mjs` の共通評価で判定する。overrideにはmetric/value/reason/evidence/unitIdsを全て宣言する。要件・期待値・riskを削って費用に合わせない。
+
+原観点は全文とhash、条件、REQ、全子obligationを保持する。代表化証明は元条件、能力、source依存閉包、正確な代替test、consumer接続、残存risk、fallback、失効条件を全て持つ。未実行のtest/calibrationはpendingとし追加費用へ加算する。source-textやSSRの成功を実Browserのlayout/focus/eventへ代用しない。pendingの証明で元条件を省略しない。
+
+## モデルの共通実行と evidence 6
+
+contract 3/profile 5 の current writer は workspace/fragment 3、evidence 6 を使う。`prepare-run` → `next-batch` / `executeBrowserBatch` → `record-batch` → `recordRunAudit` → `finalize-run` → `verify-run` は同じ model preflight と全obligation closure を使う。`BrowserParityRunner.runModel` がブラウザ操作を担い、Node側の `parity-model-workspace.mjs` が境界付きprivate file、digest、atomic writeと承認bindingを担う。新経路を旧schemaへ書き戻さない。上記の旧profile/evidence説明は各legacy readerの契約として維持する。
+
+Browser APIの文書receiptは現在のadapter module/runtime世代で取得し、全文提示と別tool呼出しでのacknowledge後に使う。freshな両surfaceはHTTP navigationを終えてからCDP/DPRを設定する。`Intl` 等の任意page globalはBrowserのDOM評価APIで利用可能とは限らない。locale/timezoneはCDPコマンドの適用応答を記録し、locale依存の画面結果は別のDOM assertionで確認する。未対応のtouch等をclickへ置換して成功扱いしない。
+
+`artifactRequests` の既定は空。画像が必要なcheckpointだけ取得し、case条件・surface・checkpoint・phaseのdigestで識別する。画像サイズの一致だけで視覚passにしない。取得surfaceの倍率・内容もCodexが見る。CDPによるviewport captureは `Page.captureScreenshot` の `fromSurface: true` を使い、明示clipで内容が縮小されるbackendを正常画像として受理しない。`fromSurface: false` はアプリwindowを取得し得るため使用しない。
+
+層別結果は正確なtest path/case ID/input/expected/environment/能力/result digestを必要とする。command exit 0だけでは未実行caseを満たさない。visualは現在の両surface画像を実際に見てから、case ID/obligation ID/criterion ID、artifact digest、viewer、reviewedAtと判定を `recordRunAudit` へ渡す。同じ画像を複数criterionで参照しても各criterionの判定を省略しない。
+
+finalizerは必要ケース・assertion・原観点・substitution・画像・目視・cleanupを再計算する。証跡とartifactをprivateな最終保存先へ書き終えてからworkspaceを消し、public `verify-run` で再読込する。`coverage` はfull parityやhuman承認と区別する。失敗は元のexecution codeを保持し、cleanupにも失敗した場合は追加診断を残す。
+
+段階scope、`--unit` / `--import-stage` / `verify-stage`、content bindingと不足分だけの集約は [implementation-checkpoints.md](implementation-checkpoints.md) を参照する。
 
 
-For state applicability, risk factors, screenshots, dependency scopes, and cross-run qualification, follow [Validation design](validation-design.md).
+Structured unit/API/DB results passed to `executeBrowserBatch({layerResults})` must come from actual declared commands and include the exact argv, exitCode 0, case ID, actual value, input/environment/capabilities, current reuse key and result digest; status or expected value alone cannot close an obligation. Plan preflight validates the six goal headings, UI version/revision bindings, exact requirement IDs and unchecked target handoff, then returns `selection` for explicit `--target` / optional `--state` inputs. Call the same `BrowserParityRunner.runModel({modelInput, tabs, phase: "smoke", caseIds: selection.caseIds})` only at the final plan boundary. For requested smoke images, create one fresh private run directory with the common `modelWorkspaceStorage.resolveWorkspacePaths(root, runId, {createRoot: true, createRun: true})`, use `createWorkspaceArtifactSink`, inspect the returned images, then call `abortRunWorkspace` in cleanup. Do not create approval or implementation evidence for this temporary plan workspace. Its `verification-model-smoke` output is transient plan verification, not evidence 6, an implementation stage, or reusable final evidence. It uses declared assertions under the selected conditions; an unmet production expectation remains a reported smoke failure. Do not silently weaken the approved final expectation for planning.

@@ -1,0 +1,11 @@
+import { mountSharedControls } from "./model-components.mjs";
+const query = new URLSearchParams(location.search);
+const consumer = query.get("consumer") === "second" ? "second" : "host";
+const theme = query.get("theme") === "dark" ? "dark" : "light";
+document.documentElement.className = theme;
+document.documentElement.style.colorScheme = theme;
+const label = consumer === "host" ? "Representative host" : "Second consumer";
+document.querySelector("#consumer-title").textContent = label;
+document.querySelector("#consumer-copy").textContent = `${label} uses the shared controls with its own callback.`;
+let callbacks = 0;
+mountSharedControls(document.querySelector("#model-main"), { label, onConfirm() { callbacks += consumer === "host" ? 1 : 2; document.querySelector("#callback-count").textContent = String(callbacks); } });

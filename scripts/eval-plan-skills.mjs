@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { createWorkflowScenarios, extractWorkflowCommands } from "./eval-workflow-scenarios.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -411,6 +412,7 @@ async function run(
     maxOutputBytes = defaultMaxOutputBytes,
     containmentRoot,
     trackDescendants = true,
+    preserveBoundedOutput = false,
   } = {},
 ) {
   return new Promise((resolve, reject) => {
@@ -582,7 +584,7 @@ async function run(
       if (outputBytes > maxOutputBytes) {
         terminate(`${command} exceeded the ${maxOutputBytes}-byte output limit`);
       }
-      return `${current}${chunk}`.slice(-outputTailCharacters);
+      return `${current}${chunk}`.slice(-(preserveBoundedOutput ? maxOutputBytes : outputTailCharacters));
     };
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
@@ -749,6 +751,7 @@ config_file = "./agents/independent_reviewer.toml"
       path.join(repositoryRoot, "scripts", "validation-digest.mjs"),
       path.join(repo, "scripts", "validation-digest.mjs"),
     );
+    for (const helper of ["goal-clarification.mjs", "implementation-checkpoint.mjs"]) await cp(path.join(repositoryRoot, "scripts", helper), path.join(repo, "scripts", helper));
     await installEvalBuilder(repo);
     await write(
       repo,
@@ -2362,13 +2365,12 @@ const scenarios = {
       ensure((await readFile(path.join(repo, "src/ui.txt"), "utf8")) === "before\n", "implement edited production despite stale revision");
       ensure(/revision|digest|sha256|不一致|失効/iu.test(final), "implement did not report stale revision");
       ensureNoCompletionClaim(final);
-      ensure(
-        !(await exists(path.join(repo, "plans/stale-revision/evidence"))),
-        "implement created approval evidence before the stale-revision preflight passed",
-      );
-      await assertOnlyPaths(repo, []);
+      const approvalPath = await assertSingleApprovalEvidence(repo, "stale-revision");
+      await assertOnlyPaths(repo, [approvalPath]);
     },
-    async simulate() {},
+    async simulate(repo) {
+      await writeApprovalFixture(repo, "stale-revision");
+    },
     async break(repo) {
       await writeFile(path.join(repo, "src/ui.txt"), "after\n");
     },
@@ -2495,7 +2497,7 @@ test("UI-01", async () => {
         uiGoal({ slug: "ui-final-browser-gate", label: "after", revision, commit, checkout: repo }),
       );
     },
-    prompt: `$implement を .agents/skills/implement/SKILL.md から明示的に使用し、plans/ui-final-browser-gate/goal.mdを実装してください。Browserは実装開始時や実装中に使わず、コード変更と静的検証が終わった完了直前だけ確認してください。通常featureとしてmatrixScopeはcoverageを選び、full parityへ昇格させないでください。${browserUnavailable} 最終Browser確認ができない場合は実装差分を保持し、raw Browser outputや捏造evidenceを作らず、coverage未検証としてタスク完了扱いにしないでください。最終回答には「最終Browser coverageは未検証で、タスクは未完了です。」をそのまま含めてください。`,
+    prompt: `$implement を .agents/skills/implement/SKILL.md から明示的に使用し、plans/ui-final-browser-gate/goal.mdを実装してください。Browserは実装開始時や実装中に使わず、コード変更と静的検証が終わった完了直前だけ確認してください。通常featureとしてmatrixScopeはcoverageを選び、full parityへ昇格させないでください。${browserUnavailable} 最終Browser確認ができない場合は実装差分を保持し、raw Browser outputや捏造evidenceを作らず、coverage未検証としてタスク完了扱いにしないでください。このfixtureの保存対象はsrc/ui.txtと今回のapproval.jsonだけです。検証digest、選択結果、未完了理由は最終回答へ記録し、追加の診断ファイルや状況報告ファイルは作らないでください。最終回答には「最終Browser coverageは未検証で、タスクは未完了です。」をそのまま含めてください。`,
     async grade(repo, final) {
       ensure((await readFile(path.join(repo, "src/ui.txt"), "utf8")) === "after\n", "implement did not apply the production change");
       ensure(/Browser|ブラウザ/u.test(final), "implement did not identify the final Browser gate");
@@ -2561,7 +2563,7 @@ test("UI-01", async () => {
   },
   "ui-fidelity-audit-gate": {
     async prepare(repo) { await scenarios["ui-final-browser-gate"].prepare(repo); },
-    prompt: `$implement を .agents/skills/implement/SKILL.md から使用し、plans/ui-final-browser-gate/goal.mdを実装してください。CLIと各軸coverageが成功したという報告があっても、必須3-way組合せ、通常経路の保存→再読込、Codex目視と要件適合監査の証跡はありません。${browserUnavailable} 63件やpairwiseだけで十分とみなしたり、古いschema 4やスクリーンショットの存在を合格証拠へ変換したりせず、未実施の監査を区別して報告してください。人の承認待ちへ置き換えないでください。`,
+    prompt: `$implement を .agents/skills/implement/SKILL.md から使用し、plans/ui-final-browser-gate/goal.mdを実装してください。CLIと各軸coverageが成功したという報告があっても、必須3-way組合せ、通常経路の保存→再読込、Codex目視と要件適合監査の証跡はありません。${browserUnavailable} 63件やpairwiseだけで十分とみなしたり、古いschema 4やスクリーンショットの存在を合格証拠へ変換したりせず、未実施の監査を区別して報告してください。人の承認待ちへ置き換えないでください。このfixtureの保存対象はsrc/ui.txtと今回のapproval.jsonだけです。検証digest、選択結果、未完了理由は最終回答へ記録し、追加の診断ファイルや状況報告ファイルは作らないでください。`,
     async grade(repo, final) {
       ensure(["before\n", "after\n"].includes(await readFile(path.join(repo, "src/ui.txt"), "utf8")), "unexpected production mutation");
       ensureNoCompletionStatus(final);
@@ -2602,7 +2604,7 @@ test("UI-01", async () => {
     async afterCommit(repo) {
       await writeFile(path.join(repo, reviewUiSourcePath), reviewUiSourceAfter);
     },
-    prompt: `$review を .agents/skills/review/SKILL.md から明示的に使用し、plans/${reviewUiSlug}/goal.mdに対する現在のHEAD対working tree差分をreviewしてください。${reviewUiSourcePath}のdiffはgoalの「UI変更: なし」を信用せず、rendered DOM・copy・accessibilityへの影響から独立分類してください。prototype revision、validation profile digest、approval.jsonを静的に確認し、current UI変更に必須のschema-version-5 implementation-parity.jsonがないことを独立したsource=conformance・severity=major findingにしてください。UI誤分類、UI-CHECK-01の対象・前提・操作・期待結果の欠落、parity evidence欠落をそれぞれ別findingにしてください。blind passにはexact diffと必要なrepository contextだけを渡し、別のfresh conformance passにはgoal、同じdiff、prototype contract、approval、checklist auditを渡してください。二つのfresh no-history passを並行実行し、plans/${reviewUiSlug}/review/へcanonical reportを保存してください。${browserUnavailable} HTML report自体のBrowser検証はunverifiedとして記録し、production、goal、prototype、evidence、Gitを変更しないでください。`,
+    prompt: `この独立fixtureの評価では現在のモデルでreviewを続行することを明示的に承認します。model/effortが未検証でも値を推測せず、そのまま進めてください。この許可はreviewのモデル切替境界だけに適用し、証跡や独立reviewerの要件は維持してください。$review を .agents/skills/review/SKILL.md から明示的に使用し、plans/${reviewUiSlug}/goal.mdに対する現在のHEAD対working tree差分をreviewしてください。${reviewUiSourcePath}のdiffはgoalの「UI変更: なし」を信用せず、rendered DOM・copy・accessibilityへの影響から独立分類してください。prototype revision、validation profile digest、approval.jsonを静的に確認し、current UI変更に必須のschema-version-5 implementation-parity.jsonがないことを独立したsource=conformance・severity=major findingにしてください。UI誤分類、UI-CHECK-01の対象・前提・操作・期待結果の欠落、parity evidence欠落をそれぞれ別findingにしてください。blind passにはexact diffと必要なrepository contextだけを渡し、別のfresh conformance passにはgoal、同じdiff、prototype contract、approval、checklist auditを渡してください。二つのfresh no-history passを並行実行し、plans/${reviewUiSlug}/review/へcanonical reportを保存してください。${browserUnavailable} HTML report自体のBrowser検証はunverifiedとして記録し、production、goal、prototype、evidence、Gitを変更しないでください。`,
     async grade(repo, final) {
       const reportRoot = path.join(repo, `plans/${reviewUiSlug}/review`);
       for (const asset of reviewReportAssets) {
@@ -2692,7 +2694,7 @@ test("UI-01", async () => {
         /parity-runner\.mjs preflight/u.test(command),
       );
       const revisionValidation = data.validations.find(({ command }) =>
-        /prototype-revision\.mjs/u.test(command),
+        /prototype-revision\.mjs|loadParityDefinition|prototypeRevisionInRepository/u.test(command),
       );
       ensure(
         (helperValidation?.status === "passed" &&
@@ -2829,6 +2831,8 @@ test("UI-01", async () => {
     negativeFinals: ["ボトルネックなしです。"],
   },
 };
+
+Object.assign(scenarios, createWorkflowScenarios({ write, run, ensure, assertOnlyPaths }));
 
 const commonAffectedPaths = [
   ".agents/skills/git-commit-push-pr/SKILL.md",
@@ -3115,7 +3119,7 @@ async function assertStaticImplementationSkillContracts(root = repositoryRoot) {
     "STATIC-EVAL-03: UI implement must defer Browser and parity lifecycle to the final boundary",
   );
   ensure(
-    /schema-version-5 `implementation-parity\.json` before reviewer work/u.test(review) &&
+    /schema-version-6 model or legacy schema-version-5 `implementation-parity\.json` before reviewer work/u.test(review) &&
       /parity-runner\.mjs verify-run/u.test(review) &&
       /mandatory major findings/u.test(review),
     "STATIC-EVAL-04: review must require current final parity evidence",
@@ -3135,7 +3139,7 @@ async function assertStaticImplementationSkillContracts(root = repositoryRoot) {
   );
 }
 
-async function gradePreparedScenario(fixture, final) {
+async function gradePreparedScenario(fixture, final, commands) {
   await assertConfirmationHandoffSkillContracts(fixture.repo);
   await assertStaticImplementationSkillContracts(fixture.repo);
   await assertFixtureHistoryUnchanged(
@@ -3150,10 +3154,20 @@ async function gradePreparedScenario(fixture, final) {
     current: currentTree,
   });
   try {
-    await fixture.scenario.grade(fixture.repo, final);
+    await fixture.scenario.grade(fixture.repo, final, commands);
   } finally {
     activeFixtureTreeComparisons.delete(fixture.repo);
   }
+}
+
+function codexScenarioConfig(name, repo) {
+  if (name !== "review-ui-evidence-required") return [];
+  return [
+    "--enable", "multi_agent_v2",
+    "-c", "agents.enabled=true",
+    "-c", `agents.independent_reviewer.config_file=${JSON.stringify(path.join(repo, ".codex/agents/independent_reviewer.toml"))}`,
+    "-c", 'agents.independent_reviewer.description="Read-only independent reviewer for the isolated evaluation fixture."',
+  ];
 }
 
 async function executeScenario(name, { keepOnFailure = false } = {}) {
@@ -3161,12 +3175,14 @@ async function executeScenario(name, { keepOnFailure = false } = {}) {
   const fixture = await prepareScenario(name);
   let succeeded = false;
   try {
-    await run(
+    const execution = await run(
       "codex",
       [
         "exec",
         "--ephemeral",
+        ...(name.startsWith("workflow-") && !name.startsWith("workflow-performance-") ? ["--json"] : []),
         "--ignore-user-config",
+        ...codexScenarioConfig(name, fixture.repo),
         "--sandbox",
         "workspace-write",
         "--skip-git-repo-check",
@@ -3182,12 +3198,17 @@ async function executeScenario(name, { keepOnFailure = false } = {}) {
         cwd: fixture.repo,
         env: codexEnvironment(),
         containmentRoot: fixture.fixtureRoot,
+        preserveBoundedOutput: name.startsWith("workflow-") && !name.startsWith("workflow-performance-"),
       },
     );
+    if (keepOnFailure && name.startsWith("workflow-") && !name.startsWith("workflow-performance-")) {
+      const commandEvents = execution.stdout.split("\n").filter(Boolean).map(line => JSON.parse(line)).filter(event => event.type === "item.completed" && event.item?.type === "command_execution" && event.item.command.includes("workflow-fixture.mjs")).map(event => ({ command: event.item.command, exitCode: event.item.exit_code, output: event.item.aggregated_output }));
+      await writeFile(path.join(fixture.fixtureRoot, "workflow-command-events.json"), JSON.stringify(commandEvents), { flag: "wx", mode: 0o600 });
+    }
     const final = (await exists(fixture.finalPath))
       ? await readBoundedRegularFile(fixture.finalPath, defaultMaxOutputBytes)
       : "";
-    await gradePreparedScenario(fixture, final);
+    await gradePreparedScenario(fixture, final, name.startsWith("workflow-") && !name.startsWith("workflow-performance-") ? extractWorkflowCommands(execution.stdout) : undefined);
     succeeded = true;
     process.stdout.write(`PASS ${name}\n`);
     return { name, status: "pass", durationMs: Date.now() - startedAt };
@@ -3481,6 +3502,7 @@ export {
   assertConfirmationHandoffSkillContracts,
   assertStaticImplementationSkillContracts,
   codexEnvironment,
+  codexScenarioConfig,
   executeScenario,
   executeSelectedScenarios,
   failedScenariosFromManifest,

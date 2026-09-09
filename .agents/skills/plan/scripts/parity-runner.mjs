@@ -161,7 +161,12 @@ async function loadParityDefinition(requestedDirectory, requestedRoot = reposito
   } catch {
     throw new Error("parity-spec.json must contain valid JSON");
   }
-  validateParitySpec(spec, contract);
+  let model;
+  if (spec.version === 5 || contract.version === 3) {
+    const { loadVerificationModel } = await import("./parity-model-files.mjs");
+    model = await loadVerificationModel(requestedDirectory, root);
+    validateParitySpec(spec, contract, model.requirements);
+  } else validateParitySpec(spec, contract);
   const afterRevision = await prototypeRevisionInRepository(requestedDirectory, root);
   ensure(beforeRevision === afterRevision, "prototype changed while loading parity definition");
   return {
@@ -171,6 +176,7 @@ async function loadParityDefinition(requestedDirectory, requestedRoot = reposito
     spec,
     prototypeRevision: afterRevision,
     validationProfileDigest: sha256(specText),
+    ...(model ? { requirements: model.requirements, sourceDigests: model.sourceDigests, sourceModes: model.sourceModes, compilerDigest: model.compilerDigest } : {}),
   };
 }
 
@@ -245,7 +251,7 @@ function mentionsCountOrIds(value, count, ids) {
   return ids.every((id) => value.includes(id));
 }
 
-function validateGoalContract({ goalText, slug, prototypeRevision, contract, spec }) {
+function validateGoalContract({ goalText, slug, prototypeRevision, contract, spec, requirements }) {
   const actualHeadings = goalText.match(/^# .+$/gmu) ?? [];
   ensure(
     stableStringify(actualHeadings) === stableStringify(goalHeadings),
@@ -259,7 +265,7 @@ function validateGoalContract({ goalText, slug, prototypeRevision, contract, spe
     "validation profile",
     "prototype revision",
     "comparison targets",
-    "parity matrix",
+    ...(contract.version === 3 ? [] : ["parity matrix"]),
   ]) {
     ensure(fields.has(field), `goal.md UI契約 is missing ${field}`);
   }
@@ -267,8 +273,8 @@ function validateGoalContract({ goalText, slug, prototypeRevision, contract, spe
   const approval = normalizeGoalValue(fields.get("approval contract"));
   const profile = normalizeGoalValue(fields.get("validation profile"));
   ensure(
-    approval.includes(`plans/${slug}/prototype/ui-contract.json`) && new RegExp(`version\\s*${contract.version}\\b`, "iu").test(approval),
-    `goal.md approval contract must reference ui-contract.json version ${contract.version}`,
+    approval.includes(`plans/${slug}/prototype/ui-contract.json`) && new RegExp(`version\\s*${contract.version}(?:\\D|$)`, "iu").test(approval),
+    "goal.md approval contract must reference the current ui-contract.json version",
   );
   ensure(
     profile.includes(`plans/${slug}/prototype/parity-spec.json`) && new RegExp(`version\\s*${spec.version}`, "iu").test(profile),
@@ -286,6 +292,7 @@ function validateGoalContract({ goalText, slug, prototypeRevision, contract, spe
     ),
     "goal.md comparison targets do not match ui-contract.json",
   );
+  if (contract.version !== 3) {
   ensure(
     mentionsCountOrIds(
       normalizeGoalValue(fields.get("parity matrix")),
@@ -294,12 +301,25 @@ function validateGoalContract({ goalText, slug, prototypeRevision, contract, spe
     ),
     "goal.md parity matrix count does not match ui-contract.json",
   );
+  }
   const implementation = markdownSection(goalText, "# 実装方針");
   ensure(
     !/^\s*(?:[-*]\s*)?(?:`{1,3})?(?:node|npx|npm\s+exec)\s+[^\n`]*build-prototype-css\.mjs/imu.test(implementation) &&
       !/`build-prototype-css\.mjs`\s*を\s*(?:再)?実行/u.test(implementation),
     "goal.md must not instruct implement to rebuild an approved prototype",
   );
+  if (contract.version === 3) {
+    ensure(spec.version === 5 && Array.isArray(requirements?.requirements), "Model goal requires its authoritative requirements bundle");
+    const closure = markdownSection(goalText, "## 要件クロージャ");
+    const ids = [...new Set([...closure.matchAll(/\bREQ-[A-Za-z0-9-]+\b/gu)].map(match => match[0]))].sort();
+    ensure(stableStringify(ids) === stableStringify([...requirements.requirements].sort()), "Model goal requirement IDs differ from its authoritative bundle");
+    const userChecks = markdownSection(goalText, "## ユーザー動作確認").split("\n").filter(line => /^- \[ \] /u.test(line));
+    const checkIds = userChecks.map(line => /UI-CHECK-[0-9]{2,}/u.exec(line)?.[0]);
+    ensure(userChecks.length > 0 && checkIds.every(Boolean) && new Set(checkIds).size === checkIds.length, "Model UI goal needs stable unchecked user checks");
+    for (const check of userChecks) for (const field of ["対象", "前提", "操作", "期待結果"]) ensure(new RegExp(`${field}:\\s*[^;；\\n]+`, "u").test(check), `Model user check lacks ${field}`);
+    for (const target of contract.comparisonTargets) ensure(userChecks.some(check => check.includes(target.route) || check.includes(target.id)), "Model user checks omit a target");
+    return { status: "pass", requirementRows, userCheckCount: userChecks.length };
+  }
   ensure(spec.version >= 3, "preflight requires parity-spec.json version 3");
   if (spec.version === 4) {
     const closure = markdownSection(goalText, "## 要件クロージャ");
@@ -354,6 +374,14 @@ async function createPreflightSummary({
   repositoryRootPath = repositoryRoot,
 }) {
   ensure(context === "plan" || context === "implement", "--context must be plan or implement");
+  if (definition.spec.version === 5) {
+    const { modelPreflight, selectModelSmoke } = await import("./parity-model-execution.mjs");
+    const result = await modelPreflight({ contract: definition.contract, profile: definition.spec, requirements: definition.requirements, sourceDigests: definition.sourceDigests, sourceModes: definition.sourceModes, compilerDigest: definition.compilerDigest }, { context });
+    const goalText = await readFile(path.join(repositoryRootPath, "plans", definition.slug, "goal.md"), "utf8");
+    const goalContract = validateGoalContract({ goalText, slug: definition.slug, prototypeRevision: definition.prototypeRevision, contract: definition.contract, spec: definition.spec, requirements: definition.requirements });
+    const selection = context === "plan" ? selectModelSmoke(result.compiled, { targetIds: changedTargetIds, stateIds: changedStates }) : null;
+    return { schemaVersion: 1, status: "pass", prototypeRevision: definition.prototypeRevision, validationProfileDigest: definition.validationProfileDigest, semanticDigest: result.compiled.semanticDigest, goalContract, selection, estimate: result.estimate };
+  }
   const goalText = await readFile(path.join(repositoryRootPath, "plans", definition.slug, "goal.md"), "utf8");
   const goalContract = validateGoalContract({
     goalText,
@@ -425,14 +453,19 @@ function createApprovalEvidence({
   prototypeRevision,
   validationProfileDigest,
   invokedAt = new Date().toISOString(),
+  semanticDigest,
+  allowExplanatoryRestatement = false,
 }) {
   requireNonEmptyString(runId, "runId");
+  ensure(typeof allowExplanatoryRestatement === "boolean" && (!allowExplanatoryRestatement || semanticDigest), "Explanatory policy requires an explicit model approval");
+  if (semanticDigest) requireSha256(semanticDigest, "semanticDigest");
   requireSha256(goalSha256, "goalSha256");
   requireSha256(prototypeRevision, "prototypeRevision");
   requireSha256(validationProfileDigest, "validationProfileDigest");
   ensure(!Number.isNaN(Date.parse(invokedAt)), "invokedAt must be an ISO-compatible timestamp");
   return {
-    schemaVersion: 1,
+    schemaVersion: semanticDigest ? 2 : 1,
+    ...(semanticDigest ? { semanticDigest, ...(allowExplanatoryRestatement ? { allowExplanatoryRestatement: true } : {}) } : {}),
     basis: "explicit-$implement-invocation",
     runId,
     invokedAt,
@@ -453,10 +486,15 @@ function validateApprovalEvidence(evidence) {
       "goalSha256",
       "prototypeRevision",
       "validationProfileDigest",
+      ...(evidence?.schemaVersion === 2 ? ["semanticDigest", ...(Object.hasOwn(evidence, "allowExplanatoryRestatement") ? ["allowExplanatoryRestatement"] : [])] : []),
     ],
     "approval evidence",
   );
-  ensure(evidence.schemaVersion === 1, "approval evidence schemaVersion must be 1");
+  ensure([1, 2].includes(evidence.schemaVersion), "approval evidence schemaVersion must be 1 or 2");
+  if (evidence.schemaVersion === 2) {
+    requireSha256(evidence.semanticDigest, "approval semanticDigest");
+    if (Object.hasOwn(evidence, "allowExplanatoryRestatement")) ensure(evidence.allowExplanatoryRestatement === true, "Invalid explanatory inheritance policy");
+  }
   ensure(evidence.basis === "explicit-$implement-invocation", "approval evidence basis is invalid");
   requireNonEmptyString(evidence.runId, "approval evidence runId");
   ensure(!Number.isNaN(Date.parse(evidence.invokedAt)), "approval evidence invokedAt must be a timestamp");
@@ -737,7 +775,8 @@ function validateRowEvidence(rowEvidence, manifestRow, contract, expectedProbes,
   ensure(rowEvidence.status === (hasFailure ? "fail" : "pass"), `${label} status does not match its probe results`);
 }
 
-function validateParityEvidence(evidence, contract, spec) {
+function validateParityEvidence(evidence, contract, spec, requirements, sourceDigests, compilerDigest, sourceModes) {
+  if (evidence?.schemaVersion === 6 || spec?.version === 5) return import("./parity-model-execution.mjs").then(({ validateModelEvidence }) => validateModelEvidence({ contract, profile: spec, requirements, sourceDigests, compilerDigest, sourceModes }, evidence));
   if (spec) validateParitySpec(spec, contract);
   assertPersistedJsonSecretFree(evidence, "parity evidence");
   ensure(isPlainObject(evidence), "parity evidence must be an object");
@@ -999,7 +1038,14 @@ function validateParityEvidence(evidence, contract, spec) {
   return evidence;
 }
 
-function validateEvidenceBundle({ approval, preEdit, implementation, contract, spec, current }) {
+function validateEvidenceBundle({ approval, preEdit, implementation, contract, spec, current, requirements, sourceDigests, compilerDigest, sourceModes }) {
+  if (implementation?.schemaVersion === 6) {
+    validateApprovalEvidence(approval);
+    ensure(approval.semanticDigest === implementation.semanticDigest, "Model approval semantic binding differs");
+    ensure(preEdit === undefined, "Model completion must not include pre-edit evidence");
+    for (const field of ["goalSha256", "prototypeRevision", "validationProfileDigest"]) ensure(approval[field] === current[field], `Model approval ${field} differs`);
+    return validateParityEvidence(implementation, contract, spec, requirements, sourceDigests, compilerDigest, sourceModes);
+  }
   validateApprovalEvidence(approval);
   validateParityEvidence(implementation, contract, spec);
   ensure(implementation.phase === "final", "implementation evidence has the wrong phase");
@@ -1083,6 +1129,7 @@ function parseCliArguments(argv) {
   const [command, target, ...rest] = argv;
   ensure(
     [
+      "estimate",
       "validate",
       "preflight",
       "select",
@@ -1095,6 +1142,7 @@ function parseCliArguments(argv) {
       "invalidate-run",
       "finalize-run",
       "verify-run",
+      "verify-stage",
       "cleanup-run",
       "abort-run",
     ].includes(command),
@@ -1126,16 +1174,22 @@ function parseCliArguments(argv) {
   };
   for (let index = 0; index < rest.length; index += 1) {
     const argument = rest[index];
+    if (argument === "--legacy-analysis") { options.legacyAnalysis = true; continue; }
     const value = rest[index + 1];
     ensure(value, `${argument} requires a value`);
     if (argument === "--phase") options.phase = value;
     else if (argument === "--context") options.context = value;
+    else if (argument === "--format") { ensure(value === "json", "Only JSON estimate output is supported"); options.format = value; }
+    else if (argument === "--baseline-report") options.baselineReport = value;
+    else if (argument === "--changed-source") (options.changedSources ??= []).push(value);
     else if (argument === "--target") options.changedTargetIds.push(value);
     else if (argument === "--state") options.changedStates.push(value);
     else if (argument === "--viewport") options.changedViewports.push(value);
     else if (argument === "--matrix-scope") options.matrixScope = value;
     else if (argument === "--execution-context") options.executionContext = value;
     else if (argument === "--run-id") options.runId = value;
+    else if (argument === "--unit") (options.unitIds ??= []).push(value);
+    else if (argument === "--import-stage") (options.importStages ??= []).push(value);
     else if (argument === "--batch-id") options.batchId = value;
     else if (argument === "--production-url") options.productionUrl = value;
     else if (argument === "--prototype-url") options.prototypeUrl = value;
@@ -1260,6 +1314,10 @@ async function readOptionalJsonRegular(target, label) {
 }
 
 async function verifyCurrentRun({ target, definition, options, repositoryRootPath = repositoryRoot }) {
+  if (definition.spec.version === 5) {
+    const { verifyModelRun } = await import("./parity-model-workspace.mjs");
+    return verifyModelRun({ repositoryRootPath, slug: planSlugFromTarget(target), runId: options.runId });
+  }
   const slug = planSlugFromTarget(target);
   ensure(options.runId, "--run-id is required");
   const root = await realpath(repositoryRootPath);
@@ -1328,6 +1386,14 @@ async function runCli({
 } = {}) {
   const root = await realpath(repositoryRootPath);
   const { command, target, options } = parseCliArguments(argv);
+  if (command === "estimate") {
+    const { estimateFromFiles } = await import("./parity-model-files.mjs");
+    ensure(options.phase === "final", "estimate requires --phase final");
+    const report = await estimateFromFiles({ target, repositoryRoot: root, context: options.context ?? "plan", baselineReport: options.baselineReport, changedSources: options.changedSources ?? [], legacyAnalysis: options.legacyAnalysis ?? false });
+    stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    if (report.status && report.status !== "complete") process.exitCode = 1;
+    return report;
+  }
   if (command === "abort-run" || command === "cleanup-run") {
     planSlugFromTarget(target);
     ensure(options.runId, "--run-id is required");
@@ -1419,10 +1485,12 @@ async function runCli({
       options,
       repositoryRootPath: root,
     });
-    ensure(definition.spec.version === 4, "new runs require parity-spec.json version 4");
+    ensure([4, 5].includes(definition.spec.version), "new runs require parity-spec.json version 4 or 5");
     const output = await prepareRunWorkspace({
       repositoryRootPath: root,
       slug,
+      unitIds: options.unitIds ?? null,
+      importStages: options.importStages ?? [],
       runId: options.runId,
       definition,
       approval,
@@ -1462,6 +1530,12 @@ async function runCli({
     stdout.write(`${JSON.stringify(output, null, 2)}\n`);
     return;
   }
+  if (command === "verify-stage") {
+    ensure(definition.spec.version === 5, "Stage verification requires profile 5");
+    const { verifyModelStage } = await import("./parity-model-workspace.mjs");
+    const result = await verifyModelStage({ repositoryRootPath: root, slug: planSlugFromTarget(target), runId: options.runId });
+    stdout.write(`${JSON.stringify(result, null, 2)}\n`); return result;
+  }
   if (command === "verify-run") {
     stdout.write(`${JSON.stringify(await verifyCurrentRun({
       target,
@@ -1470,6 +1544,15 @@ async function runCli({
       repositoryRootPath: root,
     }), null, 2)}\n`);
     return;
+  }
+  if (definition.spec.version === 5) {
+    const { modelPreflight } = await import("./parity-model-execution.mjs");
+    const result = await modelPreflight({ contract: definition.contract, profile: definition.spec, requirements: definition.requirements, sourceDigests: definition.sourceDigests, sourceModes: definition.sourceModes, compilerDigest: definition.compilerDigest });
+    const { selectModelStage } = await import("./parity-model-execution.mjs");
+    const stage = options.unitIds ? selectModelStage(result.compiled, options.unitIds) : null;
+    const output = { prototypeRevision: definition.prototypeRevision, validationProfileDigest: definition.validationProfileDigest, caseCount: stage?.caseIds.length ?? result.compiled.cases.length, ...(command === "select" ? { caseIds: stage?.caseIds ?? result.compiled.cases.map(({ id }) => id), ...(stage ? { stage } : {}) } : {}) };
+    stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+    return output;
   }
   const output = {
     prototypeRevision: definition.prototypeRevision,

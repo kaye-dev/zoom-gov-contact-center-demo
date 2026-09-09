@@ -1,4 +1,6 @@
-import { validateFidelityProfile, supplementInteractionRows, compareFidelityProbe, normalizeExpectedProbeValue, interactionCoverage } from "./parity-fidelity.mjs";
+import { validateVerificationSchema } from "./parity-verification-model.mjs";
+import { classifyBrowserError } from "./browser-api-bootstrap.mjs";
+import { validateFidelityProfile, supplementInteractionRows, compareFidelityProbe, interactionCoverage, normalizeExpectedProbeValue } from "./parity-fidelity.mjs";
 
 const phases = new Set(["smoke", "pre-edit", "affected", "final"]);
 const fullMatrixPhases = new Set(["pre-edit", "final"]);
@@ -465,7 +467,11 @@ function validateCoverageProfile(spec, contract, { probeById, probeIdsByRow, set
   }
 }
 
-function validateParitySpec(spec, contract) {
+function validateParitySpec(spec, contract, requirements) {
+  if (spec?.version === 5 || contract?.version === 3) {
+    validateVerificationSchema(contract, spec, requirements);
+    return spec;
+  }
   ensure(isPlainObject(spec), "parity-spec.json must be an object");
   ensure([1, 2, 3, 4].includes(spec.version), "parity-spec.json version must be 1, 2, or 3");
   requireExactKeys(
@@ -1291,7 +1297,8 @@ class BrowserParityRunner {
       try {
         const entries = await this.call("performanceEntries", tabId);
         if (Array.isArray(entries)) networkSource = "performance-resource-timing";
-      } catch {
+      } catch (error) {
+        if (["documentation", "permission"].includes(classifyBrowserError(error).category)) throw error;
         networkSource = undefined;
       }
     }
@@ -1299,7 +1306,8 @@ class BrowserParityRunner {
       try {
         const entries = await this.call("networkEntries", tabId);
         if (Array.isArray(entries)) networkSource = "browser-network-log";
-      } catch {
+      } catch (error) {
+        if (["documentation", "permission"].includes(classifyBrowserError(error).category)) throw error;
         networkSource = undefined;
       }
     }
@@ -1848,7 +1856,13 @@ class BrowserParityRunner {
     return evidence;
   }
 
+  async runModel(input) {
+    const { executeVerificationPlan } = await import("./parity-model-execution.mjs");
+    return executeVerificationPlan(this, input);
+  }
+
   async run(input) {
+    if (input.modelInput || input.definition?.spec?.version === 5) return this.runModel(input);
     this.canary = undefined;
     this.surfaceContexts = new Map();
     this.surfaceTeardowns = new Map();
@@ -1877,6 +1891,10 @@ class BrowserParityRunner {
         if (failure?.evidence?.capabilities) failure.evidence.capabilities.cleanup = cleanup;
         if (failure?.evidence?.schemaVersion >= 4) failure.evidence.cleanup = cleanup;
       } catch (error) {
+        const accessFailure = [failure, error].find((candidate) =>
+          ["documentation", "permission"].includes(classifyBrowserError(candidate).category));
+        if (accessFailure) throw new ParityRunError(accessFailure.code, accessFailure.message,
+          { ...accessFailure.evidence, cleanup: { status: "fail", operation: "cleanup" } });
         throw new ParityRunError(
           "PARITY_CLEANUP_FAILED",
           "Browser cleanup did not complete",

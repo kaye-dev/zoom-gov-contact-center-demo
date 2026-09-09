@@ -20,6 +20,7 @@ type EvaluatorModule = {
   assertConfirmationHandoffSkillContracts(root?: string): Promise<void>;
   assertStaticImplementationSkillContracts(root?: string): Promise<void>;
   codexEnvironment(): Record<string, string>;
+  codexScenarioConfig(name: string, repo: string): string[];
   executeScenario(name: string): Promise<{ name: string; status: string; durationMs: number }>;
   failedScenariosFromManifest(manifest: unknown): string[];
   fixtureGitEnvironment(): Record<string, string>;
@@ -126,7 +127,7 @@ async function assertRetryableFailure(
   assert.doesNotMatch(`${failure.stdout}\n${failure.stderr}\n${manifestText}`, new RegExp(privateMarker, "u"));
 }
 
-test("plan skill behavioral evalは実promptの13 scenarioを公開する", async () => {
+test("plan skill behavioral evalは実promptの35 scenarioを公開する", async () => {
   const { stdout } = await execFileAsync(process.execPath, [evaluator, "--list"], { cwd: root });
   assert.deepEqual(stdout.trim().split("\n"), [
     "plan-canonical",
@@ -142,6 +143,7 @@ test("plan skill behavioral evalは実promptの13 scenarioを公開する", asyn
     "workflow-performance-audit-bottleneck",
     "workflow-performance-audit-no-bottleneck",
     "workflow-performance-audit-insufficient-data",
+    ...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).workflowScenarioNames,
   ]);
 });
 
@@ -205,6 +207,7 @@ test("plan skill behavioral evalはsymlink経由のCLI起動でもmainを実行�
     "workflow-performance-audit-bottleneck",
     "workflow-performance-audit-no-bottleneck",
     "workflow-performance-audit-insufficient-data",
+    ...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).workflowScenarioNames,
   ]);
 });
 
@@ -215,7 +218,7 @@ test("forward evalは変更pathから関連scenarioだけを選び、共通契�
   }
   assert.deepEqual(
     evaluatorModule.selectAffectedScenarios([".agents/skills/review/references/review-contract.md"]),
-    ["review-ui-evidence-required"],
+    ["review-ui-evidence-required", ...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).workflowScenarioNames],
   );
   assert.deepEqual(
     evaluatorModule.selectAffectedScenarios(["app/styles/ui-foundation.css"]),
@@ -335,7 +338,7 @@ test("plan skill behavioral evalのartifact graderはpositive/negative control�
     cwd: root,
     timeout: 180_000,
   });
-  assert.match(stdout, /self-test passed: 13 scenarios/);
+  assert.match(stdout, /self-test passed: 35 scenarios/);
 });
 
 test("version 3のUI eval fixtureは各rowでcontract IDと同名のrequired probeを対応する", async (context) => {
@@ -421,6 +424,35 @@ test("eval fixtureは外部MCPなしで必要なcustom agent定義を読み込�
     assert.match(agent, new RegExp(`^name = "${name}"$`, "m"));
     assert.match(agent, /^sandbox_mode = "read-only"$/m);
   }
+});
+
+test("review evalは公開APIのrevision確認を認識し不一致digestを拒否する", async (context) => {
+  const evaluatorModule = await evaluatorModulePromise;
+  const fixture = await evaluatorModule.prepareScenario("review-ui-evidence-required");
+  context.after(() => rm(fixture.fixtureRoot, { recursive: true, force: true }));
+  await fixture.scenario.simulate(fixture.repo);
+  const reportPath = path.join(fixture.repo, "plans/review-ui-gate/review/review-data.json");
+  const report = JSON.parse(await readFile(reportPath, "utf8"));
+  const preflight = report.validations.find((entry: { command: string }) => entry.command.includes(" preflight "));
+  const revision = preflight.summary.match(/sha256:[a-f0-9]{64}/)[0];
+  preflight.status = "failed";
+  preflight.summary = "preflight requires a UI goal";
+  const revisionAudit = { command: "node --input-type=module (loadParityDefinition)", status: "passed", summary: revision };
+  report.validations.push(revisionAudit);
+  await writeFile(reportPath, JSON.stringify(report));
+  await evaluatorModule.gradePreparedScenario(fixture, "plans/review-ui-gate/review/ report; Browser unverified");
+  revisionAudit.summary = `sha256:${"0".repeat(64)}`;
+  await writeFile(reportPath, JSON.stringify(report));
+  await assert.rejects(evaluatorModule.gradePreparedScenario(fixture, "plans/review-ui-gate/review/"), /trusted static preflight/);
+});
+
+test("review evalだけがfixtureのcustom reviewerをCLIへ明示しsandboxとmodelを上書きしない", async () => {
+  const { codexScenarioConfig } = await evaluatorModulePromise;
+  assert.deepEqual(codexScenarioConfig("plan-canonical", root), []);
+  const args = codexScenarioConfig("review-ui-evidence-required", root);
+  assert.deepEqual(args.slice(0, 4), ["--enable", "multi_agent_v2", "-c", "agents.enabled=true"]);
+  assert.ok(args.includes(`agents.independent_reviewer.config_file=${JSON.stringify(path.join(root, ".codex/agents/independent_reviewer.toml"))}`));
+  assert.doesNotMatch(args.join(" "), /sandbox|approval_policy|model=|model_reasoning_effort=/);
 });
 
 test("eval runnerは環境と出力量を制限し通常のtimeout・子process treeをcleanupする", async (context) => {
@@ -864,4 +896,18 @@ fs.writeFileSync(process.argv[index + 1], "fake final output\\n");
   } finally {
     await rm(trustedHelperFixture.fixtureRoot, { recursive: true, force: true });
   }
+});
+
+
+test("FLOW-03/SCALE-EVAL-01: workflow scenarios bind actual tool history and affected paths", async () => {
+  const workflow = await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href);
+  assert.equal(workflow.workflowScenarioNames.length, 22);
+  const evaluatorModule = await evaluatorModulePromise;
+  for (const name of workflow.workflowScenarioNames) {
+    assert.ok(evaluatorModule.scenarios[name]);
+    assert.ok(evaluatorModule.selectAffectedScenarios(["scripts/goal-clarification.mjs"]).includes(name));
+  }
+  assert.deepEqual(workflow.extractWorkflowCommands(JSON.stringify({ type: "item.completed", item: { type: "command_execution", command: "node workflow-fixture.mjs estimate", exit_code: 0 } })), ["node workflow-fixture.mjs estimate"]);
+  assert.throws(() => workflow.extractWorkflowCommands(JSON.stringify({ type: "item.completed", item: { type: "command_execution", command: "node workflow-fixture.mjs browser", exit_code: 1 } })));
+  assert.throws(() => workflow.extractWorkflowCommands("truncated-json"));
 });

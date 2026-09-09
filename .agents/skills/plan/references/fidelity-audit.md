@@ -6,7 +6,7 @@ Use this contract for new UI plans, normal UI implementation, and current review
 
 Follow [NIST's DOs and DON'Ts](https://csrc.nist.gov/Projects/automated-combinatorial-testing-for-software/software-testing-methodology/dos-and-don-ts-of-testing): derive factors from requirements, include abstract properties, choose equivalence classes and boundaries, and choose an appropriate interaction strength rather than assuming pairwise is sufficient. Four to six values is a modelling guideline, not permission to remove required states or known reproduction cases.
 
-Current axis coverage is not a pairwise guarantee. Keep the complete feasible target-state Cartesian UI contract v2 and stable row IDs; preserve already-approved v1 compatibility. Start from existing axis/risk/anchor coverage plus declared runtime/visual rows. Supplement feasible t-way tuples greedily by greatest missing-tuple coverage, resolving ties by case ID lexical order. Report actual counts, not a fixed 63-case limit or a mathematical minimum. Full UI Cartesian runs remain independent explicit/release/CI/scheduled tasks.
+Legacy matrix axis coverage is not a pairwise guarantee. Keep its complete Cartesian UI contract v1 and stable row IDs. Start from existing axis/risk/anchor coverage plus declared runtime/visual rows. Supplement feasible t-way tuples greedily by greatest missing-tuple coverage, resolving ties by case ID lexical order. Report actual counts, not a fixed 63-case limit or a mathematical minimum. Full UI Cartesian runs remain independent explicit/release/CI/scheduled tasks.
 
 Profile v4 retains every v3 field and adds exactly one `fidelity` object:
 
@@ -47,12 +47,12 @@ Smoke evidence uses schema v5 with `audit: null` and all audit statuses `not-run
 
 `automationCoverageStatus=pass` alone is insufficient. Human approval and full parity are independent optional states; they may remain pending/not-run. Do not relabel Codex visual inspection as human approval or tick the optional user's checklist. Report requirement and Codex visual completion explicitly so a human-pending label does not imply required work remains.
 
-Historical profile v1–3 and evidence v1–4 remain read-only compatibility inputs. New current plans use profile v4; new current final runs and shipping require schema v5. Never rewrite an old result as newly verified. Synchronize writers, readers, skills, references, templates, fixtures and behavioral evaluations together. Product APIs, DB schema, and the two-stage archive/finalize shipping protocol are unchanged.
+Historical profile v1–3 and evidence v1–4 remain read-only compatibility inputs. New current plans use contract v3/profile v5; final runs and shipping require schema v6. Existing matrix plans keep profile v4/schema v5. Never rewrite an old result as newly verified. Synchronize writers, readers, skills, references, templates, fixtures and behavioral evaluations together. Product APIs, DB schema, and the two-stage archive/finalize shipping protocol are unchanged.
 
 
 ## Fresh-task handoff after CDP failure
 
-After terminal `PARITY_CDP_CAPABILITY_UNAVAILABLE` or `PARITY_DPR_OVERRIDE_UNAVAILABLE`, preserve valid implementation/checkpoints, clean up only owned resources, and recommend one fresh Codex task to revalidate the same scope. Failure in one task does not establish globally disabled CDP; success elsewhere does not prove the cause or complete the remaining checks. Distinguish advertised/acquired capability, command rejection, supported Browser API path, origin, arguments and timeout. An explicit permission denial must be resolved through the stated permission flow; a new task is not a way to bypass it. Do not recommend session changes for application assertion failures or stale source contracts.
+First complete [Browser documentation bootstrap](browser-api-bootstrap.md). Recover `BROWSER_DOCUMENTATION_REQUIRED` in the same task through the common canary and guarded checkpoint API; never use a fresh task to bypass documentation or permission. After bootstrap, if terminal `PARITY_CDP_CAPABILITY_UNAVAILABLE` or `PARITY_DPR_OVERRIDE_UNAVAILABLE` persists, preserve valid implementation/checkpoints, clean up only owned resources, and recommend one fresh Codex task to revalidate the same scope. Failure in one task does not establish globally disabled CDP; success elsewhere does not prove the cause or complete the remaining checks. Distinguish advertised/acquired capability, command rejection, supported Browser API path, origin, arguments and timeout. An explicit permission denial must be resolved through the stated permission flow; a new task is not a way to bypass it. Do not recommend session changes for application assertion failures or stale source contracts.
 
 Always return a fenced, copyable continuation prompt populated from the current task: absolute checkout and goal/verification paths, source task link if known, stable failure code and observed conditions, API path, run ID/checkpoint (or explicitly absent), successful checks with their digests, remaining cases/expected outcomes, and cleanup status. Never leave known values as placeholders, include credentials, create/send a new task automatically, or claim a fresh session is guaranteed to work. Do not keep cycling through new tasks if the same failure recurs; retain diagnostics and report the unresolved capability/permission/API issue.
 
@@ -74,3 +74,9 @@ Use this shape, filling the actual values and remaining work:
 再失敗したら原因を断定せず診断と未完了範囲を記録してください。別Browser、権限回避、CLIだけの代替完了はしないでください。
 検証記録を更新し、今回のタブ・server・viewport/DPRをcleanupしてください。既存資源と無関係な変更を保全し、commit/push/PRは行わないでください。
 ```
+
+## Model evidence 6 の監査
+
+contract 3/profile 5 では `parity-model-execution.mjs` と public `verify-run` で元bundleから必要集合を再計算する。親REQのpass、画像の存在、CLIの成功codeだけで子観点を閉じない。test case、能力、入力・期待結果・環境とsource依存が一致するcurrent結果だけを採用する。currentな証明のない代替は元obligationのfallbackを必要とする。
+
+画像はcase/surface/checkpoint/phase/conditionsのidentityを照合し、両surfaceを閲覧してcriterion別に判定する。サイズの一致と内容の倍率一致は別に確認する。古い画像、別条件の画像、未閲覧、空の判定ではfinalizeしない。UI接続・focus・keyboard・layoutをsource-text/SSRへ代用しない。実環境で未対応と判明した操作はそのcodeと未完了scopeを保持し、別入力方式へ黙って置き換えない。

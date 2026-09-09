@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import path from "node:path";
-import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
 
 const load = (name: string) => import(pathToFileURL(path.resolve(import.meta.dirname, name)).href);
@@ -176,44 +175,43 @@ test("REQ-07/09: runner executes normal-route actions and schema v5 audit is ind
   assert.throws(() => facade.validateParityEvidence(promotedSmoke, contract, spec));
 });
 
-test("literal expectations match compact Browser text and attributes in execution and evidence replay", async () => {
-  const [core, fidelity, fixtures] = await modules;
-  const syncHash = (value: string) => `sha256:${createHash("sha256").update(value).digest("hex")}`;
-  for (const [kind, expected, normalized] of [
-    ["attribute", "image/svg+xml", "image/svg+xml"],
-    ["text", "  保存済み\n  完了  ", "保存済み 完了"],
-  ]) {
-    const { spec } = fixtures.createFidelityFixture();
-    const probe = { id: "copy", kind, options: { name: "type", normalizeWhitespace: true } };
-    const rule = spec.fidelity.phaseComparisons.find((item: {probeId:string}) => item.probeId === "copy");
-    rule.final = "expected"; rule.expected = { production: expected, prototype: expected };
-    const domain = kind === "attribute" ? "parity:attribute:v1\0type\0" : "parity:text:v1\0";
-    const observed = { value: { sha256: syncHash(domain + normalized), bytes: Buffer.byteLength(normalized) } };
-    const run = await fidelity.compareFidelityProbe(probe, observed, observed, spec, "final", core.compareProbe, core.sha256Digest);
-    const replay = fidelity.compareFidelityProbe(probe, observed, observed, spec, "final", core.compareProbe, syncHash);
-    assert.equal(run.status, "pass");
-    assert.deepEqual(run, replay);
-    assert.equal(JSON.stringify(run).includes(expected), false);
-    const wrong = { value: { ...observed.value, bytes: observed.value.bytes + 1 } };
-    assert.equal((await fidelity.compareFidelityProbe(probe, wrong, observed, spec, "final", core.compareProbe, core.sha256Digest)).status, "fail");
-    rule.expected.production = "different";
-    assert.equal(fidelity.compareFidelityProbe(probe, observed, observed, spec, "final", core.compareProbe, syncHash).status, "fail");
+test("ART-02/03: model images require current per-criterion viewing and cannot cross conditions", async () => {
+  const [core] = await modules;
+  const { verificationFixture, rebindFixture, modelAdapterSpy } = await load("fixtures/parity-verification-model.mjs");
+  const { modelDigest } = await load("../.agents/skills/plan/scripts/parity-verification-model.mjs");
+  const { validateModelEvidence } = await load("../.agents/skills/plan/scripts/parity-model-execution.mjs");
+  const input = await verificationFixture({ states: 1 });
+  const obligation = input.profile.obligations[0];
+  obligation.layer = "visual"; obligation.assertion = { kind: "screenshot", selector: "body", pure: true }; obligation.expected = "readable layout"; obligation.artifactRequests = ["screenshot"]; obligation.criterionIds = ["layout", "readability"]; obligation.requiredCapabilities = ["visual"];
+  input.profile.originalCriteria = await Promise.all(["layout", "readability"].map(async (id) => ({ id, text: id, textDigest: await modelDigest(id), requirementIds: obligation.requirementIds, conditions: obligation.when, childObligationIds: [obligation.id] })));
+  await rebindFixture(input);
+  const evidence = await new core.BrowserParityRunner(modelAdapterSpy()).run({ modelInput: input, tabs: { production: "left", prototype: "right" } });
+  assert.equal(evidence.status, "pending-visual");
+  await assert.rejects(validateModelEvidence(input, evidence), { code: "PARITY_REQUIREMENT_GAP" });
+  evidence.visualAudit = evidence.caseResults.filter((item: { obligationIds: string[] }) => item.obligationIds.includes(obligation.id)).flatMap((item: { caseId: string }) => obligation.criterionIds.map((criterionId: string) => ({ caseId: item.caseId, obligationId: obligation.id, criterionId, status: "pass", viewer: "codex", reviewedAt: "2026-09-09T00:00:00Z", artifactDigests: evidence.artifacts.filter((artifact: { caseId: string }) => artifact.caseId === item.caseId).map((artifact: { sha256: string }) => artifact.sha256) })));
+  assert.equal((await validateModelEvidence(input, evidence)).status, "pass");
+  assert.equal(evidence.visualAudit.length, evidence.artifacts.length);
+  for (const field of ["hash", "empty", "checkpoint", "phase", "condition", "criterion"]) {
+    const changed = structuredClone(evidence);
+    if (field === "hash") changed.visualAudit[0].artifactDigests = ["sha256:" + "a".repeat(64)];
+    if (field === "empty") changed.artifacts[0].bytes = 0;
+    if (field === "checkpoint") changed.artifacts[0].identity.checkpointId = "other-time";
+    if (field === "phase") changed.artifacts[0].identity.phase = "smoke";
+    if (field === "condition") changed.artifacts[0].identity.conditionsDigest = "sha256:" + "a".repeat(64);
+    if (field === "criterion") changed.visualAudit.pop();
+    await assert.rejects(validateModelEvidence(input, changed), { code: "PARITY_REQUIREMENT_GAP" });
   }
 });
-
- test("selection cache respects changed inputs and returns current contract rows", async () => {
-  const [, fidelity, fixtures] = await modules;
-  const { contract, spec } = fixtures.createFidelityFixture();
-  const first = fidelity.supplementInteractionRows(contract, spec, []);
-  const cloned = structuredClone(contract);
-  const cached = fidelity.supplementInteractionRows(cloned, structuredClone(spec), []);
-  assert.deepEqual(cached, first);
-  assert.equal(cached[0], cloned.parityMatrix.find((row: {id:string}) => row.id === first[0].id));
-  cached.pop();
-  assert.equal(fidelity.supplementInteractionRows(contract, spec, []).length, first.length);
-  const additional = { ...contract.parityMatrix[0], id: "zz-cache-extra" };
-  contract.parityMatrix.push(additional);
-  assert.ok(fidelity.supplementInteractionRows(contract, spec, [additional]).some((row: {id:string}) => row.id === additional.id));
-  spec.fidelity.visualChecks.push({ ...spec.fidelity.visualChecks[0], rowId: additional.id });
-  assert.ok(fidelity.supplementInteractionRows(contract, spec, []).some((row: {id:string}) => row.id === additional.id));
+test("LAYER-02: command success and SSR/source-text cannot replace a required exact Browser-capable test case", async () => {
+  const { validateLayerResult } = await load("../.agents/skills/plan/scripts/parity-model-execution.mjs");
+  const { modelDigest } = await load("../.agents/skills/plan/scripts/parity-verification-model.mjs");
+  const expected = { assertion: { kind: "focus", selector: "#save", pure: true }, expected: true, requiredCapabilities: ["real-browser-focus"], test: { command: ["node", "--test", "focus.test.ts"], capabilities: ["real-browser-focus"], path: "focus.test.ts", caseId: "focus-save", input: { tenant: "one" }, environment: { fixture: "one" } } };
+  const compiledCase = { layer: "component", reuseKey: "current-key" };
+  const payload = { status: "pass", exitCode: 0, command: expected.test.command, actual: true, layer: "component", path: "focus.test.ts", caseId: "focus-save", input: expected.test.input, environment: expected.test.environment, assertion: expected.assertion, expected: true, reuseKey: "current-key", capabilities: ["SSR", "source-text"] };
+  await assert.rejects(validateLayerResult({ ...payload, digest: await modelDigest(payload) }, expected, compiledCase), { code: "PARITY_REQUIREMENT_GAP" });
+  await assert.rejects(validateLayerResult({ exitCode: 0 }, expected, compiledCase), { code: "PARITY_REQUIREMENT_GAP" });
+  payload.capabilities = ["real-browser-focus"];
+  assert.equal((await validateLayerResult({ ...payload, digest: await modelDigest(payload) }, expected, compiledCase)).status, "pass");
+  payload.caseId = "not-executed-case";
+  await assert.rejects(validateLayerResult({ ...payload, digest: await modelDigest(payload) }, expected, compiledCase), { code: "PARITY_REQUIREMENT_GAP" });
 });

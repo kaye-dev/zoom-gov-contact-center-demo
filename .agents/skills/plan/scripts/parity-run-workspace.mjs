@@ -1,3 +1,5 @@
+import { requireBrowserAdapterRuntime } from "./in-app-browser-parity-adapter.mjs";
+import { requireBrowserDocumentation, classifyBrowserError } from "./browser-api-bootstrap.mjs";
 import { interactionCoverage, validateFidelityAudit } from "./parity-fidelity.mjs";
 import { createHash } from "node:crypto";
 import { constants as fsConstants } from "node:fs";
@@ -57,6 +59,8 @@ const sensitiveValuePatterns = [
   /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/iu,
 ];
 const failureDiagnostics = new Map([
+  ["BROWSER_DOCUMENTATION_REQUIRED", "Browser documentation must be read in the current runtime"],
+  ["BROWSER_PERMISSION_DENIED", "Browser permission was explicitly denied"],
   ["PARITY_ARTIFACT_SINK_UNAVAILABLE", "artifact capture is unavailable"],
   ["PARITY_AUTHORIZATION_PROFILE_REQUIRED", "authorization profile provenance is unavailable"],
   ["PARITY_BATCH_INCOMPLETE", "batch execution is incomplete"],
@@ -126,10 +130,8 @@ function assertSecretFree(value, label = "payload", seen = new Set()) {
       ensure(!sensitiveKeyPattern.test(key), "PARITY_BATCH_INVALID", `${label} contains forbidden key ${key}`);
       if (key === "authorization" || key === "authorizationProfile") {
         ensure(
-          typeof item === "string" &&
-            item.length <= 128 &&
-            item !== "unknown" &&
-            authorizationProfilePattern.test(item),
+          (typeof item === "string" && item.length <= 128 && item !== "unknown" && authorizationProfilePattern.test(item)) ||
+          (key === "authorization" && item && typeof item === "object" && !Array.isArray(item) && Object.keys(item).sort().join(",") === "profile,role,tenant" && Object.values(item).every((value) => typeof value === "string" && value.length <= 128 && value !== "unknown" && authorizationProfilePattern.test(value))),
           "PARITY_BATCH_INVALID",
           `${label}.${key} must contain a sanitized authorization profile name`,
         );
@@ -403,7 +405,7 @@ async function readCheckpoint(runRoot, parentIdentity) {
     limit: maxCheckpointBytes,
     parentIdentity,
   });
-  ensure(value.schemaVersion === coverageWorkspaceSchemaVersion, "PARITY_BATCH_INVALID", "checkpoint schemaVersion is invalid");
+  ensure([coverageWorkspaceSchemaVersion, 3].includes(value.schemaVersion), "PARITY_BATCH_INVALID", "checkpoint schemaVersion is invalid");
   ensure(Array.isArray(value.batches), "PARITY_BATCH_INVALID", "checkpoint batches must be an array");
   return value;
 }
@@ -930,7 +932,13 @@ async function prepareRunWorkspace({
   maxBytes,
   shellCommands = 0,
   validateApproval,
+  unitIds = null,
+  importStages = [],
 }) {
+  if (definition?.spec?.version === 5) {
+    const { prepareModelWorkspace } = await import("./parity-model-workspace.mjs");
+    return prepareModelWorkspace({ repositoryRootPath, slug, runId, definition, approval, current, baseUrls, maxRows, maxBytes, unitIds, importStages });
+  }
   validateIdentifier(slug, "slug", slugPattern);
   validateIdentifier(runId, "runId");
   ensure(typeof validateApproval === "function", "PARITY_BATCH_INVALID", "validateApproval callback is required");
@@ -1052,6 +1060,7 @@ async function nextRunBatch({ repositoryRootPath, runId }) {
     limit: maxManifestBytes,
     parentIdentity: paths.runIdentity,
   });
+  if (manifest.schemaVersion === 3) { const { nextModelBatch } = await import("./parity-model-workspace.mjs"); return nextModelBatch({ repositoryRootPath, runId }); }
   requireCurrentRunOrigins(manifest);
   ensure(manifest.schemaVersion === coverageWorkspaceSchemaVersion, "PARITY_BATCH_INVALID", "next-batch requires a coverage workspace");
   const checkpoint = await readCheckpoint(paths.runRoot, paths.runIdentity);
@@ -1094,11 +1103,12 @@ async function nextRunBatch({ repositoryRootPath, runId }) {
 
 // Execute the immutable workspace batch through the common Browser runner.
 // Only compact summaries cross the caller boundary; raw artifacts stay in the sink.
-async function executeBrowserBatch({ repositoryRootPath, runId, runner, tabs }) {
+async function executeBrowserBatch({ repositoryRootPath, runId, runner, tabs, layerResults = [] }) {
   const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
   const { value: manifest } = await readManifest(path.join(paths.runRoot, "manifest.json"), {
     limit: maxManifestBytes, parentIdentity: paths.runIdentity,
   });
+  if (manifest.schemaVersion === 3) { const { executeModelBatch } = await import("./parity-model-workspace.mjs"); return executeModelBatch({ repositoryRootPath, runId, runner, tabs, layerResults }); }
   const next = await nextRunBatch({ repositoryRootPath, runId });
   if (!next.batch) return next;
   const descriptor = manifest.batches.find(({ batchId }) => batchId === next.batch.batchId);
@@ -1134,7 +1144,8 @@ async function executeBrowserBatch({ repositoryRootPath, runId, runner, tabs }) 
       cleanup = cleanupError instanceof ParityRunError && cleanupError.evidence
         ? cleanupError.evidence : { status: "fail" };
     }
-    const code = cleanup.status === "pass"
+    const access = ["documentation", "permission"].includes(classifyBrowserError(error).category);
+    const code = access ? error.code : cleanup.status === "pass"
       ? (error instanceof ParityRunError ? error.code : "PARITY_UNEXPECTED_ERROR")
       : "PARITY_CLEANUP_FAILED";
     const failedProbes = (error?.evidence?.rows ?? []).flatMap((row) =>
@@ -1298,6 +1309,7 @@ async function recoverTerminalBrowserBatch({ repositoryRootPath, runId, batchId,
 async function resumeRunWorkspace({ repositoryRootPath, runId }) {
   const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
   const { value: manifest } = await readManifest(path.join(paths.runRoot, "manifest.json"), { limit: maxManifestBytes, parentIdentity: paths.runIdentity });
+  if (manifest.schemaVersion === 3) { const { resumeModelWorkspace } = await import("./parity-model-workspace.mjs"); return resumeModelWorkspace({ repositoryRootPath, runId }); }
   requireCurrentRunOrigins(manifest);
   const checkpoint = await readCheckpoint(paths.runRoot, paths.runIdentity);
   checkpoint.resumed = true;
@@ -1313,6 +1325,59 @@ async function resumeRunWorkspace({ repositoryRootPath, runId }) {
     parentIdentity: paths.runIdentity,
   });
   return nextRunBatch({ repositoryRootPath, runId });
+}
+
+// Recovery is deliberately an in-process API: a CLI boolean or a serialized
+// receipt cannot authorize a Browser. Revalidate the current runtime and run
+// the common canary before changing exactly one failed checkpoint entry.
+async function recoverDocumentationFailure({ repositoryRootPath, runId, batchId, browser, runner, tabId, legacyDiagnosticFile }) {
+  validateIdentifier(batchId, "batchId");
+  const documentation = requireBrowserDocumentation(browser);
+  const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
+  const { value: manifest } = await readManifest(path.join(paths.runRoot, "manifest.json"), {
+    limit: maxManifestBytes, parentIdentity: paths.runIdentity,
+  });
+  requireCurrentRunOrigins(manifest);
+  if (manifest.schemaVersion === 3) { const { validateModelWorkspaceState } = await import("./parity-model-workspace.mjs"); await validateModelWorkspaceState({ repositoryRootPath, runId }); }
+  const checkpoint = await readCheckpoint(paths.runRoot, paths.runIdentity);
+  const batch = checkpoint.batches.find((item) => item.batchId === batchId);
+  let legacyProof;
+  if (legacyDiagnosticFile !== undefined) {
+    ensure(typeof legacyDiagnosticFile === "string" &&
+      legacyDiagnosticFile.startsWith(`failure-${batchId}-`) &&
+      /^[0-9]+\.json$/u.test(legacyDiagnosticFile.slice(`failure-${batchId}-`.length)),
+      "PARITY_BATCH_INVALID", "legacy recovery requires a workspace failure record");
+    const record = await readJsonFile(path.join(paths.runRoot, legacyDiagnosticFile), {
+      limit: maxDiagnosticBytes, parentIdentity: paths.runIdentity,
+    });
+    const diagnosis = classifyBrowserError({ code: record.value.evidence?.causeCode, message: record.value.diagnostic });
+    ensure(["PARITY_DPR_OVERRIDE_UNAVAILABLE", "PARITY_CDP_CAPABILITY_UNAVAILABLE"].includes(batch?.errorCode) &&
+      record.value.code === batch.errorCode && diagnosis.category === "documentation",
+      "PARITY_BATCH_INVALID", "legacy failure does not prove an unread documentation cause");
+    legacyProof = { file: legacyDiagnosticFile, sha256: record.sha256, priorCode: batch.errorCode };
+  }
+  ensure(batch?.status === "terminal" && (batch.errorCode === "BROWSER_DOCUMENTATION_REQUIRED" || legacyProof),
+    "PARITY_BATCH_INVALID", "only a proven documentation failure can be recovered");
+  ensure(!batch.documentationRecovery, "PARITY_BATCH_INVALID", "documentation recovery already attempted");
+  ensure(runner instanceof BrowserParityRunner && runner.adapter?.sessionId === documentation.sessionId,
+    "PARITY_BATCH_INVALID", "recovery requires the current common runner session");
+  requireBrowserAdapterRuntime(runner.adapter, browser);
+  runner.canary = undefined;
+  const canary = await runner.capabilityCanary({ tabId, viewport: { width: 390, height: 844 },
+    dpr: manifest.schemaVersion === 3 ? 1 : manifest.definition.contract.comparisonConditions.dpr, requiresNetwork: true,
+    url: manifest.baseUrls.production });
+  requireBrowserDocumentation(browser);
+  ensure(canary?.status === "pass" && canary.sessionId === documentation.sessionId,
+    "PARITY_BATCH_INVALID", "recovery canary did not pass in the current session");
+  const current = await readCheckpoint(paths.runRoot, paths.runIdentity);
+  ensure(stableStringify(current) === stableStringify(checkpoint), "PARITY_CURRENT_STATE_DRIFT", "checkpoint changed during recovery");
+  batch.documentationRecovery = { sessionId: documentation.sessionId, generation: documentation.generation,
+    documents: documentation.documents, priorAttempts: batch.attempts, canary, ...(legacyProof ? { legacyProof } : {}) };
+  batch.status = "pending";
+  batch.errorCode = null;
+  batch.diagnostic = null;
+  await writeJsonAtomic(path.join(paths.runRoot, "checkpoint.json"), checkpoint, { parentIdentity: paths.runIdentity });
+  return { runId, batchId, status: "recovered", summary: checkpoint.schemaVersion === 3 ? { passed: checkpoint.batches.filter((item) => item.status === "passed").length, pending: checkpoint.batches.filter((item) => item.status !== "passed").length, total: checkpoint.batches.length } : compactRunSummary(checkpoint) };
 }
 
 async function recordBatchFailure({
@@ -1344,7 +1409,7 @@ async function recordBatchFailure({
     batchId,
     status: batch.status,
     retryable: batch.status === "failed",
-    summary: compactRunSummary(checkpoint),
+    summary: checkpoint.schemaVersion === 3 ? { passed: checkpoint.batches.filter((item) => item.status === "passed").length, pending: checkpoint.batches.filter((item) => item.status !== "passed").length, total: checkpoint.batches.length } : compactRunSummary(checkpoint),
   };
 }
 
@@ -1361,6 +1426,7 @@ async function invalidateRunWorkspace({
     limit: maxManifestBytes,
     parentIdentity: paths.runIdentity,
   });
+  if (manifest.schemaVersion === 3) { const { invalidateModelWorkspace } = await import("./parity-model-workspace.mjs"); return invalidateModelWorkspace({ repositoryRootPath, runId, changedSources: source ? [source] : [], scope, targetIds }); }
   ensure(manifest.schemaVersion === coverageWorkspaceSchemaVersion, "PARITY_BATCH_INVALID", "invalidate-run requires a coverage workspace");
   const resolution = resolveInvalidationTargets({
     spec: manifest.definition.spec,
@@ -1539,6 +1605,7 @@ async function recordBatchResult({
     limit: maxManifestBytes,
     parentIdentity: paths.runIdentity,
   });
+  if (manifest.schemaVersion === 3) { const { recordModelBatch } = await import("./parity-model-workspace.mjs"); return recordModelBatch({ repositoryRootPath, runId, batchId, input }); }
   const workspaceSchemaVersion = manifest.schemaVersion;
   ensure(
     workspaceSchemaVersion === legacyWorkspaceSchemaVersion || workspaceSchemaVersion === coverageWorkspaceSchemaVersion,
@@ -1654,6 +1721,7 @@ function mergeMetrics(manifest, fragments) {
 async function recordRunAudit({ repositoryRootPath, runId, audit }) {
   const paths = await resolveWorkspacePaths(repositoryRootPath, runId);
   const { value: manifest } = await readManifest(path.join(paths.runRoot, "manifest.json"), { limit: maxManifestBytes, parentIdentity: paths.runIdentity });
+  if (manifest.schemaVersion === 3) { const { recordModelAudit } = await import("./parity-model-workspace.mjs"); return recordModelAudit({ repositoryRootPath, runId, audit }); }
   ensure(manifest.definition.spec.version === 4, "PARITY_BATCH_INVALID", "audit requires profile v4");
   const binding = Object.fromEntries(["goalSha256", "prototypeRevision", "validationProfileDigest", "sources"].map(key => [key, manifest[key]]));
   ensure(stableStringify(audit?.binding) === stableStringify(binding), "PARITY_CURRENT_STATE_DRIFT", "audit binding differs from run");
@@ -1680,6 +1748,7 @@ async function finalizeRunWorkspace({
     limit: maxManifestBytes,
     parentIdentity: paths.runIdentity,
   });
+  if (manifest.schemaVersion === 3) { const { finalizeModelWorkspace } = await import("./parity-model-workspace.mjs"); return finalizeModelWorkspace({ repositoryRootPath, runId, slug }); }
   requireCurrentRunOrigins(manifest);
   const workspaceSchemaVersion = manifest.schemaVersion;
   ensure(
@@ -1934,7 +2003,19 @@ export {
   prepareRunWorkspace,
   readJsonFile,
   recordBatchFailure,
+  recoverDocumentationFailure,
   recordBatchResult,
   resumeRunWorkspace,
   sha256,
 };
+
+
+// Private-file primitives shared by the model workspace. Schema and closure
+// checks remain in the public lifecycle entrypoints, not in callers.
+export const modelWorkspaceStorage = Object.freeze({
+  resolveWorkspacePaths, readManifest, writeManifest, readCheckpoint,
+  readJsonFile, readStableFile, writeJsonExclusive, writeJsonAtomic,
+  ensureRealDirectory, assertDirectoryIdentity, assertWorkspaceIdentities,
+  validateIdentifier, assertSecretFree, canonicalSha256,
+  maxManifestBytes, maxFragmentBytes, maxCheckpointBytes, maxArtifactBytes,
+});
