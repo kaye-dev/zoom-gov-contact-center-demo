@@ -55,7 +55,7 @@ export function UniversityPortal({ page, children }: { page: Page; children?: Re
   const { locale } = useI18n();
   const c = univContent[locale];
   const state = useSearchParams().get("state") ?? "default";
-  const [menuOpen, setMenuOpen] = useState(state === "mobile-nav-open");
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -88,7 +88,7 @@ export function UniversityPortal({ page, children }: { page: Page; children?: Re
         {children}
         {page === "home" && <Home content={c} />}
         {page === "consultation" && <Consultation content={c} state={state} />}
-        {page === "faq" && <Faq content={c} openFirst={state === "faq-open"} />}
+        {page === "faq" && <Faq content={c} />}
         {page === "news" && <News content={c} />}
         {(
           [
@@ -508,18 +508,9 @@ function Consultation({
   content: UniversityContent;
   state: string;
 }) {
-  if (state === "reserve" || state === "chat-triggered")
-    return <ReservationConsultation content={content} state={state} />;
-  if (
-    [
-      "now-open",
-      "now-mixed",
-      "now-stale",
-      "now-closed",
-      "now-unconfigured",
-    ].includes(state)
-  )
-    return <ImmediateConsultation content={content} state={state} />;
+  if (state === "reserve")
+    return <ReservationConsultation content={content} />;
+  if (state === "now-open") return <ImmediateConsultation content={content} />;
   return (
     <div className="mx-auto w-full max-w-7xl px-5 py-10 md:px-8 md:py-14">
       <Breadcrumb current={content.consultation.title} />
@@ -683,14 +674,8 @@ function ConsultationSupportingContent({
   );
 }
 
-function ReservationConsultation({
-  content,
-  state,
-}: {
-  content: UniversityContent;
-  state: string;
-}) {
-  const [chatStarted, setChatStarted] = useState(state === "chat-triggered");
+function ReservationConsultation({ content }: { content: UniversityContent }) {
+  const [chatStarted, setChatStarted] = useState(false);
   return (
     <div className="mx-auto max-w-7xl px-5 py-10 md:px-8 md:py-14">
       <Breadcrumb current={content.consultation.reserveTitle} />
@@ -783,13 +768,7 @@ function ReservationConsultation({
   );
 }
 
-function ImmediateConsultation({
-  content,
-  state,
-}: {
-  content: UniversityContent;
-  state: string;
-}) {
+function ImmediateConsultation({ content }: { content: UniversityContent }) {
   const labels = {
     admissions: content.consultation.services[0][0],
     "student-support": content.consultation.services[1][0],
@@ -800,8 +779,6 @@ function ImmediateConsultation({
     "student-support": content.consultation.services[1][1],
     careers: content.consultation.services[2][1],
   };
-  const closed = state === "now-closed";
-  const unconfigured = state === "now-unconfigured";
   return (
     <div className="mx-auto max-w-7xl px-5 py-10 md:px-8 md:py-14">
       <Breadcrumb current={content.consultation.instantTitle} />
@@ -813,67 +790,43 @@ function ImmediateConsultation({
         <Icon name="clock" className="h-5 w-5 text-accent" />
         {content.consultation.hours}
       </div>
-      {closed || unconfigured ? (
-        <section className="mt-12 max-w-4xl border border-line bg-surface-raised px-6 py-8">
-          <span className="text-accent">
-            <Icon
-              name={unconfigured ? "warning" : "clock"}
-              className="h-10 w-10"
-            />
-          </span>
-          <h2 className="mt-4 text-2xl font-bold">
-            {unconfigured
-              ? content.consultation.unconfiguredTitle
-              : content.consultation.closedTitle}
-          </h2>
-          <p className="mt-3 leading-7 text-fg-muted">
-            {unconfigured
-              ? content.consultation.unconfigured
-              : content.consultation.closedLead}
-          </p>
-        </section>
-      ) : (
-        <section className="mt-12">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <p className="text-sm font-bold text-accent">
-                LIVE VIDEO SUPPORT
-              </p>
-              <h2 className="mt-2 text-2xl font-bold">
-                {content.consultation.instantSectionTitle}
-              </h2>
-            </div>
-            <div className="text-right">
-              <p className="max-w-xl text-sm leading-6 text-fg-muted">
-                {content.consultation.instantSectionLead}
-              </p>
-              <p
-                aria-live="polite"
-                className="mt-1 text-xs font-semibold text-fg-muted"
-              >
-                {state === "now-stale"
-                  ? content.consultation.refreshingStatus
-                  : content.consultation.refreshStatus}
-              </p>
-            </div>
+      <section className="mt-12">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-sm font-bold text-accent">
+              LIVE VIDEO SUPPORT
+            </p>
+            <h2 className="mt-2 text-2xl font-bold">
+              {content.consultation.instantSectionTitle}
+            </h2>
           </div>
-          <ConsultationAvailability
-            labels={labels}
-            descriptions={descriptions}
-            previewState={state}
-            copy={{
-              ready: content.consultation.ready,
-              busy: content.consultation.busy,
-              busyAction: content.consultation.busyAction,
-              unavailable: content.consultation.unavailable,
-              unavailableAction: content.consultation.unavailableAction,
-              unknown: content.consultation.unknown,
-              unknownAction: content.consultation.unknownAction,
-              launch: content.consultation.launch,
-            }}
-          />
-        </section>
-      )}
+          <div className="text-right">
+            <p className="max-w-xl text-sm leading-6 text-fg-muted">
+              {content.consultation.instantSectionLead}
+            </p>
+            <p
+              aria-live="polite"
+              className="mt-1 text-xs font-semibold text-fg-muted"
+            >
+              {content.consultation.refreshStatus}
+            </p>
+          </div>
+        </div>
+        <ConsultationAvailability
+          labels={labels}
+          descriptions={descriptions}
+          copy={{
+            ready: content.consultation.ready,
+            busy: content.consultation.busy,
+            busyAction: content.consultation.busyAction,
+            unavailable: content.consultation.unavailable,
+            unavailableAction: content.consultation.unavailableAction,
+            unknown: content.consultation.unknown,
+            unknownAction: content.consultation.unknownAction,
+            launch: content.consultation.launch,
+          }}
+        />
+      </section>
     </div>
   );
 }
@@ -963,10 +916,8 @@ function Information({
 }
 function Faq({
   content,
-  openFirst,
 }: {
   content: UniversityContent;
-  openFirst: boolean;
 }) {
   return (
     <div className="mx-auto max-w-7xl px-5 py-10 md:px-8 md:py-14">
@@ -999,7 +950,6 @@ function Faq({
           <FaqList
             questions={content.faq.questions}
             className="mt-5"
-            openFirst={openFirst}
           />
         </section>
       </div>
@@ -1009,19 +959,16 @@ function Faq({
 function FaqList({
   questions,
   className = "mt-8",
-  openFirst = false,
 }: {
   questions: readonly [string, string][];
   className?: string;
-  openFirst?: boolean;
 }) {
   return (
     <div className={`${className} border-x border-b border-line`}>
-      {questions.map(([question, answer], index) => (
+      {questions.map(([question, answer]) => (
         <details
           className="group border-t border-line"
           key={question}
-          open={openFirst && index === 0}
         >
           <summary className="flex min-h-16 cursor-pointer list-none items-center gap-4 bg-surface-raised px-5 py-4 font-bold leading-7 transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent">
             <span className="flex-1">

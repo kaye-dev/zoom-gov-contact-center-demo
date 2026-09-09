@@ -16,7 +16,28 @@ export function invalidPlanArtifacts(trackedPaths) {
 export function verifyPlanArtifacts(trackedPaths) {
   const invalid = invalidPlanArtifacts(trackedPaths);
   if (invalid.length === 0) return invalid;
-  throw new Error(`Only plans/template.md may be tracked. Delete these plan artifacts:\n${invalid.map((item) => `- ${item}`).join("\n")}`);
+  throw new Error(`Only plans/template.md may be tracked. Remove these paths from the index; preserve local files:\n${invalid.map((item) => `- ${item}`).join("\n")}`);
+}
+
+// Shipping/CI inspect the proposed Git contents. Untracked plans are local
+// working material and a changed template is a legitimate source change.
+export function verifyPlanIndex({ repositoryRoot }) {
+  if (!repositoryRoot) throw new Error("repositoryRoot is required");
+  const records = execFileSync("git", ["ls-files", "--stage", "-z", "--", "plans", "plan"], {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+  }).split("\0").filter(Boolean).map((record) => {
+    const separator = record.indexOf("\t");
+    if (separator < 0) throw new Error("Malformed Git index record");
+    const [mode, , stage] = record.slice(0, separator).split(" ");
+    return { mode, stage, path: record.slice(separator + 1) };
+  });
+  verifyPlanArtifacts(records.map((record) => record.path));
+  if (records.length !== 1 || records[0].path !== "plans/template.md"
+      || records[0].stage !== "0" || !["100644", "100755"].includes(records[0].mode)) {
+    throw new Error("plans/template.md must be a regular, resolved file in the index");
+  }
+  return { status: "pass", entries: ["plans/template.md"] };
 }
 
 function entryType(entry) {
@@ -84,10 +105,13 @@ export async function verifyPlanTree({ repositoryRoot }) {
 const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : "";
 if (invokedPath === fileURLToPath(import.meta.url)) {
   const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-  verifyPlanTree({ repositoryRoot }).then(() => {
-    console.log("Plan artifact guard passed: plans/template.md is the only plan entry.");
-  }).catch((error) => {
+  try {
+    const args = process.argv.slice(2);
+    if (args.length > 0) throw new Error("Usage: node scripts/verify-plan-artifacts.mjs");
+    verifyPlanIndex({ repositoryRoot });
+    console.log("Plan artifact guard passed: only plans/template.md is tracked; local plans are preserved.");
+  } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
-  });
+  }
 }

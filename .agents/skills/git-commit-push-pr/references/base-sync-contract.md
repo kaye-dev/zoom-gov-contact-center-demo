@@ -1,6 +1,6 @@
 # Base synchronization contract
 
-Read this reference immediately before synchronizing a topic branch with its remote base. It applies identically to `$plan-finalize` and to the post-finalize `$git-commit-push-pr` continuation.
+Read this reference immediately before synchronizing a topic branch with its remote base. Use it only for explicitly requested base synchronization. Ordinary shipping can push a topic whose base has advanced.
 
 Fetch the selected remote immediately before synchronization and inspect both `<remote>/<base>` and the remote topic ref. Base-only commits are a normal synchronization condition, not a reason to request another invocation; a remote topic ref with commits not contained in local `HEAD` is remote divergence and stops the operation.
 

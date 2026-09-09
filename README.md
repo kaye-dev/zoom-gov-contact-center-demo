@@ -192,13 +192,9 @@ npm run dev
 
 表示された`http://127.0.0.1:<port>/`をブラウザで開き、停止するときは`Ctrl+C`を押します。serverはloopbackだけにbindし、対象prototype以外のrepository fileは配信しません。
 
-承認対象のprototypeは、goalに`approval contract: plans/<slug>/prototype/ui-contract.json — version 1`を記録し、page・shell・共通component・global style・tokenを含むbaselineの完全な`sources` inventory、runtime owner・checkout・40桁commit SHA・route、fixture・authorization・queryと`window.scrollX`/`window.scrollY`実測値によるexact `scroll: {x, y}`を含むcomparison conditions、state、theme、responsive、視覚的不変条件、意図した差分、interaction、`comparisonTargets`と不変なparity matrix行定義をmanifestへ同期します。Tailwind CSS build後にartifactと契約をまとめたrevisionを計算します。各targetはID、entry、production route、surface、各行はID、`targetId`、一致するentry/route/surface、state、viewport、theme、breakpoint、期待するinvariant/difference IDを保持します。結果やscreenshot等の可変証拠はmanifest外へ置き、承認時の`machineParityResults`と実装後の`implementationParityResults`で全行を`<row-id>=pending`（未実行）または`<row-id>=pass|fail`（実行後）として過不足なく記録します。bare IDや`all N`は結果になりません。goalの`parity evidence`・machine parity・UI承認を同じrevisionへ紐付け、`$implement`は承認時証跡の日付を流用せず、production編集直前に全sourceのworking tree状態を確認して現在条件で全行をCodexアプリ内Browser再実行します。
+prototypeのHTML/CSS・参照資産を視覚仕様とし、通常1〜3代表シナリオで構成・主要な見た目と主要正常系を確認します。手順は[開発workflow](docs/development/codex-development-workflow.md)と共通smoke契約を参照してください。旧UI parityの実行基盤は廃止し、過去資料は元の内容と結果のまま保全します。
 
-```bash
-node .agents/skills/plan/scripts/prototype-revision.mjs plans/<slug>/prototype
-```
-
-実際のCodex promptでplan系skillをforward testする場合は`npm run eval:plan-skills`を実行します。evalはCodex CLIの`workspace-write` sandboxと一時repository、環境allowlist、出力量上限、artifact allowlistを使い、Codex CLIの認証が必要です。runnerはprocess identity、process group、run marker、一時fixtureをcwdとして保持するprocessを再照合して通常経路をcleanupし、必要なinspectorが利用できなければ結果を受理しません。ただしこれは任意のhostile executableを封じ込めるOS-level security boundaryではありません。CLIにはCodexアプリ内Browserがないため、`$implement`のruntime所有権、build停止・再起動、live parity、cleanupの成功経路は[開発workflowのmanual integration gate](docs/development/codex-development-workflow.md#skill-behavioral-eval)で別途確認します。
+実際のCodex promptでplan系skillをforward testする場合は`npm run eval:plan-skills`を実行します。evalはCodex CLIの`workspace-write` sandboxと一時repository、環境allowlist、出力量上限、artifact allowlistを使い、Codex CLIの認証が必要です。runnerはprocess identity、process group、run marker、一時fixtureをcwdとして保持するprocessを再照合して通常経路をcleanupし、必要なinspectorが利用できなければ結果を受理しません。ただしこれは任意のhostile executableを封じ込めるOS-level security boundaryではありません。CLIにはCodexアプリ内Browserがないため、実アプリのruntime所有権・保存・cleanupは[開発workflow](docs/development/codex-development-workflow.md)の代表smokeで確認し、fixtureの成功を製品UIの成功として扱いません。
 
 ## スクリプト
 

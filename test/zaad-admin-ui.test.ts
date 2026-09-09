@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { createElement } from "react";
+import { createElement, useState } from "react";
+import { createRequire } from "node:module";
+import path from "node:path";
+import ts from "typescript";
 import { renderAdmin } from "./admin-ui-render";
-import { ZaadView, buildResidentRowActions } from "../app/admin/zaad/ZaadView";
+import { buildResidentRowActions } from "../app/admin/zaad/ZaadView";
 import { activateRowAction } from "../app/components/admin/table-row-actions";
 
 import {
@@ -54,12 +57,55 @@ test("ROW-ZAAD: retry eligibility, disabled count, row identity and revision are
   }
 });
 
-function renderResidents(reviewState?: string, canViewDeveloperApi = true) {
-  return renderAdmin(createElement(ZaadView, {
-    initialView: "residents", reviewState, canViewDeveloperApi,
+function renderResidents(state?: string, canViewDeveloperApi = true) {
+  const filename = path.resolve("app/admin/zaad/ZaadView.tsx");
+  const localRequire = createRequire(filename);
+  const code = ts.transpileModule(viewSource, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText;
+  const target = { exports: {} as { ZaadView: typeof import("../app/admin/zaad/ZaadView").ZaadView } };
+  let residentLoadedState = false;
+  const resident = { id: "test-resident", name: "Test Resident", email: "test@example.invalid", phone: "+81312345678", consentStatus: "CONSENTED", source: "ADMIN", revision: 1, contactList: null, syncStatus: "SYNCED", syncErrorCode: null, createdAt: "2026-09-01", updatedAt: "2026-09-01" };
+  new Function("require", "module", "exports", code)((name: string) => {
+    if (name === "react") return { ...localRequire("react"), useState: (initial: unknown) => {
+      let value = initial === "pending" ? state ?? "pending" : initial;
+      if (residentLoadedState) {
+        residentLoadedState = false;
+        value = state !== undefined && !["pending", "failure"].includes(state);
+      } else if (initial && typeof initial === "object" && "residents" in initial) {
+        residentLoadedState = true;
+        const residents = state === "ready" ? [resident] : [];
+        value = { residents, metrics: { total: residents.length, consented: residents.length, synced: residents.length, needsAttention: 0 }, nextCursor: null };
+      }
+      return useState(value);
+    } };
+    return localRequire(name.startsWith("@/") ? path.resolve(name.slice(2)) : name);
+  }, target, target.exports);
+  return renderAdmin(createElement(target.exports.ZaadView, {
+    initialView: "residents", canViewDeveloperApi,
     permissions: { create: false, update: false, delete: false },
   }), "/admin/zaad");
 }
+
+test("CSV import opens before any result exists and shows no fabricated success", () => {
+  const localRequire = createRequire(path.resolve("app/admin/zaad/ZaadView.tsx"));
+  const code = ts.transpileModule(`${viewSource}\nexports.ZaadDialog = ZaadDialog;`, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText;
+  const target = { exports: {} as Record<string, import("react").ComponentType<Record<string, unknown>>> };
+  new Function("require", "module", "exports", code)((name: string) => {
+    if (name === "@/app/components/admin/ModalDialog") return { ModalDialog: ({ children }: { children: import("react").ReactNode }) => children };
+    return localRequire(name.startsWith("@/") ? path.resolve(name.slice(2)) : name);
+  }, target, target.exports);
+  const html = renderAdmin(createElement(target.exports.ZaadDialog, {
+    dialog: "csv-import", state: "ready", copy: zaadDictionaries.ja, locale: "ja",
+    selectedResident: null, selectedMessage: null, selectedContactList: null, selectedCampaign: null,
+    permissions: { create: true, update: true, delete: true }, oneTimeReview: null,
+    errorCode: null, errorDetails: [], close: () => {}, setState: () => {}, onMutation: () => {}, onError: () => {},
+  }), "/admin/zaad");
+  assert.match(html, /type="file"/);
+  assert.doesNotMatch(html, /98|synthetic|fixture/);
+});
 
 test("ZAAD-HELP-01 / ZAAD-HEADER-04/05: title help and responsive API action column", () => {
   const html = renderResidents("ready", false);

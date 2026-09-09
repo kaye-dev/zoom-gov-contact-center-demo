@@ -132,7 +132,7 @@ test("cross-tab validation reveals only the first invalid panel before focus and
 test("form saves remain page-scoped and validation happens before network calls", () => {
   for (const [path, initial] of [["phone-settings/PhoneSettingsForm", "representative-phone"], ["chat-settings/ChatSettingsForm", "chat-method"]]) {
     const source = readFileSync(new URL(`../app/admin/${path}.tsx`, import.meta.url), "utf8");
-    assert.ok(source.includes(`: "${initial}")`));
+    assert.ok(source.includes(`useState("${initial}")`));
     assert.match(source, /<form data-admin-form noValidate onSubmit=\{submit\}/);
     assert.ok(source.indexOf("validateSettingsTabs(event.currentTarget, setActiveSection)") < source.indexOf("await control.save(settings)"));
     assert.match(source, /await control.save\(settings\)/);

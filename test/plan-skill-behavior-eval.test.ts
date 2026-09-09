@@ -14,17 +14,16 @@ const evaluator = path.join(root, "scripts/eval-plan-skills.mjs");
 type PreparedFixture = {
   fixtureRoot: string;
   repo: string;
-  scenario: { simulate(repo: string): Promise<void> };
+  scenario: { simulate(repo: string): Promise<void>; simulatedFinal?: string };
 };
 type EvaluatorModule = {
   assertConfirmationHandoffSkillContracts(root?: string): Promise<void>;
   assertStaticImplementationSkillContracts(root?: string): Promise<void>;
   codexEnvironment(): Record<string, string>;
-  codexScenarioConfig(name: string, repo: string): string[];
   executeScenario(name: string): Promise<{ name: string; status: string; durationMs: number }>;
   failedScenariosFromManifest(manifest: unknown): string[];
   fixtureGitEnvironment(): Record<string, string>;
-  gradePreparedScenario(fixture: PreparedFixture, final: string): Promise<void>;
+  gradePreparedScenario(fixture: PreparedFixture, final: string, commands?: string[], observations?: unknown[]): Promise<void>;
   parseArguments(argv: string[]): {
     selected: string[];
     all: boolean;
@@ -127,23 +126,16 @@ async function assertRetryableFailure(
   assert.doesNotMatch(`${failure.stdout}\n${failure.stderr}\n${manifestText}`, new RegExp(privateMarker, "u"));
 }
 
-test("plan skill behavioral evalは実promptの35 scenarioを公開する", async () => {
+test("plan skill behavioral evalは登録済みscenarioの実promptを公開する", async () => {
   const { stdout } = await execFileAsync(process.execPath, [evaluator, "--list"], { cwd: root });
   assert.deepEqual(stdout.trim().split("\n"), [
     "plan-canonical",
     "plan-existing-collision",
-    "plan-ui-revision",
-    "implement-stale-revision",
-    "implement-contract-mismatch",
-    "implement-related-source-drift",
-    "ui-final-browser-gate",
-    "ui-browser-capability-failure",
-    "ui-fidelity-audit-gate",
-    "review-ui-evidence-required",
     "workflow-performance-audit-bottleneck",
     "workflow-performance-audit-no-bottleneck",
     "workflow-performance-audit-insufficient-data",
     ...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).workflowScenarioNames,
+    ...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).smokeScenarioNames,
   ]);
 });
 
@@ -196,18 +188,11 @@ test("plan skill behavioral evalはsymlink経由のCLI起動でもmainを実行�
   assert.deepEqual(stdout.trim().split("\n"), [
     "plan-canonical",
     "plan-existing-collision",
-    "plan-ui-revision",
-    "implement-stale-revision",
-    "implement-contract-mismatch",
-    "implement-related-source-drift",
-    "ui-final-browser-gate",
-    "ui-browser-capability-failure",
-    "ui-fidelity-audit-gate",
-    "review-ui-evidence-required",
     "workflow-performance-audit-bottleneck",
     "workflow-performance-audit-no-bottleneck",
     "workflow-performance-audit-insufficient-data",
     ...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).workflowScenarioNames,
+    ...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).smokeScenarioNames,
   ]);
 });
 
@@ -218,11 +203,11 @@ test("forward evalは変更pathから関連scenarioだけを選び、共通契�
   }
   assert.deepEqual(
     evaluatorModule.selectAffectedScenarios([".agents/skills/review/references/review-contract.md"]),
-    ["review-ui-evidence-required", ...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).workflowScenarioNames],
+    [...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).workflowScenarioNames, ...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).smokeScenarioNames],
   );
   assert.deepEqual(
     evaluatorModule.selectAffectedScenarios(["app/styles/ui-foundation.css"]),
-    ["plan-ui-revision", "implement-related-source-drift"],
+    [],
   );
   assert.deepEqual(
     evaluatorModule.selectAffectedScenarios(["docs/development/codex-development-workflow.md"]),
@@ -272,17 +257,17 @@ test("forward evalは独立workを最大2並列で実行し、結果順を固定
 test("forward eval result manifestは失敗scenarioだけをresumeし、raw errorを保存しない", async (context) => {
   const evaluatorModule = await evaluatorModulePromise;
   const resultPath = await evaluatorModule.writeResultManifest(
-    { mode: "all", names: ["plan-canonical", "review-ui-evidence-required"] },
+    { mode: "all", names: ["plan-canonical", "smoke-legacy-and-review"] },
     2,
     [
       { name: "plan-canonical", status: "pass", durationMs: 10 },
-      { name: "review-ui-evidence-required", status: "fail", durationMs: 20, errorCode: "raw error secret" },
+      { name: "smoke-legacy-and-review", status: "fail", durationMs: 20, errorCode: "raw error secret" },
     ],
   );
   context.after(() => rm(path.dirname(resultPath), { recursive: true, force: true }));
   const manifestText = await readFile(resultPath, "utf8");
   const manifest = JSON.parse(manifestText);
-  assert.deepEqual(evaluatorModule.failedScenariosFromManifest(manifest), ["review-ui-evidence-required"]);
+  assert.deepEqual(evaluatorModule.failedScenariosFromManifest(manifest), ["smoke-legacy-and-review"]);
   assert.equal(manifest.results[1].errorCode, "SCENARIO_FAILED");
   assert.doesNotMatch(manifestText, /stack|stderr|prompt|raw error/iu);
   assert.throws(
@@ -319,12 +304,12 @@ test("forward evalの並列fixtureはrepositoryとartifact pathを共有しな�
   const evaluatorModule = await evaluatorModulePromise;
   const fixtures = await Promise.all([
     evaluatorModule.prepareScenario("plan-canonical", `parallel-a-${process.pid}`),
-    evaluatorModule.prepareScenario("plan-ui-revision", `parallel-b-${process.pid}`),
+    evaluatorModule.prepareScenario("plan-canonical", `parallel-b-${process.pid}`),
   ]);
   context.after(() => Promise.all(fixtures.map(({ fixtureRoot }) => rm(fixtureRoot, { recursive: true, force: true }))));
   assert.notEqual(fixtures[0].fixtureRoot, fixtures[1].fixtureRoot);
   assert.notEqual(fixtures[0].repo, fixtures[1].repo);
-  const isolatedArtifact = "plans/parallel-check/prototype/ui-contract.json";
+  const isolatedArtifact = "plans/parallel-check/prototype/index.html";
   await writeFile(path.join(fixtures[1].repo, "parallel-owner.txt"), isolatedArtifact);
   await access(path.join(fixtures[1].repo, "parallel-owner.txt"));
   await assert.rejects(
@@ -338,52 +323,8 @@ test("plan skill behavioral evalのartifact graderはpositive/negative control�
     cwd: root,
     timeout: 180_000,
   });
-  assert.match(stdout, /self-test passed: 35 scenarios/);
-});
-
-test("version 3のUI eval fixtureは各rowでcontract IDと同名のrequired probeを対応する", async (context) => {
-  const evaluatorModule = await evaluatorModulePromise;
-  const fixture = await evaluatorModule.prepareScenario(
-    "plan-ui-revision",
-    `explicit-contract-probe-map-${process.pid}`,
-  );
-  context.after(() => rm(fixture.fixtureRoot, { recursive: true, force: true }));
-  await fixture.scenario.simulate(fixture.repo);
-  const prototypeRoot = path.join(fixture.repo, "plans", "plan-ui-revision", "prototype");
-  const contract = JSON.parse(await readFile(path.join(prototypeRoot, "ui-contract.json"), "utf8"));
-  const spec = JSON.parse(await readFile(path.join(prototypeRoot, "parity-spec.json"), "utf8"));
-  const probes = new Map(spec.probes.map((probe: { id: string }) => [probe.id, probe]));
-  assert.equal(probes.size, spec.probes.length);
-
-  for (const mapping of spec.rowProbeMap) {
-    const row = contract.parityMatrix.find(({ id }: { id: string }) => id === mapping.rowId);
-    assert.ok(row);
-    for (const [field, expectedMode] of [
-      ["expectedInvariantIds", "equal"],
-      ["intentionalDifferenceIds", "different"],
-    ] as const) {
-      for (const contractId of row[field]) {
-        const probe = probes.get(contractId) as { required: boolean; mode: string };
-        assert.equal(probe.required, true);
-        assert.equal(probe.mode, expectedMode);
-        assert.ok(mapping.probeIds.includes(contractId));
-      }
-    }
-  }
-});
-
-test("WF-EVAL-01 BrowserなしではUI実装を完了扱いにしない", async (context) => {
-  const evaluatorModule = await evaluatorModulePromise;
-  const fixture = await evaluatorModule.prepareScenario(
-    "ui-final-browser-gate",
-    `wf-eval-browser-gate-${process.pid}`,
-  );
-  context.after(() => rm(fixture.fixtureRoot, { recursive: true, force: true }));
-  await fixture.scenario.simulate(fixture.repo);
-  await evaluatorModule.gradePreparedScenario(
-    fixture,
-    "明示的な$implement invocationからapproval.jsonを作成し、productionを完了候補まで編集しました。通常のmatrixScopeはcoverageで、full parityへ昇格していません。Codexアプリ内Browserを利用できないため最終Browser coverageは未検証で、タスクは未完了です。raw Browser outputやimplementation-parity.jsonは生成していません。",
-  );
+  const scenarioCount = Object.keys((await evaluatorModulePromise).scenarios).length;
+  assert.ok(stdout.includes(`self-test passed: ${scenarioCount} scenarios`));
 });
 
 test("CS-EVAL-01〜04: skill evalはconfirmation handoff契約を全scenarioのgrade前に固定する", async () => {
@@ -396,14 +337,188 @@ test("CS-EVAL-01〜04: skill evalはconfirmation handoff契約を全scenarioのg
   assert.match(source, /assertConfirmationHandoffSkillContracts\(fixture\.repo\)/u);
 });
 
-test("STATIC-EVAL-01〜06: skill evalは静的実装契約を全scenarioのgrade前に固定する", async () => {
+test("SMOKE-EVAL: current skill entrypoints use smoke and preserve the PR handoff", async () => {
   const evaluatorModule = await evaluatorModulePromise;
   await evaluatorModule.assertStaticImplementationSkillContracts(root);
   const source = await readFile(evaluator, "utf8");
-  for (const caseId of ["STATIC-EVAL-01", "STATIC-EVAL-02", "STATIC-EVAL-03", "STATIC-EVAL-04", "STATIC-EVAL-05", "STATIC-EVAL-06"]) {
-    assert.match(source, new RegExp(caseId, "u"));
-  }
+  assert.match(source, /SMOKE-EVAL/u);
   assert.match(source, /assertStaticImplementationSkillContracts\(fixture\.repo\)/u);
+});
+
+test("SMOKE-EVAL: 保存成功の報告は実際の公開API操作traceを必要とする", async (context) => {
+  const evaluatorModule = await evaluatorModulePromise;
+  const fixture = await evaluatorModule.prepareScenario("smoke-implement-default", `save-trace-${process.pid}`);
+  context.after(() => rm(fixture.fixtureRoot, { recursive: true, force: true }));
+  await fixture.scenario.simulate(fixture.repo);
+  const commands = [
+    "node workflow-fixture.mjs docs",
+    "node workflow-fixture.mjs browser open prototype",
+    "node --test fixture.test.mjs",
+    "node workflow-fixture.mjs browser open app",
+    "node workflow-fixture.mjs browser save",
+  ];
+  const final = fixture.scenario.simulatedFinal!;
+  await evaluatorModule.gradePreparedScenario(fixture, final, commands);
+  await assert.rejects(
+    evaluatorModule.gradePreparedScenario(fixture, final, commands.slice(0, -1)),
+    /actual public operations do not match/u,
+  );
+  const { extractSmokeObservations } = await import("../scripts/eval-workflow-scenarios.mjs");
+  const observations = (await readFile(path.join(fixture.repo, "observed-actions.jsonl"), "utf8")).trim().split("\n").map(line => JSON.parse(line));
+  const documentCommand = "cat <<'DOC'\nnode workflow-fixture.mjs browser save\nDOC";
+  const events = [
+    { type: "item.completed", item: { type: "command_execution", command: documentCommand, exit_code: 0, aggregated_output: "node workflow-fixture.mjs browser save\n" } },
+    ...observations.map((observation, index) => ({ type: "item.completed", item: { type: "command_execution", command: commands.filter(command => command.includes("workflow-fixture"))[index], exit_code: 0, aggregated_output: JSON.stringify({ observation }) } })),
+  ];
+  const captured = extractSmokeObservations(events.map(event => JSON.stringify(event)).join("\n"));
+  assert.deepEqual(captured, observations, "documented commands must not become executed operations");
+  const readback = observations.map(observation => JSON.stringify(observation)).join("\n");
+  const docs = { action: "docs" };
+  const reviewEvent = (output: string) => JSON.stringify({ type: "item.completed", item: {
+    type: "command_execution", command: "cat observed-actions.jsonl; node workflow-fixture.mjs docs",
+    exit_code: 0, aggregated_output: output,
+  } });
+  assert.deepEqual(extractSmokeObservations(reviewEvent(`${readback}\n${JSON.stringify({ observation: docs })}`)), [docs], "review log readback must not count as new Browser operations");
+  assert.deepEqual(extractSmokeObservations(reviewEvent(readback)), [], "historical JSON alone cannot prove an actual operation");
+  await evaluatorModule.gradePreparedScenario(fixture, final, [documentCommand, ...commands], captured);
+  await assert.rejects(
+    evaluatorModule.gradePreparedScenario(fixture, final, commands, captured.slice(0, -1)),
+    /actual public operations do not match/u,
+  );
+});
+
+async function observeSmokeFixture(fixture: PreparedFixture, comparePrototype = true) {
+  const evaluatorModule = await evaluatorModulePromise;
+  const operations = [
+    ["workflow-fixture.mjs", "docs"],
+    ["--test", "fixture.test.mjs"],
+    ...(comparePrototype ? [["workflow-fixture.mjs", "browser", "open", "prototype"]] : []),
+    ["workflow-fixture.mjs", "browser", "open", "app"],
+    ["workflow-fixture.mjs", "browser", "save"],
+  ];
+  const observations: Array<Record<string, unknown>> = [];
+  const environment = { ...process.env };
+  for (const key of Object.keys(environment)) if (key.startsWith("NODE_TEST_")) delete environment[key];
+  for (const args of operations) {
+    const { stdout } = await evaluatorModule.run(process.execPath, args, {
+      cwd: fixture.repo,
+      env: environment,
+    });
+    if (args[0] !== "workflow-fixture.mjs") continue;
+    for (const line of stdout.split("\n")) {
+      try {
+        const value = JSON.parse(line).observation;
+        if (["docs", "open", "save", "browser-unavailable"].includes(value?.action)) observations.push(value);
+      } catch { /* The docs operation also prints the public API document. */ }
+    }
+  }
+  return { commands: operations.map(args => `node ${args.join(" ")}`), observations };
+}
+
+test("SMOKE-EVAL: identical requirements need different implementations for different prototypes", async (context) => {
+  const evaluatorModule = await evaluatorModulePromise;
+  const names = ["smoke-implement-default", "smoke-implement-prototype-variant"];
+  const fixtures = await Promise.all(names.map(name => evaluatorModule.prepareScenario(name, `prototype-pair-${name}-${process.pid}`)));
+  context.after(() => Promise.all(fixtures.map(fixture => rm(fixture.fixtureRoot, { recursive: true, force: true }))));
+  assert.equal(evaluatorModule.scenarios[names[0]].prompt, evaluatorModule.scenarios[names[1]].prompt);
+  for (const file of ["AGENTS.md", "plans/smoke-settings/goal.md", "app/screen.json", "browser-api.md", "workflow-fixture.mjs", "fixture.test.mjs"]) {
+    assert.equal(await readFile(path.join(fixtures[0].repo, file), "utf8"), await readFile(path.join(fixtures[1].repo, file), "utf8"), file);
+  }
+  assert.ok((await readFile(path.join(fixtures[0].repo, "AGENTS.md"), "utf8")).includes(".agents/skills/plan/references/workflow-verification-contract.md"));
+  for (const file of ["index.html", "design.css"]) {
+    assert.notEqual(await readFile(path.join(fixtures[0].repo, "plans/smoke-settings/prototype", file), "utf8"), await readFile(path.join(fixtures[1].repo, "plans/smoke-settings/prototype", file), "utf8"));
+  }
+  const outputs = [];
+  for (const fixture of fixtures) {
+    await fixture.scenario.simulate(fixture.repo);
+    await evaluatorModule.gradePreparedScenario(fixture, fixture.scenario.simulatedFinal!);
+    const output = await readFile(path.join(fixture.repo, "app/screen.json"), "utf8");
+    outputs.push(output);
+    // Independently read the prototype: the evaluator's expected values must
+    // actually be recoverable from the candidate's HTML and linked CSS.
+    const app = JSON.parse(output);
+    const html = await readFile(path.join(fixture.repo, "plans/smoke-settings/prototype/index.html"), "utf8");
+    const css = await readFile(path.join(fixture.repo, "plans/smoke-settings/prototype/design.css"), "utf8");
+    assert.ok(html.includes('href="design.css"'));
+    assert.deepEqual(app.regions, [...html.matchAll(/data-region="([^"]+)"/gu)].map(match => match[1]));
+    assert.equal(app.contentWidth, Number(/max-width: (\d+)px/u.exec(css)?.[1]));
+    assert.equal(app.gap, Number(/gap: (\d+)px/u.exec(css)?.[1]));
+    assert.equal(app.titleSize, Number(/font-size: (\d+)px/u.exec(css)?.[1]));
+    assert.equal(app.titleWeight, Number(/font-weight: (\d+)/u.exec(css)?.[1]));
+    assert.equal(app.actionsPlacement, /justify-content: flex-(\w+)/u.exec(css)?.[1]);
+    assert.equal(app.accent, /button \{ background: var\(--(\w+)\)/u.exec(css)?.[1]);
+    assert.equal(app.surface, css.includes('.panel { background: transparent; border: 0;') ? 'plain' : 'card');
+  }
+  assert.notEqual(outputs[0], outputs[1]);
+  await writeFile(path.join(fixtures[1].repo, "app/screen.json"), outputs[0]);
+  await assert.rejects(evaluatorModule.gradePreparedScenario(fixtures[1], fixtures[1].scenario.simulatedFinal!), /prototype design mismatch/u);
+});
+
+test("SMOKE-EVAL: saving unchanged or visually divergent implementations cannot pass", async (context) => {
+  const evaluatorModule = await evaluatorModulePromise;
+  const reference = await evaluatorModule.prepareScenario("smoke-implement-default", `prototype-reference-${process.pid}`);
+  context.after(() => rm(reference.fixtureRoot, { recursive: true, force: true }));
+  await reference.scenario.simulate(reference.repo);
+  const correct = JSON.parse(await readFile(path.join(reference.repo, "app/screen.json"), "utf8"));
+  const changes = [
+    {}, // No implementation change: the original false-positive regression.
+    { regions: ["details", "summary"] },
+    { regions: ["details"] },
+    { regions: ["summary", "details", "extra"] },
+    { actionsPlacement: "start" }, { contentWidth: 880 }, { gap: 32 },
+    { surface: "card" }, { accent: "danger" }, { titleSize: 20 }, { titleWeight: 400 },
+  ];
+  for (const [index, change] of changes.entries()) {
+    const fixture = await evaluatorModule.prepareScenario("smoke-implement-default", `prototype-drift-${index}-${process.pid}`);
+    try {
+      if (index > 0) await writeFile(path.join(fixture.repo, "app/screen.json"), JSON.stringify({ ...correct, ...change }) + "\n");
+      const { commands, observations } = await observeSmokeFixture(fixture, index > 0);
+      assert.ok(observations.some(event => event.action === "open" && event.surface === "app" && event.majorBreakage === false));
+      assert.ok(observations.some(event => event.action === "save" && event.result === "Saved"));
+      await assert.rejects(evaluatorModule.gradePreparedScenario(fixture, fixture.scenario.simulatedFinal!, commands, observations), /prototype design mismatch/u);
+    } finally {
+      await rm(fixture.fixtureRoot, { recursive: true, force: true });
+    }
+  }
+});
+
+test("SMOKE-EVAL: prototype and operation-log tampering cannot authorize a design difference", async (context) => {
+  const evaluatorModule = await evaluatorModulePromise;
+  const fixture = await evaluatorModule.prepareScenario("smoke-implement-default", `prototype-tamper-${process.pid}`);
+  context.after(() => rm(fixture.fixtureRoot, { recursive: true, force: true }));
+  await fixture.scenario.simulate(fixture.repo);
+  for (const file of ["index.html", "design.css"]) {
+    const target = path.join(fixture.repo, "plans/smoke-settings/prototype", file);
+    const original = await readFile(target, "utf8");
+    await writeFile(target, original + "\n/* changed reference */\n");
+    await assert.rejects(evaluatorModule.gradePreparedScenario(fixture, fixture.scenario.simulatedFinal!), /rewrote prototype/u);
+    await writeFile(target, original);
+  }
+  const log = path.join(fixture.repo, "observed-actions.jsonl");
+  const actual = (await readFile(log, "utf8")).trim().split("\n").map(line => JSON.parse(line));
+  const altered = structuredClone(actual);
+  altered.find(event => event.action === "open" && event.surface === "prototype").title = "forged comparison";
+  await writeFile(log, altered.map(event => JSON.stringify(event)).join("\n") + "\n");
+  const commands = ["node workflow-fixture.mjs docs", "node workflow-fixture.mjs browser open prototype", "node --test fixture.test.mjs", "node workflow-fixture.mjs browser open app", "node workflow-fixture.mjs browser save"];
+  await assert.rejects(evaluatorModule.gradePreparedScenario(fixture, fixture.scenario.simulatedFinal!, commands, actual), /actual public operations do not match/u);
+});
+
+test("SMOKE-EVAL: plan may name its own prototype assets while source files and symlinks remain protected", async (context) => {
+  const evaluatorModule = await evaluatorModulePromise;
+  const fixture = await evaluatorModule.prepareScenario("smoke-plan-default", `prototype-assets-${process.pid}`);
+  context.after(() => rm(fixture.fixtureRoot, { recursive: true, force: true }));
+  await fixture.scenario.simulate(fixture.repo);
+  const prototype = path.join(fixture.repo, "plans/smoke-settings/prototype");
+  const htmlPath = path.join(prototype, "index.html");
+  await writeFile(htmlPath, (await readFile(htmlPath, "utf8")).replace('</head>', '<link rel="stylesheet" href="screen.css"></head>'));
+  await writeFile(path.join(prototype, "screen.css"), "input { min-width: 0; }\n");
+  await evaluatorModule.gradePreparedScenario(fixture, fixture.scenario.simulatedFinal!);
+  const source = path.join(fixture.repo, "app/screen.css");
+  await writeFile(source, "input { min-width: 0; }\n");
+  await assert.rejects(evaluatorModule.gradePreparedScenario(fixture, fixture.scenario.simulatedFinal!), /unexpected fixture changes: app\/screen.css/u);
+  await rm(source);
+  await symlink(path.join(fixture.repo, "app/screen.json"), path.join(prototype, "linked.json"));
+  await assert.rejects(evaluatorModule.gradePreparedScenario(fixture, fixture.scenario.simulatedFinal!), /unexpected fixture changes|symbolic link|symlink/u);
 });
 
 test("eval fixtureは外部MCPなしで必要なcustom agent定義を読み込める", async (context) => {
@@ -424,35 +539,6 @@ test("eval fixtureは外部MCPなしで必要なcustom agent定義を読み込�
     assert.match(agent, new RegExp(`^name = "${name}"$`, "m"));
     assert.match(agent, /^sandbox_mode = "read-only"$/m);
   }
-});
-
-test("review evalは公開APIのrevision確認を認識し不一致digestを拒否する", async (context) => {
-  const evaluatorModule = await evaluatorModulePromise;
-  const fixture = await evaluatorModule.prepareScenario("review-ui-evidence-required");
-  context.after(() => rm(fixture.fixtureRoot, { recursive: true, force: true }));
-  await fixture.scenario.simulate(fixture.repo);
-  const reportPath = path.join(fixture.repo, "plans/review-ui-gate/review/review-data.json");
-  const report = JSON.parse(await readFile(reportPath, "utf8"));
-  const preflight = report.validations.find((entry: { command: string }) => entry.command.includes(" preflight "));
-  const revision = preflight.summary.match(/sha256:[a-f0-9]{64}/)[0];
-  preflight.status = "failed";
-  preflight.summary = "preflight requires a UI goal";
-  const revisionAudit = { command: "node --input-type=module (loadParityDefinition)", status: "passed", summary: revision };
-  report.validations.push(revisionAudit);
-  await writeFile(reportPath, JSON.stringify(report));
-  await evaluatorModule.gradePreparedScenario(fixture, "plans/review-ui-gate/review/ report; Browser unverified");
-  revisionAudit.summary = `sha256:${"0".repeat(64)}`;
-  await writeFile(reportPath, JSON.stringify(report));
-  await assert.rejects(evaluatorModule.gradePreparedScenario(fixture, "plans/review-ui-gate/review/"), /trusted static preflight/);
-});
-
-test("review evalだけがfixtureのcustom reviewerをCLIへ明示しsandboxとmodelを上書きしない", async () => {
-  const { codexScenarioConfig } = await evaluatorModulePromise;
-  assert.deepEqual(codexScenarioConfig("plan-canonical", root), []);
-  const args = codexScenarioConfig("review-ui-evidence-required", root);
-  assert.deepEqual(args.slice(0, 4), ["--enable", "multi_agent_v2", "-c", "agents.enabled=true"]);
-  assert.ok(args.includes(`agents.independent_reviewer.config_file=${JSON.stringify(path.join(root, ".codex/agents/independent_reviewer.toml"))}`));
-  assert.doesNotMatch(args.join(" "), /sandbox|approval_policy|model=|model_reasoning_effort=/);
 });
 
 test("eval runnerは環境と出力量を制限し通常のtimeout・子process treeをcleanupする", async (context) => {
@@ -859,7 +945,7 @@ fs.writeFileSync(process.argv[index + 1], "fake final output\\n");
   await assert.rejects(access(hookMarker), { code: "ENOENT" });
 
   const trustedHelperFixture = await evaluatorModule.prepareScenario(
-    "plan-ui-revision",
+    "plan-canonical",
     `trusted-helper-${process.pid}`,
   );
   const helperMarker = path.join(fakeBin, "untrusted-helper-executed.txt");
@@ -867,28 +953,28 @@ fs.writeFileSync(process.argv[index + 1], "fake final output\\n");
     await trustedHelperFixture.scenario.simulate(trustedHelperFixture.repo);
     const ignoredUnexpected = path.join(
       trustedHelperFixture.repo,
-      "plans/plan-ui-revision/unexpected-note.md",
+      "plans/config-parser/unexpected-note.md",
     );
     await writeFile(ignoredUnexpected, "unexpected ignored artifact\n");
     await assert.rejects(
       evaluatorModule.gradePreparedScenario(
         trustedHelperFixture,
-        "planとprototypeを作成し、Browser未利用のため影響rowのsmokeは未確認です。",
+        "非UIのplanを作成しました。",
       ),
-      /unexpected fixture changes: plans\/plan-ui-revision\/unexpected-note\.md/u,
+      /unexpected fixture changes: plans\/config-parser\/unexpected-note\.md/u,
     );
     await rm(ignoredUnexpected);
     await writeFile(
       path.join(
         trustedHelperFixture.repo,
-        ".agents/skills/plan/scripts/prototype-revision.mjs",
+        ".agents/skills/plan/scripts/build-prototype-css.mjs",
       ),
       `#!/usr/bin/env node\nrequire("node:fs").writeFileSync(${JSON.stringify(helperMarker)}, "executed\\n");\n`,
     );
     await assert.rejects(
       evaluatorModule.gradePreparedScenario(
         trustedHelperFixture,
-        "planとprototypeを作成し、Browser未利用のため影響rowのsmokeは未確認です。",
+        "非UIのplanを作成しました。",
       ),
       /unexpected fixture changes/u,
     );
@@ -899,15 +985,15 @@ fs.writeFileSync(process.argv[index + 1], "fake final output\\n");
 });
 
 
-test("FLOW-03/SCALE-EVAL-01: workflow scenarios bind actual tool history and affected paths", async () => {
+test("FLOW-03: workflow scenarios bind actual tool history and affected paths", async () => {
   const workflow = await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href);
-  assert.equal(workflow.workflowScenarioNames.length, 22);
+  assert.equal(workflow.workflowScenarioNames.length, 7);
   const evaluatorModule = await evaluatorModulePromise;
   for (const name of workflow.workflowScenarioNames) {
     assert.ok(evaluatorModule.scenarios[name]);
-    assert.ok(evaluatorModule.selectAffectedScenarios(["scripts/goal-clarification.mjs"]).includes(name));
+    assert.ok(evaluatorModule.selectAffectedScenarios(["scripts/eval-workflow-scenarios.mjs"]).includes(name));
   }
-  assert.deepEqual(workflow.extractWorkflowCommands(JSON.stringify({ type: "item.completed", item: { type: "command_execution", command: "node workflow-fixture.mjs estimate", exit_code: 0 } })), ["node workflow-fixture.mjs estimate"]);
+  assert.deepEqual(workflow.extractWorkflowCommands(JSON.stringify({ type: "item.completed", item: { type: "command_execution", command: "node workflow-fixture.mjs inspect", exit_code: 0 } })), ["node workflow-fixture.mjs inspect"]);
   assert.throws(() => workflow.extractWorkflowCommands(JSON.stringify({ type: "item.completed", item: { type: "command_execution", command: "node workflow-fixture.mjs browser", exit_code: 1 } })));
   assert.throws(() => workflow.extractWorkflowCommands("truncated-json"));
 });

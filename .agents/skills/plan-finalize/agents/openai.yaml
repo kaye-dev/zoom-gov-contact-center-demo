@@ -1,7 +1,0 @@
-interface:
-  display_name: "Finalize Plan Archive"
-  short_description: "検証済みarchiveをbase同期後に限定cleanupする"
-  default_prompt: "Use $plan-finalize with the exact handoff emitted by $git-commit-push-pr to synchronize the archived plan safely and perform its constrained cleanup."
-
-policy:
-  allow_implicit_invocation: false

@@ -18,12 +18,3 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - run: npm run plans:guard
-      - name: Verify goal archives in changed commits
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PUSH_BEFORE_SHA: ${{ github.event.before }}
-        run: |
-          base_sha="${PR_BASE_SHA:-${PUSH_BEFORE_SHA}}"
-          head_sha="${PR_HEAD_SHA:-${GITHUB_SHA}}"
-          node scripts/plan-commit-archive.mjs verify-history --base "${base_sha}" --head "${head_sha}"

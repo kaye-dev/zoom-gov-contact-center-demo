@@ -18,7 +18,6 @@ import {
   type OnlineConsultationSetting,
 } from "@/lib/online-consultation-settings";
 import { MAX_CHAT_MEMO_LENGTH } from "@/lib/chat-settings";
-import type { SettingsReviewState } from "@/lib/admin-settings-review";
 import type { TenantKey } from "@/lib/tenants";
 import {
   AdminSettingsPanel,
@@ -31,33 +30,17 @@ type Props = {
   initialSettings: OnlineConsultationSetting[];
   initialTenant: TenantKey;
   canEdit: boolean;
-  reviewState?: SettingsReviewState;
 };
 export function OnlineConsultationSettingsForm({
   initialSettings,
   initialTenant,
   canEdit,
-  reviewState,
 }: Props) {
   const { t } = useI18n();
   const copy = t.admin.industrySettings;
-  const [activeSection, setActiveSection] = useState<string>(
-    consultationServices(initialTenant)[
-      reviewState === "detail" ? 1 : reviewState === "third" ? 2 : 0
-    ] ?? consultationServices(initialTenant)[0],
-  );
-  const [feedback, setFeedback] = useState<"saved" | "error" | null>(
-    reviewState === "saved"
-      ? "saved"
-      : reviewState === "save-error"
-        ? "error"
-        : null,
-  );
-  const [invalidField, setInvalidField] = useState<string | null>(
-    reviewState === "validation"
-      ? `online-consultation-tag-${consultationServices(initialTenant)[0]}`
-      : null,
-  );
+  const [activeSection, setActiveSection] = useState<string>(consultationServices(initialTenant)[0]);
+  const [feedback, setFeedback] = useState<"saved" | "error" | null>(null);
+  const [invalidField, setInvalidField] = useState<string | null>(null);
   useEffect(() => {
     if (invalidField) document.getElementById(invalidField)?.focus();
   }, [invalidField]);
@@ -70,7 +53,6 @@ export function OnlineConsultationSettingsForm({
       setFeedback(null);
       setInvalidField(null);
     },
-    reviewState,
   );
   const { settings, setSettings, isSubmitting } = control;
   const services = consultationServices(control.tenantKey);
@@ -138,7 +120,7 @@ export function OnlineConsultationSettingsForm({
   }
   return (
     <section
-      data-industry-state={control.pending ? "confirm-switch" : invalidField ? "validation" : control.invalid ? "invalid" : control.loading ? "loading" : control.loadError ? "load-error" : control.isSubmitting ? "saving" : feedback === "saved" ? "saved" : feedback === "error" ? "save-error" : control.dirty ? "dirty" : control.reviewIdentity ?? "default"}
+      data-industry-state={control.pending ? "confirm-switch" : invalidField ? "validation" : control.loading ? "loading" : control.loadError ? "load-error" : control.isSubmitting ? "saving" : feedback === "saved" ? "saved" : feedback === "error" ? "save-error" : control.dirty ? "dirty" : "default"}
     >
       <div data-admin-page-chrome className="space-y-4">
         <div data-admin-page-header className="ml-1 mr-0 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -152,7 +134,7 @@ export function OnlineConsultationSettingsForm({
           resource="online-consultation-settings"
         />
         </div>
-        {!control.invalid && !control.loading && !control.loadError && (
+        {!control.loading && !control.loadError && (
           <AdminSettingsTabs
             activeSection={active}
             onSelect={setActiveSection}
@@ -163,7 +145,7 @@ export function OnlineConsultationSettingsForm({
       </div>
       <div data-admin-page-body className="ml-1 mr-0 mt-6 max-w-5xl">
         <AdminSettingsLoadState control={control} />
-        {!control.invalid && !control.loading && !control.loadError && (
+        {!control.loading && !control.loadError && (
           <form
             data-admin-form
             noValidate

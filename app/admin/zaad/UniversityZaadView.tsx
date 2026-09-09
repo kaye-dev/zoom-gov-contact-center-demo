@@ -9,13 +9,10 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useI18n } from "@/app/i18n/LanguageProvider";
 import { AdminFieldHelp } from "@/app/components/admin/AdminFieldHelp";
 import { Select } from "@/app/components/Select";
-import { CASES, recipientsFor } from "@/lib/zaad/university/demo";
+import { CASES } from "@/lib/zaad/university/demo";
 import {
   PURPOSE_DEPARTMENT,
   parseConfig,
-  classify,
-  staffSummary,
-  groupSummary,
   type Template,
   type Outcome,
   type Config,
@@ -68,18 +65,14 @@ const defaults = (template: Template) =>
   Object.fromEntries(template.fields.map(([key, , value]) => [key, value]));
 
 export function UniversityZaadView({
-  permissions: actualPermissions,
+  permissions,
   departments,
   allowedTenants,
   years,
   serverDate,
-  reviewState,
-  reviewPurpose,
   embedded = false,
 }: {
   embedded?: boolean;
-  reviewState?: string;
-  reviewPurpose?: string;
   permissions: Permissions;
   departments: string[];
   allowedTenants: ("lg" | "univ")[];
@@ -91,76 +84,29 @@ export function UniversityZaadView({
     a = c.admin;
   const router = useRouter();
   const urlParams = useSearchParams();
-  const permissions =
-    reviewState === "readonly"
-      ? { create: false, update: false, delete: false }
-      : actualPermissions;
   const available = CASES.filter((item) =>
     departments.includes(PURPOSE_DEPARTMENT[item.id]),
   );
   const [chosen, setChosen] = useState(
-    available.find((item) => item.id === reviewPurpose) ??
-      available.find((item) => item.id === "scholarship") ??
+    available.find((item) => item.id === "scholarship") ??
       available[0] ??
       CASES[1],
   );
-  const initialStage: Stage = [
-    "targets",
-    "content",
-    "review",
-    "results",
-    "case",
-    "complete",
-    "inbound",
-    "registrations",
-    "metrics",
-  ].includes(reviewState ?? "")
-    ? (reviewState as Stage)
-    : reviewState === "readonly"
-      ? "results"
-      : reviewState === "error"
-        ? "review"
-        : ["registration-add", "registration-review"].includes(
-              reviewState ?? "",
-            )
-          ? "registrations"
-          : "templates";
-  const previewRun =
-    reviewState &&
-    ["results", "case", "complete", "readonly"].includes(reviewState)
-      ? createReviewRun(chosen)
-      : null;
-  const [stage, setStage] = useState<Stage>(initialStage),
+  const [stage, setStage] = useState<Stage>("templates"),
     [config, setConfig] = useState<Config>(() => defaults(chosen));
   const [candidateCursor, setCandidateCursor] = useState<string | null>(null);
   const [candidateTotal, setCandidateTotal] = useState<number | null>(null);
   const [trigger, setTrigger] = useState(chosen.mode);
-  const [candidates, setCandidates] = useState<Candidate[]>(
-      reviewState ? recipientsFor(chosen.id) : [],
-    ),
-    [selected, setSelected] = useState<string[]>(
-      reviewState
-        ? recipientsFor(chosen.id)
-            .filter((r) => r.eligible)
-            .map((r) => r.id)
-        : [],
-    ),
+  const [candidates, setCandidates] = useState<Candidate[]>([]),
+    [selected, setSelected] = useState<string[]>([]),
     [confirmed, setConfirmed] = useState<string[]>([]),
     [notified, setNotified] = useState<string[]>([]);
-  const [run, setRun] = useState<Run | null>(previewRun),
+  const [run, setRun] = useState<Run | null>(null),
     [history, setHistory] = useState<History[]>([]),
-    [activeRow, setActiveRow] = useState<ResultRow | null>(
-      initialStage === "case"
-        ? (previewRun?.rows.find((r) => r.answers.consultation) ??
-            previewRun?.rows[0] ??
-            null)
-        : null,
-    );
+    [activeRow, setActiveRow] = useState<ResultRow | null>(null);
   const [filter, setFilter] = useState("all"),
     [executeConfirmed, setExecuteConfirmed] = useState(false),
-    [error, setError] = useState<string | null>(
-      reviewState === "error" ? "RESULT_UNKNOWN" : null,
-    ),
+    [error, setError] = useState<string | null>(null),
     [feedback, setFeedback] = useState(false),
     [pending, setPending] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<History | null>(null);
@@ -1167,7 +1113,6 @@ export function UniversityZaadView({
         {stage === "inbound" && <UniversityIntakes permissions={permissions} />}
         {stage === "registrations" && (
           <UniversityStudentRegistry
-            reviewState={reviewState}
             canCreate={permissions.create}
             canUpdate={permissions.update}
             years={years}
@@ -2199,69 +2144,4 @@ function ManualAnswer({
       )}
     </section>
   );
-}
-
-// Bounded local review rendering. These rows are never accepted as persisted IDs by the APIs.
-function createReviewRun(template: Template): Run {
-  const config = defaults(template);
-  const rows: ResultRow[] = recipientsFor(template.id)
-    .filter((r) => r.eligible)
-    .map((r) => ({
-      ...r,
-      result: classify(r),
-      task: {
-        id: `review-case-${r.id}`,
-        siteKey: "univ",
-        departmentKey: PURPOSE_DEPARTMENT[template.id],
-        targetId: r.id,
-        intakeId: null,
-        assigneeId: null,
-        status: "OPEN",
-        procedureStatus: template.procedureApplicable ? "UNKNOWN" : "NA",
-        verificationAt: null,
-        verificationReference: null,
-        dueAt: null,
-        version: 1,
-        handoffRecipient: null,
-        handoffAt: null,
-        actions: [],
-        assignee: "",
-        note: "",
-        action: "",
-        minutes: 0,
-        procedure: template.procedureApplicable ? "UNKNOWN" : "NA",
-        verification: "",
-      },
-    }));
-  return {
-    id: "review-only",
-    templateId: template.id,
-    config,
-    version: 1,
-    mode: "DEMO",
-    status: "COMPLETED",
-    frozenTargetCount: rows.length,
-    rows,
-    reserves: [],
-    summary: {
-      targets: rows.length,
-      connected: rows.filter((r) => ["HUMAN", "VOICEMAIL"].includes(r.call))
-        .length,
-      acknowledged: rows.filter(
-        (r) => r.call === "HUMAN" && r.confirmed && r.recognized,
-      ).length,
-      consultation: rows.filter(
-        (r) =>
-          r.call === "HUMAN" &&
-          r.confirmed &&
-          r.recognized &&
-          r.answers.consultation,
-      ).length,
-      unconfirmed: rows.filter((r) => r.result === "unconfirmed").length,
-      resolved: 0,
-      verified: 0,
-    },
-    groups: template.id === "group" ? groupSummary(rows) : null,
-    venues: template.id === "staff" ? staffSummary(rows, config, []) : null,
-  };
 }

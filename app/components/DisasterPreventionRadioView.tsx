@@ -18,12 +18,11 @@ const contactPhoneHref = 'tel:+81312345678';
 
 type PublicRegistrationState = 'ready' | 'pending' | 'success' | 'empty' | 'failure';
 
-export function DisasterPreventionRadioView({ initialReviewState }: { initialReviewState?: string }) {
+export function DisasterPreventionRadioView() {
   const { t } = useI18n();
   const copy = t.contentPages.disasterRadio;
   const formCopy = copy.form;
-  const reviewState = isPublicRegistrationState(initialReviewState) ? initialReviewState : null;
-  const [state, setState] = useState<PublicRegistrationState>(reviewState ?? 'ready');
+  const [state, setState] = useState<PublicRegistrationState>('ready');
   const validationErrorRef = useRef<HTMLDivElement>(null);
   const serverErrorRef = useRef<HTMLDivElement>(null);
   const successRef = useRef<HTMLHeadingElement>(null);
@@ -186,8 +185,4 @@ const inputClass = 'mt-2 min-h-11 w-full rounded-md border border-line bg-surfac
 
 function RequiredLabel({ children }: { children: string }) {
   return <span className="text-red-700 dark:text-red-300">{children}</span>;
-}
-
-function isPublicRegistrationState(value: string | undefined): value is PublicRegistrationState {
-  return value === 'ready' || value === 'pending' || value === 'success' || value === 'empty' || value === 'failure';
 }

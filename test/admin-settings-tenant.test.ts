@@ -1,4 +1,3 @@
-import { resolveSettingsReview } from "../lib/admin-settings-review";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
@@ -57,34 +56,4 @@ test("consultation catalog and memo boundaries are industry-specific", () => {
     ).ok,
     false,
   );
-});
-
-test("review fixtures require an explicit state, loopback and non-production", () => {
-  assert.equal(
-    resolveSettingsReview("saving", "localhost", "development", true),
-    "saving",
-  );
-  for (const [host, env] of [
-    ["localhost", "production"],
-    ["univ.example.com", "development"],
-    ["example.com", "development"],
-  ]) {
-    assert.equal(resolveSettingsReview("saving", host!, env, true), undefined);
-  }
-  assert.equal(
-    resolveSettingsReview("saving", "localhost", "development"),
-    undefined,
-  );
-  for (const state of [
-    undefined,
-    "",
-    "unknown",
-    ["saving"],
-    ["saving", "default"],
-  ]) {
-    assert.equal(
-      resolveSettingsReview(state, "localhost", "development", true),
-      undefined,
-    );
-  }
 });

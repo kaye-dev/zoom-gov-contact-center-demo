@@ -81,7 +81,7 @@ test("IC-01 semantic-category-map: all locales and reordered stable keys", () =>
   }
 });
 
-test("IC-02 guidance-and-channels: all locales, reservation and chat-started", () => {
+test("IC-02 guidance-and-channels: all locales and reservation", () => {
   assert.deepEqual(universityGuidanceKeys, ["devices", "network", "preparation"]);
   assert.deepEqual(universityGuidanceKeys.map(key => universityGuidanceIcons[key]), ["devices", "wifi", "calendar"]);
   for (locale of locales) {
@@ -91,7 +91,7 @@ test("IC-02 guidance-and-channels: all locales, reservation and chat-started", (
     const hub = renderToStaticMarkup(createElement(Portal, { page: "consultation" }));
     assert.ok(hub.includes(iconMarkup("calendar", "h-10 w-10")));
     for (const name of ["devices", "wifi", "calendar"] as const) assert.ok(hub.includes(iconMarkup(name, "h-8 w-8")));
-    for (state of ["reserve", "chat-triggered"]) {
+    for (state of ["reserve"]) {
       const html = renderToStaticMarkup(createElement(Portal, { page: "consultation" }));
       const buttons = [...html.matchAll(/<button\b[^>]*>([\s\S]*?)<\/button>/g)].map(m => m[1]);
       assert.ok(buttons.some(body => body.endsWith(iconMarkup("chat")) && body.includes(copy.consultation.chatAction)));
@@ -121,28 +121,8 @@ test("IC-03 svg-contract-and-shape: every glyph and all illustration transforms"
   }
 });
 
-test("IC-04 status-and-action: ready video, busy/unknown disabled clock", () => {
-  const old = process.env.NODE_ENV;
-  Object.assign(process.env, { NODE_ENV: "development" });
-  try {
-    for (const previewState of ["now-open", "now-mixed", "now-stale"]) {
-      const html = renderToStaticMarkup(createElement(ConsultationAvailability, {
-        labels: { admissions: "Admissions", "student-support": "Support", careers: "Careers" },
-        descriptions: { admissions: "A", "student-support": "S", careers: "C" },
-        previewState, copy: { ready: "Ready", busy: "Busy", unavailable: "Unavailable", unknown: "Unknown", launch: "Start" },
-      }));
-      const cards = [...html.matchAll(/<article\b[^>]*data-availability-status="([^"]+)"[^>]*>([\s\S]*?)<\/article>/g)];
-      assert.equal(cards.length, 3);
-      for (const [, status, card] of cards) {
-        const button = card.match(/<button\b([^>]*)>([\s\S]*?)<\/button>/)!;
-        assert.equal(button[1].includes("disabled"), status !== "ready");
-        assert.ok(button[2].includes(iconMarkup(status === "ready" ? "video" : "clock")));
-      }
-    }
-  } finally { if (old === undefined) Reflect.deleteProperty(process.env, "NODE_ENV"); else Object.assign(process.env, { NODE_ENV: old }); }
-});
-
-test("IC-04 unavailable aggregate: disabled clock and preserved label", () => {
+// Supply API-shaped state only inside this render test; production always fetches it.
+function availabilityWithStatus(status: "ready" | "busy" | "unknown" | "unavailable") {
   const filename = path.resolve("app/tenants/univ/ConsultationAvailability.tsx");
   const localRequire = createRequire(filename);
   const code = ts.transpileModule(readFileSync(filename, "utf8"), {
@@ -151,31 +131,63 @@ test("IC-04 unavailable aggregate: disabled clock and preserved label", () => {
   const target = { exports: {} as { ConsultationAvailability: typeof ConsultationAvailability } };
   new Function("require", "module", "exports", code)((name: string) => {
     if (name === "react") return { ...localRequire("react"), useState: () => useState({
-      open: true, services: [{ serviceKey: "admissions", status: "unavailable" }],
+      open: true, services: ["admissions", "student-support", "careers"].map(serviceKey => ({ serviceKey, status })),
     }) };
     return localRequire(name);
   }, target, target.exports);
-  const html = renderToStaticMarkup(createElement(target.exports.ConsultationAvailability, {
-    labels: { admissions: "Admissions", "student-support": "Support", careers: "Careers" },
-    descriptions: { admissions: "A", "student-support": "S", careers: "C" },
-    previewState: "default",
-    copy: { ready: "Ready", busy: "Busy", unavailable: "Unavailable", unknown: "Unknown", launch: "Start" },
-  }));
-  const firstCard = html.match(/<article\b[^>]*>([\s\S]*?)<\/article>/)![1];
-  assert.ok(html.includes('data-availability-status="unavailable"'));
-  assert.match(firstCard, /<button[^>]*disabled=""/);
-  assert.ok(firstCard.includes(iconMarkup("clock")));
-  assert.ok(firstCard.includes("Unavailable"));
+  return target.exports.ConsultationAvailability;
+}
+
+test("IC-04 API status: ready video; busy, unknown and unavailable disabled clock", () => {
+  for (const status of ["ready", "busy", "unknown", "unavailable"] as const) {
+    const html = renderToStaticMarkup(createElement(availabilityWithStatus(status), {
+      labels: { admissions: "Admissions", "student-support": "Support", careers: "Careers" },
+      descriptions: { admissions: "A", "student-support": "S", careers: "C" },
+      copy: { ready: "Ready", busy: "Busy", unavailable: "Unavailable", unknown: "Unknown", launch: "Start" },
+    }));
+    const cards = [...html.matchAll(/<article\b[^>]*data-availability-status="([^"]+)"[^>]*>([\s\S]*?)<\/article>/g)];
+    assert.equal(cards.length, 3);
+    for (const [, actualStatus, card] of cards) {
+      assert.equal(actualStatus, status);
+      const button = card.match(/<button\b([^>]*)>([\s\S]*?)<\/button>/)!;
+      assert.equal(button[1].includes("disabled"), status !== "ready");
+      assert.ok(button[2].includes(iconMarkup(status === "ready" ? "video" : "clock")));
+      if (status === "unavailable") assert.ok(card.includes("Unavailable"));
+    }
+  }
 });
 
 test("IC-05 route-and-accessibility: every public page in every locale", () => {
   for (locale of locales) for (const page of ["home", "admissions", "academics", "campus-life", "scholarships", "careers", "faq", "news", "consultation"] as const) {
-    state = page === "faq" ? "faq-open" : "default";
+    state = "default";
     const html = renderToStaticMarkup(createElement(Portal, { page }));
     assert.ok(html.includes('id="main-content"'), `${locale}/${page}`);
     assert.ok(html.includes('href="/consultation"'));
     assert.doesNotMatch(html, /<svg[^>]*(?:tabindex|filter)=|<image|<foreignObject/);
   }
+});
+
+test("public query selects real consultation modes without forcing menu, FAQ or availability state", () => {
+  locale = "ja";
+  state = "default";
+  const ordinary = renderToStaticMarkup(createElement(Portal, { page: "consultation" }));
+  for (state of ["now-mixed", "now-stale", "now-closed", "now-unconfigured", "chat-triggered"]) {
+    assert.equal(renderToStaticMarkup(createElement(Portal, { page: "consultation" })), ordinary);
+  }
+  for (const [page, query] of [["home", "mobile-nav-open"], ["faq", "faq-open"]] as const) {
+    state = "default";
+    const initial = renderToStaticMarkup(createElement(Portal, { page }));
+    state = query;
+    assert.equal(renderToStaticMarkup(createElement(Portal, { page })), initial);
+  }
+  state = "now-open";
+  const immediate = renderToStaticMarkup(createElement(Portal, { page: "consultation" }));
+  assert.equal((immediate.match(/data-availability-status="unknown"/g) ?? []).length, 3);
+  assert.doesNotMatch(immediate, /data-availability-status="ready"/);
+  state = "reserve";
+  const reserved = renderToStaticMarkup(createElement(Portal, { page: "consultation" }));
+  assert.notEqual(reserved, ordinary);
+  assert.notEqual(reserved, immediate);
 });
 
 test("IC-07 adapted-source-contract: license, immutable source and no external dependencies", () => {

@@ -1,95 +1,52 @@
 ---
 name: implement
-description: "Implement and verify one repository goal; explicit $implement invocation approves the resolved goal and current prototype revision for UI-affecting work."
+description: "Implement an adopted repository goal, run focused static checks and a brief UI smoke, and incorporate direct minor UI feedback. Explicit $implement approves the selected design."
 ---
 
 # Implement
 
-Treat the resolved goal as the specification. The current agent owns implementation and verification; do not delegate implementation to a custom agent or route it through lifecycle machinery.
+The current agent owns implementation and verification; do not delegate implementation to a custom agent. Use the goal and the user's latest instructions as the specification. Preserve unrelated changes.
 
-When the adopted goal declares independently verifiable units and local stage commits, follow [implementation-checkpoints.md](../plan/references/implementation-checkpoints.md). Complete each unit's checks and any model stage coverage, create a content-bound receipt, commit only its verified scope, and continue without asking again. Do not invoke shipping for a local stage commit. Preserve generated goal/evidence and unrelated changes outside the index.
+## Start
 
-For contract 3/profile 5, use full-model estimate/preflight and `prepare-run --unit` / `verify-stage`; stage output is `checkpoint-verification.json`, not overall completion. Import only content/condition/expectation-identical stage results into the final union, execute missing or invalidated obligations, and require public `verify-run` evidence 6. This model path supersedes the legacy matrix-specific instructions below; existing contract 1/2 and profile 1–4 retain their own supported readers and are not silently migrated. A non-UI goal may explicitly require an owned development-tool Browser fixture; keep it separate from product UI approval.
+1. Resolve the explicit `plans/<slug>/goal.md`, or the only canonical goal. Stop for an ambiguous choice, not for other plans when the requested path is known.
+2. Read the complete goal, applicable repository rules, affected code/tests, and Git status. Check its requirements, interfaces, completion conditions, and user-check handoff using [goal-quality.md](../plan/references/goal-quality.md).
+3. The explicit invocation approves the selected goal and prototype. Ask only for a genuinely unresolved specification or new consequential action. Browser availability is not a start gate.
+4. For UI work, read [workflow-verification-contract.md](../plan/references/workflow-verification-contract.md) and `.claude/rules/dev-server.md`. Read the adopted prototype HTML/CSS and referenced assets; carry its visual specification into implementation even where the goal omits it, honoring later direct UI instructions. Legacy parity descriptions are historical validation data; retain product requirements and use smoke for this workflow.
 
-## Resolve and capture approval
+For non-UI work, verify the goal-specific static checks. Do not create a prototype, approval file, or parity evidence. An owned development-tool fixture is allowed only when the adopted goal calls for that limited test.
 
-1. Use the explicit `plans/<slug>/goal.md`, or the only `plans/*/goal.md`; stop for zero or multiple candidates. Reject invalid or reserved slugs.
-2. Read repository rules, the complete goal, current Git status, affected implementation, [goal-quality.md](../plan/references/goal-quality.md), and applicable UI references.
-3. Independently classify UI impact and resolve the regular goal and prototype/profile files. Capture validation issues for the next gate; do not edit production yet.
-4. For UI work whose artifact identities can be resolved, create a fresh run ID and write `plans/<slug>/evidence/<run-id>/approval.json` from this explicit invocation before preflight. Use `createApprovalEvidence` plus `writeRunEvidence` from [parity-runner.md](../plan/references/parity-runner.md), binding the complete goal hash, actual current prototype revision and profile digest. Model approval also binds `semanticDigest`; set `allowExplanatoryRestatement: true` only if the adopted goal authorizes that policy. Capture provenance even when the goal's recorded revision is stale; it does not permit proceeding past a failed gate.
-5. Now validate the six goal headings, closure, interfaces, completion criteria, unresolved decisions, UI impact, and user-check handoff. Run one `parity-runner.mjs preflight plans/<slug>/prototype --context implement`. New UI work uses contract 3/profile 5; existing matrix plans retain their supported contract 1/2 and profile 1–4. Require current goal, revision, profile, source, and selection checks to pass before production editing. Never rebuild the approved prototype; open it only at a completed unit or final verification boundary.
+## Implement and verify
 
-Write `approval.json` before source-drift and other start gates. A later gate failure keeps this invocation-bound evidence but stops production editing. The explicit `$implement` invocation is the approval basis; do not request a second approval, manual parity field, or revision transcription. Approval does not authorize deployment, destructive data changes, secrets, external writes, or GitHub mutations.
+- Implement the adopted behavior and prototype design using existing components and conventions. Preserve the prototype; do not edit it to match an unintended implementation difference. Use focused checks during editing.
+- At completion run affected tests, applicable lint/typecheck, and diff checks. Build for route/configuration/bundling/server-boundary changes or an explicit requirement. Run the full suite only for a concrete cross-suite impact or when no reliable focused selection exists.
+- Reuse passing checks when their paths, content, and execution time still apply. A digest is optional supporting information. A missing digest alone does not require re-execution. After a fix rerun only affected checks.
+- Review the final diff against the goal and latest instructions. Fix in-scope defects and continue; do not turn a test failure into another approval request for already-authorized repairs.
+- Preserve user-owned servers. Use HMR for normal edits, an isolated build when needed, and the runtime ownership rules for any explicit restart.
 
-For non-UI work, require `UI変更: なし` and `- 対象外: UI変更なし`; do not create product prototypes, UI approval evidence, or `implementation-parity.json`. Use goal-specific static/runtime verification. Browser is permitted only for an owned development-tool fixture expressly required by the adopted goal.
+## Brief final UI smoke
 
-## Legacy matrix scope and shared start gates
+After implementation and static checks, start or reuse the owned app through `./dev-compose.sh ensure` and use its verified URL. Follow the public Browser documentation before operating the Codex in-app Browser.
 
-Legacy matrix UI runs use `matrixScope: coverage` by default. The deterministic covering matrix must include, for every target, every declared state, viewport, and light/dark theme at least once. Execute every declared risk row and at least one anchor row per target. Do not reduce axis coverage because a change is local.
+Check normally 1–3 representative scenarios in total:
 
-Use `matrixScope: full` only for `release`, `ci`, `scheduled`, or user-`explicit` execution. A concrete cross-cutting risk may require full parity, but run it as a separate non-LLM verification task rather than an interactive feature turn. Never describe coverage evidence as full parity. `targeted` remains available only for `$plan` smoke and legacy profiles.
+1. Display the adopted prototype and affected app UI at the same representative viewport/theme/state. Compare their major structure and appearance under the shared contract, and check missing, overlapping, clipped, overflowing, or unusable areas. A usable page can still have an unintended design difference.
+2. Perform the main happy path through visible completion. For a save flow, observe the save result or rendered update. Prototype/fixture display alone is not evidence of real-app persistence.
 
-Before any UI production edit:
+Choose representative responsive/theme conditions only when relevant to the change. Do not enumerate every button, failure path, state, boundary, or viewport/theme combination. Do not use strict DOM, geometry, or pixel equality. Detailed parity, manifests, approval ledgers, estimates, and matrix runners are outside this workflow.
 
-- Capture HEAD, Git status, process/container ID, Compose ownership, checkout mount, and runtime URL without opening Browser or starting the prototype.
-- Validate goal/revision/profile, deterministic coverage selection, complete `productionBaseline.sources`, source impact declarations, and the freshly written approval evidence.
-- Require each user checklist item to have a stable unchecked `UI-CHECK-XX` ID plus an observable production target, approved-prototype prerequisite, comparison operation, and expected result. Do not mark an item complete.
-- Stop before editing for stale approval, missing source, contract contradiction, unrelated source drift, wrong ownership/mount, ambiguous task scope, or an incomplete user-check handoff.
-- Record the coverage scope and exact selection for the final run. Rendered fixture, authorization, query, route, viewport, theme, and scroll conditions are verified at the final Browser boundary.
+Keep the check to a few minutes as a guide, not an approval deadline. Fix a discovered in-scope defect and recheck the affected part. If Browser is unavailable, preserve the implementation, report static results and `UI未確認`, and allow shipping with that disclosure. An observed defect is a failure, not merely unverified. Stop repeated identical tool failures, report the actual limitation, and do not build validation infrastructure or switch tasks to bypass it.
 
-Browser availability is not a start gate. Do not probe Browser capability or create parity results before the completion candidate.
+## Direct UI feedback
 
-## Implement and verify statically
+A direct request for a local adjustment such as spacing, position, size, color, or wording authorizes that fix when behavior, permissions, and data contracts are preserved. Implement it without requiring `$plan` or another `$implement`, keep goal/prototype unchanged, and run only applicable local checks plus a brief check of the changed UI. Report the intended difference so later work honors the latest instruction instead of reverting to the older prototype.
 
-- Implement the adopted design while preserving unrelated changes. Treat the prototype, UI contract, and validation profile as fixed targets.
-- Run the smallest relevant code checks while editing. Do not run Browser rows or supplemental sweeps during authoring.
-- Use HMR for ordinary source changes. `./dev-compose.sh ensure` may restart only verified Compose `web` after a pending migration. For new-route, cache, package, or runtime-configuration refresh, report the reason and wait for the explicit `./dev-compose.sh restart web` (`Web restart`) action.
-- Never stop a user-owned server for a build. Use an isolated build or report it blocked.
-- Before final checks, run `node scripts/validation-digest.mjs --scope <task-path>` once for the exact task paths and record its HEAD, staged/unstaged/untracked digests, validated diff digest, command, scope, and result. Run focused tests plus applicable lint/typecheck and `git diff --check`; run the full suite only when unrelated suites can be affected or no reliable target exists, and build only for route, configuration, bundling, server-boundary, or explicit repository requirements.
-- Reuse a passing check only when its command, scope, status, and validated diff digest match. Full test and build each run at most once per digest; after a source fix rerun only affected checks, and never rerun static checks for a Browser-only failure.
-- Review the final diff against the goal, requirement closure, exact task scope, and user-check handoff before starting runtime verification.
+For a requested design change, update the plan through an explicit `$plan` request and implement the adopted revision through `$implement`. Ask about unresolved product/permission/data decisions only; do not infer a new design from a vague complaint.
 
-## Final coverage run (legacy matrix protocol)
+## Cleanup and finish
 
-For UI work, only after implementation, static checks, any justified build, and diff review are complete:
+Treat exact phrase `確認セッションを保持` as an opt-in only when it appears in the current invocation. After smoke, use `./dev-confirmation.sh attach-app <slug>` and status to retain the owned app, and report `./dev-confirmation.sh stop <slug>`. Otherwise clean up only baseline-delta resources proven task-owned with `./dev-compose.sh cleanup`; never delete volumes or stop pre-existing/user resources.
 
-1. Start or reuse the verified real app with one authoritative `./dev-compose.sh ensure` and use the owner, health, project, checkout mount, container/PID, port, and `PRODUCTION_URL` in its final status; do not issue parallel status, fixed sleep, polling, or follow-log commands while it runs. Start the prototype once, and perform one drift readback only immediately before `finalize-run`; on ensure failure, take one bounded same-project status/process/recent-log diagnostic without changing foreign resources.
-2. Use the common `in-app-browser-parity-adapter.mjs` with distinct task-owned `production` and `prototype` tab handles and the `prepare-run` / `next-batch` / `record-batch` / `record-failure` / `invalidate-run` / `resume-run` / `finalize-run` protocol from [parity-runner.md](../plan/references/parity-runner.md). Do not create task-specific adapters, executable bundles, or runtime shims.
-3. Let the runner execute bounded data-only batches. Do not operate or narrate rows one by one. Batch summaries stay compact. After capture, Codex must open the declared sanitized image pairs by artifact path for visual inspection; do not dump raw DOM, accessibility trees, base64, or every successful row.
-4. Require every coverage row and required probe to pass, including exact `390x844 / DPR 1` readback when declared. Coverage probes verify route, state setup and identity, exact viewport/DPR, root theme and `color-scheme`, primary controls, horizontal overflow/scroll, and serious console errors. Anchor rows add only the declared screenshot, DOM, accessibility, computed-style, geometry, focus, keyboard, and network probes.
-5. Persist raw screenshot, DOM, and accessibility artifacts through the workspace artifact sink. Do not dump raw payloads; expose only the selected safe images needed for Codex visual inspection. Require private paths, artifact digests, denylist scanning, and terminal cleanup.
-6. Perform the requirement, CLI, real-action, interaction, and Codex visual audit in [fidelity-audit.md](../plan/references/fidelity-audit.md), then use `record-audit`. Human inspection is optional.
-7. Write schema-version-5 `implementation-parity.json` only after required coverage, interactions, real actions, Codex visual/requirement audit, CLI checks, and cleanup pass. It records `matrixScope: coverage | full`, exact rows, recomputed state/viewport/theme coverage, risk and anchor results, checkpoint/resume history, artifacts, digests, cleanup, automation coverage status, human visual approval status, and full parity status. New runs do not create `pre-edit-parity.json`.
+Report changed paths, actual checks and smoke outcomes, comparison conditions/matches/accepted differences, known failures, unverified items, and unchecked human UI items. If either surface could not be displayed, report `prototypeとの視覚照合は未確認`. Keep progress in the report, not in the goal. Review and shipping reuse valid results rather than rerunning Browser for an engineering phase change.
 
-There is no run-wide time cutoff. Completion occurs when required coverage passes, a required probe exposes an implementation defect, the same transient failure batch fails after its one retry, or cleanup/readback returns a terminal failure. Retry only the failed batch once; do not restart passed rows, change batch size, switch Browser, or rerun static checks because of a Browser-only failure.
-
-## Fixes, invalidation, and terminal failure
-
-When Browser validation exposes an implementation defect, identify the source impact before editing:
-
-- Target-only source: invalidate that target's coverage, risk, and anchor rows.
-- Shared source: invalidate only consumers declared by `sourceImpactMap`.
-- Global style, theme foundation, or shared shell: invalidate every target.
-- Unresolved impact: fail closed and invalidate every target.
-
-Resume from the resulting checkpoint. Preserve unaffected passing rows and static results. Invalidate matching runtime and visual audit evidence too; retain unaffected passing rows. Repeat the final audit after fixes. Do not create an `affected` phase or duplicate manual sweep.
-
-A missing Browser capability, selected-tab drift, failed required probe, second transient tool failure, or cleanup failure prevents an automated-coverage completion claim but preserves valid implementation edits. Report the stable code, verified and unexecuted coverage, checkpoint, absent canonical evidence when applicable, and the incomplete required checks. Do not replace a failed required check with a request for human approval. Do not fall back to another Browser, Chrome, Playwright, or Computer Use, and do not redesign the runner in the feature task. Complete [Browser documentation bootstrap](../plan/references/browser-api-bootstrap.md) before Browser operations. Recover documented unread failures in the same task through the guarded checkpoint API; follow the actual permission flow for explicit denials. For terminal CDP capability/DPR failures that persist after bootstrap, follow the fresh-task handoff in [fidelity-audit.md](../plan/references/fidelity-audit.md): recommend a new Codex task and return a populated, copyable continuation prompt without claiming recovery or creating a task automatically.
-
-For manifest size failures, follow [Manifest size recovery policy](../plan/references/manifest-storage.md). Preserve the full contract and treat explicit user authorization for a runner fix as a workflow scope extension; the feature-task restriction above does not require another approval for that authorized fix. A documentation-only request does not authorize storage implementation.
-
-## Codex visual audit, optional human approval, and cleanup
-
-CLI checks, automated axis/interaction coverage, runtime actions, requirement conformance, Codex visual inspection, optional human approval, and full parity are distinct states. Codex must inspect every declared visual pair before completion. Never mark `UI-CHECK-XX` complete from automated coverage. The final report separates state coverage, viewport coverage, theme coverage, risk rows, anchor rows, unverified items, representative screenshot/URL, and visual judgments such as spacing, font rendering, pixels, and overall finish. Automated coverage passing does not claim human approval or full parity.
-
-Treat exact phrase `確認セッションを保持` as an opt-in only when it appears in the current invocation. After final review, an opted-in invocation runs `./dev-confirmation.sh attach-app <slug>` and `./dev-confirmation.sh status <slug>`, then reports app/prototype availability separately from parity verification plus the exact stop command. Without opt-in, clean up only baseline-delta resources proven agent-owned. Worktrees use `./dev-compose.sh cleanup`; Local cleanup is a no-op. Never run broad `docker compose down`, delete volumes, or stop pre-existing/user resources.
-
-## Finish
-
-Complete model UI work only with public `verify-run` evidence 6 after the current full obligation union passes. Complete legacy matrix UI work only when schema-version-5 evidence has `automationCoverageStatus=pass`, complete recomputed `interactionCoverage`, and all `auditStatus` fields equal `pass`; human visual approval may remain pending and full parity may remain not-run. Non-UI work completes through its goal-specific checks, including an expressly required owned tool fixture; it does not require product UI parity evidence.
-
-Report changed paths, commands/results, runtime checks, evidence paths, coverage results, unchecked user checks, human-review status, full-parity status, risks, and preserved unrelated changes. Do not mutate the goal for progress, ship automatically, push, or create a pull request. Stage/commit only when the adopted goal explicitly authorizes local stage commits, using the content-bound checkpoint workflow above.
-
-At the transition to independent review, follow [the manual model handoff](../review/references/model-handoff.md): finish required implementation verification first, then return the target model and populated continuation prompt before any independent review. Keep `$review` optional unless requested; do not start it automatically.
-
-新規UIのcontract version 3 / profile version 5、Browser前のestimate、consumer接続、段階集約のschema 6、`goal-clarification.mjs`による限定承認継承は[共通検証契約](../plan/references/workflow-verification-contract.md)に従う。
+Do not start `$review`, push, or create a PR automatically. Stage/commit only if the adopted goal explicitly authorizes scoped local commits; such commits require successful affected checks and do not authorize shipping. A later explicit `$git-commit-push-pr` handles commit, push, and PR together.

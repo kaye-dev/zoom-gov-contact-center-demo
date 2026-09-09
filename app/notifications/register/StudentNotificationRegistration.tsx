@@ -330,68 +330,19 @@ export function RegistrationConfirmation({
 export function StudentNotificationRegistration({
   admissionYears: initialYears,
   serverDate,
-  reviewState,
 }: {
   admissionYears: number[];
   serverDate: string;
-  reviewState?: string;
 }) {
   const { t } = useI18n(),
     c = t.universityOutreach;
-  const fixture = [
-    "reg-confirm",
-    "reg-submitting",
-    "reg-success",
-    "reg-error",
-  ].includes(reviewState ?? "")
-    ? {
-        name: "大学 花子（デモ）",
-        facultyCode: "1",
-        admissionYear: String(initialYears[0]),
-        serial: "0001",
-        phone: "090-0000-0000",
-        topicIds: ["scholarship", "class-change"] as Topic[],
-        consent: true,
-      }
-    : emptyRegistration();
-  const [value, setValue] = useState(fixture),
+  const [value, setValue] = useState(emptyRegistration),
     [years, setYears] = useState(initialYears),
     [validationDate, setValidationDate] = useState(serverDate);
-  const [step, setStep] = useState<
-    "input" | "confirm" | "submitting" | "success"
-  >(
-    reviewState === "reg-confirm"
-      ? "confirm"
-      : reviewState === "reg-submitting"
-        ? "submitting"
-        : reviewState === "reg-success"
-          ? "success"
-          : "input",
-  );
-  const [errors, setErrors] = useState<Record<string, string>>(
-      reviewState === "reg-validation"
-        ? {
-            name: "name",
-            facultyCode: "faculty",
-            admissionYear: "year",
-            serial: "serial",
-            phone: "phone",
-            topicIds: "topics",
-            consent: "consent",
-          }
-        : {},
-    ),
-    [failure, setFailure] = useState<"server" | "year" | null>(
-      reviewState === "reg-error" ? "server" : null,
-    );
-  const [parsed, setParsed] = useState<RegistrationInput | null>(() =>
-    fixture.consent
-      ? parseRegistration(
-          registrationPayload(fixture, "registration-review-fixture"),
-          new Date(serverDate),
-        )
-      : null,
-  );
+  const [step, setStep] = useState<"input" | "confirm" | "submitting" | "success">("input");
+  const [errors, setErrors] = useState<Record<string, string>>({}),
+    [failure, setFailure] = useState<"server" | "year" | null>(null);
+  const [parsed, setParsed] = useState<RegistrationInput | null>(null);
   const key = useRef<string | null>(null),
     sending = useRef(false),
     focusTarget = useRef<HTMLElement | null>(null);
