@@ -30,7 +30,7 @@ export async function defaultGroupDto(db: Database, group: Awaited<ReturnType<ty
   return { id: group.id, kind: "DEFAULT", defaultGroupId: group.id, topicKey: group.topicKey, name: group.topicKey, description: "", departmentKey: null, version: group.revision, revision: String(group.revision), accountId, contactListId: group.binding?.zoomId ?? null,
     rebindCount: await db.outreachRegistrationMembership.count({ where: { siteKey: group.siteKey, defaultGroupId: group.id, syncStatus: { not: "UNKNOWN" } } }), contactCount: null, bindingState: !group.binding || group.binding.tombstone ? "MISSING" : group.binding.accountId !== accountId ? "ACCOUNT_CHANGED" : "CONFIGURED" };
 }
-export async function listOutreachGroups(db: PrismaClient, scope: OutreachScope) {
+export async function listOutreachGroups(db: PrismaClient, scope: OutreachScope, injected?: Parameters<typeof listZoomGroups>[2]) {
   const defaults = scope.all ? await db.outreachDefaultGroup.findMany({ where: { siteKey: scope.siteKey }, include: { binding: true }, orderBy: { id: "asc" } }) : [];
   const items: Array<DefaultGroupDto | (Awaited<ReturnType<typeof listZoomGroups>>["items"][number] & { kind: "REGULAR" })> = [];
   for (const topic of DEFAULT_GROUP_TOPICS[scope.siteKey]) {
@@ -38,13 +38,33 @@ export async function listOutreachGroups(db: PrismaClient, scope: OutreachScope)
     if (group) items.push(await defaultGroupDto(db, group));
   }
   let providerState = "connected";
+  let client = injected;
+  const counts = new Map<string, number | null>();
   try {
-    const regular = await listZoomGroups(db, scope);
+    client ??= await ZaadZoomClient.fromDatabase(db, scope.siteKey);
+    const regular = await listZoomGroups(db, scope, client);
+    for (const row of regular.items) counts.set(row.id, row.contactCount);
     items.push(...regular.items.filter(row => !defaults.some(group => group.bindingId === row.bindingId)).map(row => ({ ...row, kind: "REGULAR" as const })));
   } catch (error) {
     // The local default groups stay accessible when the provider is unavailable.
     if (!scope.all) throw error;
     providerState = error instanceof Error ? error.message : "SERVICE_UNAVAILABLE";
+  }
+  if (client) {
+    const currentClient = client;
+    const configured = items.filter((row): row is DefaultGroupDto => row.kind === "DEFAULT" && row.bindingState === "CONFIGURED" && row.accountId === currentClient.accountId);
+    const pendingIds = [...new Set(configured.flatMap(row => row.contactListId && !counts.has(row.contactListId) ? [row.contactListId] : []))];
+    // Bound fallback reads and keep failures local to the affected list.
+    await Promise.all(Array.from({ length: Math.min(3, pendingIds.length) }, async () => {
+      let id: string | undefined;
+      while ((id = pendingIds.shift()) !== undefined) {
+        try {
+          const observed = await currentClient.getContactList(id);
+          if (observed.id === id && observed.type === "contact") counts.set(id, observed.contactCount);
+        } catch { /* Unknown counts stay null; never substitute local memberships. */ }
+      }
+    }));
+    for (const row of configured) row.contactCount = counts.get(row.contactListId!) ?? null;
   }
   return { tenantKey: scope.siteKey, items, total: items.length, nextCursor: null, providerState };
 }

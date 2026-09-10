@@ -744,3 +744,47 @@ test("default group binding uses a shared labelled select and refresh without li
   assert.match(groups, /d\.sync/); assert.match(groups, /z.common.create/);
   assert.match(groups, /<DefaultGroupBinding/); assert.match(detail, /<DefaultGroupBinding/);
 });
+
+
+test("contact group counts and detail chrome keep localized labels and saved-ID state", async () => {
+  const { outreachCommonDictionaries } = await import("../app/i18n/outreach-common");
+  const labels = ["連絡先数", "Contact count", "联系人数量", "聯絡人數量", "연락처 수"];
+  for (const [index, locale] of (["ja", "en", "zh-Hans", "zh-Hant", "ko"] as const).entries()) {
+    const copy = outreachCommonDictionaries[locale];
+    assert.equal(copy.groupMembers, labels[index]);
+    assert.ok(copy.defaultGroups.update);
+    assert.notEqual(copy.defaultGroups.update, copy.defaultGroups.configure);
+  }
+  const source = (name: string) => readFileSync(new URL(`../app/admin/zaad/${name}.tsx`, import.meta.url), "utf8");
+  const groups = source("OutreachGroups"), detail = source("OutreachDefaultGroup"), view = source("OutreachView");
+  assert.ok(groups.includes('row.contactCount ?? "—"'));
+  assert.ok(groups.includes('row.contactListId ? d.defaultGroups.update : d.defaultGroups.configure'));
+  assert.ok(detail.includes('data.group.contactListId ? d.update : d.configure'));
+  for (const text of [groups, detail]) {
+    assert.ok(text.includes('flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2'));
+    assert.ok(text.includes('break-all text-sm text-fg-muted'));
+  }
+  assert.ok(groups.includes('{d.defaultGroups.listId}：{detail.group.id}'));
+  assert.ok(detail.includes('border-l-2 border-accent pl-3 text-sm text-red-700 dark:text-red-300'));
+  assert.ok(view.includes('["default-group-detail", "group-detail"].includes(query.get("state") ?? "")'));
+  assert.ok(view.includes('{!showingGroupDetail && <AdminTenantRouteSelect'));
+});
+
+test("default detail keeps search and sync semantics with a portal help and centered icon actions", async () => {
+  const { outreachCommonDictionaries } = await import("../app/i18n/outreach-common");
+  for (const copy of Object.values(outreachCommonDictionaries)) assert.ok(copy.defaultGroups.syncStatusHelp);
+  const detail = readFileSync(new URL("../app/admin/zaad/OutreachDefaultGroup.tsx", import.meta.url), "utf8");
+  assert.equal((detail.match(/<SearchInput /g) ?? []).length, 1);
+  assert.ok(detail.includes('flex-col items-start gap-4 lg:flex-row lg:flex-wrap lg:items-center'));
+  assert.ok(detail.includes('containerClassName="w-full max-w-96 lg:w-96"'));
+  assert.ok(detail.includes('params.set("cursor", "0")'));
+  assert.ok(detail.includes('if (composing || text === search) return'));
+  assert.ok(detail.includes('label={d.syncStatusHelp} description={d.boundary} portal'));
+  assert.ok(!detail.includes('<p className="text-sm text-fg-muted">{d.boundary}</p>'));
+  assert.ok(detail.includes('aria-label={t.outreachCommon.sync} title={t.outreachCommon.sync}'));
+  assert.ok(detail.includes('disabled={busy || !configured || row.syncStatus === "SYNCING"}'));
+  assert.ok(detail.includes('onClick={() => void sync(row.id)}><RefreshIcon />'));
+  assert.ok(detail.includes('canSync && needsLink ? <TableRowActions'));
+  assert.ok(detail.includes('text-center"><div className="flex justify-center"'));
+  assert.ok(detail.includes('ref={noticeRef} tabIndex={-1} role="status"'));
+});

@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { withIsolatedPostgresDatabase } from "../helpers/isolated-postgres";
 import { createDatabaseContext } from "../../lib/server/prisma";
-import { bindDefaultGroup, defaultGroupCandidates, addRegistrationMemberships, ensureDefaultGroups } from "../../lib/server/zaad/default-groups";
+import { listOutreachGroups, bindDefaultGroup, defaultGroupCandidates, addRegistrationMemberships, ensureDefaultGroups } from "../../lib/server/zaad/default-groups";
 import { startRegistrationGroupSync, advanceRegistrationSync, getRegistrationSyncOperation, getDefaultGroupDetail, syncRegisteredSource, type RegistrationGroupClient } from "../../lib/server/zaad/registration-group-sync";
 import type { OutreachScope } from "../../lib/server/zaad/outreach-scope";
 import { OutreachContractError } from "../../lib/zaad/outreach-contracts";
@@ -245,6 +245,74 @@ test("default group candidate reads preserve provider lists and enforce binding 
         await rejects(bindDefaultGroup(db, scope, groupId, { ...payload, revision: snapshot.revision + 1 }, provider), "RESOURCE_OWNERSHIP_CONFLICT");
         assert.equal((await db.outreachDefaultGroup.findUniqueOrThrow({ where: { id: groupId }, include: { binding: true } })).binding?.zoomId, lists[4].id);
       });
+    } finally { await context.close(); }
+  });
+});
+
+
+test("group list counts use Zoom values, isolate failures and never count pending registrations", { timeout: 180000 }, async () => {
+  await withIsolatedPostgresDatabase(async databaseUrl => {
+    const context = createDatabaseContext({ ...process.env, DATABASE_URL: databaseUrl }), db = context.prisma;
+    try {
+      await db.globalDeveloperApiSetting.create({ data: { id: "global", accountId: "fixture-account", clientId: "fixture" } });
+      const calls: string[] = [];
+      let failListing = false, active = 0, peak = 0;
+      const observed = (id: string) => ({ id, name: id, description: "", type: "contact" as const, contactCount: id.endsWith("0") ? 0 : id.endsWith("1") ? 12 : null, revision: "1", updatedAt: null });
+      const unused = async (): Promise<never> => { throw new Error("unexpected provider write or contact enumeration"); };
+      const provider = {
+        ...groupProvider(),
+        async listContactLists() {
+          if (failListing) throw new Error("listing unavailable");
+          return { lists: ["lg-0", "lg-1", "lg-2", "lg-3", "univ-0", "univ-1", "univ-2", "univ-3", "regular-1"].map(observed), nextPageToken: null };
+        },
+        async getContactList(id: string) {
+          calls.push(id); active++; peak = Math.max(peak, active);
+          try { await new Promise(resolve => setTimeout(resolve, 5)); if (id.endsWith("3")) throw new Error("individual failure"); return observed(id); }
+          finally { active--; }
+        },
+        createContactList: unused, updateContactList: unused, deleteContactList: unused,
+        createContact: unused, updateContact: unused, deleteContact: unused, listContacts: unused,
+      };
+      for (const siteKey of ["lg", "univ"] as const) {
+        await ensureDefaultGroups(db, siteKey);
+        const groups = await db.outreachDefaultGroup.findMany({ where: { siteKey }, orderBy: { id: "asc" } });
+        for (const [index, group] of groups.slice(0, 4).entries()) {
+          const binding = await db.zoomResourceBinding.create({ data: { ownerSiteKey: siteKey, accountId: provider.accountId, resourceType: "CONTACT_LIST", zoomId: `${siteKey}-${index}`, purpose: "REGULAR" } });
+          await db.outreachDefaultGroup.update({ where: { id: group.id }, data: { bindingId: binding.id } });
+        }
+        for (let index = 0; index < 3; index++) await addRegistrationMemberships(db, siteKey, siteKey === "lg" ? "MUNICIPAL_CONTACT" : "UNIVERSITY_REGISTRATION", `pending-${siteKey}-${index}`, [groups[1].topicKey]);
+      }
+      await db.zoomResourceBinding.create({ data: { ownerSiteKey: "lg", accountId: provider.accountId, resourceType: "CONTACT_LIST", zoomId: "regular-1", purpose: "REGULAR" } });
+      const snapshot = async () => JSON.stringify({ groups: await db.outreachDefaultGroup.findMany({ orderBy: { id: "asc" } }), bindings: await db.zoomResourceBinding.findMany({ orderBy: { id: "asc" } }), memberships: await db.outreachRegistrationMembership.findMany({ orderBy: { id: "asc" } }) });
+      const before = await snapshot();
+      for (const siteKey of ["lg", "univ"] as const) {
+        const result = await listOutreachGroups(db, { ...scope, siteKey }, provider);
+        assert.deepEqual(result.items.filter(row => row.kind === "DEFAULT").map(row => row.contactCount).sort((a, b) => (a ?? -1) - (b ?? -1)), [null, null, null, 0, 12]);
+        assert.equal(result.items.filter(row => row.kind === "REGULAR").length, siteKey === "lg" ? 1 : 0);
+        if (siteKey === "lg") assert.equal(result.items.find(row => row.kind === "REGULAR")?.contactCount, 12);
+        assert.ok(result.items.every(row => row.kind === "REGULAR" || row.id.startsWith(`default-${siteKey}-`)));
+      }
+      assert.equal(calls.length, 0); // Listing values, including null, do not trigger redundant reads.
+      failListing = true;
+      for (const siteKey of ["lg", "univ"] as const) {
+        const result = await listOutreachGroups(db, { ...scope, siteKey }, provider);
+        assert.equal(result.items.length, 5);
+        assert.equal(result.items.find(row => row.kind === "DEFAULT" && row.contactListId === `${siteKey}-1`)?.contactCount, 12);
+        assert.equal(result.items.find(row => row.kind === "DEFAULT" && row.contactListId === `${siteKey}-3`)?.contactCount, null);
+      }
+      assert.equal(peak, 3); assert.equal(new Set(calls).size, 8); assert.equal(calls.length, 8);
+      assert.equal(await snapshot(), before);
+      await db.zoomResourceBinding.updateMany({ where: { zoomId: "lg-0" }, data: { accountId: "old-account" } });
+      await db.zoomResourceBinding.updateMany({ where: { zoomId: "lg-1" }, data: { tombstone: true } });
+      calls.length = 0;
+      const invalid = await listOutreachGroups(db, scope, provider);
+      for (const id of ["lg-0", "lg-1"]) {
+        assert.equal(invalid.items.find(row => row.kind === "DEFAULT" && row.contactListId === id)?.contactCount, null);
+        assert.ok(!calls.includes(id));
+      }
+      failListing = false;
+      const restricted = await listOutreachGroups(db, { ...scope, all: false, departments: [] }, provider);
+      assert.deepEqual(restricted.items, []);
     } finally { await context.close(); }
   });
 });

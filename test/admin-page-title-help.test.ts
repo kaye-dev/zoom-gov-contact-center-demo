@@ -82,3 +82,24 @@ test("HELP-REVIEW: field help supports an initially open, dismissible state", as
   assert.match(html, /対象を選択します。/);
   assert.equal(isHelpOpen(helpReducer({ ...initialHelpState, pinned: true }, "dismiss")), false);
 });
+
+test("FIELD-HELP-PORTAL: SSR keeps one accessible description without requiring document", async () => {
+  const { AdminFieldHelp } = await import("../app/components/admin/AdminFieldHelp");
+  for (const portal of [false, true]) {
+    const html = renderToStaticMarkup(createElement(AdminFieldHelp, {
+      id: "sync-status-help", label: "同期状態について", description: "同期完了は配信開始を意味しません。", portal, defaultOpen: true,
+    }));
+    assert.equal((html.match(/id="sync-status-help"/g) ?? []).length, 1);
+    assert.match(html, /aria-describedby="sync-status-help"/);
+    assert.match(html, /role="tooltip"/);
+    assert.match(html, /同期完了は配信開始を意味しません。/);
+    assert.ok(html.includes(portal ? 'class="sr-only"' : 'absolute left-0'));
+  }
+});
+
+test("FIELD-HELP-PORTAL: placement fits at viewport edges and flips above the table header", async () => {
+  const { fieldHelpPosition } = await import("../app/components/admin/AdminFieldHelp");
+  assert.deepEqual(fieldHelpPosition({ right: 980, top: 300, bottom: 332 }, 320, 64, { width: 1280, height: 720 }), { left: 660, top: 340 });
+  assert.deepEqual(fieldHelpPosition({ right: 30, top: 700, bottom: 732 }, 320, 64, { width: 390, height: 844 }), { left: 20, top: 740 });
+  assert.deepEqual(fieldHelpPosition({ right: 800, top: 800, bottom: 832 }, 320, 64, { width: 390, height: 844 }), { left: 50, top: 728 });
+});
