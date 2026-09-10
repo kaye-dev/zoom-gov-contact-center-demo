@@ -96,7 +96,7 @@ test("ROW-05 synchronous guard blocks pending/replayed success and permits faile
   guard.end("a", true);
   assert.equal(guard.begin("a"), false);
   assert.equal(guard.begin("b"), true);
-  for (const path of ["roles/RolesView", "zaad/ZaadView", "password-reset-requests/PasswordResetRequestsView"]) {
+  for (const path of ["roles/RolesPanel", "zaad/ZaadView", "password-reset-requests/PasswordResetRequestsView"]) {
     const source = readFileSync(new URL(`../app/admin/${path}.tsx`, import.meta.url), "utf8");
     assert.match(source, /open=\{openRowId ===/);
     assert.match(source, /onOpenChange=\{\(open\) => setOpenRowId\(open \?/);

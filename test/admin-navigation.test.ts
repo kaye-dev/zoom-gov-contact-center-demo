@@ -165,7 +165,7 @@ test("every users and settings page places section navigation between header and
     "../app/admin/password-reset-requests/PasswordResetRequestsView.tsx",
     "../app/admin/languages/LanguageSettingsForm.tsx",
     "../app/admin/maintenance-settings/MaintenanceSettingsForm.tsx",
-    "../app/admin/roles/RolesView.tsx",
+    "../app/admin/roles/RolesPanel.tsx",
     "../app/admin/roles/[id]/RoleDetailsView.tsx",
   ]) {
     const view = source(file);

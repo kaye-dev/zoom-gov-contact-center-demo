@@ -14,7 +14,7 @@ const pages = [
   ["CHAT", "chat-settings/ChatSettingsForm", "max-w-5xl", 'control.copy.pageHelpDescription.replace("{title}", t.admin.chatManagement.title)'],
   ["LANG", "languages/LanguageSettingsForm", "max-w-3xl", "t.admin.languageManagement.description"],
   ["MAINT", "maintenance-settings/MaintenanceSettingsForm", "max-w-5xl", "copy.description"],
-  ["ROLES", "roles/RolesView", null, "copy.listDescription"],
+  ["ROLES", "roles/RolesPanel", null, "copy.listDescription"],
   ["DEV", "developer-api/DeveloperApiSettingsForm", "max-w-5xl", "copy.description"],
   ["USER", "users/new/NewUserForm", "max-w-2xl", null],
 ] as const;
@@ -68,7 +68,7 @@ test("HELP-CONTENT: field guidance, role count, environment and security control
     ["languages/LanguageSettingsForm", "enabledCountLabel", "japaneseRequired"],
     ["maintenance-settings/MaintenanceSettingsForm", "environmentBadgeClass(environment)", "propagationNote"],
     ["developer-api/DeveloperApiSettingsForm", "server-to-server-oauth", "webhook-only-app"],
-    ["roles/RolesView", "`${total} ${copy.roleCount}`", "roles-read-only-reason", "setIsCreateOpen(true)", "<table"],
+    ["roles/RolesPanel", "`${total} ${copy.roleCount}`", "roles-read-only-reason", "setIsCreateOpen(true)", "<table"],
     ["users/new/NewUserForm", "issuedPasswordDescription", "assignedRolesHelp"],
   ];
   for (const [path, ...markers] of cases) {
@@ -82,8 +82,8 @@ test("RESPONSIVE: tooltip has bounded absolute layout, semantic colors and an un
   for (const cls of ["relative min-w-0", "flex items-center gap-2", "min-w-0 text-2xl font-bold", "h-11 w-11 shrink-0", "cursor-pointer", "absolute left-0 top-full", "max-w-[calc(100vw-2.5rem)]", "bg-fg", "text-surface", "focus-visible:outline-accent"]) {
     assert.ok(help.includes(cls), cls);
   }
-  assert.match(source("app/admin/roles/RolesView.tsx"), /relative max-w-full overflow-x-auto/);
-  assert.match(source("app/admin/roles/RolesView.tsx"), /min-w-\[880px\]/);
+  assert.match(source("app/admin/roles/RolesPanel.tsx"), /relative max-w-full overflow-x-auto/);
+  assert.match(source("app/admin/roles/RolesPanel.tsx"), /min-w-\[880px\]/);
   assert.match(source("app/admin/AdminSectionNavigation.tsx"), /px-1/);
 });
 

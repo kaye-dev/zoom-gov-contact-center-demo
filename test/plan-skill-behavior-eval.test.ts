@@ -149,6 +149,7 @@ test("plan skill behavioral evalは登録済みscenarioの実promptを公開す�
     "workflow-performance-audit-insufficient-data",
     ...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).workflowScenarioNames,
     ...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).smokeScenarioNames,
+    "prototype-tsx-transfer",
   ]);
 });
 
@@ -206,6 +207,7 @@ test("plan skill behavioral evalはsymlink経由のCLI起動でもmainを実行�
     "workflow-performance-audit-insufficient-data",
     ...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).workflowScenarioNames,
     ...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).smokeScenarioNames,
+    "prototype-tsx-transfer",
   ]);
 });
 
