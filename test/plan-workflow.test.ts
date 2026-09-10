@@ -356,7 +356,7 @@ test("workflow scenario登録は全採用要件の行動評価へ接続する", 
   const { scenarios } = await import("../scripts/eval-plan-skills.mjs");
   // The JavaScript registry adds workflow scenarios with Object.assign.
   const registered = scenarios as Record<string, { grade?: unknown; affectedPaths?: string[] }>;
-  for (const name of ["smoke-plan-default", "smoke-implement-default", "smoke-implement-prototype-variant", "smoke-unavailable-and-defect", "smoke-legacy-and-review", "ui-design-feedback", "ui-minor-feedback-direct"]) {
+  for (const name of ["smoke-plan-default", "smoke-implement-default", "smoke-implement-prototype-variant", "smoke-unavailable-and-defect", "smoke-legacy-and-review", "ui-design-feedback", "ui-minor-feedback-direct", "prototype-tsx-transfer"]) {
     assert.ok(registered[name], `missing scenario: ${name}`);
     assert.equal(typeof registered[name].grade, "function");
     assert.ok(registered[name].affectedPaths?.includes(".agents/skills/implement/"));

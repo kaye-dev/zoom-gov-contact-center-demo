@@ -2,7 +2,7 @@
 
 Read [workflow-verification-contract.md](workflow-verification-contract.md) for the verification scope.
 
-Check the implementation against the goal, actual prototype HTML/CSS/assets, and latest user corrections. Review affected source/tests for the required behavior. Within normally 1–3 representative scenarios, UI smoke compares prototype structure/appearance, major layout breakage, and main happy paths under the shared contract. Reuse the reported comparison conditions, matches, accepted differences, and unverified items; a usable page or a passing save alone does not establish design conformance. Do not infer real persistence from a prototype or fixture display.
+Check the implementation against the goal, actual prototype TSX/adopted shared source/styles/assets or existing HTML/CSS, and latest user corrections. Review affected source/tests for the required behavior. Within normally 1–3 representative scenarios, UI smoke compares prototype structure/appearance, major layout breakage, and main happy paths under the shared contract, using corresponding data and permissions. Reuse the reported comparison conditions, matches, accepted differences, and unverified items; a usable page or a passing save alone does not establish design conformance. Do not infer real persistence from a prototype or fixture display.
 
 A valid smoke result is reused in review and shipping; an unchecked human item is not a failed implementation check. A known in-scope defect needs a fix and affected recheck. Missing Browser access leaves UI unverified without creating a feature-completion dependency on infrastructure work.
 

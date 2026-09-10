@@ -30,7 +30,7 @@ Codexが所有権確認済みのローカルruntimeで管理画面へログイ�
 
 ## prototypeとHTML report
 
-prototypeはproduction Tailwind utilitiesと`app/styles/ui-foundation.css`で作り、自身だけをsource探索する。closest source、shell、token、共通componentを参考にし、mockはdata・永続化・authorization・backend副作用に限定する。CSS build後に次のloopback serverで配信する。
+新規prototypeは共通Next.js hostでTSXと既存表示componentを使う。rootの依存を再利用し、`app/styles/ui-foundation.css`、選択prototype、採用時のshared sourceとhostをTailwindの探索範囲とする。mockはdata・永続化・authorization・backend副作用に限定する。`node scripts/prototype-runtime.mjs check <slug>`で対象の型・lintを確認してから次のloopback serverで配信する。通常のNext.js buildやplan別installは不要。旧HTMLは従来のCSS builderを使う。
 
 ```sh
 ./dev-prototype.sh <slug>
@@ -38,7 +38,9 @@ prototypeはproduction Tailwind utilitiesと`app/styles/ui-foundation.css`で作
 node scripts/serve-plan-artifact.mjs plans/<slug>/review
 ```
 
-返されたloopback URLを使い、`file://`、外部CDN/API/analytics、repository全体の公開は行わない。prototypeには通常のHTML/CSSがあればよく、parity manifestやrevision helperの実行を前提にしない。
+返されたloopback URLを使い、`file://`、外部CDN/API/analytics、repository全体の公開は行わない。新規は`entry.tsx`、既存HTMLは`index.html`を入口にし、両方の併存は曖昧な入口として拒否する。詳細は[prototype authoring](../../.agents/skills/plan/references/ui-prototype-quality.md)に従う。parity manifestやrevision helperの実行を前提にしない。
+
+Next.js hostのcacheは`.local/prototype-runtime/<slug>/.next`に隔離し、HTMLと同じartifact slot/PID/token契約で配信する。初回routeの応答を待ってreadyを返す。Next.jsのcold起動は最大60秒の単一待機とし、通常編集はHMR、同じslugはprocessを再利用する。失敗時に外側pollや別portを追加しない。停止は当該process・upgrade socket・登録だけを終了し、cacheと採用sourceを保全する。
 
 implementの照合では一致する既存prototype serverを再利用するか、`./dev-prototype.sh <slug>`で一時配信する。照合のためにprototypeを編集せず、新たな保持sessionを作らない。今回起動した一時配信processだけを終了し、planで保持済みのserverは残す。
 

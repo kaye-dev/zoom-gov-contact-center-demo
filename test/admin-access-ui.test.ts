@@ -33,10 +33,10 @@ test("ROW-ROLE: custom roles keep a menu with disabled actions; system roles hav
     assert.equal((body.match(/aria-haspopup="menu"/g) ?? []).length, 2);
     assert.match(html, /data-row-action-heading="true" tabindex="-1"/);
   }
-  const view = source("../app/admin/roles/RolesView.tsx");
+  const view = source("../app/admin/roles/RolesPanel.tsx");
   assert.match(view, /disabled: !canUpdate/);
   assert.match(view, /memberCount > 0/);
-  assert.match(view, /expectedRevision: roleToDelete.revision/);
+  assert.match(view, /actions\.deleteRole\(roleToDelete.id, roleToDelete.revision\)/);
   assert.match(view, /deletingRef.current/);
   assert.match(view, /<ConfirmationDialog/);
 });
@@ -138,7 +138,7 @@ test("RES-LIST-AUTH-01 reservation list reuses reservations VIEW access", () => 
   assert.deepEqual(reservationResource.supportedActions, ["VIEW", "UPDATE"]);
 
   const page = source("../app/admin/reservations/bookings/page.tsx");
-  const shell = source("../app/admin/AdminShell.tsx");
+  const shell = source("../app/admin/AdminShellView.tsx");
   assert.match(
     page,
     /requireAdminAccess\(\s*"reservations",\s*"VIEW",\s*RESERVATION_BOOKINGS_ROUTE/u,
@@ -148,12 +148,12 @@ test("RES-LIST-AUTH-01 reservation list reuses reservations VIEW access", () => 
 });
 
 test('role UI creates metadata first and renders the prototype permission controls', () => {
-  const list = source('../app/admin/roles/RolesView.tsx');
+  const list = source('../app/admin/roles/RolesPanel.tsx');
   const modal = source('../app/components/admin/ModalDialog.tsx');
   const details = source('../app/admin/roles/[id]/RoleDetailsView.tsx');
   assert.match(list, /<ModalDialog/);
-  assert.match(list, /JSON\.stringify\(\{ name, description \}\)/);
-  assert.match(list, /router\.push\(`\/admin\/roles\/\$\{encodeURIComponent\(body\.role\.id\)\}`\)/);
+  assert.match(source("../app/admin/roles/RolesView.tsx"), /JSON\.stringify\(\{ name, description \}\)/);
+  assert.match(source("../app/admin/roles/RolesView.tsx"), /router\.push\(`\/admin\/roles\/\$\{encodeURIComponent\(id\)\}`\)/);
   assert.match(
     details,
     /!editable \|\| !cell\.supported \|\| dependencyDisabled/,
@@ -231,7 +231,7 @@ test('role UI creates metadata first and renders the prototype permission contro
 });
 
 test("role and user screens follow the compact prototype structure and single-role editor", () => {
-  const list = source("../app/admin/roles/RolesView.tsx");
+  const list = source("../app/admin/roles/RolesPanel.tsx");
   const details = source("../app/admin/roles/[id]/RoleDetailsView.tsx");
   const access = source("../app/admin/users/[id]/access/UserAccessView.tsx");
   const accessPage = source("../app/admin/users/[id]/access/page.tsx");

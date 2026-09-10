@@ -3,7 +3,7 @@
 import Link from "next/link";
 
 import { useI18n } from "../i18n/LanguageProvider";
-import { useAdminNavigationContext } from "./AdminShell";
+import { useAdminNavigationContext } from "./AdminShellView";
 
 export function AdminSectionNavigation() {
   const { t } = useI18n();

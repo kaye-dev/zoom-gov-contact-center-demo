@@ -5,7 +5,7 @@ description: "Create or revise a self-contained implementation goal and a faithf
 
 # Plan
 
-Create a reviewable specification. Write only `plans/<slug>/goal.md` and, for UI work, `plans/<slug>/prototype/**`. Do not implement production code, create evidence/review directories, stage, commit, push, or create a pull request.
+Create a reviewable specification. Write only `plans/<slug>/goal.md` and, for UI work, `plans/<slug>/prototype/**`. The common runtime may manage its own `.local/prototype-runtime/` cache and existing ownership/session state. Do not implement production code, create evidence/review directories, stage, commit, push, or create a pull request.
 
 ## Resolve the design
 
@@ -19,9 +19,9 @@ Create a reviewable specification. Write only `plans/<slug>/goal.md` and, for UI
 
 Read [ui-prototype-quality.md](references/ui-prototype-quality.md) for UI work. Use the closest source, shared shell/components, `DESIGN.md`, semantic tokens, and production Tailwind foundation. Mock only data, persistence, authorization, and backend side effects.
 
-- Create the affected UI under `plans/<slug>/prototype/` and build its CSS with `build-prototype-css.mjs`. Identify the adopted prototype by its path and actual contents; its HTML/CSS/assets supply visual requirements even where the goal omits detail.
+- Create new UI as reusable TSX under `plans/<slug>/prototype/`, using the common Next.js/TypeScript/Tailwind host. Import existing presentation components; keep fixture data and side effects outside transferable components. Run `node scripts/prototype-runtime.mjs check <slug>` instead of a separate CSS build. Its TSX, adopted shared source, styles and assets supply visual requirements even where the goal omits detail. Existing HTML prototypes retain their CSS builder and static server.
 - Set `UI検証方式: smoke`. Select normally 1–3 representative scenarios in total for major visual breakage and the main happy path; implementation also compares prototype structure and appearance within that selection. One scenario is an operation sequence through its visible completion, not each individual click.
-- Finish authoring and static checks before one final prototype smoke. Follow [workflow-verification-contract.md](references/workflow-verification-contract.md) and `.claude/rules/dev-server.md`; use the Codex in-app Browser public API. Report unavailable Browser as unverified without blocking a reviewable plan.
+- Record source-to-production component paths, props/callbacks and representative data in the goal’s existing interface section. Finish authoring and static checks before one final prototype smoke. Follow [workflow-verification-contract.md](references/workflow-verification-contract.md) and `.claude/rules/dev-server.md`; use the Codex in-app Browser public API. Report unavailable Browser as unverified without blocking a reviewable plan.
 - Return a live prototype with `./dev-prototype.sh --retain <slug>`. Reuse a matching active session; never replace another slug implicitly. Report URL, PID, owner, smoke result, unverified items, and `./dev-confirmation.sh stop <slug>`.
 
 Do not generate parity manifests, matrices, estimate reports, approval ledgers, or final parity evidence. The old parity executors and readers have been removed. Preserve existing goals and evidence without rewriting their results.

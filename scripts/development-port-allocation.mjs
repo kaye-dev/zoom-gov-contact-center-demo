@@ -157,7 +157,7 @@ export async function inspectPorts(ports, identity) {
     let owned = pids.length > 0;
     for (const pid of pids) {
       const command = (await exec("ps", ["-p", pid, "-o", "command="], { timeout: 3000 })).stdout;
-      owned &&= await processCheckout(pid) === identity.checkout && /(?:next-server|next dev|serve-plan-artifact\.mjs)/u.test(command);
+      owned &&= await processCheckout(pid) === identity.checkout && /(?:next-server|next dev|serve-plan-artifact\.mjs|prototype-entry\.mjs)/u.test(command);
     }
     results.push({ port, free: false, owned, detail: `listener PID ${pids.join(",") || "unknown"}` });
   }

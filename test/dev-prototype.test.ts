@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { accessSync, constants } from "node:fs";
 import {
   chmod,
+  symlink,
   copyFile,
   mkdir,
   mkdtemp,
@@ -58,21 +59,18 @@ async function createRepositoryFixture(context: test.TestContext): Promise<Fixtu
     mkdir(emptyBin),
   ]);
   await copyFile(sourceScript, script);
+  await copyFile(path.join(repositoryRoot, "scripts/prototype-entry.mjs"), path.join(root, "scripts/prototype-entry.mjs"));
   await chmod(script, 0o755);
   await writeFile(
     path.join(root, "scripts/serve-plan-artifact.mjs"),
-    "// Fake server: the fake Node executable records its path without starting it.\n",
+    "for (const arg of process.argv.slice(1)) console.log(`FAKE_NODE_ARG=${arg}`);\n",
   );
   await writeFile(
     path.join(root, "dev-confirmation.sh"),
     "#!/bin/sh\nprintf 'CONFIRMATION_ARG=%s\\n' \"$@\"\n",
   );
   await chmod(path.join(root, "dev-confirmation.sh"), 0o755);
-  await writeFile(
-    path.join(bin, "node"),
-    "#!/bin/sh\nprintf 'FAKE_NODE_ARG=%s\\n' \"$@\"\n",
-  );
-  await chmod(path.join(bin, "node"), 0o755);
+  await symlink(process.execPath, path.join(bin, "node"));
 
   return { bin, emptyBin, root, script };
 }

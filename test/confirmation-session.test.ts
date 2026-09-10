@@ -63,6 +63,7 @@ async function createFixture(context: TestContext): Promise<Fixture> {
   await mkdir(scripts, { recursive: true });
   await Promise.all([
     copyFile(sourceManager, manager),
+    copyFile(path.join(sourceRoot, "scripts/prototype-entry.mjs"), path.join(scripts, "prototype-entry.mjs")),
     copyFile(path.join(sourceRoot, "scripts/development-port-allocation.mjs"), path.join(scripts, "development-port-allocation.mjs")),
     copyFile(sourceServer, path.join(scripts, "serve-plan-artifact.mjs")),
     createArtifact(root, "alpha", "prototype"),

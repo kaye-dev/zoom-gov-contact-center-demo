@@ -9,6 +9,7 @@ import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
+import { nextPrototypeCsp } from "../scripts/prototype-runtime.mjs";
 
 const sourceRoot = path.resolve(import.meta.dirname, "..");
 const sourceServerScript = path.join(sourceRoot, "scripts/serve-plan-artifact.mjs");
@@ -66,6 +67,7 @@ async function createTestRepository(context: TestContext): Promise<TestRepositor
   const serverScript = path.join(scripts, "serve-plan-artifact.mjs");
   await mkdir(scripts);
   await copyFile(sourceServerScript, serverScript);
+  await copyFile(path.join(sourceRoot, "scripts/prototype-entry.mjs"), path.join(scripts, "prototype-entry.mjs"));
   await copyFile(path.join(sourceRoot, "scripts/development-port-allocation.mjs"), path.join(scripts, "development-port-allocation.mjs"));
   await mkdir(path.join(repositoryRoot, "common.git"));
   const children = new Set<ReturnType<typeof spawn>>();
@@ -313,6 +315,59 @@ test("canonical reviewは固定5ファイルだけを配信する", async (conte
   const extra = await fetchArtifact(url, "/extra.json");
   assert.equal(extra.status, 404);
   assert.equal(await extra.text(), "Not Found");
+});
+
+test("Next adapterは登録routeとHMRだけを渡し、API・私有source・異なるOriginを拒否する", async context => {
+  const repository = await createTestRepository(context);
+  const relativeArtifact = `plans/${uniqueSlug("next-boundary")}/prototype`;
+  const directory = await createArtifactDirectory(repository, relativeArtifact);
+  await writeFile(path.join(directory, "entry.tsx"), 'export default function Entry() { return null; }');
+  // Keep HTTP/ownership tests independent of a framework build; real Next is
+  // exercised by the shared-host fixture smoke and isolated build.
+  await writeFile(path.join(repository.root, "scripts/prototype-runtime.mjs"), `
+    export const readPrototypeConfig = async () => ({ route: '/preview', assets: [] });
+    export const preparePrototype = async () => ({ config: await readPrototypeConfig() });
+    export const nextPrototypeCsp = ${nextPrototypeCsp.toString()};
+    export const createNextPrototype = async () => ({
+      handle: async (req, res) => { res.end('next:' + req.url); },
+      upgrade: (req, socket) => { socket.end('HTTP/1.1 101 Switching Protocols\\r\\nConnection: Upgrade\\r\\nUpgrade: websocket\\r\\n\\r\\n'); },
+      close: async () => {}
+    });
+  `);
+  const { child, url } = await startServer(context, repository, relativeArtifact);
+  const origin = new URL(url).origin;
+  const head = await fetch(url, { method: "HEAD" });
+  assert.equal(head.status, 200);
+  assert.equal(head.headers.get("content-security-policy"), nextPrototypeCsp(Number(new URL(url).port)));
+  assert.ok(head.headers.get("x-confirmation-session-token"));
+  for (const pathname of ["/preview", "/_next/static/chunks/app.js"]) {
+    const response = await fetch(new URL(pathname, url));
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), `next:${pathname}`);
+  }
+  for (const pathname of ["/api/save", "/admin/users", "/entry.tsx", "/.shared/package.json", "/_next/server/app.js"]) {
+    assert.equal((await fetch(new URL(pathname, url))).status, 404, pathname);
+  }
+  assert.equal((await fetch(new URL("/preview", url), { method: "POST" })).status, 405);
+  assert.equal((await fetch(new URL("/preview", url), { headers: { Origin: "https://outside.example" } })).status, 404);
+
+  async function upgrade(pathname: string, requestOrigin: string) {
+    const target = new URL(url);
+    return new Promise<string>((resolve, reject) => {
+      const socket = connect(Number(target.port), target.hostname);
+      let data = "";
+      socket.setTimeout(2000, () => { socket.destroy(); reject(new Error("upgrade timeout")); });
+      socket.on("error", reject);
+      socket.on("data", chunk => { data += chunk.toString(); });
+      socket.once("close", () => resolve(data));
+      socket.once("connect", () => socket.write(`GET ${pathname} HTTP/1.1\r\nHost: ${target.host}\r\nOrigin: ${requestOrigin}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n`));
+    });
+  }
+  assert.match(await upgrade("/_next/hmr?id=fixture", origin), /101 Switching Protocols/);
+  assert.equal(await upgrade("/_next/hmr", "https://outside.example"), "");
+  assert.equal(await upgrade("/api/socket", origin), "");
+  await stopServer(child);
+  await assert.rejects(fetch(url));
 });
 
 test("HTTP境界はHost・method・encoded path・symlink・未対応対象を拒否する", async (context) => {
