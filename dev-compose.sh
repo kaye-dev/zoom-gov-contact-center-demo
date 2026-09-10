@@ -1034,6 +1034,7 @@ runtime_stop_services() {
   }
   # Stopping a legacy runtime must not require migrating or rewriting it first.
   dev_runtime_load
+  dev_runtime_ensure_session
   dev_runtime_resolve_volume_identity
   ensure_docker_daemon
   dev_runtime_capture_session_baseline
@@ -1188,6 +1189,7 @@ runtime_passthrough() {
 
   command_index="$(compose_subcommand_index "$@")" || {
     print -u2 "A Docker Compose subcommand is required."
+    runtime_help >&2
     return 2
   }
   subcommand="${@[${command_index}]}"
@@ -1210,6 +1212,13 @@ runtime_passthrough() {
       runtime_stop_services "$@"
       return
       ;;
+    attach | bridge | build | commit | config | cp | create | events | exec | export | images | logs | ls | pause | port | ps | publish | pull | push | run | scale | start | stats | top | unpause | version | volumes | wait | watch)
+      ;;
+    *)
+      print -u2 -r -- "Unknown command: ${subcommand}"
+      runtime_help >&2
+      return 2
+      ;;
   esac
 
   dev_runtime_prepare
@@ -1225,6 +1234,31 @@ runtime_passthrough() {
   return "${command_status}"
 }
 
+runtime_help() {
+  cat <<'HELP'
+Usage: ./dev-compose.sh [command]
+
+コマンド（省略時は ensure）:
+  ensure                      開発アプリを起動、または所有権確認済みのアプリを再利用
+  prepare                     checkout固有のruntimeを準備（Docker起動なし）
+  status [--url]              runtime状態を表示（--urlはURLだけ）
+  wt / worktrees              全worktreeのポート一覧・対話式停止
+  logs                        所有権確認済みwebの直近100行と追尾ログ
+  db                          起動済みの所有DBへpsqlで接続
+  restart web                 所有権確認済みwebを明示的に再起動
+  stop <web|studio|db> [...]   指定serviceだけを停止
+  cleanup                     session所有資源をcleanup（named volume保持）
+  migrate-ports [--rollback]  開発ポートを移行、またはロールバック
+  -help, --help, -h, help     このヘルプを表示（runtime操作なし）
+
+その他のコマンドはcheckout固有のDocker Composeへ委譲します。
+例: ./dev-compose.sh up -d studio
+    ./dev-compose.sh exec web npm run db:check-seed-admin
+所有権・scopeの制約は維持されます。down / rm / kill とruntime scopeの上書きは
+禁止されています。停止には stop、資源整理には cleanup を使ってください。
+HELP
+}
+
 main() {
   local command_name
 
@@ -1235,6 +1269,13 @@ main() {
   command_name="$1"
   shift
   case "${command_name}" in
+    -help | --help | -h | help)
+      [[ $# -eq 0 ]] || {
+        print -u2 "Usage: ./dev-compose.sh --help"
+        return 2
+      }
+      runtime_help
+      ;;
     prepare)
       [[ $# -eq 0 ]] || {
         print -u2 "Usage: ./dev-compose.sh prepare"
@@ -1280,9 +1321,9 @@ main() {
     cleanup)
       runtime_cleanup "$@"
       ;;
-    worktrees)
+    wt | worktrees)
       [[ $# -eq 0 ]] || {
-        print -u2 "Usage: ./dev-compose.sh worktrees"
+        print -u2 "Usage: ./dev-compose.sh wt"
         return 2
       }
       exec node "${DEV_COMPOSE_SCRIPT_DIR}/scripts/manage-worktree-runtimes.mjs"

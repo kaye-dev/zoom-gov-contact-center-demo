@@ -1123,6 +1123,7 @@ test("PORT-08: scoped stop can load a legacy manifest without preparing or migra
   const result = runHelper(fixture, `${stopFunction}
     dev_runtime_prepare() { print -u2 unexpected-prepare; return 99; }
     dev_runtime_load() { print LEGACY_LOADED; }
+    dev_runtime_ensure_session() { print SESSION_ENSURED; }
     dev_runtime_resolve_volume_identity() { return 0; }
     ensure_docker_daemon() { return 0; }
     dev_runtime_capture_session_baseline() { return 0; }
@@ -1132,6 +1133,102 @@ test("PORT-08: scoped stop can load a legacy manifest without preparing or migra
     runtime_stop_services web
   `);
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /LEGACY_LOADED\nSTOP=web/u);
+  assert.match(result.stdout, /LEGACY_LOADED\nSESSION_ENSURED\nSTOP=web/u);
   assert.doesNotMatch(result.stderr, /unexpected-prepare/u);
+});
+
+
+test("wrapper help aliases are read-only and wt retains the worktrees entrypoint", (context) => {
+  const fixture = createRuntimeFixture("worktree");
+  context.after(() => rmSync(fixture.root, { recursive: true, force: true }));
+  const calls = join(fixture.root, "unexpected-calls");
+  for (const executable of ["docker", "colima", "git", "node"]) {
+    writeExecutable(join(fixture.stubDirectory, executable), `echo called >> '${calls}'; exit 97`);
+  }
+  let expected = "";
+  for (const alias of ["-help", "--help", "-h", "help"]) {
+    const result = execFileSyncWithResult("zsh", [wrapperPath, alias], fixtureEnv(fixture));
+    assert.equal(result.status, 0, result.stderr);
+    if (!expected) expected = result.stdout;
+    assert.equal(result.stdout, expected);
+    assert.match(result.stdout, /migrate-ports \[--rollback\]/u);
+    assert.match(result.stdout, /down \/ rm \/ kill/u);
+    assert.match(result.stdout, /省略時は ensure/u);
+  }
+  for (const args of [["wtx"], ["--ansi", "never", "wtx"], ["--unknown"]]) {
+    const invalid = execFileSyncWithResult("zsh", [wrapperPath, ...args], fixtureEnv(fixture));
+    assert.equal(invalid.status, 2);
+    assert.ok(invalid.stderr.endsWith(expected), invalid.stderr);
+    assert.equal(invalid.stdout, "");
+  }
+  assert.throws(() => readFileSync(calls), { code: "ENOENT" });
+  assert.throws(() => readFileSync(join(fixture.checkout, ".codex/runtime.local.env")), { code: "ENOENT" });
+  writeExecutable(join(fixture.stubDirectory, "node"), 'printf "%s\\n" "$@"');
+  const outputs = ["wt", "worktrees"].map((alias) => {
+    const result = execFileSyncWithResult("zsh", [wrapperPath, alias], fixtureEnv(fixture));
+    assert.equal(result.status, 0, result.stderr);
+    const invalid = execFileSyncWithResult("zsh", [wrapperPath, alias, "extra"], fixtureEnv(fixture));
+    assert.equal(invalid.status, 2);
+    return result.stdout;
+  });
+  assert.equal(outputs[0], outputs[1]);
+  assert.match(outputs[0], /manage-worktree-runtimes\.mjs/u);
+  assert.throws(() => readFileSync(calls), { code: "ENOENT" });
+});
+
+
+test("scoped stop recreates a missing session without changing the runtime manifest", (context) => {
+  const fixture = createRuntimeFixture("worktree");
+  context.after(() => rmSync(fixture.root, { recursive: true, force: true }));
+  assert.equal(runHelper(fixture, "dev_runtime_prepare").status, 0);
+  const manifestPath = join(fixture.checkout, ".codex/runtime.local.env");
+  const manifest = readFileSync(manifestPath, "utf8");
+  rmSync(join(fixture.checkout, ".codex/runtime-session.local.json"));
+  const wrapper = readFileSync(wrapperPath, "utf8");
+  const stopFunction = wrapper.slice(wrapper.indexOf("runtime_stop_services() {"), wrapper.indexOf("runtime_cleanup_label_matches() {"));
+  const result = runHelper(fixture, `${stopFunction}
+    dev_runtime_docker_is_available() { return 0; }
+    dev_runtime_project_container_ids() { print fixture-container; }
+    dev_runtime_project_network_ids() { print fixture-network; }
+    dev_runtime_resolve_volume_identity() { return 0; }
+    ensure_docker_daemon() { return 0; }
+    runtime_validate_project_containers() { return 0; }
+    runtime_compose() { if [[ "$1" == stop ]]; then print STOPPED; fi; }
+    runtime_stop_services web
+  `);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /STOPPED/u);
+  assert.equal(readFileSync(manifestPath, "utf8"), manifest);
+  const session = JSON.parse(readFileSync(join(fixture.checkout, ".codex/runtime-session.local.json"), "utf8"));
+  assert.deepEqual(session.baselineContainerIds, ["fixture-container"]);
+  assert.deepEqual(session.createdContainerIds, []);
+});
+
+test("prepare after allocation release rediscovers the retained volume creation identity", (context) => {
+  const fixture = createRuntimeFixture("worktree");
+  context.after(() => rmSync(fixture.root, { recursive: true, force: true }));
+  assert.equal(runHelper(fixture, "dev_runtime_prepare").status, 0);
+  rmSync(join(fixture.checkout, ".codex/runtime.local.env"));
+  rmSync(join(fixture.checkout, ".codex/runtime-session.local.json"));
+  const result = runHelper(fixture, `
+    dev_runtime_docker_is_available() { return 0; }
+    dev_runtime_project_container_ids() { return 0; }
+    dev_runtime_project_network_ids() { return 0; }
+    docker() { [[ "$1" == volume && "$2" == inspect ]]; }
+    dev_runtime_volume_label() {
+      case "$2" in
+        com.docker.compose.project) print "$COMPOSE_PROJECT_NAME" ;;
+        com.docker.compose.volume) print "\${1#\${COMPOSE_PROJECT_NAME}_}" ;;
+        dev.zoomgov.runtime.id) print "$RUNTIME_ID" ;;
+        dev.zoomgov.runtime.checkout) print "$RUNTIME_CHECKOUT_PATH" ;;
+        dev.zoomgov.runtime.mode) print worktree ;;
+        dev.zoomgov.runtime.config-digest) print sha256:original-volume ;;
+        dev.zoomgov.runtime.session-id) print original-volume-session ;;
+      esac
+    }
+    dev_runtime_prepare
+    print "$RUNTIME_VOLUME_CONFIG_DIGEST/$RUNTIME_VOLUME_OWNER_SESSION_ID"
+  `);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /sha256:original-volume\/original-volume-session/u);
 });
