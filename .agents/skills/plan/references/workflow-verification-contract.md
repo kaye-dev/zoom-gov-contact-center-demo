@@ -14,7 +14,7 @@ Report the compared screen/conditions, observed matches, differences authorized 
 
 The Browser scope excludes exhaustive failure/state/consumer/boundary combinations and strict DOM/style/geometry/pixel comparisons. Responsive/theme representatives belong in the same small selection when they are the subject of the change. Keep product requirements covered by affected unit/integration tests and diff inspection.
 
-Run affected tests, applicable lint/typecheck, and diff checks. Full tests/build need a concrete change-related reason. Reuse results based on path/content/time; rerun affected checks after a relevant edit or failure. Digest files and evidence schemas are not prerequisites. New prototype checks use the selected host and TSX only; no routine Next.js build, extra comparison phase, install, performance report, or approval is added. HMR and existing process/cache reuse replace repeated preparation.
+Run affected tests, applicable lint/typecheck, and diff checks. Full tests/build need a concrete change-related reason during implementation; shipping additionally requires the current automatic CI checks before commit under the git-commit-push-pr preflight contract. Reuse results based on path/content/time; rerun affected checks after a relevant edit or failure. Digest files and evidence schemas are not prerequisites. New prototype checks use the selected host and TSX only; no routine Next.js build, extra comparison phase, install, performance report, or approval is added. HMR and existing process/cache reuse replace repeated preparation.
 
 ## Runtime and failures
 

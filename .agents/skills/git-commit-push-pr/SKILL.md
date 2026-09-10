@@ -7,7 +7,7 @@ description: "Ship current-task changes with local git and gh: scoped commit, no
 
 Complete commit, push, PR creation/update, and readback in the current agent. Do not delegate to a custom agent or use a GitHub connector. Run `git` and `gh` directly from the shell.
 
-An explicit invocation authorizes the current task's topic branch, scoped stage/commit, fetch, non-force push, and PR creation/minimal update. Respect narrower instructions such as push-only. It does not authorize force push, stash/reset, broad staging, discarding changes, plan deletion, conflict resolution, forking, PR merge, or CI waiting.
+An explicit invocation authorizes the current task's topic branch, scoped stage/commit, pre-commit CI-equivalent validation and minor repairs, fetch, non-force push, and PR creation/minimal update. Respect narrower instructions such as push-only. It does not authorize force push, stash/reset, broad staging, discarding changes, plan deletion, conflict resolution, forking, PR merge, or CI waiting.
 
 ## 1. Inspect and resolve
 
@@ -24,17 +24,19 @@ Authentication fallback is conditional: if the user's terminal has a working key
 
 Generated `plans/<slug>/` directories, other plans, and local fixtures remain in place and outside the stage allowlist. Their presence is not a blocker. Only `plans/template.md` is a permitted tracked plan file. For that policy run `npm run plans:guard` after staging when applicable; it checks the index, not local directory inventory.
 
-- Reuse implementation test/lint/typecheck/build results that still apply to the task's content. Do not rerun them by default before commit. Missing digests or parity evidence are not a gate. Known required-check failures remain failures and must not be reported as successful validation.
+- Before creating a task commit, read the current automatic PR/push workflows, invoked scripts/actions, and runtime requirements. Validate the exact staged candidate with their full applicable checks and environment, following [pre-commit-ci.md](references/pre-commit-ci.md). A focused host test or a previous remote green check does not replace this preflight. Reuse earlier results only when they cover the same candidate, commands, environment and relevant base; execute every missing or invalidated check. No routine Browser rerun or post-push CI watch is added.
+- Fix minor local failures without another user prompt when the intended behavior, permissions, data contract and test strength remain intact (for example a missing scenario expectation, typo, import or type mismatch). Inspect the reason before changing expectations; never weaken a check to obtain green. Include directly related repair paths in the explicit allowlist and rerun invalidated CI checks.
+- Stop before commit/push when a fix needs broad redesign/refactoring, permission or data-contract changes, migration-history edits, a major dependency upgrade, or an unresolved specification. Also stop on unavailable required validation after bounded diagnostics. Report the failed check, direct cause, impact, preserved work, and a concrete recommended approach with alternatives/tradeoffs so the user can direct the next step. Do not continue growing the repair scope while describing it as minor.
 - Use `git add -- <explicit paths>`. Inspect the complete staged diff and `git diff --cached --name-status`; run `git diff --cached --check`. Exclude credentials, tokens, machine-local files and unrelated generated output.
-- Generate a Japanese commit from the staged diff only, following repository conventions. No AI attribution or `Co-authored-by`. If the task is already committed, proceed with that real base-relative diff; do not create an empty or archive-only commit.
-- Let hooks run; never use `--no-verify`. If a hook makes clearly mechanical edits only inside the intended set, inspect/restage those paths and retry once. Stop for unrelated hook changes or another failure. Do not broaden the task to repair unrelated failures.
+- Commit only after the required preflight succeeds and the staged candidate is still the validated content. If a repair or hook changes it, rerun invalidated checks before the commit/retry; hook-only reuse is valid only when no CI check is invalidated. Generate a Japanese commit from the staged diff only, following repository conventions. No AI attribution or `Co-authored-by`. If the task is already committed, proceed with that real base-relative diff; do not create an empty or archive-only commit.
+- Let hooks run; never use `--no-verify`. If a hook makes clearly mechanical edits only inside the intended set, inspect/restage those paths and retry once. Stop for unrelated hook changes or another hook failure. Apply the minor-versus-major repair boundary above to CI failures.
 - Verify the created commit paths/subject and clean index. Preserve unrelated worktree content. An unexpected committed path stops push; do not amend/reset it automatically.
 
 ## 3. Push and pull request
 
 A nonempty intended base-relative diff is required. Before push verify the current topic branch, local HEAD and remote topic ref. Stop if the remote topic contains commits not in local HEAD. Push with an explicit refspec, for example `git push -u <remote> HEAD:refs/heads/<topic>`, without force.
 
-Base-only commits do not require integration. A PR merge conflict can be reported with a safe topic push and Draft PR. Resolve conflicts or synchronize the base only when the user requests it; then read [base-sync-contract.md](references/base-sync-contract.md). Never rebase published history.
+Base-only commits do not require branch integration when the required preflight can still be completed. If a merge conflict prevents required CI-equivalent validation, stop before commit/push and propose resolution. Resolve conflicts or synchronize the base only when the user requests it; then read [base-sync-contract.md](references/base-sync-contract.md). Never rebase published history.
 
 - Query existing PRs for the exact head before creation. Create only if none exists; minimally update stale parts of an existing PR, retaining its base, human notes, checklist states and draft/ready status. A new PR with a known conflict or unverified UI is Draft.
 - Write title/body from `<base>...HEAD`, `<base>..HEAD`, actual check results, and current PR metadata. Preserve the repository PR template and use Japanese. Copy applicable unchecked `UI-CHECK-XX` items, disclose UI unverified/known failures/CI state, and use `UI 変更なし` for non-UI work. A user UI checklist is not a required pre-push approval.
@@ -45,6 +47,6 @@ Finish with branch/base, commit, actual validation, push result, PR URL/update r
 
 ## Plan and verification compatibility
 
-Shipping uses valid focused-check and UI-smoke results under [workflow-verification-contract.md](../plan/references/workflow-verification-contract.md); it does not run Browser or detailed parity. Carry forward prototype comparison conditions, matches, accepted differences, and any `prototypeとの視覚照合は未確認` limitation. Browser unavailability is disclosed as UI unverified. A known functional/test failure or unintended design difference is not merely unverified and must be reported as a blocker unless the user explicitly accepts that exact failure for shipment.
+Shipping adds the pre-commit CI preflight above and otherwise uses valid focused-check and UI-smoke results under [workflow-verification-contract.md](../plan/references/workflow-verification-contract.md); it does not run Browser or detailed parity. Carry forward prototype comparison conditions, matches, accepted differences, and any `prototypeとの視覚照合は未確認` limitation. Browser unavailability is disclosed as UI unverified. A known functional/test failure or unintended design difference is not merely unverified and must be reported as a blocker unless the user explicitly accepts that exact failure for shipment.
 
 Goal archive and cleanup are optional separate operations, not steps or handoffs in this invocation. Keep existing archives/evidence untouched. Never delete or move plan artifacts for shipping.
