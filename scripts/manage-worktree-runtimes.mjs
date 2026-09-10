@@ -6,6 +6,8 @@ import path from "node:path";
 import process from "node:process";
 import { promisify } from "node:util";
 
+import { releaseWorktreeRuntime } from "./release-worktree-runtime.mjs";
+
 const execFileAsync = promisify(execFile);
 const runtimeManifest = ".codex/runtime.local.env";
 const confirmationState = ".codex/confirmation-session.local.json";
@@ -171,15 +173,15 @@ async function command(commandName, args, options = {}) {
 }
 
 async function dockerContainers() {
-  const format = "{{.ID}}\t{{.Label \"dev.zoomgov.runtime.checkout\"}}\t{{.Label \"com.docker.compose.service\"}}";
+  const format = "{{.ID}}\t{{.Label \"dev.zoomgov.runtime.checkout\"}}\t{{.Label \"com.docker.compose.service\"}}\t{{.State}}";
   const result = await command("docker", ["ps", "-a", "--format", format]).catch(() => ({ stdout: "" }));
   return result.stdout
     .trim()
     .split("\n")
     .filter(Boolean)
     .map((line) => {
-      const [id, checkout, service] = line.split("\t");
-      return { id, checkout, service };
+      const [id, checkout, service, state] = line.split("\t");
+      return { id, checkout, service, state };
     })
     .filter((container) => container.id && container.checkout && container.service);
 }
@@ -206,6 +208,7 @@ async function inspectCheckout(worktree, listeners, containers = []) {
         port,
         listener,
         containerId: container?.id ?? null,
+        containerState: container?.state ?? null,
         owner: runtime.mode === "worktree" ? "worktree runtime" : "Local runtime",
       });
     }
@@ -231,48 +234,83 @@ async function inspectCheckout(worktree, listeners, containers = []) {
     runtime,
     confirmation,
     resources,
+    runningServices: containers.filter((container) => container.checkout === checkout && container.state === "running").map((container) => container.service),
   };
 }
 
 function formatResource(resource) {
   const listener = resource.listener;
   const processIdentity = listener ? `PID ${listener.pid} (${listener.command})` : "not listening";
-  const containerIdentity = resource.containerId ? `; container ${resource.containerId}` : "";
+  const containerIdentity = resource.containerId ? `; container ${resource.containerId} (${resource.containerState ?? "unknown"})` : "";
   const mismatch = resource.expectedPid && listener && resource.expectedPid !== listener.pid ? "; PID mismatch" : "";
   return `    ${resource.surface.padEnd(9)} port ${String(resource.port).padEnd(5)} ${processIdentity}${containerIdentity}; ${resource.owner}${mismatch}`;
+}
+
+function formatIndex(index, count) {
+  return String(index + 1).padStart(Math.max(2, String(count).length), "0");
+}
+
+function hasRunningResource(item) {
+  return item.resources.some((resource) => resource.listener || resource.containerState === "running") || (item.runningServices?.length ?? 0) > 0;
+}
+
+function hasActiveRuntime(item) {
+  return item.state === "ready" && hasRunningResource(item);
+}
+
+function sortInventory(inventory) {
+  return [...inventory].sort((left, right) => Number(hasRunningResource(right)) - Number(hasRunningResource(left)));
+}
+
+function portSummary(item, colored = false) {
+  const ports = ["app", "studio", "prototype", "review"].flatMap((surface) =>
+    item.resources.filter((resource) => resource.surface === surface)
+      .map((resource) => {
+        const label = `${surface}:${resource.port} (${resource.listener ? "listening" : resource.containerState === "running" ? "running, not listening" : "stopped"})`;
+        const color = resource.listener ? ansi.green : resource.containerState === "running" ? ansi.yellow : ansi.gray;
+        return colored ? `${color}${label}${ansi.reset}` : label;
+      }),
+  );
+  const services = (item.runningServices ?? []).filter((service) => !["web", "studio"].includes(service));
+  if (services.length) ports.push(`${services.join(",")}:running`);
+  return ports.join(" ") || "no managed ports";
+}
+
+function rowSummary(item) {
+  return `${item.state === "ready" ? "" : `${item.state} — `}${portSummary(item)}`;
 }
 
 function printInventory(inventory) {
   console.log("Parallel worktree runtime inventory");
   for (const [index, checkout] of inventory.entries()) {
-    console.log(`[${index + 1}] ${checkout.checkout} (${checkout.branch}) — ${checkout.state}`);
+    console.log(`[${formatIndex(index, inventory.length)}] ${checkout.checkout} (${checkout.branch}) — ${rowSummary(checkout)}`);
     if (checkout.reason) console.log(`    ${checkout.reason}`);
-    if (checkout.resources.length === 0) console.log("    no managed ports recorded");
     for (const resource of checkout.resources) console.log(formatResource(resource));
   }
 }
 
 const ansi = {
   reset: "\u001B[0m", bold: "\u001B[1m", dim: "\u001B[2m", cyan: "\u001B[36m",
-  green: "\u001B[32m", yellow: "\u001B[33m", red: "\u001B[31m", inverse: "\u001B[7m",
+  gray: "\u001B[90m", green: "\u001B[32m", yellow: "\u001B[33m", red: "\u001B[31m", inverse: "\u001B[7m",
   clear: "\u001B[2J\u001B[H", alternateOn: "\u001B[?1049h", alternateOff: "\u001B[?1049l", hideCursor: "\u001B[?25l", showCursor: "\u001B[?25h",
 };
 
-function statusColor(state) {
-  return state === "ready" ? ansi.green : state === "needs-attention" ? ansi.yellow : ansi.red;
+function statusColor(item) {
+  if (item.state !== "ready") return item.state === "needs-attention" ? ansi.yellow : ansi.red;
+  return hasActiveRuntime(item) ? ansi.green : ansi.gray;
 }
 
 function pickerScreen(inventory, cursor, selected, message = "") {
   const rows = inventory.map((item, index) => {
-    const checked = selected.has(index) ? `${ansi.green}[x]${ansi.reset}` : "[]";
-    const line = `› ${checked} ${ansi.dim}[${String(index + 1).padStart(2)}]${ansi.reset} ${item.checkout} — ${statusColor(item.state)}${item.state}${ansi.reset}`;
+    const checked = !hasActiveRuntime(item) ? "   " : selected.has(index) ? `${ansi.green}[x]${ansi.reset}` : "[ ]";
+    const line = `› ${checked} ${ansi.dim}[${formatIndex(index, inventory.length)}]${ansi.reset} ${item.checkout} — ${item.state === "ready" && item.resources.length ? portSummary(item, true) : `${statusColor(item)}${rowSummary(item)}${ansi.reset}`}`;
     return index === cursor ? `${ansi.inverse}${line}${ansi.reset}` : `  ${line.slice(2)}`;
   });
   const item = inventory[cursor];
   const details = item.resources.length
     ? item.resources.map((resource) => {
       const listener = resource.listener ? `${ansi.green}PID ${resource.listener.pid}${ansi.reset}` : `${ansi.dim}not listening${ansi.reset}`;
-      return `  ${resource.surface.padEnd(9)} ${ansi.cyan}:${resource.port}${ansi.reset}  ${listener}${resource.containerId ? `  ${ansi.dim}container ${resource.containerId}${ansi.reset}` : ""}`;
+      return `  ${resource.surface.padEnd(9)} ${ansi.cyan}:${resource.port}${ansi.reset}  ${listener}${resource.containerId ? `  ${ansi.dim}container ${resource.containerId} (${resource.containerState ?? "unknown"})${ansi.reset}` : ""}`;
     }).join("\n")
     : `  ${ansi.dim}${item.reason ?? "No managed ports recorded."}${ansi.reset}`;
   return [
@@ -306,7 +344,9 @@ function keyboardChoice(inventory) {
       if (value === "\u001B[A") cursor = (cursor + inventory.length - 1) % inventory.length;
       else if (value === "\u001B[B") cursor = (cursor + 1) % inventory.length;
       else if (value === "\r" || value === "\n" || value === " ") {
-        if (selected.has(cursor)) selected.delete(cursor); else selected.add(cursor);
+        if (hasActiveRuntime(inventory[cursor])) {
+          if (selected.has(cursor)) selected.delete(cursor); else selected.add(cursor);
+        }
       } else if (value === "s") {
         if (selected.size) return finish([...selected].sort((left, right) => left - right));
         message = "Select one or more checkouts before continuing.";
@@ -366,8 +406,16 @@ async function processStillExists(pid) {
 }
 
 async function stopNativeListener(checkout, resource) {
-  const listener = resource.listener;
+  let listener;
+  try {
+    const current = await command("lsof", ["-nP", `-iTCP:${resource.port}`, "-sTCP:LISTEN", "-Fpcn"]);
+    listener = listenerForPort(parseLsof(current.stdout), resource.port);
+  } catch (error) {
+    if (error.code === 1) return "not-listening";
+    return "preserved: current listener could not be verified";
+  }
   if (!listener) return "not-listening";
+  if (listener.pid !== resource.listener?.pid) return "preserved: listener changed since selection";
   let cwd;
   let commandLine;
   try {
@@ -391,7 +439,20 @@ async function stopNativeListener(checkout, resource) {
   return "failed: native process did not stop after SIGTERM";
 }
 
-async function stopCheckout(checkout) {
+async function composeContainerIds(checkout) {
+  const { stdout } = await command("docker", ["ps", "-aq", "--filter", `label=com.docker.compose.project=${checkout.runtime.composeProject}`]);
+  return stdout.trim().split("\n").filter(Boolean);
+}
+
+function stopFailure(error) {
+  const diagnostic = typeof error?.stderr === "string" ? error.stderr.trim() : "";
+  if (diagnostic.includes("artifact PID was reused")) {
+    return "preserved: artifact PID was reused; confirmation metadata remains for inspection";
+  }
+  return `failed: ${diagnostic || (error instanceof Error ? error.message : String(error))}`;
+}
+
+async function stopCheckout(checkout, { inspectContainers = composeContainerIds, release = releaseWorktreeRuntime } = {}) {
   const results = [];
   if (checkout.state !== "ready") return [{ action: "preserved", detail: checkout.reason ?? "checkout state is not safe" }];
   if (checkout.confirmation?.state === "valid") {
@@ -399,26 +460,44 @@ async function stopCheckout(checkout) {
       await command(path.join(checkout.checkout, "dev-confirmation.sh"), ["stop", checkout.confirmation.slug], { cwd: checkout.checkout });
       results.push({ action: "confirmation", detail: "stopped" });
     } catch (error) {
-      results.push({ action: "confirmation", detail: `failed: ${error instanceof Error ? error.message : String(error)}` });
+      results.push({ action: "confirmation", detail: stopFailure(error) });
+      return results;
     }
   }
   if (checkout.runtime?.state === "valid") {
     try {
-      await command(path.join(checkout.checkout, "dev-compose.sh"), ["stop", "web", "studio", "db"], { cwd: checkout.checkout });
-      results.push({ action: "Compose services", detail: "stopped" });
+      const containers = await inspectContainers(checkout);
+      if (containers.length) {
+        await command(path.join(checkout.checkout, "dev-compose.sh"), ["stop", "web", "studio", "db"], { cwd: checkout.checkout });
+        results.push({ action: "Compose services", detail: "stopped" });
+      } else {
+        results.push({ action: "Compose services", detail: "skipped: no project containers" });
+      }
     } catch (error) {
-      results.push({ action: "Compose services", detail: `failed: ${error instanceof Error ? error.message : String(error)}` });
+      results.push({ action: "Compose services", detail: stopFailure(error) });
+      return results;
     }
     if (checkout.runtime.mode === "worktree") {
       try {
         await command(path.join(checkout.checkout, "dev-compose.sh"), ["cleanup"], { cwd: checkout.checkout });
         results.push({ action: "worktree cleanup", detail: "completed" });
       } catch (error) {
-        results.push({ action: "worktree cleanup", detail: `failed: ${error instanceof Error ? error.message : String(error)}` });
+        results.push({ action: "worktree cleanup", detail: stopFailure(error) });
+        return results;
       }
     }
     const app = checkout.resources.find((resource) => resource.surface === "app");
-    if (app) results.push({ action: "native app", detail: await stopNativeListener(checkout.checkout, app) });
+    if (app) {
+      const detail = await stopNativeListener(checkout.checkout, app);
+      results.push({ action: "native app", detail });
+      if (!["stopped", "not-listening"].includes(detail)) return results;
+    }
+  }
+  try {
+    await release(checkout.checkout);
+    results.push({ action: "port allocation", detail: "released; named volumes preserved" });
+  } catch (error) {
+    results.push({ action: "port allocation", detail: stopFailure(error) });
   }
   return results;
 }
@@ -429,11 +508,11 @@ async function inventoryFromRepository(cwd = process.cwd()) {
     command("lsof", ["-nP", "-iTCP", "-sTCP:LISTEN", "-Fpcn"]).catch(() => ({ stdout: "" })),
     dockerContainers(),
   ]);
-  return Promise.all(parseWorktreeList(stdout).map((worktree) => inspectCheckout(worktree, parseLsof(lsofOutput), containers)));
+  return sortInventory(await Promise.all(parseWorktreeList(stdout).map((worktree) => inspectCheckout(worktree, parseLsof(lsofOutput), containers))));
 }
 
 async function main() {
-  if (process.argv.length !== 2) fail("Usage: ./dev-compose.sh worktrees");
+  if (process.argv.length !== 2) fail("Usage: ./dev-compose.sh wt");
   const inventory = await inventoryFromRepository();
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     printInventory(inventory);
@@ -456,4 +535,4 @@ if (import.meta.url === new URL(process.argv[1], "file:").href) {
   });
 }
 
-export { inspectCheckout, parseLsof, parseSelection, parseWorktreeList, readConfirmation, readRuntime, stopCheckout, stopNativeListener };
+export { sortInventory, hasActiveRuntime, formatIndex, portSummary, pickerScreen, printInventory, inspectCheckout, parseLsof, parseSelection, parseWorktreeList, readConfirmation, readRuntime, stopCheckout, stopNativeListener };

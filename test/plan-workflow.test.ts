@@ -377,6 +377,6 @@ test("worktree管理のhandoffは現行smokeと既存保持sessionを保全す�
   }
   assert.match(implement, /stop every task-owned prototype\/review process created by this invocation/u);
   assert.match(implement, /preserving pre-existing retained prototype sessions/u);
-  assert.match(devServer, /\.\/dev-compose\.sh worktrees/u);
+  assert.match(devServer, /\.\/dev-compose\.sh wt/u);
   assert.match(devServer, /named volumeは保持する/u);
 });

@@ -87,7 +87,7 @@ test("non-interactive worktrees command prints inventory without presenting a st
   execFileSync("git", ["init", "-q"], { cwd: checkout });
   const result = execFileSync(process.execPath, [manager], { cwd: checkout, encoding: "utf8", input: "" });
   assert.match(result, /Parallel worktree runtime inventory/u);
-  assert.match(result, /no managed ports recorded/u);
+  assert.match(result, /no managed ports/u);
   assert.doesNotMatch(result, /Stop which worktrees/u);
 });
 
@@ -135,15 +135,100 @@ test("explicit worktree selection stops confirmation and scoped Compose resource
     confirmation: { state: "valid", slug: "demo" },
     runtime: { state: "valid", mode: "worktree" },
     resources: [],
-  });
+  }, { inspectContainers: async () => ["fixture-container"], release: async () => ({ released: true, volumesPreserved: true }) });
   assert.deepEqual(results, [
     { action: "confirmation", detail: "stopped" },
     { action: "Compose services", detail: "stopped" },
     { action: "worktree cleanup", detail: "completed" },
+    { action: "port allocation", detail: "released; named volumes preserved" },
   ]);
   assert.deepEqual((await readFile(log, "utf8")).trim().split("\n"), [
     "confirmation:stop demo",
     "compose:stop web studio db",
     "compose:cleanup",
   ]);
+});
+
+
+test("inventory rows keep checkbox width, pad indexes, and summarize ports and warnings", async () => {
+  const { formatIndex, pickerScreen, portSummary } = await modulePromise;
+  assert.equal(formatIndex(0, 2), "01");
+  assert.equal(formatIndex(1, 2), "02");
+  assert.equal(formatIndex(0, 100), "001");
+  assert.equal(formatIndex(99, 100), "100");
+  const item = {
+    checkout: "/fixture", state: "ready", resources: [
+      { surface: "review", port: 4002 }, { surface: "studio", port: 5555 },
+      { surface: "prototype", port: 4001 }, { surface: "app", port: 3000, listener: { pid: 123 } },
+    ],
+  };
+  assert.equal(portSummary(item), "app:3000 (listening) studio:5555 (stopped) prototype:4001 (stopped) review:4002 (stopped)");
+  const strip = (text: string) => text.replace(/\u001b\[[0-9;?]*[a-zA-Z]/gu, "");
+  const plain = strip(pickerScreen([item], 0, new Set()));
+  const checked = strip(pickerScreen([item], 0, new Set([0])));
+  assert.equal(plain.replace("[ ]", "[x]"), checked);
+  assert.match(plain, /\[01\] \/fixture — app:3000/u);
+  assert.doesNotMatch(plain, /ready/u);
+  assert.match(plain, /Focused checkout/u);
+  assert.match(plain, /not listening/u);
+  for (const state of ["needs-attention", "unavailable"]) {
+    assert.ok(strip(pickerScreen([{ ...item, state }], 0, new Set())).includes(`${state} — app:3000`));
+  }
+  assert.match(strip(pickerScreen([{ ...item, resources: [] }], 0, new Set())), /no managed ports/u);
+});
+
+
+test("missing Compose containers skip stop even when the checkout has no session", async (context) => {
+  const checkout = await fixture(context);
+  const { stopCheckout } = await modulePromise;
+  await writeFile(path.join(checkout, "dev-compose.sh"), '#!/bin/sh\n[ "$1" = cleanup ] || exit 91\n');
+  await chmod(path.join(checkout, "dev-compose.sh"), 0o755);
+  const results = await stopCheckout({ checkout, state: "ready", runtime: { state: "valid", mode: "worktree" }, resources: [] }, { inspectContainers: async () => [], release: async () => ({ released: true, volumesPreserved: true }) });
+  assert.deepEqual(results, [
+    { action: "Compose services", detail: "skipped: no project containers" },
+    { action: "worktree cleanup", detail: "completed" },
+    { action: "port allocation", detail: "released; named volumes preserved" },
+  ]);
+});
+
+
+test("reused artifact PID preserves resources and blocks subsequent cleanup", async (context) => {
+  const checkout = await fixture(context);
+  const { stopCheckout } = await modulePromise;
+  await writeFile(path.join(checkout, "dev-confirmation.sh"), '#!/bin/sh\necho "artifact PID was reused; no process will be stopped" >&2\nexit 1\n');
+  await chmod(path.join(checkout, "dev-confirmation.sh"), 0o755);
+  const results = await stopCheckout({ checkout, state: "ready", confirmation: { state: "valid", slug: "demo" }, runtime: { state: "valid", mode: "worktree" }, resources: [] }, { inspectContainers: async () => { assert.fail("must not continue after confirmation failure"); } });
+  assert.deepEqual(results, [{ action: "confirmation", detail: "preserved: artifact PID was reused; confirmation metadata remains for inspection" }]);
+});
+
+
+test("stopped allocations are gray and unselectable while listeners and running services remain visible", async () => {
+  const { pickerScreen, hasActiveRuntime } = await modulePromise;
+  const item = { checkout: "/fixture", state: "ready", resources: [{ surface: "app", port: 3000, containerId: "old", containerState: "exited" }] };
+  assert.equal(hasActiveRuntime(item), false);
+  const screen = pickerScreen([item], 0, new Set([0]));
+  assert.ok(screen.includes("\u001b[90mapp:3000 (stopped)"));
+  assert.ok(!screen.includes("[x]"));
+  assert.ok(!screen.includes("[ ]"));
+  assert.ok(screen.includes("container old (exited)"));
+  assert.equal(hasActiveRuntime({ ...item, runningServices: ["db"] }), true);
+  assert.equal(hasActiveRuntime({ ...item, resources: [{ surface: "prototype", port: 4003, listener: { pid: 62190 } }] }), true);
+  assert.equal(hasActiveRuntime({ ...item, resources: [{ ...item.resources[0], containerState: "running" }] }), true);
+});
+
+
+test("inventory puts active resources first with stable ordering and preserves selected identity", async () => {
+  const { sortInventory, pickerScreen } = await modulePromise;
+  const idle = { checkout: "/idle", state: "ready", resources: [] };
+  const listening = { checkout: "/listening", state: "ready", resources: [{ surface: "prototype", port: 4003, listener: { pid: 123 } }] };
+  const stopped = { checkout: "/stopped", state: "ready", resources: [{ surface: "app", port: 3000, containerState: "exited" }] };
+  const running = { checkout: "/running", state: "ready", resources: [], runningServices: ["db"] };
+  const warning = { ...listening, checkout: "/warning", state: "needs-attention" };
+  const original = [idle, listening, stopped, running, warning];
+  const sorted = sortInventory(original);
+  assert.deepEqual(sorted, [listening, running, warning, idle, stopped]);
+  assert.deepEqual(original, [idle, listening, stopped, running, warning]);
+  assert.equal(sorted[0], listening);
+  const display = pickerScreen(sorted, 0, new Set([0])).replace(/\u001b\[[0-9;?]*[a-zA-Z]/gu, "");
+  assert.ok(display.includes("› [x] [01] /listening"));
 });
