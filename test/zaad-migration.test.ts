@@ -114,10 +114,10 @@ test("ZMI-02: 適用済みZAAD migrationのSQLとmanifest hashを維持する", 
   );
   assert.equal(
     manifest.migrations.findIndex(({ name }) => name === migrationName),
-    manifest.migrations.length - 12,
+    manifest.migrations.length - 13,
   );
   assert.deepEqual(
-    manifest.migrations.slice(-11).map(({ name }) => name),
+    manifest.migrations.slice(-12).map(({ name }) => name),
     [
       "20260901160000_add_reservation_caller_ani_binding",
       "20260906120000_add_site_key_tenant_scope",
@@ -130,6 +130,7 @@ test("ZMI-02: 適用済みZAAD migrationのSQLとmanifest hashを維持する", 
       "20260909050000_outreach_crm_municipal",
       "20260909070000_outreach_registration_reception",
       "20260909130000_shared_contact_list_bindings",
+      "20260910080000_global_api_default_groups",
     ],
   );
   assert.match(reviewed, new RegExp(migrationName, "u"));
