@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { DetailPageBreadcrumb } from "./DetailPageBreadcrumb";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useI18n } from "@/app/i18n/LanguageProvider";
@@ -8,7 +9,7 @@ import { AdminPageTitleHelp } from "@/app/components/admin/AdminPageTitleHelp";
 import type { OutreachCommonDictionary } from "@/app/i18n/outreach-common";
 import { ModalDialog } from "@/app/components/admin/ModalDialog";
 import type { TenantKey } from "@/lib/tenants";
-import { OUTREACH_VIEWS as views, resolveOutreachView } from "@/lib/admin-routing";
+import { OUTREACH_VIEWS as views, resolveOutreachView, isOutreachDetailPage } from "@/lib/admin-routing";
 import { MunicipalWorkflowPanel } from "./MunicipalWorkflowPanel";
 import { outreachRequest } from "./outreach-client";
 import { outreachPrimary as primary, outreachSecondary as secondary } from "@/app/notifications/register/StudentNotificationRegistration";
@@ -22,7 +23,8 @@ export type OutreachPanelProps = { fullAccess?: boolean; tenant: TenantKey; depa
 export function OutreachView({ tenant, allowedTenants, departments, permissions, canConfigure, years, serverDate }: Omit<OutreachPanelProps, "setDirty"> & { allowedTenants: readonly TenantKey[]; canConfigure: boolean }) {
   const { t } = useI18n(), d = t.outreachCommon, z = t.admin.zaad, router = useRouter(), query = useSearchParams();
   const selected = resolveOutreachView(tenant, query.get("view"), query.get("workflow"));
-  const showingGroupDetail = selected === "contact-lists" && query.get("section") !== "contacts" && ["default-group-detail", "group-detail"].includes(query.get("state") ?? "");
+  const showingGroupDetail = isOutreachDetailPage(selected, new URLSearchParams(query.toString()));
+
   const [connection, setConnection] = useState<{ state: string } | null>(null), [failure, setFailure] = useState(false), [reload, setReload] = useState(0);
   const [saving, setSaving] = useState(false), [fullAccess, setFullAccess] = useState(false);
   const [dirty, setDirty] = useState(false), [pending, setPending] = useState<string | null>(null), cancelRef = useRef<HTMLButtonElement>(null);
@@ -70,10 +72,11 @@ export function OutreachView({ tenant, allowedTenants, departments, permissions,
   const returnTo = `/admin/zaad?${new URLSearchParams({ tenant, view: selected })}`;
   const setupHref = `/admin/developer-api?${new URLSearchParams({ returnTo })}`;
   return <section>
-    <div data-admin-page-chrome className="space-y-4"><div data-admin-page-header className="ml-1 mr-0 flex flex-col gap-4 md:flex-row md:items-start md:justify-between"><AdminPageTitleHelp title={t.universityOutreach.brand} description={z.description} label={z.infoLabel} />{!showingGroupDetail && <AdminTenantRouteSelect allowed={allowedTenants} dirty={dirty} saving={saving} />}</div>
-      {<nav aria-label={z.title} className="-mx-4 overflow-x-auto border-b border-line px-4 md:-mx-6 md:px-6"><div role="tablist" className="flex min-w-max gap-8">{views.map((view, index) => <button key={view} id={`outreach-tab-${view}`} role="tab" disabled={saving} aria-controls="outreach-panel" aria-selected={selected === view} tabIndex={selected === view ? 0 : -1} className={`whitespace-nowrap border-b-2 pb-3 pt-1 text-sm font-semibold focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent ${selected === view ? "border-accent text-accent" : "border-transparent text-fg-muted"}`} onClick={() => navigate(`/admin/zaad?tenant=${tenant}&view=${view}`)} onKeyDown={event => { let next = index; if (event.key === "ArrowRight") next = (index + 1) % views.length; else if (event.key === "ArrowLeft") next = (index + views.length - 1) % views.length; else if (event.key === "Home") next = 0; else if (event.key === "End") next = views.length - 1; else return; event.preventDefault(); document.getElementById(`outreach-tab-${views[next]}`)?.focus(); navigate(`/admin/zaad?tenant=${tenant}&view=${views[next]}`); }}>{d.tabLabels[view]}</button>)}</div></nav>}
-    </div>
-    <div id="outreach-panel" data-admin-page-body role={configured ? "tabpanel" : undefined} aria-labelledby={configured ? `outreach-tab-${selected}` : undefined} className="ml-1 mr-0 mt-6" key={`${tenant}:${selected}`}>
+    {!showingGroupDetail && <div data-admin-page-chrome className="space-y-4"><div data-admin-page-header className="ml-1 mr-0 flex flex-col gap-4 md:flex-row md:items-start md:justify-between"><AdminPageTitleHelp title={t.universityOutreach.brand} description={z.description} label={z.infoLabel} />{!showingGroupDetail && <AdminTenantRouteSelect allowed={allowedTenants} dirty={dirty} saving={saving} />}</div>
+      {!showingGroupDetail && <nav aria-label={z.title} className="-mx-4 overflow-x-auto border-b border-line px-4 md:-mx-6 md:px-6"><div role="tablist" className="flex min-w-max gap-8">{views.map((view, index) => <button key={view} id={`outreach-tab-${view}`} role="tab" disabled={saving} aria-controls="outreach-panel" aria-selected={selected === view} tabIndex={selected === view ? 0 : -1} className={`whitespace-nowrap border-b-2 pb-3 pt-1 text-sm font-semibold focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent ${selected === view ? "border-accent text-accent" : "border-transparent text-fg-muted"}`} onClick={() => navigate(`/admin/zaad?tenant=${tenant}&view=${view}`)} onKeyDown={event => { let next = index; if (event.key === "ArrowRight") next = (index + 1) % views.length; else if (event.key === "ArrowLeft") next = (index + views.length - 1) % views.length; else if (event.key === "Home") next = 0; else if (event.key === "End") next = views.length - 1; else return; event.preventDefault(); document.getElementById(`outreach-tab-${views[next]}`)?.focus(); navigate(`/admin/zaad?tenant=${tenant}&view=${views[next]}`); }}>{d.tabLabels[view]}</button>)}</div></nav>}
+    </div>}
+    <div id="outreach-panel" data-admin-page-body role={configured && !showingGroupDetail ? "tabpanel" : undefined} aria-labelledby={configured && !showingGroupDetail ? `outreach-tab-${selected}` : undefined} className={`ml-1 mr-0 ${showingGroupDetail ? "" : "mt-6"}`} key={`${tenant}:${selected}`}>
+      {showingGroupDetail && selected !== "contact-lists" && (!connection || failure || connection.state !== "connected") && <div className="mb-5 space-y-5"><h1 className="text-2xl font-bold">{d.tabLabels[selected]}</h1><DetailPageBreadcrumb title={d.tabLabels[selected]} /></div>}
       {selected === "contact-lists" ? panel : !connection && !failure ? <OutreachLoading /> : failure || (connection && !["connected", "missing"].includes(connection.state)) ? <OutreachFailure retry={() => { setFailure(false); setConnection(null); setReload(value => value + 1); }} /> : connection?.state === "missing" ? <OutreachSetupGate copy={d} canConfigure={canConfigure} href={setupHref} /> : panel}
     </div>
     {pending && <ModalDialog title={d.confirmDiscard} description={t.admin.industrySettings.help} initialFocusRef={cancelRef} onRequestClose={() => setPending(null)}><div className="flex flex-wrap justify-end gap-3"><button ref={cancelRef} className={secondary} onClick={() => setPending(null)}>{z.common.cancel}</button><button className={primary} onClick={() => { const href = pending; setDirty(false); setPending(null); router.push(href); }}>{d.discard}</button></div></ModalDialog>}

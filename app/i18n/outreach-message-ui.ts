@@ -2,7 +2,7 @@ import type { Locale } from "./dictionaries";
 export type OutreachMessageDictionary = { asset: string; previewTitle: string; previewHelp: string; previewAction: string; play: string; revisionHelp: string; conflict: string; inUse: string; usageUnknown: string; notGenerated: string; generating: string; failed: string; unknown: string; ready: string; referenced: string; inUseTitle: string; saved: string };
 export const outreachMessageDictionaries: Record<Locale, OutreachMessageDictionary> = {
   "ja": {
-    "asset": "Zoom音声アセット",
+    "asset": "音声アセット",
     "previewTitle": "メッセージの試聴",
     "previewHelp": "Zoomで生成した音声ファイルを確認できる場合に試聴できます。現在は音声生成・取得の確認が完了していないため、再生できません。端末の読み上げ音声は使用しません。",
     "previewAction": "試聴方法を確認",

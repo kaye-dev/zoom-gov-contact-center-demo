@@ -1,4 +1,5 @@
 "use client";
+import { DetailPageBreadcrumb } from "./DetailPageBreadcrumb";
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/app/i18n/LanguageProvider";
 import { Select } from "@/app/components/Select";
@@ -23,7 +24,6 @@ export function OutreachMessageEditor({ message, close, saved, tenant, departmen
   useEffect(() => { if (writable) name.current?.focus(); }, [writable]);
   function change(patch: Partial<OutreachMessage>) { if (!writable || lock.current) return; setDraft(current => ({ ...current, ...patch })); dirty.current = true; setDirty(true); }
   function finish() { dirty.current = false; setDirty(false); close(); }
-  function requestClose() { if (lock.current) return; if (dirty.current) setDiscard(true); else finish(); }
   async function save() {
     if (!writable || lock.current) return;
     lock.current = true; setBusy(true); setSaving?.(true); setError("");
@@ -34,7 +34,7 @@ export function OutreachMessageEditor({ message, close, saved, tenant, departmen
     finally { lock.current = false; setBusy(false); setSaving?.(false); }
   }
   return <section className="max-w-3xl space-y-6" aria-labelledby="message-page-title">
-    <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="message-page-title" className="text-lg font-bold">{message ? z.messages.editTitle : z.messages.createTitle}</h2><button className={secondary} disabled={busy} onClick={requestClose}>{d.backToContacts}</button></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><h1 id="message-page-title" className="text-2xl font-bold">{message?.name ?? z.messages.createTitle}</h1></div><DetailPageBreadcrumb title={message?.name ?? z.messages.createTitle} disabled={busy} />
     <form className="space-y-5" onSubmit={event => { event.preventDefault(); void save(); }} aria-busy={busy}>
       {error && <p role="alert">{error}</p>}
       <fieldset className="space-y-5" disabled={busy || !writable}><legend className="sr-only">{message ? z.messages.editTitle : z.messages.createTitle}</legend>

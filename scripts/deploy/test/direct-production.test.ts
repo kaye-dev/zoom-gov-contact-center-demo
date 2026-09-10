@@ -447,6 +447,10 @@ test("reviewed migration manifest exactly classifies the current SHA-verified ch
         name: "20260910080000_global_api_default_groups",
         classification: "destructive-reviewed",
       },
+      {
+        name: "20260910140000_outreach_purpose_campaigns",
+        classification: "expand-compatible",
+      },
     ],
   );
 });

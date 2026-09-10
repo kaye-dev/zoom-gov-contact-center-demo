@@ -119,7 +119,7 @@ export function buildAdminNavigation(
     });
   }
   if (visible.has("zaad") && (!outreach || outreach.allowedTenants.length)) {
-    primaryItems.push({ key: "zaad", href: "/admin/zaad", label: t.admin.zaad.navLabel });
+    primaryItems.push({ key: "zaad", href: "/admin/zaad?tenant=lg", label: t.admin.zaad.navLabel });
   }
   if (users[0]) {
     primaryItems.push({

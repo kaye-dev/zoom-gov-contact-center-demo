@@ -1,3 +1,4 @@
+import { listPurposeCampaigns, purposeCampaignCandidates, purposeCampaignOperation, savePurposeCampaign } from "./purpose-campaign-bindings";
 import { startRegularGroupSync } from "./regular-group-sync";
 import { bindDefaultGroup, defaultGroupCandidates, listOutreachGroups } from "./default-groups";
 import { getDefaultGroupDetail, startRegistrationGroupSync, getRegistrationSyncOperation, advanceRegistrationSync, linkRegistrationMember } from "./registration-group-sync";
@@ -24,6 +25,10 @@ import { registerMunicipalRoutes } from "./municipal/api-routes";
 export function registerOutreachRoutes(app: Hono<ZaadApiEnvironment>) {
   registerMunicipalRoutes(app);
   const root = "/admin/zaad";
+  app.get(`${root}/purpose-campaigns`, c => withOutreach(c, "VIEW", (db, scope) => listPurposeCampaigns(db, scope)));
+  app.get(`${root}/purpose-campaigns/operations/:operationKey`, c => withOutreach(c, "UPDATE", (db, scope) => purposeCampaignOperation(db, scope, c.req.param("operationKey"))));
+  app.get(`${root}/purpose-campaigns/:mode/:purpose/candidates`, c => withOutreach(c, "UPDATE", (db, scope) => purposeCampaignCandidates(db, scope, c.req.param("mode"), c.req.param("purpose"), c.req.query("cursor"))));
+  app.put(`${root}/purpose-campaigns/:mode/:purpose`, c => withOutreach(c, "UPDATE", async (db, scope) => savePurposeCampaign(db, scope, c.req.param("mode"), c.req.param("purpose"), await outreachJson(c))));
   app.get(`${root}/resource-bindings`, c => withOutreach(c, "VIEW", (db, scope) => listResourceBindings(db, scope)));
   app.post(`${root}/resource-bindings/preview`, c => withOutreach(c, "UPDATE", async (db, scope) => previewResourceBinding(db, scope, await outreachJson(c))));
   app.put(`${root}/resource-bindings`, c => withOutreach(c, "UPDATE", async (db, scope) => saveResourceBinding(db, scope, await outreachJson(c))));

@@ -1,0 +1,11 @@
+import type { Locale } from "./dictionaries";
+const keys = ["title", "label", "linked", "unlinked", "link", "select", "campaign", "campaignId", "refresh", "saved", "changeHelp", "conflict", "unavailable", "unknown", "assigned", "loading"] as const;
+export type PurposeCampaignDictionary = Record<typeof keys[number], string>;
+const rows: Record<Locale, string[]> = {
+ ja: ["キャンペーンの関連付け", "用途別キャンペーンの関連付け", "関連付け済み", "未関連付け", "関連付け", "キャンペーンを選択してください", "Zoomキャンペーン", "キャンペーンID", "候補を再取得", "キャンペーンの関連付けを保存しました。", "関連付け先を変更します。過去の案内履歴は変更しません。", "関連付けやZoomの状態が変更されました。候補を再取得して選び直してください。", "現在のキャンペーンを確認できません。候補を再取得して有効なキャンペーンを選択してください。", "保存結果を確認できません。同じ操作の結果を確認するため、保存をもう一度押してください。", "選択不可", "キャンペーンを取得しています…"],
+ en: ["Link campaign", "Campaign links by purpose", "Linked", "Not linked", "Link", "Select a campaign", "Zoom campaign", "Campaign ID", "Refresh candidates", "Campaign link saved.", "Changing the linked campaign. Past notice history will be retained.", "The link or Zoom state changed. Refresh candidates and select again.", "The current campaign could not be verified. Refresh and select an available campaign.", "The save result is unknown. Press Save again to check the same operation.", "Unavailable", "Loading campaigns…"],
+ "zh-Hans": ["关联营销活动", "按用途关联营销活动", "已关联", "未关联", "关联", "请选择营销活动", "Zoom营销活动", "营销活动ID", "重新获取候选项", "已保存营销活动关联。", "将更改关联的营销活动。过去的通知历史不会更改。", "关联或Zoom状态已更改。请重新获取候选项并重新选择。", "无法确认当前营销活动。请重新获取并选择有效的营销活动。", "无法确认保存结果。请再次点击保存以确认同一操作的结果。", "不可选择", "正在获取营销活动…"],
+ "zh-Hant": ["關聯行銷活動", "依用途關聯行銷活動", "已關聯", "未關聯", "關聯", "請選擇行銷活動", "Zoom行銷活動", "行銷活動ID", "重新取得候選項", "已儲存行銷活動關聯。", "將變更關聯的行銷活動。過去的通知歷史不會變更。", "關聯或Zoom狀態已變更。請重新取得候選項並重新選擇。", "無法確認目前行銷活動。請重新取得並選擇有效的行銷活動。", "無法確認儲存結果。請再次點擊儲存以確認同一操作的結果。", "不可選擇", "正在取得行銷活動…"],
+ ko: ["캠페인 연결", "용도별 캠페인 연결", "연결됨", "연결되지 않음", "연결", "캠페인을 선택하세요", "Zoom 캠페인", "캠페인 ID", "후보 새로고침", "캠페인 연결을 저장했습니다.", "연결된 캠페인을 변경합니다. 과거 안내 기록은 유지됩니다.", "연결 또는 Zoom 상태가 변경되었습니다. 후보를 새로고침하고 다시 선택하세요.", "현재 캠페인을 확인할 수 없습니다. 새로고침 후 사용 가능한 캠페인을 선택하세요.", "저장 결과를 확인할 수 없습니다. 같은 작업의 결과를 확인하려면 저장을 다시 누르세요.", "선택 불가", "캠페인을 불러오는 중…"],
+};
+export const purposeCampaignDictionaries = Object.fromEntries(Object.entries(rows).map(([locale, values]) => [locale, Object.fromEntries(keys.map((key, i) => [key, values[i]]))])) as Record<Locale, PurposeCampaignDictionary>;

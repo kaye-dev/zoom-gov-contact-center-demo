@@ -65,7 +65,7 @@ test(
         assert.equal((await missingTenant.json()).code, "TENANT_REQUIRED");
 
         await t.test("contact group sync endpoints require authentication and update access", async () => {
-          for (const path of ["/api/admin/zaad/default-groups/default-lg-elder-watch/candidates", "/api/admin/zaad/contact-lists/sync-candidates", "/api/admin/zaad/contact-lists/sync-operations/fixture-operation"]) {
+          for (const path of ["/api/admin/zaad/purpose-campaigns/regular/ELDER_WATCH/candidates", "/api/admin/zaad/purpose-campaigns/operations/fixture-operation", "/api/admin/zaad/default-groups/default-lg-elder-watch/candidates", "/api/admin/zaad/contact-lists/sync-candidates", "/api/admin/zaad/contact-lists/sync-operations/fixture-operation"]) {
             const anonymous = await invoke(route.GET, "GET", path);
             assert.equal(anonymous.status, 401);
             const readonly = await invoke(route.GET, "GET", path, { cookie: viewCookie });
@@ -74,6 +74,10 @@ test(
           }
           const denied = await invoke(route.POST, "POST", "/api/admin/zaad/contact-lists/sync-bindings", { cookie: viewCookie, body: { operationKey: "fixture-operation", accountId: "fixture-account", contactListIds: ["fixture-list-1"] } });
           assert.equal(denied.status, 403);
+          const deniedPurpose = await invoke(route.PUT, "PUT", "/api/admin/zaad/purpose-campaigns/regular/ELDER_WATCH", { cookie: viewCookie, body: { operationKey: "fixture-purpose", accountId: "fixture-account", revision: 0, campaignId: "fixture-campaign" } });
+          assert.equal(deniedPurpose.status, 403);
+          const anonymousPurpose = await invoke(route.GET, "GET", "/api/admin/zaad/purpose-campaigns");
+          assert.equal(anonymousPurpose.status, 401);
           assert.equal(externalFetches.length, 0);
         });
 

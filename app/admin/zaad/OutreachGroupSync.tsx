@@ -1,4 +1,5 @@
 "use client";
+import { DetailPageBreadcrumb } from "./DetailPageBreadcrumb";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Checkbox } from "@/app/components/Checkbox";
@@ -93,7 +94,7 @@ export function OutreachGroupSync({ tenant, writable, setDirty, setSaving, close
     } finally { lock.current = false; setBusy(false); setSaving?.(false); }
   }
   return <section aria-labelledby="group-sync-title" className="max-w-4xl space-y-6" aria-busy={loading || busy} data-group-sync-state={busy ? "saving" : unknown ? "unknown" : loading ? "loading" : readFailed ? "error" : selected.length ? "selected" : rows.length ? "ready" : "empty"}>
-    <h2 id="group-sync-title" ref={heading} tabIndex={-1} className="text-lg font-bold">{c.title}</h2>
+    <h1 id="group-sync-title" ref={heading} tabIndex={-1} className="text-2xl font-bold">{c.title}</h1><DetailPageBreadcrumb title={c.title} disabled={busy} />
     <p className="font-semibold">{c.destination.replace("{tenant}", t.admin.industrySettings.names[tenant])}</p>
     {!writable ? <p role="alert">{c.permission}</p> : <>
       {error && <p role="alert">{error}</p>}

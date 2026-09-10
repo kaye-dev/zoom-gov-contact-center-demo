@@ -1,4 +1,5 @@
 "use client";
+import { DetailPageBreadcrumb } from "./DetailPageBreadcrumb";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Checkbox } from "@/app/components/Checkbox";
 import { ModalDialog } from "@/app/components/admin/ModalDialog";
@@ -62,7 +63,7 @@ export function OutreachCampaignSync({ tenant, writable, setDirty, setSaving, cl
   }
   const filtered = candidates?.filter(row => `${row.name} ${row.id}`.toLowerCase().includes(query.toLowerCase())) ?? [];
   return <section aria-labelledby="campaign-sync-title" className="max-w-4xl space-y-6" aria-busy={loading || busy}>
-    <h2 id="campaign-sync-title" ref={heading} tabIndex={-1} className="text-lg font-bold">{c.title}</h2>
+    <h1 id="campaign-sync-title" ref={heading} tabIndex={-1} className="text-2xl font-bold">{c.title}</h1><DetailPageBreadcrumb title={c.title} disabled={busy} />
     <p className="font-semibold">{c.destination.replace("{tenant}", t.admin.industrySettings.names[tenant])}</p><p className="text-sm leading-7 text-fg-muted">{c.help}</p>
     {!writable ? <><p role="alert">{c.permission}</p><button className={secondary} onClick={requestClose}>{z.common.cancel}</button></> : <>
       {error && <p role="alert">{error}</p>}

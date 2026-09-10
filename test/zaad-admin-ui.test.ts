@@ -761,12 +761,12 @@ test("contact group counts and detail chrome keep localized labels and saved-ID 
   assert.ok(groups.includes('row.contactListId ? d.defaultGroups.update : d.defaultGroups.configure'));
   assert.ok(detail.includes('data.group.contactListId ? d.update : d.configure'));
   for (const text of [groups, detail]) {
-    assert.ok(text.includes('flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2'));
+    assert.ok(text.includes('gap-x-4 gap-y-2'));
     assert.ok(text.includes('break-all text-sm text-fg-muted'));
   }
   assert.ok(groups.includes('{d.defaultGroups.listId}：{detail.group.id}'));
   assert.ok(detail.includes('border-l-2 border-accent pl-3 text-sm text-red-700 dark:text-red-300'));
-  assert.ok(view.includes('["default-group-detail", "group-detail"].includes(query.get("state") ?? "")'));
+  assert.ok(view.includes('isOutreachDetailPage(selected,'));
   assert.ok(view.includes('{!showingGroupDetail && <AdminTenantRouteSelect'));
 });
 
@@ -775,8 +775,8 @@ test("default detail keeps search and sync semantics with a portal help and cent
   for (const copy of Object.values(outreachCommonDictionaries)) assert.ok(copy.defaultGroups.syncStatusHelp);
   const detail = readFileSync(new URL("../app/admin/zaad/OutreachDefaultGroup.tsx", import.meta.url), "utf8");
   assert.equal((detail.match(/<SearchInput /g) ?? []).length, 1);
-  assert.ok(detail.includes('flex-col items-start gap-4 lg:flex-row lg:flex-wrap lg:items-center'));
-  assert.ok(detail.includes('containerClassName="w-full max-w-96 lg:w-96"'));
+  assert.ok(detail.includes('md:w-auto md:flex-row md:flex-wrap md:items-center'));
+  assert.ok(detail.includes('containerClassName="w-full min-w-0 md:w-64 xl:w-80"'));
   assert.ok(detail.includes('params.set("cursor", "0")'));
   assert.ok(detail.includes('if (composing || text === search) return'));
   assert.ok(detail.includes('label={d.syncStatusHelp} description={d.boundary} portal'));

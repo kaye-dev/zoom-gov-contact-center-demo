@@ -720,6 +720,7 @@ model ZoomResourceBinding {
   tombstone Boolean @default(false)
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  purposeCampaigns OutreachPurposeCampaign[]
   defaultGroups OutreachDefaultGroup[]
   memberships ZoomContactMembership[]
   municipalWorkflows MunicipalWorkflowRevision[] @relation("MunicipalWorkflowFlow")
@@ -1511,4 +1512,16 @@ model OutreachGroupSyncItem {
   @@unique([operationId, membershipId])
   @@index([operationId, status])
   @@map("outreach_group_sync_items")
+}
+
+model OutreachPurposeCampaign {
+  id String @id @default(cuid())
+  siteKey String
+  mode String
+  purpose String
+  bindingId String? @unique
+  version Int @default(1)
+  binding ZoomResourceBinding? @relation(fields: [siteKey, bindingId], references: [ownerSiteKey, id], onDelete: Restrict)
+  @@unique([siteKey, mode, purpose])
+  @@map("outreach_purpose_campaigns")
 }

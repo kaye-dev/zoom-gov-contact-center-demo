@@ -1,4 +1,5 @@
 "use client";
+import { DetailPageBreadcrumb } from "./DetailPageBreadcrumb";
 import { useRef, useState } from "react";
 import { useI18n } from "@/app/i18n/LanguageProvider";
 import { Select } from "@/app/components/Select";
@@ -17,7 +18,6 @@ export function OutreachGroupEditor({ group, close, saved, tenant, departments, 
   const writable = group ? permissions.update && !group.mutationBlock : permissions.create;
   function change(patch: Partial<OutreachGroup>) { if (!writable || lock.current) return; setDraft(current => ({ ...current, ...patch })); operation.current = null; dirty.current = true; setDirty(true); }
   function finish() { dirty.current = false; setDirty(false); close(); }
-  function requestClose() { if (lock.current) return; if (dirty.current) setDiscard(true); else finish(); }
   async function save() {
     if (!writable || lock.current) return;
     lock.current = true; setBusy(true); setSaving?.(true); setError(""); operation.current ??= crypto.randomUUID();
@@ -28,7 +28,7 @@ export function OutreachGroupEditor({ group, close, saved, tenant, departments, 
     finally { lock.current = false; setBusy(false); setSaving?.(false); }
   }
   return <section className="max-w-3xl space-y-6" aria-labelledby="group-page-title">
-    <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="group-page-title" className="text-lg font-bold">{group ? d.groupEdit : d.groupCreate}</h2><button className={secondary} disabled={busy} onClick={requestClose}>{d.backToContacts}</button></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><h1 id="group-page-title" className="text-2xl font-bold">{group?.name ?? d.groupCreate}</h1></div><DetailPageBreadcrumb title={group?.name ?? d.groupCreate} disabled={busy} />
     <form className="space-y-5" onSubmit={event => { event.preventDefault(); void save(); }}>
       {group && <p className="text-sm leading-7 text-fg-muted">{d.groupSync.sharedEdit}</p>}
       {group?.mutationBlock && <p role="alert" className="text-sm leading-7">{d.groupMutationBlocks[group.mutationBlock]}</p>}
