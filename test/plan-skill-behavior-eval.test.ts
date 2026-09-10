@@ -58,6 +58,19 @@ type EvaluatorModule = {
 };
 const evaluatorModulePromise = import(pathToFileURL(evaluator).href) as Promise<EvaluatorModule>;
 
+test("prototype-transfer: unchanged TSX and legacy inputs pass; rewrites and extra stages fail", async context => {
+  const evaluatorModule = await evaluatorModulePromise;
+  const fixture = await evaluatorModule.prepareScenario("prototype-tsx-transfer", `transfer-${process.pid}`);
+  context.after(() => rm(fixture.fixtureRoot, { recursive: true, force: true }));
+  await fixture.scenario.simulate(fixture.repo);
+  const final = fixture.scenario.simulatedFinal!;
+  await evaluatorModule.gradePreparedScenario(fixture, final, ["node --test transfer.test.mjs"]);
+  await assert.rejects(evaluatorModule.gradePreparedScenario(fixture, final, ["npm run build", "node --test transfer.test.mjs"]), /unnecessary workflow stage/u);
+  const target = path.join(fixture.repo, "app/NameEditor.tsx");
+  await writeFile(target, (await readFile(target, "utf8")).replace("px-4", "px-8"));
+  await assert.rejects(evaluatorModule.gradePreparedScenario(fixture, final), /transfer rewrote presentation code/u);
+});
+
 async function temporaryEntries(prefix: string) {
   return (await readdir(tmpdir())).filter((entry) => entry.startsWith(prefix));
 }

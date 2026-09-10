@@ -8,7 +8,7 @@ function source(path: string) {
 
 test("admin layout supplies the session user to the responsive shared shell", () => {
   const layout = source("../app/admin/layout.tsx");
-  const shell = source("../app/admin/AdminShell.tsx");
+  const shell = source("../app/admin/AdminShellView.tsx");
 
   assert.match(layout, /currentUserName=\{getSessionUser\(session\)!\.name\}/u);
   assert.match(shell, /currentUserName: string/u);
@@ -36,7 +36,7 @@ test("admin layout supplies the session user to the responsive shared shell", ()
 });
 
 test("desktop sidebar toggle and shortcut share one guarded state transition", () => {
-  const shell = source("../app/admin/AdminShell.tsx");
+  const shell = source("../app/admin/AdminShellView.tsx");
 
   assert.match(
     shell,
@@ -67,7 +67,7 @@ test("desktop sidebar toggle and shortcut share one guarded state transition", (
 });
 
 test("sidebar identity and navigation icons keep the 34px axis across states", () => {
-  const shell = source("../app/admin/AdminShell.tsx");
+  const shell = source("../app/admin/AdminShellView.tsx");
   const navigation = source("../app/admin/AdminNavigation.tsx");
   const identity = shell.match(/data-admin-identity\s*className="([^"]+)"/u);
   const primary = navigation.match(
@@ -102,7 +102,7 @@ test("sidebar identity and navigation icons keep the 34px axis across states", (
 });
 
 test("neutral administration identity and account menu retain accessible navigation", () => {
-  const shell = source("../app/admin/AdminShell.tsx");
+  const shell = source("../app/admin/AdminShellView.tsx");
   const navigation = source("../app/admin/AdminNavigation.tsx");
   const identity = shell.match(/data-admin-identity\s*className="([^"]+)"/u);
   const account = navigation.match(/data-admin-account\s*className="([^"]+)"/u);
@@ -140,7 +140,7 @@ test("neutral administration identity and account menu retain accessible navigat
 });
 
 test("account menu supports pointer, keyboard, outside, route, and shell close paths", () => {
-  const shell = source("../app/admin/AdminShell.tsx");
+  const shell = source("../app/admin/AdminShellView.tsx");
   const navigation = source("../app/admin/AdminNavigation.tsx");
 
   assert.match(shell, /accountMenuSurface/u);
@@ -167,13 +167,16 @@ test("account menu supports pointer, keyboard, outside, route, and shell close p
   );
   assert.match(navigation, /signOutRequestedRef\.current = true/u);
   assert.match(navigation, /disabled=\{isSigningOut\}/u);
-  assert.match(shell, /await authClient\.signOut\(\)/u);
-  assert.match(shell, /window\.location\.replace\("\/admin\/login"\)/u);
-  assert.match(shell, /router\.refresh\(\)/u);
+  const wrapper = source("../app/admin/AdminShell.tsx");
+  assert.match(shell, /await onSignOut\(\)/u);
+  assert.doesNotMatch(shell, /authClient/u);
+  assert.match(wrapper, /await authClient\.signOut\(\)/u);
+  assert.match(wrapper, /window\.location\.replace\("\/admin\/login"\)/u);
+  assert.match(wrapper, /router\.refresh\(\)/u);
 });
 
 test("mobile drawer uses the shared navigation with complete focus cleanup", () => {
-  const shell = source("../app/admin/AdminShell.tsx");
+  const shell = source("../app/admin/AdminShellView.tsx");
 
   assert.match(shell, /id="admin-menu-button"/u);
   assert.match(shell, /aria-controls="admin-mobile-navigation"/u);
@@ -227,7 +230,7 @@ test("section navigation is a full-width, horizontally scrollable link rail", ()
 });
 
 test("admin overlays remain above the sticky mobile header", () => {
-  const shell = source("../app/admin/AdminShell.tsx");
+  const shell = source("../app/admin/AdminShellView.tsx");
   const userDirectory = source("../app/admin/users/UsersView.tsx");
   const modal = source("../app/components/admin/ModalDialog.tsx");
 

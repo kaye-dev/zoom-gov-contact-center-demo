@@ -12,7 +12,22 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "plans/**",
+    ".local/**",
+    "tools/prototype-runtime/**",
+    "test/fixtures/next-prototype/**",
   ]),
+  {
+    files: ["app/**/*.{ts,tsx}", "lib/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": ["error", {
+        patterns: [{
+          group: ["**/plans/**", "**/.local/**", "**/tools/prototype-runtime/**", "**/test/fixtures/**", "@prototype/**"],
+          message: "本番から計画資料・prototype runtimeを参照せず、採用した表示コンポーネントを本番へ移してください。",
+        }],
+      }],
+    },
+  },
   {
     files: ["app/**/*.tsx"],
     ignores: ["app/components/Checkbox.tsx"],

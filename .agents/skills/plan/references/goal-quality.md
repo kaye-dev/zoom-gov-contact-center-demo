@@ -22,7 +22,7 @@ Escape literal pipes in cells. Split requirements whose outcomes or checks diffe
 
 ## UI design and handoff
 
-UI goals identify the prototype path, visual intent, affected state/operation, and `UI検証方式: smoke`. The prototype HTML/CSS/assets also specify visual details not repeated in the goal. Follow [workflow-verification-contract.md](workflow-verification-contract.md): implementation compares prototype structure/appearance within the same normally 1–3 scenarios for major visual breakage and main happy paths; put behavioral correctness into affected static/integration tests as appropriate.
+UI goals identify the prototype path, visual intent, affected state/operation, and `UI検証方式: smoke`. The prototype TSX, relevant adopted `.shared` source, CSS/assets (or existing HTML/CSS) also specify visual details not repeated in the goal. For new TSX, state prototype-to-production paths, props/action adapters, and representative fixture data in the existing interface section. Follow [workflow-verification-contract.md](workflow-verification-contract.md): implementation compares prototype structure/appearance within the same normally 1–3 scenarios for major visual breakage and main happy paths; put behavioral correctness into affected static/integration tests as appropriate.
 
 Under `## ユーザー動作確認`, use a short unchecked handoff: `- [ ] UI-CHECK-01 — 対象: ...; 前提: ...; 操作: ...; 期待結果: ...`. Keep stable IDs for unchanged items. Do not expand it into an exhaustive action/state checklist or mark human review complete from automation. Latest direct UI instructions are accepted differences from the prototype.
 

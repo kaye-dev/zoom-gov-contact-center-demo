@@ -12,6 +12,51 @@ const cases = [
   ["legacy-read-only", "旧runの読取だけを依頼しています。新schemaへの移行は依頼されていません。", ["inspect"]],
 ];
 export const workflowScenarioNames = cases.map(([name]) => `workflow-${name}`);
+
+export function createPrototypeTransferScenarios({ write, run, ensure, assertOnlyPaths }) {
+  const sourcePath = "plans/transfer/prototype/components/NameEditor.tsx";
+  const targetPath = "app/NameEditor.tsx";
+  const component = '"use client";\nexport function NameEditor({ name, onSave }: { name: string; onSave: (name: string) => void }) { return <button className="bg-accent px-4 py-2" onClick={() => onSave(name)}>{name}</button>; }\n';
+  const driver = `import assert from 'node:assert/strict';\nimport { readFile } from 'node:fs/promises';\nassert.equal(await readFile('${targetPath}','utf8'),await readFile('${sourcePath}','utf8'));\nassert.match(await readFile('app/ConnectedEditor.tsx','utf8'),/from ["']\\.\\/NameEditor["']/);\nassert.doesNotMatch(await readFile('app/ConnectedEditor.tsx','utf8'),/plans\\/|fixtures|prototype-runtime/);\n`;
+  const adapter = 'import { NameEditor } from "./NameEditor";\nexport function ConnectedEditor({ name, save }: { name: string; save: (name: string) => void }) { return <NameEditor name={name} onSave={save} />; }\n';
+  return {
+    "prototype-tsx-transfer": {
+      affectedPaths: [".agents/skills/plan/", ".agents/skills/implement/", "scripts/prototype-runtime.mjs", "scripts/eval-workflow-scenarios.mjs", "test/plan-skill-behavior-eval.test.ts"],
+      async prepare(repo) {
+        await write(repo, sourcePath, component);
+        await write(repo, "plans/transfer/prototype/.shared/Shared.tsx", "export const shared = 'adopted source';\n");
+        await write(repo, "plans/legacy/prototype/index.html", "<!doctype html><title>preserved legacy</title>\n");
+        await write(repo, "transfer.test.mjs", driver);
+        await write(repo, "transfer-input.md", `採用TSXは${sourcePath}。${targetPath}へ引き継ぎ、app/ConnectedEditor.tsxからname/save propsを接続する。採用source、.shared、legacy HTML、testは保存する。これは依存installや実Browserを要しない移植判断のfixture。検証: node --test transfer.test.mjs。製品保存の検証ではない。\n`);
+      },
+      prompt: "$implement の移植契約を使い、transfer-input.mdの限定した実装を行ってください。採用済み範囲の実装を追加承認なく完了し、実際の検証と未確認事項を報告してください。",
+      async grade(repo, final, commands) {
+        ensure(await readFile(path.join(repo, sourcePath), "utf8") === component, "adopted TSX changed");
+        ensure(await readFile(path.join(repo, targetPath), "utf8") === component, "transfer rewrote presentation code");
+        ensure(await readFile(path.join(repo, "plans/transfer/prototype/.shared/Shared.tsx"), "utf8") === "export const shared = 'adopted source';\n", "shared snapshot changed");
+        ensure(await readFile(path.join(repo, "plans/legacy/prototype/index.html"), "utf8") === "<!doctype html><title>preserved legacy</title>\n", "legacy HTML changed");
+        ensure(await readFile(path.join(repo, "transfer.test.mjs"), "utf8") === driver, "transfer test changed");
+        await run(process.execPath, ["--test", "transfer.test.mjs"], { cwd: repo });
+        if (commands) {
+          ensure(commands.some(command => /node\s+--test\s+transfer\.test\.mjs/u.test(command)), "missing focused transfer check");
+          ensure(!commands.some(command => /(?:npm|pnpm)\s+(?:install|ci|run build)|next build|refresh-shared|parity-runner/u.test(command)), "unnecessary workflow stage");
+        }
+        ensure(/fixture|フィクスチャ/u.test(final) && /未確認|not verified/u.test(final), "fixture and product validation are not distinguished");
+        ensure(!/承認してください|確認してよろしい/u.test(final), "unnecessary approval");
+        await assertOnlyPaths(repo, [targetPath, "app/ConnectedEditor.tsx"]);
+      },
+      async simulate(repo) {
+        await write(repo, targetPath, component);
+        await write(repo, "app/ConnectedEditor.tsx", adapter);
+        await run(process.execPath, ["--test", "transfer.test.mjs"], { cwd: repo });
+      },
+      async break(repo) { await write(repo, targetPath, component.replace("px-4", "px-8")); },
+      simulatedFinal: "TSX移植fixtureの検証が成功しました。製品UIと実保存は未確認です。",
+      negativeFinals: ["すべての製品UIと保存を確認しました。"],
+    },
+  };
+}
+
 export function createWorkflowScenarios({ write, run, ensure, assertOnlyPaths }) {
   return Object.fromEntries(cases.map(([name, problem, actions]) => {
     const id = `workflow-${name}`;

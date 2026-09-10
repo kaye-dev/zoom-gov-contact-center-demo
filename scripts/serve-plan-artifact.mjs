@@ -7,6 +7,7 @@ import { lstat, readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { resolvePrototypeEntry } from "./prototype-entry.mjs";
 
 const MIME = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -77,24 +78,24 @@ if (
 }
 const reviewAllowlist = new Set(["index.html", "styles.css", "app.js", "review-data-schema.js", "review-data.json"]);
 
-let canonicalRoot;
+let entry;
 try {
-  canonicalRoot = await realpath(sourceRoot);
-  if (canonicalRoot !== sourceRoot || !(await stat(canonicalRoot)).isDirectory()) fail("artifact directory must be a real directory, not a symlink");
-  const indexPath = path.join(canonicalRoot, "index.html");
-  const indexMetadata = await lstat(indexPath);
-  if (indexMetadata.isSymbolicLink() || !indexMetadata.isFile() || (await realpath(indexPath)) !== indexPath) {
-    fail("artifact index.html must be a regular file, not a symlink");
-  }
+  entry = await resolvePrototypeEntry(repositoryRoot, segments[1], artifactType);
 } catch (error) {
-  fail(`artifact directory is unavailable: ${error instanceof Error ? error.message : String(error)}`);
+  fail(`artifact directory is unavailable: ${error.message}`);
 }
+const canonicalRoot = entry.directory;
+const nextTools = entry.kind === "next" ? await import("./prototype-runtime.mjs") : null;
+let prepared;
+let nextRuntime;
+let ready = false;
+const upgradeSockets = new Set();
 
 function headers(contentType) {
   const values = {
     "Cache-Control": "no-store",
-    "Content-Security-Policy": CSP,
-    "Content-Type": contentType,
+    "Content-Security-Policy": nextTools && allocation ? nextTools.nextPrototypeCsp(allocation.artifactPort) : CSP,
+    ...(contentType ? { "Content-Type": contentType } : {}),
     "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
@@ -125,7 +126,24 @@ const server = createServer({ requireHostHeader: false }, async (request, respon
     const url = new URL(requestTarget, "http://127.0.0.1");
     const decoded = decodeURIComponent(url.pathname);
     if (decoded.includes("\0")) throw new Error("invalid path");
+    if (nextTools) {
+      if (request.headers.origin && request.headers.origin !== `http://127.0.0.1:${address.port}`) throw new Error("invalid origin");
+      if (request.method === "HEAD" && decoded === "/") {
+        response.writeHead(ready ? 200 : 503, headers("text/plain; charset=utf-8"));
+        response.end();
+        return;
+      }
+      if (!nextRuntime) throw new Error("Next.js is not ready");
+      const allowed = decoded === "/" || decoded === prepared.config.route || decoded.startsWith("/_next/static/") || decoded === "/__nextjs_font/geist-latin.woff2" || prepared.config.assets.includes(decoded.slice(1));
+      if (allowed) {
+        for (const [key, value] of Object.entries(headers())) response.setHeader(key, value);
+        await nextRuntime.handle(request, response);
+        return;
+      }
+      if (!decoded.startsWith("/assets/")) throw new Error("Unknown prototype route");
+    }
     const relative = decoded === "/" ? "index.html" : decoded.replace(/^\/+/, "");
+    if (relative.split("/").some(segment => segment.startsWith("."))) throw new Error("private artifact source");
     if (artifactType === "review" && !reviewAllowlist.has(relative)) throw new Error("file is not part of the review surface");
     const candidate = path.resolve(canonicalRoot, relative);
     const lexicalInside = path.relative(canonicalRoot, candidate);
@@ -158,7 +176,7 @@ let allocation;
 let registered = false;
 
 function outputStartup(pid, reused = false) {
-  console.log(`URL=http://127.0.0.1:${allocation.artifactPort}/`);
+  console.log(`URL=http://127.0.0.1:${allocation.artifactPort}${prepared?.config.route ?? "/"}`);
   console.log(`PID=${pid}`);
   console.log(`PORT_SLOT=${allocation.slot}`);
   console.log(`PORT_ALLOCATION_SCHEMA=${allocation.schemaVersion}`);
@@ -176,7 +194,7 @@ async function existingArtifact() {
   }
   // A concurrent starter registers its owner before binding the socket.
   for (let attempt = 0; attempt < 10; attempt += 1) {
-    try { return await verifyArtifactProcess(current); }
+    try { const owned = await verifyArtifactProcess(current); if (!owned) throw new Error("Artifact exited during reuse"); return owned; }
     catch (error) {
       if (attempt === 9) throw error;
       await new Promise(resolve => setTimeout(resolve, 50));
@@ -184,11 +202,39 @@ async function existingArtifact() {
   }
 }
 
+let startupTimer;
+let closing = false;
+async function shutdown(code = 0) {
+  if (closing) return;
+  closing = true;
+  ready = false;
+  clearTimeout(startupTimer);
+  for (const socket of upgradeSockets) socket.destroy();
+  server.closeAllConnections();
+  server.close();
+  try {
+    if (registered) await portAllocator.clearArtifact(portIdentity, allocation.allocationId, confirmationSessionToken);
+    if (nextRuntime) await Promise.race([nextRuntime.close(), new Promise(resolve => setTimeout(resolve, 1500))]);
+  } finally { process.exit(code); }
+}
+for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => void shutdown());
+server.on("upgrade", (request, socket, head) => {
+  const host = `127.0.0.1:${allocation?.artifactPort}`;
+  if (!ready || !nextRuntime || request.headers.host !== host || request.headers.origin !== `http://${host}` || !["/_next/hmr", "/_next/webpack-hmr"].includes(request.url?.split("?", 1)[0])) {
+    socket.destroy();
+    return;
+  }
+  upgradeSockets.add(socket);
+  socket.once("close", () => upgradeSockets.delete(socket));
+  void nextRuntime.upgrade(request, socket, head);
+});
+
 try {
   await assertArtifactStartupAllowed(portIdentity);
   allocation = await portAllocator.allocate(portIdentity);
   let existing = await existingArtifact();
   if (existing) {
+    if (nextTools) prepared = { config: await nextTools.readPrototypeConfig(canonicalRoot) };
     outputStartup(existing.pid, true);
   } else {
     try {
@@ -203,10 +249,26 @@ try {
       outputStartup(existing.pid, true);
     }
     if (registered) {
+      if (nextTools) {
+        const startupTimeout = setTimeout(() => {
+          console.error("Next.js prototype startup timed out after 60000ms");
+          void shutdown(1);
+        }, 60000);
+        startupTimer = startupTimeout;
+        prepared = await nextTools.preparePrototype(repositoryRoot, segments[1]);
+        nextRuntime = await nextTools.createNextPrototype(prepared, { port: allocation.artifactPort });
+      }
       await new Promise((resolve, reject) => {
         server.once("error", reject);
         server.listen(allocation.artifactPort, "127.0.0.1", resolve);
       });
+      if (nextTools) {
+        const result = await fetch(`http://127.0.0.1:${allocation.artifactPort}${prepared.config.route}`, { signal: AbortSignal.timeout(55000), redirect: "error" });
+        await result.arrayBuffer();
+        if (!result.ok) throw new Error(`Prototype route failed with HTTP ${result.status}`);
+      }
+      ready = true;
+      clearTimeout(startupTimer);
       outputStartup(process.pid);
     }
   }
@@ -215,15 +277,6 @@ try {
   if (allocation?.created) {
     await portAllocator.release(portIdentity, portIdentity.owner, allocation.allocationId, { rollback: true }).catch(() => {});
   }
-  fail(`Artifact startup failed: ${error.message}. No fallback port was selected.`);
-}
-
-for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, async () => {
-    if (signal === "SIGINT" && process.stdout.isTTY) process.stdout.write("\n");
-    server.closeAllConnections();
-    await new Promise(resolve => server.close(resolve));
-    if (registered) await portAllocator.clearArtifact(portIdentity, allocation.allocationId, confirmationSessionToken);
-    process.exit(0);
-  });
+  console.error(`Artifact startup failed: ${error.message}. No fallback port was selected.`);
+  await shutdown(1);
 }

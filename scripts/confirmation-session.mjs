@@ -2,6 +2,7 @@
 
 import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { resolvePrototypeEntry } from "./prototype-entry.mjs";
 import { createPortAllocator, resolvePortIdentity, verifyArtifactProcess, processStart } from "./development-port-allocation.mjs";
 import { realpathSync } from "node:fs";
 import {
@@ -323,9 +324,7 @@ async function requireArtifactDirectory(identity, slug, surface) {
   ensure(root === requested, `${surface} artifact directory must be real and must not be a symlink`);
   const metadata = await stat(root);
   ensure(metadata.isDirectory(), `${surface} artifact root must be a directory`);
-  const indexPath = path.join(root, "index.html");
-  const indexMetadata = await lstat(indexPath);
-  ensure(indexMetadata.isFile() && !indexMetadata.isSymbolicLink() && (await realpath(indexPath)) === indexPath, `${surface} artifact index.html must be a regular file`);
+  await resolvePrototypeEntry(identity.checkout, slug, surface);
   return root;
 }
 
@@ -358,11 +357,11 @@ async function probeArtifact(identity, artifact) {
   }
 }
 
-async function waitForStartup(child, surface) {
+async function waitForStartup(child, surface, timeoutMs = 7000) {
   let stdout = "";
   let stderr = "";
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => finish(new Error(`${surface} server startup timed out`)), 7000);
+    const timeout = setTimeout(() => finish(new Error(`${surface} server startup timed out`)), timeoutMs);
     let settled = false;
     const finish = (error, result) => {
       if (settled) return;
@@ -399,7 +398,8 @@ async function startArtifactProcess(identity, slug, surface, artifactRealpath) {
     stdio: ["ignore", "pipe", "pipe"],
   });
   try {
-    const startup = await waitForStartup(child, surface);
+    const entry = await resolvePrototypeEntry(identity.checkout, slug, surface);
+    const startup = await waitForStartup(child, surface, entry.kind === "next" ? 60000 : 7000);
     const portIdentity = await resolvePortIdentity(identity.checkout);
     const allocation = await createPortAllocator().status(portIdentity);
     const processRecord = await verifyArtifactProcess(allocation);

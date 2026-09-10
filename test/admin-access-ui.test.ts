@@ -138,7 +138,7 @@ test("RES-LIST-AUTH-01 reservation list reuses reservations VIEW access", () => 
   assert.deepEqual(reservationResource.supportedActions, ["VIEW", "UPDATE"]);
 
   const page = source("../app/admin/reservations/bookings/page.tsx");
-  const shell = source("../app/admin/AdminShell.tsx");
+  const shell = source("../app/admin/AdminShellView.tsx");
   assert.match(
     page,
     /requireAdminAccess\(\s*"reservations",\s*"VIEW",\s*RESERVATION_BOOKINGS_ROUTE/u,

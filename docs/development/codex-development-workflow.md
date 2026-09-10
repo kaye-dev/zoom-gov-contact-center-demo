@@ -54,6 +54,10 @@ skillメタデータとproject-local `profiles`ではmodelを指定しない。�
 
 停止時は現在モデルの根拠、切替先、対象goal/差分/証跡、完了済み検証、未実施レビュー、現在タスクのディープリンクを継続プロンプトへ含める。リンクを取得できない場合のみ入力欄を用意する。詳細とテンプレートは[レビューのモデル引継ぎ](../../.agents/skills/review/references/model-handoff.md)を正本とする。
 
+## 通常作業の時間を増やさない運用
+
+共通hostは一度整備し、各planのinstallやNext.js設定作成、毎回のbuild、承認、比較専用フェーズを増やさない。対象typecheck/lint→起動→代表smokeの流れを維持し、CSSはNext.jsが生成する。編集中はHMR、保持・再利用では同じprocess/cacheを使う。reviewと出荷は有効な結果を再利用する。非UIや直接の軽微UI修正にprototypeを要求しない。初期整備費と通常作業の時間を分け、実測前にUI差分ゼロ・総時間短縮を断定しない。毎案件の性能レポートや計測を必須にしない。
+
 ## 任意の壁打ち
 
 `$kabeuchi`は標準の実装フローとは独立した、明示呼び出し専用のread-only相談である。現在の相談、確定済み判断、必要最小限のrepository evidenceだけをfreshな`product_advisor`へ渡す。親エージェントは助言を証拠と照合し、推奨案、トレードオフ、未確認事項、次に決めることを統合して返す。
@@ -71,12 +75,14 @@ skillメタデータとproject-local `profiles`ではmodelを指定しない。�
 
 最新要求、採用済み判断と資料、repositoryの関連source/testsを整理する。`plans/template.md`の6見出しに沿い、`plans/<slug>/goal.md`へ現在の最終設計だけを書く。`## 要件クロージャ`の各行は5列で具体的要件、設計先、prototypeまたは非UI理由、検証case、観測できる完了結果を持つ。
 
-UIはclosest source・shell・共通component・semantic tokenを使った忠実なprototypeを作る。mockはdata、永続化、authorization、backend副作用だけとする。CSS buildと静的作業を完了してから、返却直前に代表smokeを1回行う。
+新規UIは共通Next.js・TypeScript・Tailwind環境で、既存のshell・共通component・semantic tokenを使う。表示部品をimportし、mockはdata、永続化、authorization、backend副作用だけとする。新規TSXの移植先、props/callbackと代表データをgoalのインターフェース節に記す。対象の型・lintを確認してから、返却直前に代表smokeを1回行う。
 
 ```sh
-node .agents/skills/plan/scripts/build-prototype-css.mjs plans/<slug>/prototype
+node scripts/prototype-runtime.mjs check <slug>
 ./dev-prototype.sh --retain <slug>
 ```
+
+詳細な作成例は[prototype authoring](../../.agents/skills/plan/references/ui-prototype-quality.md)を使う。共通hostが初回に既存ソースを`prototype/.shared/`へ保存し、以後の実装変更から比較元を保つ。旧HTML prototypeは従来のCSS builderと配信を継続でき、変換は不要。
 
 pathと実際の内容で採用prototypeを特定し、live URL、PID、owner、smoke結果、未確認事項、`./dev-confirmation.sh stop <slug>`を返す。非UIはprototypeや確認sessionを作らず、`UI変更: なし`、`prototype: なし`、`UI検証方式: 対象外`を記す。
 
@@ -97,9 +103,11 @@ pathと実際の内容で採用prototypeを特定し、live URL、PID、owner、
 
 ### `$implement`
 
+採用TSXは本番のcomponent pathへ引き継ぎ、import調整と実data/permission/action adapterの接続を行う。JSXやTailwindクラスを移植のために書き直さず、fixtureやprototype runtimeを本番からimportしない。保存元の`.shared`は更新しない。同じ代表データ・権限・状態・viewport/themeで既存のsmoke内に照合を含める。
+
 明示呼出しで選択goalとprototypeを承認し、未解決の製品仕様がなければ実装を進める。実装中はfocused check、完成時は対象test、適用lint/typecheck、diff checkを行う。full testは具体的なcross-suite影響、buildはroute/configuration/bundling/server boundary等に理由がある場合に行う。
 
-採用prototypeのHTML/CSSと参照資産を実装前に読み、goalに省略された視覚仕様も引き継ぐ。最新の直接修正指示を対象箇所へ優先し、実装の差を正当化するためにprototypeを書き換えない。
+採用prototypeのTSX・fixture/config・関連shared source・CSS/参照資産（既存HTMLも可）を実装前に読み、goalに省略された視覚仕様も引き継ぐ。最新の直接修正指示を対象箇所へ優先し、実装の差を正当化するためにprototypeを書き換えない。
 
 成功済み結果は対象path・内容・実行時点で有効性を判断して再利用する。digestは補助情報であり、欠落だけで全checkを再実行しない。修正後は影響checkだけを再実行する。
 
