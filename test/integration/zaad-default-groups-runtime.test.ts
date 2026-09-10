@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { withIsolatedPostgresDatabase } from "../helpers/isolated-postgres";
 import { createDatabaseContext } from "../../lib/server/prisma";
-import { bindDefaultGroup, addRegistrationMemberships, ensureDefaultGroups } from "../../lib/server/zaad/default-groups";
+import { bindDefaultGroup, defaultGroupCandidates, addRegistrationMemberships, ensureDefaultGroups } from "../../lib/server/zaad/default-groups";
 import { startRegistrationGroupSync, advanceRegistrationSync, getRegistrationSyncOperation, getDefaultGroupDetail, syncRegisteredSource, type RegistrationGroupClient } from "../../lib/server/zaad/registration-group-sync";
 import type { OutreachScope } from "../../lib/server/zaad/outreach-scope";
 import { OutreachContractError } from "../../lib/zaad/outreach-contracts";
@@ -151,6 +151,100 @@ test("default group binding, registration membership and durable sync isolation"
         assert.equal(result.status, "PARTIAL"); assert.equal(result.counts.synced, 25);
       });
       assert.equal((await db.disasterRadioSubscription.findUniqueOrThrow({ where: { id: second.id } })).consentStatus, "CONSENTED");
+    } finally { await context.close(); }
+  });
+});
+
+test("default group candidate reads preserve provider lists and enforce binding ownership", { timeout: 180000 }, async t => {
+  await withIsolatedPostgresDatabase(async databaseUrl => {
+    const context = createDatabaseContext({ ...process.env, DATABASE_URL: databaseUrl }), db = context.prisma;
+    const names = ["光化学スモッグ注意報発令", "未来市-警察_金融機関", "未来市-税務課", "未来大学-入試窓口課", "未来市-防災課"];
+    const lists = names.map((name, n) => ({ id: `opaque-${n}`, name, description: "", type: "contact" as const, contactCount: n % 3, revision: "1", updatedAt: null }));
+    const requests: (string | undefined)[] = [];
+    let failure = 0, currentFailure = 0;
+    const provider = {
+      accountId: "fixture-account",
+      async listContactLists(input: { pageSize?: number; nextPageToken?: string } = {}) {
+        requests.push(input.nextPageToken); assert.equal(input.pageSize, 100);
+        if (failure) throw new ZaadZoomError(ZAAD_ERROR_CODES.zoomUnavailable, failure);
+        return { lists: input.nextPageToken ? lists.slice(2) : lists.slice(0, 3), nextPageToken: input.nextPageToken ? null : "opaque-next" };
+      },
+      async getContactList(id: string) { if (currentFailure) throw new ZaadZoomError(ZAAD_ERROR_CODES.zoomUnavailable, currentFailure); return lists.find(row => row.id === id) ?? { ...lists[0], id }; },
+    };
+    const groupId = "default-lg-elder-watch";
+    try {
+      await db.user.create({ data: { id: scope.actorId, name: "Fixture", email: "candidates@example.invalid", emailVerified: true, createdAt: new Date(), updatedAt: new Date() } });
+      await db.globalDeveloperApiSetting.create({ data: { id: "global", accountId: provider.accountId, clientId: "fixture" } });
+      await ensureDefaultGroups(db, "lg"); await ensureDefaultGroups(db, "univ");
+      const unchanged = async () => ({ groups: await db.outreachDefaultGroup.findMany({ orderBy: { id: "asc" } }), bindings: await db.zoomResourceBinding.findMany({ orderBy: { id: "asc" } }), operations: await db.outreachOperation.count() });
+      await t.test("both tenants see the five original names including empty lists and opaque pagination", async () => {
+        const before = await unchanged();
+        for (const siteKey of ["lg", "univ"] as const) {
+          const id = siteKey === "lg" ? groupId : "default-univ-scholarship";
+          const first = await defaultGroupCandidates(db, { ...scope, siteKey }, id, undefined, provider);
+          assert.equal(first.nextCursor, "opaque-next"); assert.equal(first.current, null);
+          const second = await defaultGroupCandidates(db, { ...scope, siteKey }, id, first.nextCursor!, provider);
+          assert.deepEqual([...new Map([...first.items, ...second.items].map(row => [row.id, row.name])).values()], names);
+          assert.ok([...first.items, ...second.items].every(row => row.selectable));
+        }
+        assert.deepEqual(requests, [undefined, "opaque-next", undefined, "opaque-next"]);
+        assert.deepEqual(await unchanged(), before);
+      });
+      await t.test("a current list outside the page remains selectable; same-name IDs bind independently", async () => {
+        lists[4].name = lists[0].name;
+        await bindDefaultGroup(db, scope, groupId, { operationKey: "fixture-candidate-bind", accountId: provider.accountId, revision: 1, contactListId: lists[4].id }, provider);
+        const before = await unchanged();
+        const result = await defaultGroupCandidates(db, scope, groupId, undefined, provider);
+        assert.equal(result.current?.id, lists[4].id); assert.equal(result.current?.name, lists[0].name); assert.equal(result.current?.selectable, true);
+        assert.equal(result.items.some(row => row.id === lists[4].id), false);
+        assert.equal((await db.outreachDefaultGroup.findUniqueOrThrow({ where: { id: groupId }, include: { binding: true } })).binding?.zoomId, lists[4].id);
+        assert.deepEqual(await unchanged(), before);
+      });
+      await t.test("only a 404 marks a current list missing; account changes never resolve the old ID", async () => {
+        currentFailure = 404;
+        assert.equal((await defaultGroupCandidates(db, scope, groupId, undefined, provider)).current?.unavailableReason, "MISSING");
+        for (const status of [403, 429, 503]) { currentFailure = status; await assert.rejects(defaultGroupCandidates(db, scope, groupId, undefined, provider), error => error instanceof ZaadZoomError && error.httpStatus === status); }
+        provider.accountId = "new-account";
+        assert.equal((await defaultGroupCandidates(db, scope, groupId, undefined, provider)).current?.unavailableReason, "ACCOUNT_CHANGED");
+        provider.accountId = "fixture-account"; currentFailure = 0;
+      });
+      await t.test("regular lists are adoptable; other defaults, industries and tombstoned internal lists are disabled", async () => {
+        await db.zoomResourceBinding.create({ data: { ownerSiteKey: "lg", accountId: provider.accountId, resourceType: "CONTACT_LIST", zoomId: lists[0].id, purpose: "REGULAR" } });
+        await bindDefaultGroup(db, scope, "default-lg-fraud-alert", { operationKey: "fixture-other-default", accountId: provider.accountId, revision: 1, contactListId: lists[1].id }, provider);
+        await db.zoomResourceBinding.create({ data: { ownerSiteKey: "univ", accountId: provider.accountId, resourceType: "CONTACT_LIST", zoomId: lists[2].id, purpose: "REGULAR" } });
+        await db.zoomResourceBinding.create({ data: { ownerSiteKey: "lg", accountId: provider.accountId, resourceType: "CONTACT_LIST", zoomId: lists[3].id, purpose: "ONE_TIME", tombstone: true } });
+        const before = await unchanged();
+        const first = await defaultGroupCandidates(db, scope, groupId, undefined, provider);
+        const second = await defaultGroupCandidates(db, scope, groupId, first.nextCursor!, provider);
+        const map = new Map([...first.items, ...second.items].map(row => [row.id, row]));
+        assert.equal(map.get(lists[0].id)?.selectable, true);
+        assert.equal(map.get(lists[1].id)?.disabledReason, "ASSIGNED_DEFAULT");
+        assert.equal(map.get(lists[2].id)?.disabledReason, "OTHER_INDUSTRY");
+        assert.equal(map.get(lists[3].id)?.disabledReason, "INTERNAL_RESOURCE");
+        assert.equal(map.get(lists[4].id)?.selectable, true);
+        await rejects(defaultGroupCandidates(db, { ...scope, all: false }, groupId, undefined, provider), "FULL_ACCESS_REQUIRED");
+        await rejects(defaultGroupCandidates(db, scope, groupId, "x".repeat(2049), provider), "INVALID_CURSOR");
+        assert.deepEqual(await unchanged(), before);
+      });
+      await t.test("empty pages and provider failures are distinct and never mutate state", async () => {
+        const before = await unchanged();
+        assert.deepEqual((await defaultGroupCandidates(db, scope, groupId, undefined, { ...provider, async listContactLists() { return { lists: [], nextPageToken: null }; } })).items, []);
+        for (const status of [403, 429, 503]) { failure = status; await assert.rejects(defaultGroupCandidates(db, scope, groupId, undefined, provider), error => error instanceof ZaadZoomError && error.httpStatus === status); }
+        failure = 0;
+        assert.deepEqual(await unchanged(), before);
+      });
+      await t.test("post-read account, revision and ownership conflicts preserve the original binding", async () => {
+        const snapshot = await defaultGroupCandidates(db, scope, groupId, undefined, provider);
+        const payload = { operationKey: "fixture-after-read", accountId: snapshot.accountId, revision: snapshot.revision, contactListId: lists[0].id };
+        await db.globalDeveloperApiSetting.update({ where: { id: "global" }, data: { accountId: "changed" } });
+        await rejects(bindDefaultGroup(db, scope, groupId, payload, provider), "ACCOUNT_CHANGED");
+        await db.globalDeveloperApiSetting.update({ where: { id: "global" }, data: { accountId: provider.accountId } });
+        await db.outreachDefaultGroup.update({ where: { id: groupId }, data: { revision: { increment: 1 } } });
+        await rejects(bindDefaultGroup(db, scope, groupId, payload, provider), "VERSION_CONFLICT");
+        await bindDefaultGroup(db, scope, "default-lg-procedure-support", { ...payload, operationKey: "fixture-intervening-owner", revision: 1 }, provider);
+        await rejects(bindDefaultGroup(db, scope, groupId, { ...payload, revision: snapshot.revision + 1 }, provider), "RESOURCE_OWNERSHIP_CONFLICT");
+        assert.equal((await db.outreachDefaultGroup.findUniqueOrThrow({ where: { id: groupId }, include: { binding: true } })).binding?.zoomId, lists[4].id);
+      });
     } finally { await context.close(); }
   });
 });

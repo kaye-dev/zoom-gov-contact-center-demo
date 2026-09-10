@@ -29,5 +29,15 @@ export type GroupSyncResult = {
   tenantKey: TenantKey; operationId: string; status: string;
   counts: { total: number; pending: number; synced: number; failed: number };
 };
+export type DefaultGroupCandidate = {
+  id: string; name: string; selectable: boolean;
+  disabledReason: null | "ASSIGNED_DEFAULT" | "OTHER_INDUSTRY" | "INTERNAL_RESOURCE";
+};
+export type DefaultGroupCandidatesResponse = {
+  tenantKey: TenantKey; accountId: string; revision: number;
+  items: DefaultGroupCandidate[];
+  current: { id: string; name: string; selectable: boolean; unavailableReason: null | "MISSING" | "ACCOUNT_CHANGED" | "CONFLICT" } | null;
+  nextCursor: string | null;
+};
 export function defaultGroupId(site: TenantKey, topic: string) { return `default-${site}-${topic}`; }
 export function isPendingSync(status: string) { return !["REGISTERED", "SYNCED", "WITHDRAWN"].includes(status); }

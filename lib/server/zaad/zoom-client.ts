@@ -1003,9 +1003,9 @@ async function boundedRetryDelay(retryAfter: string | null) {
 
 function parseContactList(value: Record<string, unknown>, assumedType?: "contact"): ZoomContactListDto | null {
   const id = stringAt(value, ["contact_list_id", "id"]);
-  const name = stringAt(value, ["contact_list_name", "name"]);
+  const name = stringAt(value, ["contact_list_name", "name"]) ?? "";
   const type = stringAt(value, ["contact_list_type", "type"]) ?? assumedType;
-  if (!id || !name || type !== "contact") return null;
+  if (!id || type !== "contact") return null;
   const result = {
     id,
     name,

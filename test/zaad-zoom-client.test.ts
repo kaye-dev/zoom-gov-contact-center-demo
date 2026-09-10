@@ -1424,3 +1424,14 @@ test("credential update version invalidates the in-memory OAuth token cache", as
   assert.equal(tokenRequests, 2);
   clearZaadZoomTokenCache();
 });
+
+test("contact list candidates retain empty names and zero counts for ID fallback", async () => {
+  clearZaadZoomTokenCache();
+  const zoom = client(async input => {
+    if (new URL(String(input)).pathname === "/oauth/token") return Response.json({ access_token: "token", expires_in: 3600 });
+    return Response.json({ contact_lists: [{ contact_list_id: "empty-name", contact_list_name: "", contacts_count: 0 }] });
+  }, false);
+  const result = await zoom.listContactLists();
+  assert.equal(result.lists[0].name, ""); assert.equal(result.lists[0].id, "empty-name"); assert.equal(result.lists[0].contactCount, 0);
+  clearZaadZoomTokenCache();
+});

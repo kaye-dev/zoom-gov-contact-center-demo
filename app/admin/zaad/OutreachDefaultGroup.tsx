@@ -1,5 +1,6 @@
 "use client";
 
+import { DefaultGroupBinding } from "./OutreachDefaultGroupBinding";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useI18n } from "@/app/i18n/LanguageProvider";
@@ -8,7 +9,7 @@ import { SearchInput } from "@/app/components/admin/SearchInput";
 import { Pagination } from "@/app/components/admin/Pagination";
 import { Select } from "@/app/components/Select";
 import { TableRowActions } from "@/app/components/admin/TableRowActions";
-import { DEFAULT_GROUP_TOPICS, isPendingSync, type DefaultGroupDetail, type DefaultGroupDto, type GroupSyncResult, type SyncedGroupMember } from "@/lib/zaad/default-groups";
+import { DEFAULT_GROUP_TOPICS, isPendingSync, type DefaultGroupDetail, type GroupSyncResult, type SyncedGroupMember } from "@/lib/zaad/default-groups";
 import type { TenantKey } from "@/lib/tenants";
 import { outreachMutation, outreachRequest, OutreachApiError } from "./outreach-client";
 import { OutreachFailure, OutreachLoading, type OutreachPanelProps } from "./OutreachView";
@@ -86,22 +87,6 @@ export function OutreachDefaultGroup(props: OutreachPanelProps & { id: string; s
     {editing && writable && <DefaultGroupBinding tenant={tenant} group={data.group} name={name} setDirty={setDirty} setSaving={setSaving} close={() => setEditing(false)} saved={() => { setEditing(false); refresh(); }} />}
     {linking && <RegistrationLink tenant={tenant} groupId={id} member={linking} setSaving={setSaving} close={() => setLinking(null)} saved={() => { setLinking(null); refresh(); }} />}
   </section>;
-}
-
-function DefaultGroupBinding({ tenant, group, name, close, saved, setDirty, setSaving }: { tenant: TenantKey; group: DefaultGroupDto; name: string; close: () => void; saved: () => void; setDirty: (value: boolean) => void; setSaving?: (value: boolean) => void }) {
-  const { t } = useI18n(), d = t.outreachCommon.defaultGroups, common = t.admin.zaad.common;
-  const [listId, setListId] = useState(group.contactListId ?? ""), [busy, setBusy] = useState(false), [error, setError] = useState(""), [discard, setDiscard] = useState(false);
-  const lock = useRef(false), key = useRef<string | null>(null), cancel = useRef<HTMLButtonElement>(null);
-  const changed = listId !== (group.contactListId ?? "");
-  function finish() { setDirty(false); close(); }
-  function requestClose() { if (lock.current) return; if (changed) setDiscard(true); else finish(); }
-  async function save() {
-    if (lock.current) return; lock.current = true; setBusy(true); setSaving?.(true); setError(""); key.current ??= crypto.randomUUID();
-    try { await outreachMutation(tenant, `default-groups/${encodeURIComponent(group.id)}`, { operationKey: key.current, revision: group.version, accountId: group.accountId, contactListId: listId }, "PUT"); setDirty(false); saved(); }
-    catch (failure) { setError(failure instanceof OutreachApiError && ["RESOURCE_OWNERSHIP_CONFLICT", "ACCOUNT_CHANGED", "VERSION_CONFLICT"].includes(failure.code) ? t.outreachCommon.bindingConflict : common.failure); }
-    finally { lock.current = false; setBusy(false); setSaving?.(false); }
-  }
-  return <><ModalDialog title={d.configureTitle} description={name} backdropClassName="bg-black/40" locked={busy || discard} onRequestClose={requestClose}><form className="mt-5 space-y-5" onSubmit={event => { event.preventDefault(); void save(); }}><label className="block">{d.listId}<input required maxLength={200} className={input} value={listId} disabled={busy} onChange={event => { setListId(event.target.value); setDirty(event.target.value !== (group.contactListId ?? "")); key.current = null; }} /></label><p className="text-sm text-fg-muted">{d.configureHelp}</p>{group.contactListId && changed && <p className="text-sm text-fg-muted">{d.rebindHelp} {d.rebindCount.replace("{count}", String(group.rebindCount))}</p>}{!group.accountId && <a className="text-accent underline" href="/admin/developer-api">{t.outreachCommon.setupLabel}</a>}{error && <p role="alert">{error}</p>}<div className="flex justify-end gap-3"><button className={secondary} type="button" disabled={busy} onClick={requestClose}>{common.cancel}</button><button className={primary} disabled={busy || !group.accountId}>{busy ? common.loading : common.save}</button></div></form></ModalDialog>{discard && <ModalDialog title={t.outreachCommon.confirmDiscard} description={name} initialFocusRef={cancel} onRequestClose={() => setDiscard(false)}><div className="mt-5 flex justify-end gap-3"><button ref={cancel} className={secondary} onClick={() => setDiscard(false)}>{common.cancel}</button><button className={primary} onClick={finish}>{t.outreachCommon.discard}</button></div></ModalDialog>}</>;
 }
 
 function RegistrationLink({ tenant, groupId, member, close, saved, setSaving }: { tenant: TenantKey; groupId: string; member: SyncedGroupMember; close: () => void; saved: () => void; setSaving?: (value: boolean) => void }) {

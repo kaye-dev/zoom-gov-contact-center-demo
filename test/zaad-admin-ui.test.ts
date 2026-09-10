@@ -719,3 +719,28 @@ test("client validation alerts use dialog-specific localized messages", () => {
   assert.match(mapper, /copy\.oneTime\.invalid/u);
   assert.match(viewSource, /validationMessage=\{/u);
 });
+
+test("default group binding uses a shared labelled select and refresh without list navigation", () => {
+  const binding = readFileSync(new URL("../app/admin/zaad/OutreachDefaultGroupBinding.tsx", import.meta.url), "utf8");
+  const groups = readFileSync(new URL("../app/admin/zaad/OutreachGroups.tsx", import.meta.url), "utf8");
+  const detail = readFileSync(new URL("../app/admin/zaad/OutreachDefaultGroup.tsx", import.meta.url), "utf8");
+  assert.match(binding, /<Select required/);
+  assert.match(binding, /aria-labelledby=\{descriptionId\}/);
+  assert.match(binding, /<RefreshIcon \/>/);
+  assert.match(binding, /aria-label=\{d.candidateRefresh\} title=\{d.candidateRefresh\} disabled=\{loading \|\| busy\}/);
+  assert.match(binding, /loadDefaultGroupCandidates/);
+  assert.match(binding, /\/candidates/);
+  assert.match(binding, /disabled=\{!canSave\}/);
+  assert.match(binding, /selectable && !loading && !loadFailed && !busy/);
+  assert.doesNotMatch(binding, /<input|configureHelp|nextCursor|nextPage|<label/);
+  assert.match(binding, /controller.abort\(\)/);
+  assert.match(binding, /group.rebindCount/);
+  assert.match(binding, /setDiscard\(true\)/);
+  assert.match(groups, /if \(row\?\.kind === "DEFAULT"\) \{ setSuccess\(""\); setBindingTarget\(\{ tenant, group: row \}\); return; \}/);
+  assert.match(groups, /row.kind === "DEFAULT" \? "default-group-detail" : "group-detail"/);
+  assert.match(groups, /state === "default-group-bind" \? data\?\.items.find/);
+  assert.doesNotMatch(groups, /d\.defaultGroups\.listHelp|d\.groupIndustry|t\.admin\.industrySettings\.names\[tenant\]/);
+  assert.match(groups, /d.defaultGroups.manageContacts/);
+  assert.match(groups, /d\.sync/); assert.match(groups, /z.common.create/);
+  assert.match(groups, /<DefaultGroupBinding/); assert.match(detail, /<DefaultGroupBinding/);
+});

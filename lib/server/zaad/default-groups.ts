@@ -1,11 +1,11 @@
 import type { Prisma, PrismaClient } from "@/lib/generated/prisma/client";
-import { DEFAULT_GROUP_TOPICS, defaultGroupId, type DefaultGroupDto, type RegistrationOrigin } from "@/lib/zaad/default-groups";
+import { DEFAULT_GROUP_TOPICS, defaultGroupId, type DefaultGroupDto, type RegistrationOrigin, type DefaultGroupCandidate, type DefaultGroupCandidatesResponse } from "@/lib/zaad/default-groups";
 import type { TenantKey } from "@/lib/tenants";
 import { fields, operationKey, OutreachContractError, record, stringValue, whole } from "@/lib/zaad/outreach-contracts";
 import { requireFullAccess, type OutreachScope } from "./outreach-scope";
 import { databaseError, digest, json } from "./outreach-data";
 import { writeZaadAudit } from "./audit";
-import { ZaadZoomClient } from "./zoom-client";
+import { ZaadZoomClient, ZaadZoomError } from "./zoom-client";
 import { listZoomGroups } from "./zoom-groups";
 
 type Database = Prisma.TransactionClient;
@@ -48,6 +48,37 @@ export async function listOutreachGroups(db: PrismaClient, scope: OutreachScope)
   }
   return { tenantKey: scope.siteKey, items, total: items.length, nextCursor: null, providerState };
 }
+export async function defaultGroupCandidates(db: PrismaClient, scope: OutreachScope, id: string, cursor?: string, injected?: Pick<ZaadZoomClient, "accountId" | "listContactLists" | "getContactList">): Promise<DefaultGroupCandidatesResponse> {
+  const group = await requireDefaultGroup(db, scope, id);
+  if (cursor && (cursor.length > 2048 || /[\u0000-\u001f]/.test(cursor))) throw new OutreachContractError("INVALID_CURSOR");
+  const client = injected ?? await ZaadZoomClient.fromDatabase(db, scope.siteKey);
+  const page = await client.listContactLists({ pageSize: 100, nextPageToken: cursor });
+  const ids = [...new Set([...page.lists.map(row => row.id), ...(group.binding ? [group.binding.zoomId] : [])])];
+  const bindings = await db.zoomResourceBinding.findMany({ where: { accountId: client.accountId, resourceType: "CONTACT_LIST", zoomId: { in: ids } }, include: { defaultGroups: true } });
+  function reason(listId: string): DefaultGroupCandidate["disabledReason"] {
+    const matches = bindings.filter(row => row.zoomId === listId);
+    if (matches.some(row => row.dispatchId || row.purpose !== "REGULAR")) return "INTERNAL_RESOURCE";
+    if (matches.some(row => row.ownerSiteKey !== scope.siteKey && !row.tombstone)) return "OTHER_INDUSTRY";
+    if (matches.some(row => row.defaultGroups.some(other => other.id !== id))) return "ASSIGNED_DEFAULT";
+    return null;
+  }
+  const items = page.lists.map(row => { const disabledReason = reason(row.id); return { id: row.id, name: row.name, selectable: !disabledReason, disabledReason }; });
+  let current: DefaultGroupCandidatesResponse["current"] = null;
+  if (group.binding) {
+    const binding = group.binding;
+    current = { id: binding.zoomId, name: "", selectable: false, unavailableReason: "MISSING" };
+    if (binding.accountId !== client.accountId) current.unavailableReason = "ACCOUNT_CHANGED";
+    else {
+      try {
+        const observed = await client.getContactList(binding.zoomId);
+        if (observed.id !== binding.zoomId || observed.type !== "contact") throw new OutreachContractError("PROVIDER_ID_MISMATCH", 409);
+        current = { id: observed.id, name: observed.name, selectable: !reason(observed.id), unavailableReason: reason(observed.id) ? "CONFLICT" : null };
+      } catch (error) { if (!(error instanceof ZaadZoomError && error.httpStatus === 404)) throw error; }
+    }
+  }
+  return { tenantKey: scope.siteKey, accountId: client.accountId, revision: group.revision, items, current, nextCursor: page.nextPageToken || null };
+}
+
 export async function bindDefaultGroup(db: PrismaClient, scope: OutreachScope, id: string, payload: unknown, injected?: Pick<ZaadZoomClient, "accountId" | "getContactList">) {
   requireFullAccess(scope);
   const v = record(payload); fields(v, ["operationKey", "revision", "accountId", "contactListId"]);

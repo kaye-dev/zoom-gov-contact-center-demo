@@ -1,5 +1,5 @@
 import { startRegularGroupSync } from "./regular-group-sync";
-import { bindDefaultGroup, listOutreachGroups } from "./default-groups";
+import { bindDefaultGroup, defaultGroupCandidates, listOutreachGroups } from "./default-groups";
 import { getDefaultGroupDetail, startRegistrationGroupSync, getRegistrationSyncOperation, advanceRegistrationSync, linkRegistrationMember } from "./registration-group-sync";
 import { groupSyncCandidates, syncContactLists, groupSyncOperation } from "./group-sync";
 import { updateZaadResident, deleteZaadResident } from "./residents";
@@ -76,6 +76,10 @@ export function registerOutreachRoutes(app: Hono<ZaadApiEnvironment>) {
     const body = record(await outreachJson(c));
     return previewZoomCrmImport(db, scope, c.req.param("id"), { ...body, contactIds: [c.req.param("contactId")] });
   }));
+  app.get(`${root}/default-groups/:id/candidates`, c => {
+    c.header("Cache-Control", "no-store");
+    return withOutreach(c, "UPDATE", (db, scope) => defaultGroupCandidates(db, scope, c.req.param("id"), c.req.query("cursor")));
+  });
   app.get(`${root}/default-groups/:id`, c => withOutreach(c, "VIEW", (db, scope) => getDefaultGroupDetail(db, scope, c.req.param("id"), { cursor: c.req.query("cursor"), query: c.req.query("query") })));
   app.put(`${root}/default-groups/:id`, c => withOutreach(c, "UPDATE", async (db, scope) => bindDefaultGroup(db, scope, c.req.param("id"), await outreachJson(c))));
   app.post(`${root}/default-groups/:id/sync`, c => withOutreach(c, "UPDATE", async (db, scope) => startRegistrationGroupSync(db, scope, c.req.param("id"), await outreachJson(c)), 202));
