@@ -1,4 +1,4 @@
-import { boundedBody } from "@/lib/server/zaad/outreach-api";
+import { boundedBody, requireSameOrigin } from "@/lib/server/zaad/outreach-api";
 import { OutreachContractError } from "@/lib/zaad/outreach-contracts";
 import { resolveAdminSettingsTenant, ADMIN_SETTINGS_RESOURCES } from "@/lib/admin-settings-tenant";
 import { classifyAdminApi, parseAdminTenant } from "@/lib/admin-routing";
@@ -999,9 +999,10 @@ app.put("/admin/developer-api", async (c) => {
     "UPDATE",
   );
   if (!authorization.ok) {
-    return c.json({ error: authorization.error }, authorization.status);
+    return c.json({ ...(authorization.error === "PASSWORD_CHANGE_REQUIRED" ? { code: authorization.error } : {}), error: authorization.error }, authorization.status);
   }
 
+  try { requireSameOrigin(c.req.raw); } catch { return c.json({ error: "INVALID_ORIGIN" }, 403); }
   const parsed = parseDeveloperApiSettings(await readJsonBody(c.req.raw));
   if (!parsed.ok) {
     return c.json({ error: parsed.code }, 400);
@@ -1010,7 +1011,6 @@ app.put("/admin/developer-api", async (c) => {
   try {
     const settings = await saveDeveloperApiSettings(
       prisma,
-      c.get("tenantKey"),
       parsed.value,
     );
     if (!settings) {
@@ -1052,9 +1052,10 @@ app.post("/admin/developer-api/reveal", async (c) => {
     "VIEW",
   );
   if (!authorization.ok) {
-    return c.json({ error: authorization.error }, authorization.status);
+    return c.json({ ...(authorization.error === "PASSWORD_CHANGE_REQUIRED" ? { code: authorization.error } : {}), error: authorization.error }, authorization.status);
   }
 
+  try { requireSameOrigin(c.req.raw); } catch { return c.json({ error: "INVALID_ORIGIN" }, 403); }
   const parsed = parseDeveloperApiSecretReveal(await readJsonBody(c.req.raw));
   if (!parsed.ok) {
     return c.json({ error: parsed.code }, 400);
@@ -1063,7 +1064,6 @@ app.post("/admin/developer-api/reveal", async (c) => {
   try {
     const value = await revealDeveloperApiSecret(
       prisma,
-      c.get("tenantKey"),
       parsed.value.field,
     );
     if (value === null) {

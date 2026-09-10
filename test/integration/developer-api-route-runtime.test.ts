@@ -148,7 +148,7 @@ test(
           assert.equal(response.status, expectedStatus);
           assertNoStore(response);
         }
-        for (const [index, response] of [
+        for (const response of [
           await invokeRaw(
             route.POST,
             "POST",
@@ -170,9 +170,9 @@ test(
             fullCookie,
             { field: "unknown" },
           ),
-        ].entries()) {
+        ]) {
           assert.equal(response.status, 400);
-          assert.deepEqual(await response.json(), index === 0 ? { code: "INVALID_REQUEST" } : {
+          assert.deepEqual(await response.json(), {
             error: DEVELOPER_API_ERROR_CODES.invalidRequest,
           });
           assertNoStore(response);
@@ -277,10 +277,17 @@ test(
         assertNoStore(unavailableReveal);
         process.env.DEVELOPER_API_SETTINGS_ENCRYPTION_KEY = validKey;
 
+        for (const tenant of ["lg", "univ"]) {
+          const response = await invokeJson(route.PUT, "PUT", `/api/admin/developer-api?tenant=${tenant}`, fullCookie, validOauth);
+          assert.equal(response.status, 200);
+          assert.equal(await settingsCount(client), 1);
+        }
+        const crossSite = await route.PUT(new Request("http://localhost:3000/api/admin/developer-api", { method: "PUT", headers: { cookie: fullCookie, origin: "https://other.example.invalid", "content-type": "application/json" }, body: JSON.stringify(validOauth) }));
+        assert.equal(crossSite.status, 403);
         await client.query(
-          `UPDATE site_developer_api_settings
+          `UPDATE global_developer_api_settings
            SET "clientSecretEncrypted" = 'v1.invalid.invalid.invalid'
-           WHERE "siteKey" = 'lg'`,
+           WHERE "id" = 'global'`,
         );
         const originalConsoleError = console.error;
         const logged: unknown[][] = [];
@@ -353,10 +360,10 @@ async function invokeRaw(
   cookie: string | undefined,
   body: string,
 ) {
-  const headers = new Headers({ "content-type": "application/json" });
+  const headers = new Headers({ "content-type": "application/json", origin: "http://localhost:3000" });
   if (cookie) headers.set("cookie", cookie);
   const url = new URL(`http://localhost:3000${path}`);
-  if (url.pathname.startsWith("/api/admin/") && !url.searchParams.has("tenant")) url.searchParams.set("tenant", "lg");
+
   return handler(
     new Request(url, {
       method,
@@ -448,7 +455,7 @@ async function assignNoAccess(client: Client, userId: string) {
 
 async function settingsCount(client: Client) {
   const result = await client.query<{ count: string }>(
-    `SELECT count(*)::text AS count FROM site_developer_api_settings`,
+    `SELECT count(*)::text AS count FROM global_developer_api_settings`,
   );
   return Number(result.rows[0]?.count);
 }
@@ -459,7 +466,7 @@ async function readCiphertexts(client: Client) {
     secretTokenEncrypted: string | null;
   }>(
     `SELECT "clientSecretEncrypted", "secretTokenEncrypted"
-     FROM site_developer_api_settings WHERE "siteKey" = 'lg'`,
+     FROM global_developer_api_settings WHERE "id" = 'global'`,
   );
   return result.rows[0];
 }

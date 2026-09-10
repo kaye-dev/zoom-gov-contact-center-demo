@@ -361,7 +361,7 @@ test("Developer API settings navigation honors server-derived VIEW access", () =
   const source = readFileSync("app/admin/zaad/OutreachView.tsx", "utf8");
   assert.match(source, /canConfigure \? <Link/u);
   assert.match(source, /const returnTo = `\/admin\/zaad\?\$\{new URLSearchParams\(\{ tenant, view: selected \}\)\}`/u);
-  assert.match(source, /const setupHref = `\/admin\/developer-api\?\$\{new URLSearchParams\(\{ tenant, returnTo \}\)\}`/u);
+  assert.match(source, /const setupHref = `\/admin\/developer-api\?\$\{new URLSearchParams\(\{ returnTo \}\)\}`/u);
   assert.match(source, /!canConfigure && copy\.setupPermission/u);
 });
 

@@ -202,8 +202,8 @@ export class ZaadZoomClient {
       writeGates?: ZaadZoomWriteGates;
     } = {},
   ) {
-    const row = await prisma.siteDeveloperApiSetting.findUnique({
-      where: { siteKey: tenantKey },
+    const row = await prisma.globalDeveloperApiSetting.findUnique({
+      where: { id: "global" },
       select: {
         accountId: true,
         clientId: true,

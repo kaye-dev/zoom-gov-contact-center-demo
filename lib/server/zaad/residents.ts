@@ -1,3 +1,5 @@
+import { addRegistrationMemberships } from "./default-groups";
+import { syncRegisteredSource } from "./registration-group-sync";
 import { randomUUID } from "node:crypto";
 
 import type { Prisma, PrismaClient } from "@/lib/generated/prisma/client";
@@ -70,14 +72,12 @@ export class ZaadResidentError extends Error {
 }
 
 export async function registerPublicDisasterRadioResident(prisma: PrismaClient, tenantKey: TenantKey, payload: unknown) {
+  if (tenantKey !== "lg") throw new ZaadResidentError(ZAAD_ERROR_CODES.invalidRequest, 400);
   const parsed = parsePublicDisasterRadioRegistration(payload);
   if (!parsed.ok) throw new ZaadResidentError(ZAAD_ERROR_CODES.invalidRequest, 400, parsed.errors);
   const created = await createResidentLocal(prisma, tenantKey, parsed.value, "PUBLIC_FORM", null);
   if (created) {
-    await syncResidentBestEffort(prisma, tenantKey, created.id, {
-      actorUserId: null,
-      action: "SYNC_CREATE",
-    });
+    await syncRegisteredSource(prisma, tenantKey, "DISASTER_RADIO", created.id);
   }
   return { status: "accepted" as const };
 }
@@ -413,6 +413,7 @@ async function createResidentLocal(
         },
         select: { id: true },
       });
+      if (source === "PUBLIC_FORM" && tenantKey === "lg" && resident.consentStatus === "CONSENTED") await addRegistrationMemberships(transaction, tenantKey, "DISASTER_RADIO", id, ["disaster-radio"]);
       await writeZaadAudit(transaction, tenantKey, {
         actorUserId,
         resourceKind: "resident",

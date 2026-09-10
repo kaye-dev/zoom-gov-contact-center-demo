@@ -49,6 +49,7 @@ export async function saveResourceBinding(db: PrismaClient, scope: OutreachScope
       const where = { accountId: observed.accountId, resourceType: observed.resourceType, zoomId: observed.zoomId };
       const current = await tx.zoomResourceBinding.findFirst({ where: { ...where, ...(where.resourceType === "CONTACT_LIST" ? { ownerSiteKey: scope.siteKey } : {}) } });
       if (current && (current.ownerSiteKey !== scope.siteKey || current.tombstone || current.dispatchId || current.version !== version)) throw new OutreachContractError("RESOURCE_OWNERSHIP_CONFLICT", 409);
+      if (where.resourceType === "CONTACT_LIST" && await tx.outreachDefaultGroup.count({ where: { binding: { accountId: where.accountId, zoomId: where.zoomId } } })) throw new OutreachContractError("RESOURCE_OWNERSHIP_CONFLICT", 409);
       if (!current && version !== 0) throw new OutreachContractError("VERSION_CONFLICT", 409);
       const result = current ? await tx.zoomResourceBinding.update({ where: { id: current.id, version }, data: { departmentKey, notificationTopic, observedDigest: observed.observedDigest, version: { increment: 1 } } }) : await tx.zoomResourceBinding.create({ data: { ...where, ownerSiteKey: scope.siteKey, departmentKey, notificationTopic, observedDigest: observed.observedDigest, purpose: "REGULAR" } });
       await tx.outreachOperation.create({ data: { ...unique, requestDigest, status: "COMPLETED", result: json({ id: result.id, version: result.version }) } });

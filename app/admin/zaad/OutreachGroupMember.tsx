@@ -8,7 +8,7 @@ import type { TenantKey } from "@/lib/tenants";
 import { OutreachApiError, outreachAll, outreachMutation } from "./outreach-client";
 import { registrationInputClass as input, outreachPrimary as primary, outreachSecondary as secondary } from "@/app/notifications/register/StudentNotificationRegistration";
 
-export type GroupMember = { id: string; displayName: string; phones: { number: string }[]; observedDigest: string; mapping: { syncState: string; version: number; personId: string | null; personOrigin: string | null } | null };
+export type GroupMember = { id: string; displayName: string; phones: { number: string }[]; observedDigest: string; source?: string; syncStatus?: import("@/lib/zaad/default-groups").MemberSyncStatus; remotePresent?: boolean; mapping: { id?: string; syncState: string; version: number; personId: string | null; personOrigin: string | null } | null };
 export type MemberAction = { mode: "add" | "edit" | "delete" | "link"; member?: GroupMember };
 export function OutreachGroupMember({ tenant, group, action, close, saved, setDirty, setSaving }: {
   tenant: TenantKey; group: { id: string; name: string; departmentKey: string | null }; action: MemberAction;

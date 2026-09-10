@@ -18,7 +18,7 @@ test("stateful provider exercises the real client and database write/readback bo
       const scope: OutreachScope = { siteKey: "lg", actorId: "provider-fixture-admin", all: true, departments: ["resident-support"], live: false };
       await db.user.create({ data: { id: scope.actorId, name: "Fixture administrator", email: "provider@example.invalid", emailVerified: true, createdAt: new Date(), updatedAt: new Date() } });
       const provider = new ZoomOutreachProvider("fixture-account");
-      await db.siteDeveloperApiSetting.create({ data: { siteKey: "lg", accountId: provider.accountId, clientId: "fixture-client", clientSecretEncrypted: encryptDeveloperApiSecret("fixture-secret", "clientSecret") } });
+      await db.globalDeveloperApiSetting.create({ data: { id: "global", accountId: provider.accountId, clientId: "fixture-client", clientSecretEncrypted: encryptDeveloperApiSecret("fixture-secret", "clientSecret") } });
       const client = await ZaadZoomClient.fromDatabase(db, "lg", { fetchImpl: provider.fetch, apiBase: provider.apiBase, tokenUrl: provider.tokenUrl, writeGates: { contact: true, tts: false, campaign: false } });
       const input = { operationKey: "fixture_group_create", name: "検証用連絡先リスト", description: "保存・再取得の検証", departmentKey: "resident-support" };
       await t.test("connection is observed through OAuth and the actual provider client", async () => {

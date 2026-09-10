@@ -1,3 +1,5 @@
+import { addRegistrationMemberships } from "../default-groups";
+import { syncRegisteredSource } from "../registration-group-sync";
 import { getRegistrationReception } from "../registration-reception";
 import { createHash } from "node:crypto";
 import type { Prisma, PrismaClient } from "@/lib/generated/prisma/client";
@@ -54,7 +56,7 @@ export async function registerStudent(
   const input = parseRegistration(payload),
     requestDigest = payloadDigest(input);
   try {
-    return await db.$transaction(
+    const accepted = await db.$transaction(
       async (tx) => {
         const previous = await tx.universityStudentRegistration.findFirst({
           where: { siteKey, requestKey: input.requestKey },
@@ -87,6 +89,7 @@ export async function registerStudent(
             note: actorId ? text(attestation) : "",
           },
         });
+        await addRegistrationMemberships(tx, "univ", "UNIVERSITY_REGISTRATION", row.id, input.topicIds);
         await writeZaadAudit(tx, "univ", {
           actorUserId: actorId ?? null,
           resourceKind: "university-registration",
@@ -99,6 +102,8 @@ export async function registerStudent(
       },
       { isolationLevel: "Serializable" },
     );
+    await syncRegisteredSource(db, "univ", "UNIVERSITY_REGISTRATION", accepted.id);
+    return accepted;
   } catch (error) {
     rethrowDatabase(error);
   }

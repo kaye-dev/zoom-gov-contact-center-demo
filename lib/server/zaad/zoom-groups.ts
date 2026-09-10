@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@/lib/generated/prisma/client";
-import { fields, OutreachContractError, operationKey, personReference, phoneValue, record, stringValue, whole } from "@/lib/zaad/outreach-contracts";
+import { fields, type PersonOrigin, OutreachContractError, operationKey, personReference, phoneValue, record, stringValue, whole } from "@/lib/zaad/outreach-contracts";
 import { requireOutreachDepartment, type OutreachScope } from "./outreach-scope";
 import { ZaadZoomClient, ZaadZoomError, type ZoomContactListDto } from "./zoom-client";
 import { allCampaigns } from "./campaign-bindings";
@@ -9,7 +9,7 @@ import { writeZaadAudit } from "./audit";
 export type GroupClient = Pick<ZaadZoomClient, "accountId" | "listContactLists" | "getContactList" | "createContactList" | "updateContactList" | "deleteContactList" | "listContacts" | "createContact" | "updateContact" | "deleteContact" | "listCampaigns" | "getCampaign">;
 
 export async function requireZoomBinding(db: Pick<PrismaClient, "zoomResourceBinding">, scope: OutreachScope, client: Pick<GroupClient, "accountId">, resourceType: string, zoomId: string) {
-  const row = await db.zoomResourceBinding.findFirst({ where: { ownerSiteKey: scope.siteKey, resourceType, zoomId, accountId: client.accountId, tombstone: false, ...(!scope.all ? { departmentKey: { in: scope.departments } } : {}) } });
+  const row = await db.zoomResourceBinding.findFirst({ where: { ownerSiteKey: scope.siteKey, resourceType, zoomId, accountId: client.accountId, tombstone: false, ...(!scope.all ? { departmentKey: { in: scope.departments }, defaultGroups: { none: {} } } : {}) } });
   if (!row) throw new OutreachContractError("NOT_FOUND", 404);
   return row;
 }
@@ -23,7 +23,7 @@ export async function listZoomGroups(db: PrismaClient, scope: OutreachScope, inj
     if (seen.has(result.nextPageToken) || page === 99) throw new OutreachContractError("PROVIDER_PAGINATION_LOOP", 502);
     seen.add(result.nextPageToken); token = result.nextPageToken;
   }
-  const bindings = await db.zoomResourceBinding.findMany({ where: { ownerSiteKey: scope.siteKey, accountId: client.accountId, resourceType: "CONTACT_LIST", tombstone: false, purpose: "REGULAR", dispatchId: null, ...(!scope.all ? { departmentKey: { in: scope.departments } } : {}) } });
+  const bindings = await db.zoomResourceBinding.findMany({ where: { ownerSiteKey: scope.siteKey, accountId: client.accountId, resourceType: "CONTACT_LIST", tombstone: false, purpose: "REGULAR", dispatchId: null, ...(!scope.all ? { departmentKey: { in: scope.departments }, defaultGroups: { none: {} } } : {}) } });
   const items = bindings.map(binding => {
     const row = all.get(binding.zoomId);
     if (!row) throw new OutreachContractError("PROVIDER_RESOURCE_MISSING", 409);
@@ -35,15 +35,30 @@ export async function zoomGroupMembers(db: PrismaClient, scope: OutreachScope, i
   const client = injected ?? await ZaadZoomClient.fromDatabase(db, scope.siteKey);
   const binding = await requireZoomBinding(db, scope, client, "CONTACT_LIST", id), group = await client.getContactList(id);
   if (group.id !== id) throw new OutreachContractError("PROVIDER_ID_MISMATCH", 502);
-  const contacts = await client.listContacts(id), mappings = await db.zoomContactMembership.findMany({ where: { siteKey: scope.siteKey, bindingId: binding.id } });
-  const items = contacts.map(contact => {
-    const mapping = mappings.find(row => row.zoomContactId === contact.id);
-    return { ...contact, observedDigest: digest(contact), mapping: mapping ? { id: mapping.id, version: mapping.version, personOrigin: mapping.personOrigin, personId: mapping.personId, syncState: mapping.observedDigest === digest(contact) ? mapping.syncState : "DIFFERENCE" } : null, noticeConsent: "UNVERIFIED" };
-  });
+  let contacts: Awaited<ReturnType<GroupClient["listContacts"]>> = [], providerState = "READY";
+  try { contacts = [...new Map((await client.listContacts(id)).map(c => [c.id, c])).values()]; }
+  catch (error) { providerState = error instanceof ZaadZoomError ? error.code : "SERVICE_UNAVAILABLE"; }
+  const mappings = await db.zoomContactMembership.findMany({ where: { siteKey: scope.siteKey, bindingId: binding.id, syncState: { not: "REMOVED" } } });
+  const items = [], linked = new Set<string>();
+  for (const mapping of mappings) {
+    if (!mapping.personId || !mapping.personOrigin) continue;
+    let source;
+    try { source = await getContact(db, scope, mapping.personOrigin as PersonOrigin, mapping.personId); }
+    catch (error) { if (error instanceof OutreachContractError && [403, 404].includes(error.status)) continue; throw error; }
+    if (source.departmentKey !== binding.departmentKey || ["WITHDRAWN", "REJECTED", "NOT_CONSENTED"].includes(source.status)) continue;
+    const contact = contacts.find(c => c.id === mapping.zoomContactId);
+    if (contact) linked.add(contact.id);
+    const matches = contact && contact.displayName === source.name && contact.phones.some(p => p.number === source.phone);
+    const syncStatus = mapping.syncState === "SYNCING" ? "UNKNOWN" : !contact ? "UNKNOWN" : matches && mapping.observedDigest === digest(contact) && mapping.lastSyncedVersion === source.version ? "SYNCED" : mapping.syncState === "FAILED" ? "FAILED" : "DIFFERENCE";
+    items.push({ id: mapping.zoomContactId, displayName: source.name, phones: [{ number: source.phone }], emails: contact?.emails ?? [], observedDigest: contact ? digest(contact) : mapping.observedDigest, mapping: { id: mapping.id, version: mapping.version, personOrigin: mapping.personOrigin, personId: mapping.personId, syncState: mapping.syncState }, source: "SITE", syncStatus, remotePresent: Boolean(contact), noticeConsent: "UNVERIFIED" });
+  }
+  for (const contact of contacts) if (!linked.has(contact.id)) items.push({ ...contact, observedDigest: digest(contact), mapping: null, source: "Zoom", syncStatus: "REGISTERED", remotePresent: true, noticeConsent: "UNVERIFIED" });
   const mutationBlock = includeMutationBlock ? await groupMutationBlock(client, id) : undefined;
-  return { tenantKey: scope.siteKey, group: { ...group, departmentKey: binding.departmentKey, version: binding.version, mutationBlock }, items, total: items.length, nextCursor: null, observedAt: new Date().toISOString() };
+  const summary = providerState === "READY" ? { total: items.length, unsynced: items.filter(i => !["SYNCED", "REGISTERED"].includes(i.syncStatus)).length, synced: items.filter(i => i.syncStatus === "SYNCED").length, zoomOnly: items.filter(i => i.syncStatus === "REGISTERED").length } : { total: null, unsynced: null, synced: null, zoomOnly: null };
+  return { tenantKey: scope.siteKey, group: { ...group, departmentKey: binding.departmentKey, version: binding.version, mutationBlock }, items, summary, providerState, total: items.length, nextCursor: null, observedAt: new Date().toISOString() };
 }
-async function groupMutationBlock(client: GroupClient, id: string, deleting = false): Promise<"GROUP_IN_USE" | "CAMPAIGN_REFERENCE_UNKNOWN" | null> {
+
+export async function groupMutationBlock(client: Pick<GroupClient, "accountId" | "listCampaigns" | "getCampaign">, id: string, deleting = false): Promise<"GROUP_IN_USE" | "CAMPAIGN_REFERENCE_UNKNOWN" | null> {
   const campaigns = await allCampaigns(client);
   for (const listed of campaigns) {
     const campaign = await client.getCampaign(listed.id);
@@ -83,6 +98,7 @@ export async function saveZoomGroup(db: PrismaClient, scope: OutreachScope, payl
   const client = injected ?? await ZaadZoomClient.fromDatabase(db, scope.siteKey);
   const binding = id ? await requireZoomBinding(db, scope, client, "CONTACT_LIST", id) : null;
   if (binding) {
+    if (await db.outreachDefaultGroup.count({ where: { bindingId: binding.id } })) throw new OutreachContractError("RESOURCE_OWNERSHIP_CONFLICT", 409);
     if (whole(v.version) !== binding.version) throw new OutreachContractError("VERSION_CONFLICT", 409);
     await assertGroupIdle(client, id!);
     const current = await client.getContactList(id!);
@@ -118,6 +134,7 @@ export async function deleteZoomGroup(db: PrismaClient, scope: OutreachScope, id
       }
       const binding = await requireZoomBinding(tx, scope, client, "CONTACT_LIST", id);
       if (binding.version !== version) throw new OutreachContractError("VERSION_CONFLICT", 409);
+      if (await tx.outreachDefaultGroup.count({ where: { bindingId: binding.id } })) throw new OutreachContractError("RESOURCE_OWNERSHIP_CONFLICT", 409);
       if (binding.dispatchId || binding.purpose !== "REGULAR") throw new OutreachContractError("RESOURCE_OWNERSHIP_CONFLICT", 409);
       await tx.zoomResourceBinding.update({ where: { id: binding.id, version }, data: { tombstone: true, version: { increment: 1 } } });
       await tx.outreachOperation.create({ data: { ...unique, requestDigest, status: "COMPLETED", result: json({ id, detached: true }) } });
@@ -133,6 +150,7 @@ export async function saveZoomMember(db: PrismaClient, scope: OutreachScope, lis
   const person = !contactId ? personReference(v.reference, scope.siteKey) : null;
   const crm = person ? await getContact(db, scope, person.origin, person.id) : null;
   if (crm && crm.departmentKey !== binding.departmentKey) throw new OutreachContractError("DEPARTMENT_MISMATCH", 409);
+  if (contactId && await db.zoomContactMembership.count({ where: { siteKey: scope.siteKey, bindingId: binding.id, zoomContactId: contactId, syncState: "SYNCING" } })) throw new OutreachContractError("PROVIDER_RESULT_REQUIRES_RECONCILIATION", 409);
   const name = contactId ? stringValue(v.name) : crm!.name, phone = contactId ? phoneValue(v.phone) : crm!.phone;
   if (contactId) {
     const current = (await client.listContacts(listId)).find(row => row.id === contactId);
@@ -173,6 +191,7 @@ export async function linkZoomMember(db: PrismaClient, scope: OutreachScope, lis
   try {
     return await db.$transaction(async tx => {
       const where = { siteKey: scope.siteKey, bindingId: binding.id, zoomContactId: contactId }, previous = await tx.zoomContactMembership.findUnique({ where: { siteKey_bindingId_zoomContactId: where } });
+      if (previous?.syncState === "SYNCING" && await tx.outreachGroupSyncItem.count({ where: { membershipId: previous.id, status: "RUNNING", claimedAt: { gt: new Date(Date.now() - 300_000) } } })) throw new OutreachContractError("PROVIDER_RESULT_REQUIRES_RECONCILIATION", 409);
       if (previous && (v.version !== previous.version || (previous.personId && (previous.personId !== person.id || previous.personOrigin !== person.origin)))) throw new OutreachContractError("MEMBERSHIP_LINK_CONFLICT", 409);
       const mapping = await tx.zoomContactMembership.upsert({ where: { siteKey_bindingId_zoomContactId: where }, create: { ...where, personOrigin: person.origin, personId: person.id, observedDigest: digest(observed), attestation, confirmedBy: scope.actorId, lastSyncedVersion: crm.version, syncState: "LINKED" }, update: { personOrigin: person.origin, personId: person.id, observedDigest: digest(observed), attestation, confirmedBy: scope.actorId, lastSyncedVersion: crm.version, syncState: "LINKED", version: { increment: 1 } } });
       return { tenantKey: scope.siteKey, mapping };

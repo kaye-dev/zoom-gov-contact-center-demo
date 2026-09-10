@@ -23,7 +23,7 @@ test("group sync shares only lists, preserves CRM and migrates existing bindings
     try {
       await db.user.create({ data: { id: scope.actorId, name: "Fixture admin", email: "group-sync@example.invalid", emailVerified: true, createdAt: new Date(), updatedAt: new Date() } });
       const accountId = "fixture-group-account";
-      for (const siteKey of ["lg", "univ"]) await db.siteDeveloperApiSetting.create({ data: { siteKey, accountId, clientId: "fixture-client", clientSecretEncrypted: encryptDeveloperApiSecret("fixture-secret", "clientSecret") } });
+      await db.globalDeveloperApiSetting.create({ data: { id: "global", accountId, clientId: "fixture-client", clientSecretEncrypted: encryptDeveloperApiSecret("fixture-secret", "clientSecret") } });
       const provider = new ZoomOutreachProvider(accountId, {
         accountId, lists: [1, 2, 3, 4, 5].map(n => ({ contact_list_id: `fixture-list-${n}`, contact_list_name: `Fixture list ${n}`, contact_list_type: "contact", updated_at: "2026-09-09T01:00:00Z" })),
         members: { "fixture-list-1": [{ contact_id: "fixture-contact-10", display_name: "Fixture person", phone_numbers: [{ phone_number: "+819000000010", phone_type: "mobile" }] }] }, campaigns: [],
@@ -93,10 +93,10 @@ test("group sync shares only lists, preserves CRM and migrates existing bindings
       });
       await t.test("account changes during provider read roll back the entire addition", async () => {
         let changed = false;
-        const reader: ContactListReader = { accountId, listContactLists: client.listContactLists.bind(client), getContactList: async id => { const result = await client.getContactList(id); if (!changed) { changed = true; await db.siteDeveloperApiSetting.update({ where: { siteKey: "lg" }, data: { accountId: "changed" } }); } return result; } };
+        const reader: ContactListReader = { accountId, listContactLists: client.listContactLists.bind(client), getContactList: async id => { const result = await client.getContactList(id); if (!changed) { changed = true; await db.globalDeveloperApiSetting.update({ where: { id: "global" }, data: { accountId: "changed" } }); } return result; } };
         await rejects(syncContactLists(db, scope, payload("account-race", ["fixture-list-3"]), reader), "ACCOUNT_CHANGED");
         assert.equal(await db.zoomResourceBinding.count({ where: { zoomId: "fixture-list-3" } }), 0);
-        await db.siteDeveloperApiSetting.update({ where: { siteKey: "lg" }, data: { accountId } });
+        await db.globalDeveloperApiSetting.update({ where: { id: "global" }, data: { accountId } });
       });
       await t.test("missing IDs and internal dispatch resources cannot partially add lists", async () => {
         await assert.rejects(syncContactLists(db, scope, payload("missing-id", ["fixture-list-3", "fixture-list-99"]), client));

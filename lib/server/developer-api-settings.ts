@@ -12,16 +12,15 @@ import {
   decryptDeveloperApiSecret,
   encryptDeveloperApiSecret,
 } from "./developer-api-crypto";
-import type { TenantKey } from "@/lib/tenants";
 
 import { withPrisma } from "./prisma";
 
 
 export const getDeveloperApiSettings = cache(
-  async (tenantKey: TenantKey): Promise<DeveloperApiSettingsSnapshot> =>
+  async (): Promise<DeveloperApiSettingsSnapshot> =>
     withPrisma(async (prisma) => {
-      const row = await prisma.siteDeveloperApiSetting.findUnique({
-        where: { siteKey: tenantKey },
+      const row = await prisma.globalDeveloperApiSetting.findUnique({
+        where: { id: "global" },
         select: {
           accountId: true,
           clientId: true,
@@ -35,13 +34,12 @@ export const getDeveloperApiSettings = cache(
 
 export async function saveDeveloperApiSettings(
   prisma: PrismaClient,
-  tenantKey: TenantKey,
   update: DeveloperApiSettingsUpdate,
 ): Promise<DeveloperApiSettingsSnapshot | null> {
   assertDeveloperApiEncryptionAvailable();
   return prisma.$transaction(async (transaction) => {
-    const current = await transaction.siteDeveloperApiSetting.findUnique({
-      where: { siteKey: tenantKey },
+    const current = await transaction.globalDeveloperApiSetting.findUnique({
+      where: { id: "global" },
       select: {
         clientSecretEncrypted: true,
         secretTokenEncrypted: true,
@@ -68,10 +66,10 @@ export async function saveDeveloperApiSettings(
       update.section === "webhook-only-app" && update.secretToken
         ? encryptDeveloperApiSecret(update.secretToken, "secretToken")
         : undefined;
-    const saved = await transaction.siteDeveloperApiSetting.upsert({
-      where: { siteKey: tenantKey },
+    const saved = await transaction.globalDeveloperApiSetting.upsert({
+      where: { id: "global" },
       create: {
-        siteKey: tenantKey,
+        id: "global",
         accountId:
           update.section === "server-to-server-oauth" ? update.accountId : "",
         clientId:
@@ -99,17 +97,16 @@ export async function saveDeveloperApiSettings(
 
 export async function revealDeveloperApiSecret(
   prisma: PrismaClient,
-  tenantKey: TenantKey,
   field: DeveloperApiSecretField,
 ): Promise<string | null> {
   const row =
     field === "clientSecret"
-      ? await prisma.siteDeveloperApiSetting.findUnique({
-          where: { siteKey: tenantKey },
+      ? await prisma.globalDeveloperApiSetting.findUnique({
+          where: { id: "global" },
           select: { clientSecretEncrypted: true },
         })
-      : await prisma.siteDeveloperApiSetting.findUnique({
-          where: { siteKey: tenantKey },
+      : await prisma.globalDeveloperApiSetting.findUnique({
+          where: { id: "global" },
           select: { secretTokenEncrypted: true },
         });
   const encrypted =

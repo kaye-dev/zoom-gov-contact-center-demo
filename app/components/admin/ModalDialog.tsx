@@ -21,6 +21,7 @@ type ModalDialogProps = {
   locked?: boolean;
   initialFocusRef?: RefObject<HTMLElement | null>;
   maxWidthClassName?: string;
+  backdropClassName?: "bg-black/40" | "bg-black/45";
   containerId?: string;
   titleId?: string;
   descriptionId?: string;
@@ -45,6 +46,7 @@ export function ModalDialog({
   locked = false,
   initialFocusRef,
   maxWidthClassName = "max-w-lg",
+  backdropClassName = "bg-black/45",
   containerId,
   titleId: explicitTitleId,
   descriptionId: explicitDescriptionId,
@@ -119,7 +121,7 @@ export function ModalDialog({
         if (event.target === event.currentTarget && !locked) onRequestClose();
       }}
     >
-      <div className="pointer-events-none absolute inset-0 bg-black/45" aria-hidden="true" />
+      <div className={`pointer-events-none absolute inset-0 ${backdropClassName}`} aria-hidden="true" />
       <div
         ref={dialogRef}
         role="dialog"

@@ -7,7 +7,6 @@ import {
   connectDatabaseWithRetry,
   createDatabaseContext,
 } from "../../lib/server/prisma";
-import { DEFAULT_TENANT_KEY } from "../../lib/tenants";
 
 const API_BASE_URL = "https://api.zoom.us/v2";
 const TOKEN_URL = "https://zoom.us/oauth/token";
@@ -938,8 +937,8 @@ async function loadCredentials() {
   const database = createDatabaseContext(process.env);
   try {
     await connectDatabaseWithRetry(database.prisma);
-    const row = await database.prisma.siteDeveloperApiSetting.findUnique({
-      where: { siteKey: DEFAULT_TENANT_KEY },
+    const row = await database.prisma.globalDeveloperApiSetting.findUnique({
+      where: { id: "global" },
       select: {
         accountId: true,
         clientId: true,
