@@ -14,9 +14,10 @@ export async function dispatchTargets(db: PrismaClient, scope: OutreachScope, dr
   for (const id of draft.groupIds) {
     const result = await zoomGroupMembers(db, scope, id, injected);
     if (result.group.departmentKey !== draft.departmentKey) throw new OutreachContractError("DEPARTMENT_MISMATCH", 409);
+    if (result.providerState !== "READY") throw new OutreachContractError("SERVICE_UNAVAILABLE", 503);
     groups.push({ id, name: result.group.name, observedAt: new Date().toISOString(), version: result.group.version, digest: digest(result.items) });
     for (const member of result.items) {
-      if (!member.mapping) { exclude("ZOOM_ONLY", member.displayName); continue; }
+      if (!member.mapping?.personId || !member.mapping.personOrigin) { exclude("ZOOM_ONLY", member.displayName); continue; }
       if (member.mapping.syncState !== "LINKED") { exclude("MEMBERSHIP_UNVERIFIED", member.displayName); continue; }
       refs.push({ reference: personReference({ siteKey: scope.siteKey, kind: scope.siteKey === "lg" ? "resident" : "student", origin: member.mapping.personOrigin, id: member.mapping.personId }, scope.siteKey), membershipId: member.mapping.id, membershipVersion: member.mapping.version, groupId: id, providerPhones: member.phones.map(phone => phone.number) });
     }

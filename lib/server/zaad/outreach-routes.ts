@@ -1,3 +1,4 @@
+import { audioImportCandidates, importAudioMessages, audioImportOperation, getImportedAudioMessage, messageCatalog } from "./message-imports";
 import { listPurposeCampaigns, purposeCampaignCandidates, purposeCampaignOperation, savePurposeCampaign } from "./purpose-campaign-bindings";
 import { startRegularGroupSync } from "./regular-group-sync";
 import { bindDefaultGroup, defaultGroupCandidates, listOutreachGroups } from "./default-groups";
@@ -5,7 +6,6 @@ import { getDefaultGroupDetail, startRegistrationGroupSync, getRegistrationSyncO
 import { groupSyncCandidates, syncContactLists, groupSyncOperation } from "./group-sync";
 import { updateZaadResident, deleteZaadResident } from "./residents";
 import { listResourceBindings, previewResourceBinding, saveResourceBinding } from "./resource-bindings";
-import { getRegistrationReception, saveRegistrationReception } from "./registration-reception";
 import { previewZoomCrmImport, applyZoomCrmImport } from "./zoom-crm-imports";
 import { ZaadZoomClient } from "./zoom-client";
 import { executeDispatch, getDispatch, inspectDispatchConfirmation, listDispatches, preflightDispatch, prepareDispatch } from "./dispatches";
@@ -32,8 +32,6 @@ export function registerOutreachRoutes(app: Hono<ZaadApiEnvironment>) {
   app.get(`${root}/resource-bindings`, c => withOutreach(c, "VIEW", (db, scope) => listResourceBindings(db, scope)));
   app.post(`${root}/resource-bindings/preview`, c => withOutreach(c, "UPDATE", async (db, scope) => previewResourceBinding(db, scope, await outreachJson(c))));
   app.put(`${root}/resource-bindings`, c => withOutreach(c, "UPDATE", async (db, scope) => saveResourceBinding(db, scope, await outreachJson(c))));
-  app.get(`${root}/registration-reception`, c => withOutreach(c, "VIEW", async (db, scope) => ({ tenantKey: scope.siteKey, setting: await getRegistrationReception(db, scope.siteKey) })));
-  app.put(`${root}/registration-reception`, c => withOutreach(c, "UPDATE", async (db, scope) => saveRegistrationReception(db, scope, await outreachJson(c))));
   app.get(`${root}/one-time-dispatches`, c => withOutreach(c, "VIEW", (db, scope) => listDispatches(db, scope)));
   app.get(`${root}/one-time-dispatches/:id`, c => withOutreach(c, "VIEW", (db, scope) => c.req.query("confirmation") === "true" ? inspectDispatchConfirmation(db, scope, c.req.param("id")) : getDispatch(db, scope, c.req.param("id"))));
   app.post(`${root}/one-time-dispatches/preflight`, c => withOutreach(c, "CREATE", async (db, scope) => preflightDispatch(db, scope, await outreachJson(c))));
@@ -57,7 +55,7 @@ export function registerOutreachRoutes(app: Hono<ZaadApiEnvironment>) {
   app.post(`${root}/contacts/imports/preview`, c => withOutreach(c, "CREATE", async (db, scope) => {
     requireSameOrigin(c.req.raw);
     if (c.req.header("content-type")?.split(";")[0] !== "text/csv") throw new OutreachContractError("INVALID_CONTENT_TYPE");
-    return previewCrmImport(db, scope, { bytes: new TextEncoder().encode(await boundedBody(c.req.raw, CRM_CSV_MAX_BYTES)), operationKey: c.req.header("x-operation-key") ?? "", departmentKey: c.req.header("x-department-key") ?? "" });
+    return previewCrmImport(db, scope, { bytes: new TextEncoder().encode(await boundedBody(c.req.raw, CRM_CSV_MAX_BYTES)), operationKey: c.req.header("x-operation-key") ?? "" });
   }));
   app.post(`${root}/contacts/imports`, c => withOutreach(c, "CREATE", async (db, scope) => applyCrmImport(db, scope, await outreachJson(c))));
   app.get(`${root}/contacts/imports/:jobId`, c => withOutreach(c, "VIEW", (db, scope) => getCrmImport(db, scope, c.req.param("jobId"))));
@@ -111,6 +109,11 @@ export function registerOutreachRoutes(app: Hono<ZaadApiEnvironment>) {
   app.get(`${root}/campaigns`, c => withOutreach(c, "VIEW", (db, scope) => listRegularCampaigns(db, scope)));
   app.get(`${root}/campaigns/:id`, c => withOutreach(c, "VIEW", (db, scope) => getRegularCampaign(db, scope, c.req.param("id"))));
   app.patch(`${root}/campaigns/:id/status`, c => withOutreach(c, "UPDATE", async (db, scope) => pauseRegularCampaign(db, scope, c.req.param("id"), await outreachJson(c))));
+  app.get(`${root}/message-catalog`, c => withOutreach(c, "VIEW", (db, scope) => messageCatalog(db, scope)));
+  app.get(`${root}/message-import/candidates`, c => withOutreach(c, ["CREATE", "UPDATE"], (db, scope) => audioImportCandidates(db, scope)));
+  app.post(`${root}/message-import`, c => withOutreach(c, ["CREATE", "UPDATE"], async (db, scope) => importAudioMessages(db, scope, await outreachJson(c))));
+  app.get(`${root}/message-import/operations/:key`, c => withOutreach(c, ["CREATE", "UPDATE"], (db, scope) => audioImportOperation(db, scope, c.req.param("key"))));
+  app.get(`${root}/imported-audio-messages/:id`, c => withOutreach(c, "VIEW", (db, scope) => getImportedAudioMessage(db, scope, c.req.param("id"))));
   app.get(`${root}/messages`, c => withOutreach(c, "VIEW", (db, scope) => listOutreachMessages(db, scope)));
   app.post(`${root}/messages`, c => withOutreach(c, "CREATE", async (db, scope) => saveOutreachMessage(db, scope, await outreachJson(c))));
   app.get(`${root}/messages/:id`, c => withOutreach(c, "VIEW", (db, scope) => getOutreachMessage(db, scope, c.req.param("id"))));

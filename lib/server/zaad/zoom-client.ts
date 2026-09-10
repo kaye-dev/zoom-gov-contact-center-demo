@@ -1,3 +1,4 @@
+import { parseAudioAsset, parseAudioAssetsPage } from "./audio-asset-parser";
 import { createHash } from "node:crypto";
 
 import type { PrismaClient } from "@/lib/generated/prisma/client";
@@ -598,6 +599,16 @@ export class ZaadZoomClient {
       { status },
       true,
     );
+  }
+
+  async listAudioAssets(input: { pageSize?: number; nextPageToken?: string } = {}) {
+    const params = new URLSearchParams({ asset_type: "audio", page_size: String(Math.min(100, Math.max(1, input.pageSize ?? 100))) });
+    if (input.nextPageToken) params.set("next_page_token", input.nextPageToken);
+    return parseAudioAssetsPage(await this.requestJson("GET", `/contact_center/asset_library/assets?${params}`));
+  }
+
+  async getAudioAsset(id: string) {
+    return parseAudioAsset(await this.requestJson("GET", `/contact_center/asset_library/assets/${encodeId(id)}`), id);
   }
 
   async getTtsAsset(id: string): Promise<ZoomTtsAssetResult> {

@@ -30,3 +30,18 @@ test("CSV-INVALID-VALUES: missing and invalid fields retain raw values for corre
   assert.deepEqual(rows.map(row => row.studentNumber), ["1260001", "2260001", "0000001"]);
   assert.equal(rows[1].name, "未入力"); assert.equal(rows[1].phone, "");
 });
+
+test("CSV-TOPICS-02: selected topics are deduplicated, tenant validated, and optional for legacy CSV", () => {
+  const parse = (value: string, tenant: "lg" | "univ" = "lg") => parseCrmCsv(new TextEncoder().encode(value), tenant);
+  const rows = parse("name,phone,topicIds\n一,09000000001, elder-watch ;procedure-support;elder-watch\n二,09000000002,\n");
+  assert.deepEqual(rows[0].topicIds, ["elder-watch", "procedure-support"]);
+  assert.deepEqual(rows[1].topicIds, []);
+  assert.deepEqual(parse("name,phone\n一,09000000001\n")[0].topicIds, []);
+  for (const ids of ["scholarship", "unknown", "elder-watch;;procedure-support", ";elder-watch", "elder-watch;"]) {
+    const row = parse(`name,phone,topicIds\n一,09000000001,${ids}\n`)[0];
+    assert.equal(row.status, "INVALID"); assert.equal(row.errorField, "topicIds"); assert.equal(row.rawTopicIds, ids);
+  }
+  const univ = parse("name,phone,studentNumber,topicIds\n学生,09000000001,1260001,scholarship;class-change\n", "univ");
+  assert.deepEqual(univ[0].topicIds, ["scholarship", "class-change"]);
+  for (const tenant of ["lg", "univ"] as const) assert.equal(parse(crmCsvSample(tenant), tenant)[0].topicIds.length, 2);
+});

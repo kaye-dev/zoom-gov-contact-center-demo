@@ -64,8 +64,17 @@ test(
         assert.equal(missingTenant.status, 400);
         assert.equal((await missingTenant.json()).code, "TENANT_REQUIRED");
 
+        await t.test("audio import writes require access and retired registration settings are unreachable", async () => {
+          const denied = await invoke(route.POST, "POST", "/api/admin/zaad/message-import", { cookie: viewCookie, body: {} });
+          assert.equal(denied.status, 403);
+          for (const path of ["/api/admin/zaad/registration-reception", "/api/admin/zaad/municipal/caller-notices"]) {
+            assert.equal((await invoke(route.GET, "GET", path, { cookie: fullCookie })).status, 404);
+            assert.equal((await invoke(route.PUT, "PUT", path, { cookie: fullCookie, body: {} })).status, 404);
+          }
+        });
+
         await t.test("contact group sync endpoints require authentication and update access", async () => {
-          for (const path of ["/api/admin/zaad/purpose-campaigns/regular/ELDER_WATCH/candidates", "/api/admin/zaad/purpose-campaigns/operations/fixture-operation", "/api/admin/zaad/default-groups/default-lg-elder-watch/candidates", "/api/admin/zaad/contact-lists/sync-candidates", "/api/admin/zaad/contact-lists/sync-operations/fixture-operation"]) {
+          for (const path of ["/api/admin/zaad/message-import/candidates", "/api/admin/zaad/message-import/operations/fixture-operation", "/api/admin/zaad/purpose-campaigns/regular/ELDER_WATCH/candidates", "/api/admin/zaad/purpose-campaigns/operations/fixture-operation", "/api/admin/zaad/default-groups/default-lg-elder-watch/candidates", "/api/admin/zaad/contact-lists/sync-candidates", "/api/admin/zaad/contact-lists/sync-operations/fixture-operation"]) {
             const anonymous = await invoke(route.GET, "GET", path);
             assert.equal(anonymous.status, 401);
             const readonly = await invoke(route.GET, "GET", path, { cookie: viewCookie });

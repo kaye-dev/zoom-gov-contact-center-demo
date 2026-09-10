@@ -1,8 +1,6 @@
-import { saveCallerNotice, listCallerNotices } from "../../lib/server/zaad/municipal/caller-notices";
 import { previewResourceBinding, saveResourceBinding } from "../../lib/server/zaad/resource-bindings";
 import { bindCampaigns, getRegularCampaign, pauseRegularCampaign, type CampaignReader } from "../../lib/server/zaad/campaign-bindings";
 import type { ZaadZoomClient } from "../../lib/server/zaad/zoom-client";
-import { getRegistrationReception, saveRegistrationReception } from "../../lib/server/zaad/registration-reception";
 import { previewZoomCrmImport, applyZoomCrmImport } from "../../lib/server/zaad/zoom-crm-imports";
 import { CONSENT_VERSION } from "../../lib/zaad/university/contracts";
 import { linkZoomMember, zoomGroupMembers, saveZoomMember, deleteZoomMember, type GroupClient } from "../../lib/server/zaad/zoom-groups";
@@ -107,7 +105,12 @@ test("outreach persists scoped registration, consent, immutable messages and sna
         assert.equal((result.snapshot as { recipientCount: number }).recipientCount, 1);
         const request = { id: result.id, version: result.version, snapshotDigest: result.snapshotDigest, operationKey: "recheck_group_001" };
         await rejects(prepareDispatch(db, scope, request, reader), "AUDIO_CONTRACT_NOT_VERIFIED");
-        assert.equal((await inspectDispatchConfirmation(db, scope, result.id, { ...reader, async listContacts() { throw new Error("Provider unavailable"); } })).confirmationStatus, "UNAVAILABLE");
+        const unavailable = { ...reader, async listContacts() { throw new Error("Provider unavailable"); } };
+        assert.equal((await inspectDispatchConfirmation(db, scope, result.id, unavailable)).confirmationStatus, "UNAVAILABLE");
+        await rejects(prepareDispatch(db, scope, request, unavailable), "SERVICE_UNAVAILABLE");
+        await rejects(preflightDispatch(db, scope, { ...(await db.zaadOneTimeDispatch.findUniqueOrThrow({ where: { id: result.id } })).draft as object, operationKey: "unavailable_group_001" }, unavailable), "SERVICE_UNAVAILABLE");
+        assert.equal(await db.zaadOneTimeDispatch.count({ where: { operationKey: "unavailable_group_001" } }), 0);
+        assert.equal((await inspectDispatchConfirmation(db, scope, result.id, reader)).confirmationStatus, "CURRENT");
         members = [];
         await rejects(prepareDispatch(db, scope, request, reader), "TARGET_CHANGED");
         members = [member];
@@ -133,17 +136,6 @@ test("outreach persists scoped registration, consent, immutable messages and sna
         assert.equal((valid.snapshot as { recipientCount: number }).recipientCount, 1);
         await db.zaadOneTimeDispatch.update({ where: { id: valid.id }, data: { appState: "UNKNOWN" } });
         await rejects(preflightDispatch(db, scope, { ...draft, operationKey: "legacy_dispatch_004", parentDispatchId: valid.id }), "DISPATCH_NOT_REPEATABLE");
-      });
-      await t.test("caller publication requires scoped confirmation and rejects stale updates", async () => {
-        const notice = { departmentKey: "resident-support", callerPhone: "0312345678", officeUrl: "https://example.invalid/office", version: 0, publicationConfirmed: true };
-        await rejects(saveCallerNotice(db, scope, { ...notice, publicationConfirmed: false }), "PUBLICATION_CONFIRMATION_REQUIRED");
-        await rejects(saveCallerNotice(db, { ...scope, departments: ["welfare"] }, notice), "NOT_FOUND");
-        const saved = await saveCallerNotice(db, scope, notice);
-        assert.equal(saved.notice.callerPhone, "+81312345678");
-        assert.equal(saved.notice.approvedBy, scope.actorId);
-        assert.equal((await listCallerNotices(db, scope)).items.length, 1);
-        await rejects(saveCallerNotice(db, scope, notice), "VERSION_CONFLICT");
-        assert.equal((await listCallerNotices(db, { ...scope, departments: ["welfare"] })).items.length, 0);
       });
       await t.test("CSV imports preserve row idempotency and do not grant consent", async () => {
         const preview = await previewCrmImport(db, scope, { operationKey: "csv_import_00001", departmentKey: "resident-support", bytes: new TextEncoder().encode("name,phone\r\nCSV住民,09000000002\r\n") });
@@ -201,6 +193,16 @@ test("outreach persists scoped registration, consent, immutable messages and sna
         await saveZoomMember(db, scope, "group-list", { operationKey: "member_edit_001", name: "Zoom更新名", phone: "+819000000001", expectedDigest: before.items[0].observedDigest }, "group-member", reader);
         const after = await zoomGroupMembers(db, scope, "group-list", reader);
         assert.equal(after.items[0].mapping?.syncState, "UNLINKED");
+        assert.equal(after.items[0].mapping?.personId, null);
+        assert.equal(after.items[0].source, "Zoom");
+        assert.equal(after.items[0].syncStatus, "REGISTERED");
+        const mapping = await db.zoomContactMembership.findUniqueOrThrow({ where: { id: after.items[0].mapping!.id } });
+        assert.equal(after.items[0].mapping?.version, mapping.version);
+        const link = { reference: contactBefore.reference, attestation: "本人情報を確認して関連付け", expectedDigest: after.items[0].observedDigest, version: mapping.version };
+        await rejects(linkZoomMember(db, scope, "group-list", "group-member", { ...link, version: mapping.version + 1 }, reader), "MEMBERSHIP_LINK_CONFLICT");
+        const linked = await linkZoomMember(db, scope, "group-list", "group-member", link, reader);
+        assert.equal(linked.mapping.personId, registered.contactId);
+        assert.equal(linked.mapping.version, mapping.version + 1);
         await deleteZoomMember(db, scope, "group-list", "group-member", { operationKey: "member_delete_001", expectedDigest: after.items[0].observedDigest }, reader);
         assert.equal((await zoomGroupMembers(db, scope, "group-list", reader)).items.length, 0);
         assert.deepEqual(await getContact(db, scope, "MUNICIPAL_CONTACT", registered.contactId), contactBefore);
@@ -345,15 +347,11 @@ test("outreach persists scoped registration, consent, immutable messages and sna
         assert.equal((await pauseRegularCampaign(db, { ...scope, live: true }, campaign.id, input, client)).campaign.status, "paused");
         await pauseRegularCampaign(db, { ...scope, live: true }, campaign.id, input, client); assert.equal(patches, 1);
       });
-      await t.test("registration reception is scoped, versioned and preserves accepted requests", async () => {
-        const before = await getRegistrationReception(db, "lg");
-        const saved = await saveRegistrationReception(db, scope, { enabled: false, version: before.version });
-        assert.equal(saved.setting.enabled, false);
-        assert.equal((await getRegistrationReception(db, "univ")).enabled, true);
-        assert.equal((await registerMunicipalContact(db, "lg", payload)).id, registered.id);
-        await rejects(registerMunicipalContact(db, "lg", { ...payload, operationKey: "blocked_registration" }), "REGISTRATION_UNAVAILABLE");
-        await rejects(saveRegistrationReception(db, scope, { enabled: true, version: before.version }), "VERSION_CONFLICT");
-        await saveRegistrationReception(db, scope, { enabled: true, version: saved.setting.version });
+      await t.test("public registration ignores the retired reception toggle", async () => {
+        await db.zaadRegistrationSetting.upsert({ where: { siteKey: "lg" }, create: { siteKey: "lg", publicRegistrationEnabled: false }, update: { publicRegistrationEnabled: false } });
+        const result = await registerMunicipalContact(db, "lg", { ...payload, operationKey: "always_open_registration", phone: "09000000091" });
+        assert.ok(result.id);
+        assert.equal((await db.zaadRegistrationSetting.findUniqueOrThrow({ where: { siteKey: "lg" } })).publicRegistrationEnabled, false);
       });
     } finally { globalThis.fetch = oldFetch; await context.close(); }
   });

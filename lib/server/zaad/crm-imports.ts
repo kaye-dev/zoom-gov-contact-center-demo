@@ -1,5 +1,7 @@
+import { MUNICIPAL_DEPARTMENTS } from "@/lib/zaad/municipal/contracts";
+import { DEPARTMENTS } from "@/lib/zaad/university/contracts";
 import type { Prisma, PrismaClient } from "@/lib/generated/prisma/client";
-import { parseCrmCsv, type CrmCsvRow } from "@/lib/zaad/crm-csv";
+import { parseCrmCsv, parseCrmTopicIds, type CrmCsvRow } from "@/lib/zaad/crm-csv";
 import { fields, operationKey, OutreachContractError, record, stringList, stringValue } from "@/lib/zaad/outreach-contracts";
 import { requireOutreachDepartment, type OutreachScope } from "./outreach-scope";
 import { databaseError, digest, json } from "./outreach-data";
@@ -12,8 +14,8 @@ async function findCsvMatch(db: Pick<Prisma.TransactionClient, "municipalContact
   return db.universityStudentRegistration.findFirst({ where: { siteKey: scope.siteKey, contactId: null, facultyCode: row.studentNumber[0], admissionYear: 2000 + Number(row.studentNumber.slice(1, 3)), serial: row.studentNumber.slice(3) }, select: { id: true } });
 }
 
-export async function previewCrmImport(db: PrismaClient, scope: OutreachScope, input: { bytes: Uint8Array; operationKey: string; departmentKey: string }) {
-  const key = operationKey(input.operationKey), departmentKey = stringValue(input.departmentKey);
+export async function previewCrmImport(db: PrismaClient, scope: OutreachScope, input: { bytes: Uint8Array; operationKey: string; departmentKey?: string }) {
+  const key = operationKey(input.operationKey), departmentKey = csvImportDepartment(scope);
   requireOutreachDepartment(scope, departmentKey);
   const rows = parseCrmCsv(input.bytes, scope.siteKey);
   for (const row of rows) {
@@ -47,6 +49,7 @@ export async function applyCrmImport(db: PrismaClient, scope: OutreachScope, pay
   if (!job) throw new OutreachContractError("NOT_FOUND", 404);
   if (job.previewDigest !== previewDigest || job.expiresAt <= new Date()) throw new OutreachContractError("PREVIEW_EXPIRED", 409);
   if (selected.some(key => !job.rows.some(row => row.rowKey === key && ["NEW", "FAILED", "IMPORTED"].includes(row.status)))) throw new OutreachContractError("INVALID_IMPORT_SELECTION");
+  if (job.rows.some(row => row.status === "INVALID")) throw new OutreachContractError("INVALID_IMPORT_ROWS", 422);
   for (const key of selected) {
     try {
       await db.$transaction(async tx => {
@@ -56,6 +59,7 @@ export async function applyCrmImport(db: PrismaClient, scope: OutreachScope, pay
         if (claim.count !== 1) throw new OutreachContractError("IMPORT_ROW_CONFLICT", 409);
         const candidate = row.candidate as unknown as CrmCsvRow;
         if (!candidate.name || !candidate.phone) throw new OutreachContractError("INVALID_IMPORT_ROW");
+        const topicIds = parseCrmTopicIds((candidate.topicIds ?? []).join(";"), scope.siteKey);
         const existing = await findCsvMatch(tx, scope, candidate);
         if (existing) {
           await tx.crmImportRow.update({ where: { id: row.id }, data: { status: "MATCH", errorCode: "EXISTING_CONTACT_REQUIRES_REVIEW" } });
@@ -64,8 +68,12 @@ export async function applyCrmImport(db: PrismaClient, scope: OutreachScope, pay
         const created = scope.siteKey === "lg"
           ? await tx.municipalContact.create({ data: { siteKey: scope.siteKey, departmentKey: job.departmentKey, name: candidate.name, phone: candidate.phone, source: "CSV", status: "PENDING_REVIEW" } })
           : await tx.universityContact.create({ data: { siteKey: scope.siteKey, departmentKey: job.departmentKey, name: candidate.name, phone: candidate.phone, displayStudentNumber: candidate.studentNumber, facultyCode: candidate.studentNumber![0], admissionYear: 2000 + Number(candidate.studentNumber!.slice(1, 3)), serial: candidate.studentNumber!.slice(3), registrationSource: "CSV_IMPORT", registrationStatus: "PENDING_REVIEW" } });
+        if (topicIds.length) {
+          if (scope.siteKey === "lg") await tx.municipalNotificationPreference.createMany({ data: topicIds.map(topic => ({ siteKey: scope.siteKey, contactId: created.id, topic, requested: true, enabled: false })) });
+          else await tx.universityNotificationPreference.createMany({ data: topicIds.map(topicId => ({ siteKey: scope.siteKey, contactId: created.id, topicId, enabled: true, sourceRequestId: row.id, confirmedBy: scope.actorId, confirmedAt: new Date() })) });
+        }
         await tx.crmImportRow.update({ where: { id: row.id }, data: { status: "IMPORTED", errorCode: null, personOrigin: scope.siteKey === "lg" ? "MUNICIPAL_CONTACT" : "UNIVERSITY_CONTACT", personId: created.id } });
-        await writeZaadAudit(tx, scope.siteKey, { actorUserId: scope.actorId, resourceKind: "crm-import", targetId: row.id, action: "CREATE", result: "SUCCESS", changedFieldNames: ["contact", "source"] });
+        await writeZaadAudit(tx, scope.siteKey, { actorUserId: scope.actorId, resourceKind: "crm-import", targetId: row.id, action: "CREATE", result: "SUCCESS", changedFieldNames: ["contact", "source", "preferences"] });
       }, { isolationLevel: "Serializable" });
     } catch {
       // Preserve successful rows and raw values only in the bounded preview store.
@@ -88,4 +96,15 @@ export async function expireCrmPreviews(db: PrismaClient, now = new Date()) {
     await tx.crmImportJob.update({ where: { id: job.id }, data: { status: "EXPIRED" } });
   });
   return { expiredPreviews: jobs.length };
+}
+
+
+/** The CSV screen needs no department choice; never leave the actor's scope. */
+export function csvImportDepartment(scope: OutreachScope): string {
+  const defined: readonly string[] = scope.siteKey === "lg" ? MUNICIPAL_DEPARTMENTS : DEPARTMENTS;
+  const allowed = scope.departments.filter(key => defined.includes(key)).sort();
+  const preferred = scope.siteKey === "lg" ? "resident-support" : "student-affairs";
+  const department = allowed.includes(preferred) ? preferred : allowed[0];
+  if (!department) throw new OutreachContractError("DEPARTMENT_ACCESS_DENIED", 403);
+  return department;
 }

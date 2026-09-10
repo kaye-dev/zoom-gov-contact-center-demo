@@ -720,6 +720,7 @@ model ZoomResourceBinding {
   tombstone Boolean @default(false)
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  importedAudioMessages OutreachImportedAudioMessage[]
   purposeCampaigns OutreachPurposeCampaign[]
   defaultGroups OutreachDefaultGroup[]
   memberships ZoomContactMembership[]
@@ -1524,4 +1525,28 @@ model OutreachPurposeCampaign {
   binding ZoomResourceBinding? @relation(fields: [siteKey, bindingId], references: [ownerSiteKey, id], onDelete: Restrict)
   @@unique([siteKey, mode, purpose])
   @@map("outreach_purpose_campaigns")
+}
+
+
+model OutreachImportedAudioMessage {
+  id String @id @default(cuid())
+  siteKey String
+  bindingId String
+  assetItemId String
+  name String
+  languageCode String
+  voiceId String?
+  bodyState String @default("UNAVAILABLE")
+  observedDigest String
+  sourceModifiedAt DateTime? @db.Timestamptz(3)
+  version Int @default(1)
+  createdBy String
+  updatedBy String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+  binding ZoomResourceBinding @relation(fields: [siteKey, bindingId], references: [ownerSiteKey, id], onDelete: Restrict)
+  @@unique([bindingId, assetItemId])
+  @@unique([siteKey, id])
+  @@index([siteKey, updatedAt, id])
+  @@map("outreach_imported_audio_messages")
 }

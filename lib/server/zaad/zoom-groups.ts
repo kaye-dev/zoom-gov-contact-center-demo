@@ -52,7 +52,10 @@ export async function zoomGroupMembers(db: PrismaClient, scope: OutreachScope, i
     const syncStatus = mapping.syncState === "SYNCING" ? "UNKNOWN" : !contact ? "UNKNOWN" : matches && mapping.observedDigest === digest(contact) && mapping.lastSyncedVersion === source.version ? "SYNCED" : mapping.syncState === "FAILED" ? "FAILED" : "DIFFERENCE";
     items.push({ id: mapping.zoomContactId, displayName: source.name, phones: [{ number: source.phone }], emails: contact?.emails ?? [], observedDigest: contact ? digest(contact) : mapping.observedDigest, mapping: { id: mapping.id, version: mapping.version, personOrigin: mapping.personOrigin, personId: mapping.personId, syncState: mapping.syncState }, source: "SITE", syncStatus, remotePresent: Boolean(contact), noticeConsent: "UNVERIFIED" });
   }
-  for (const contact of contacts) if (!linked.has(contact.id)) items.push({ ...contact, observedDigest: digest(contact), mapping: null, source: "Zoom", syncStatus: "REGISTERED", remotePresent: true, noticeConsent: "UNVERIFIED" });
+  for (const contact of contacts) if (!linked.has(contact.id)) {
+    const unlinked = mappings.find(mapping => mapping.zoomContactId === contact.id && !mapping.personId && !mapping.personOrigin);
+    items.push({ ...contact, observedDigest: digest(contact), mapping: unlinked ? { id: unlinked.id, version: unlinked.version, personOrigin: null, personId: null, syncState: unlinked.syncState } : null, source: "Zoom", syncStatus: "REGISTERED", remotePresent: true, noticeConsent: "UNVERIFIED" });
+  }
   const mutationBlock = includeMutationBlock ? await groupMutationBlock(client, id) : undefined;
   const summary = providerState === "READY" ? { total: items.length, unsynced: items.filter(i => !["SYNCED", "REGISTERED"].includes(i.syncStatus)).length, synced: items.filter(i => i.syncStatus === "SYNCED").length, zoomOnly: items.filter(i => i.syncStatus === "REGISTERED").length } : { total: null, unsynced: null, synced: null, zoomOnly: null };
   return { tenantKey: scope.siteKey, group: { ...group, departmentKey: binding.departmentKey, version: binding.version, mutationBlock }, items, summary, providerState, total: items.length, nextCursor: null, observedAt: new Date().toISOString() };

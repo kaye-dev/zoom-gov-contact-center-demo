@@ -451,6 +451,10 @@ test("reviewed migration manifest exactly classifies the current SHA-verified ch
         name: "20260910140000_outreach_purpose_campaigns",
         classification: "expand-compatible",
       },
+      {
+        name: "20260911010000_outreach_imported_audio_messages",
+        classification: "expand-compatible",
+      },
     ],
   );
 });

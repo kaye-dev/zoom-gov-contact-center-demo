@@ -1,4 +1,6 @@
 "use client";
+import { outreachTableFrame } from "./outreach-table-layout";
+import { handleOutreachRowClick } from "./outreach-row-navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useI18n } from "@/app/i18n/LanguageProvider";
 import { ModalDialog } from "@/app/components/admin/ModalDialog";
@@ -10,11 +12,11 @@ import { MUNICIPAL_PURPOSES, purposeTopic } from "@/lib/zaad/municipal/contracts
 import type { PurposeBinding, PurposeCandidate, PurposeCandidates, PurposeMode } from "@/lib/zaad/purpose-campaigns";
 import { loadPurposeCampaignCandidates } from "./outreach-purpose-client";
 import { outreachMutation, outreachRequest, OutreachApiError } from "./outreach-client";
-import { OutreachFailure, OutreachLoading, type OutreachPanelProps } from "./OutreachView";
+import { OutreachFailure, type OutreachPanelProps } from "./OutreachView";
 
 type BindingList = { tenantKey: string; accountId: string; rows: PurposeBinding[] };
-type Props = OutreachPanelProps & { mode: PurposeMode; children?: ReactNode | ((assigned: ReadonlySet<string>) => ReactNode); onSaved?: () => void; openCampaign?: (id: string) => void };
-export function OutreachPurposeBindings({ mode, children, onSaved, openCampaign, ...props }: Props) {
+type Props = OutreachPanelProps & { mode: PurposeMode; loading?: boolean; children?: ReactNode | ((assigned: ReadonlySet<string>) => ReactNode); onSaved?: () => void; openCampaign?: (id: string) => void };
+export function OutreachPurposeBindings({ mode, children, loading = false, onSaved, openCampaign, ...props }: Props) {
   const { t } = useI18n(), d = t.outreachCommon, c = d.purposeCampaigns, z = t.admin.zaad;
   const [rows, setRows] = useState<PurposeBinding[] | null>(null), [target, setTarget] = useState<PurposeBinding | null>(null), [notice, setNotice] = useState("");
   const [failed, setFailed] = useState(false), [reload, setReload] = useState(0);
@@ -27,15 +29,17 @@ export function OutreachPurposeBindings({ mode, children, onSaved, openCampaign,
   useEffect(() => { if (notice) noticeRef.current?.focus(); }, [notice]);
   const purposes = mode === "regular" ? MUNICIPAL_PURPOSES : ["FRAUD_ALERT"] as const;
   if (props.tenant !== "lg") return null;
-  if (failed) return <OutreachFailure retry={() => { setFailed(false); setReload(value => value + 1); }} />;
-  if (!rows) return <OutreachLoading />;
-  const assigned = new Set(rows.filter(row => row.mode === "regular" && row.campaignId).map(row => row.campaignId!));
+
+  const assigned = new Set((rows ?? []).filter(row => row.mode === "regular" && row.campaignId).map(row => row.campaignId!));
   return <section className="space-y-3" aria-label={c.label}>
+    {failed && <OutreachFailure retry={() => { setFailed(false); setRows(null); setReload(value => value + 1); }} />}
     {notice && <p ref={noticeRef} tabIndex={-1} role="status" className="text-sm">{notice}</p>}
-    <div className="overflow-x-auto rounded-lg border border-line"><table className="w-full min-w-[720px] text-left text-sm"><thead className="border-b border-line bg-surface-hover"><tr>{(mode === "regular" ? [d.groupName, z.campaigns.status, d.tabLabels["contact-lists"], d.campaignSync.type, z.residents.actions] : [d.groupName, d.dispatchUi.createdAt, z.oneTime.uniqueRecipients, d.dispatchUi.status, z.residents.actions]).map(label => <th key={label} className="px-4 py-3">{label}</th>)}</tr></thead><tbody className="divide-y divide-line">{purposes.map(purpose => {
-      const row = rows.find(item => item.mode === mode && item.purpose === purpose); if (!row) return null;
+    <div className={outreachTableFrame}><table aria-busy={loading || (!rows && !failed)} className="w-full min-w-[720px] text-left text-sm"><thead className="bg-surface-hover"><tr>{(mode === "regular" ? [d.groupName, z.campaigns.status, d.tabLabels["contact-lists"], d.campaignSync.type, z.residents.actions] : [d.groupName, d.dispatchUi.createdAt, z.oneTime.uniqueRecipients, d.dispatchUi.status, z.residents.actions]).map(label => <th key={label} className="px-4 py-3">{label}</th>)}</tr></thead><tbody className="divide-y divide-line [&>tr:first-child]:border-t [&>tr:first-child]:border-line">{purposes.map(purpose => {
+      const row = rows?.find(item => item.mode === mode && item.purpose === purpose) ?? { mode, purpose, version: 0, campaignId: null, campaignName: null, accountId: null, contactListName: null, status: null, available: false };
+      const pending = loading || (!rows && !failed);
+      const navigable = mode === "regular" && !pending && !failed && row.available && Boolean(row.campaignId) && Boolean(openCampaign);
       const name = t.municipalOutreach.topics[purposeTopic[purpose]];
-      return <tr key={purpose}><td className="px-4 py-3 font-semibold"><span className="inline-flex items-center gap-2">{name}{mode === "one-time" && <AdminFieldHelp id="outreach-fraud-help" label={name} description={d.dispatchUi.historyHelp} portal />}</span>{row.campaignId && <p className="mt-1 text-xs font-normal text-fg-muted">{openCampaign && row.available ? <button className="cursor-pointer text-left hover:text-accent" onClick={() => openCampaign(row.campaignId!)}>{row.campaignName} · {row.campaignId}</button> : <>{row.campaignName ?? d.unknown} · {row.campaignId}</>}</p>}</td>{mode === "one-time" && <><td className="px-4 py-3">—</td><td className="px-4 py-3">—</td></>}<td className="px-4 py-3"><span className="inline-flex whitespace-nowrap rounded-full bg-surface-hover px-2 py-1">{!row.available ? d.unknown : row.campaignId ? c.linked : c.unlinked}</span></td>{mode === "regular" && <><td className="px-4 py-3">{row.contactListName ?? "—"}</td><td className="px-4 py-3">{row.campaignId && row.available ? "Agentless Dialer" : "—"}</td></>}<td className="px-4 py-3"><button className="cursor-pointer whitespace-nowrap text-accent disabled:cursor-not-allowed disabled:opacity-50" disabled={!props.fullAccess || !props.permissions.update} onClick={() => { setNotice(""); setTarget(row); }}>{row.campaignId ? d.defaultGroups.update : c.link}</button></td></tr>;
+      return <tr key={purpose} aria-busy={pending} className={navigable ? "cursor-pointer hover:bg-surface-hover/40" : undefined} onClick={event => handleOutreachRowClick(event, () => openCampaign?.(row.campaignId!), !navigable)}><td className="px-4 py-3 font-semibold"><span className="inline-flex items-center gap-2">{name}{mode === "one-time" && <AdminFieldHelp id="outreach-fraud-help" label={name} description={d.dispatchUi.historyHelp} portal />}</span>{row.campaignId && <p className="mt-1 text-xs font-normal text-fg-muted">{openCampaign && row.available ? <button className="cursor-pointer text-left hover:text-accent" onClick={() => openCampaign(row.campaignId!)}>{row.campaignName} · {row.campaignId}</button> : <>{row.campaignName ?? d.unknown} · {row.campaignId}</>}</p>}</td>{mode === "one-time" && <><td className="px-4 py-3">—</td><td className="px-4 py-3">—</td></>}<td className="px-4 py-3"><span className="inline-flex whitespace-nowrap rounded-full bg-surface-hover px-2 py-1">{pending ? z.common.loading : !row.available ? d.unknown : row.campaignId ? c.linked : c.unlinked}</span></td>{mode === "regular" && <><td className="px-4 py-3">{row.contactListName ?? "—"}</td><td className="px-4 py-3">{row.campaignId && row.available ? "Agentless Dialer" : "—"}</td></>}<td className="px-4 py-3"><button className="cursor-pointer whitespace-nowrap text-accent disabled:cursor-not-allowed disabled:opacity-50" disabled={pending || failed || !props.fullAccess || !props.permissions.update} onClick={() => { setNotice(""); setTarget(row); }}>{row.campaignId ? d.defaultGroups.update : c.link}</button></td></tr>;
     })}{typeof children === "function" ? children(assigned) : children}</tbody></table></div>
     {target && <PurposeBindingDialog key={`${mode}:${target.purpose}`} mode={mode} row={target} name={t.municipalOutreach.topics[purposeTopic[target.purpose]]} {...props} close={() => setTarget(null)} saved={result => { setRows(result.rows); setTarget(null); setNotice(c.saved); onSaved?.(); }} />}
   </section>;

@@ -122,20 +122,21 @@ export function resolveOutreachDefaultRedirect(url: URL, method: string): URL | 
 
 export function isOutreachDetailPage(view: string, query: URLSearchParams): boolean {
   const state = query.get("state") ?? "";
-  if (query.get("section") === "contacts") return view === "contact-lists" && !state;
+  if (query.get("section") === "contacts") return view === "contact-lists" && ["", "csv-upload", "csv-preview", "csv-error", "registration-settings"].includes(state);
   if (query.get("workflow") || query.get("step") === "cases") return false;
   const states: Record<string, readonly string[]> = {
     "contact-lists": ["default-group-detail", "group-detail", "group-edit", "group-create", "group-sync"],
     campaigns: ["campaign-detail", "campaign-sync"],
     "one-time": ["dispatch-create", "dispatch-history", "dispatch-edit", "dispatch-retry", "dispatch-confirm"],
-    messages: ["message-create", "message-edit"],
+    messages: ["message-create", "message-edit", "message-sync", "message-audio-detail"],
   };
   return Boolean(states[view]?.includes(state) && (state.endsWith("create") || state.endsWith("sync") || query.get("detail")));
 }
-export function outreachParentHref(tenant: TenantKey, query: URLSearchParams): string {
+export function outreachParentHref(tenant: TenantKey, query: URLSearchParams, parent: "section" | "contacts" = "section"): string {
   const params = new URLSearchParams(query);
-  for (const key of ["state", "detail", "query", "search", "cursor", "section", "origin", "page", "trail"]) params.delete(key);
+  for (const key of ["state", "detail", "query", "search", "cursor", "section", "origin", "page", "trail", "importJob"]) params.delete(key);
   params.set("tenant", tenant);
   params.set("view", resolveOutreachView(tenant, query.get("view"), query.get("workflow")));
+  if (parent === "contacts") params.set("section", "contacts");
   return `/admin/zaad?${params}`;
 }

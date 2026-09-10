@@ -1,4 +1,3 @@
-import { listCallerNotices, saveCallerNotice } from "./caller-notices";
 import type { Hono } from "hono";
 import type { ZaadApiEnvironment } from "../api-routes";
 import { withOutreach, outreachError, outreachJson, boundedBody } from "../outreach-api";
@@ -15,8 +14,7 @@ export function registerMunicipalRoutes(app: Hono<ZaadApiEnvironment>) {
   app.get("/municipal-notification-options", async c => {
     c.header("Cache-Control", "no-store");
     if (c.get("tenantKey") !== "lg") return c.notFound();
-    const notice = await c.get("prisma").municipalCallerNotice.findFirst({ where: { siteKey: "lg", publishedAt: { lte: new Date() } }, select: { callerPhone: true, officeUrl: true, departmentKey: true, publishedAt: true } });
-    return c.json({ districts: MUNICIPAL_DISTRICTS, topics: MUNICIPAL_TOPICS, consentVersion: MUNICIPAL_CONSENT_VERSION, callerNotice: notice });
+    return c.json({ districts: MUNICIPAL_DISTRICTS, topics: MUNICIPAL_TOPICS, consentVersion: MUNICIPAL_CONSENT_VERSION });
   });
   app.post("/municipal-notification-registrations", async c => {
     c.header("Cache-Control", "no-store");
@@ -25,8 +23,6 @@ export function registerMunicipalRoutes(app: Hono<ZaadApiEnvironment>) {
       return c.json({ status: "accepted" }, 202);
     } catch (error) { return outreachError(c, error); }
   });
-  app.get("/admin/zaad/municipal/caller-notices", c => withOutreach(c, "VIEW", (db, scope) => listCallerNotices(db, scope)));
-  app.put("/admin/zaad/municipal/caller-notices", c => withOutreach(c, "UPDATE", async (db, scope) => saveCallerNotice(db, scope, await outreachJson(c))));
   app.get("/admin/zaad/municipal/contacts/:id", c => withOutreach(c, "VIEW", (db, scope) => getContact(db, scope, "MUNICIPAL_CONTACT", c.req.param("id"))));
   app.patch("/admin/zaad/municipal/contacts/:id", c => withOutreach(c, "UPDATE", async (db, scope) => updateContact(db, scope, "MUNICIPAL_CONTACT", c.req.param("id"), await outreachJson(c))));
   app.get("/admin/zaad/municipal/assignees", c => withOutreach(c, "VIEW", (db, scope) => listMunicipalAssignees(db, scope)));

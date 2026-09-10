@@ -759,7 +759,7 @@ test("contact group counts and detail chrome keep localized labels and saved-ID 
   const groups = source("OutreachGroups"), detail = source("OutreachDefaultGroup"), view = source("OutreachView");
   assert.ok(groups.includes('row.contactCount ?? "—"'));
   assert.ok(groups.includes('row.contactListId ? d.defaultGroups.update : d.defaultGroups.configure'));
-  assert.ok(detail.includes('data.group.contactListId ? d.update : d.configure'));
+  assert.ok(detail.includes('data.group.contactListId ? t.outreachCommon.defaultGroups.updateShort : d.configure'));
   for (const text of [groups, detail]) {
     assert.ok(text.includes('gap-x-4 gap-y-2'));
     assert.ok(text.includes('break-all text-sm text-fg-muted'));
@@ -787,4 +787,28 @@ test("default detail keeps search and sync semantics with a portal help and cent
   assert.ok(detail.includes('canSync && needsLink ? <TableRowActions'));
   assert.ok(detail.includes('text-center"><div className="flex justify-center"'));
   assert.ok(detail.includes('ref={noticeRef} tabIndex={-1} role="status"'));
+});
+
+test("CSV-AUTO-01: preview is capped at five rows, but submission and errors cover the entire CSV", async () => {
+  const { crmImportSummary } = await import("../lib/zaad/crm-import-view");
+  const preview = { id: "job", departmentKey: "resident-support", previewDigest: "digest", status: "PREVIEW", expiresAt: new Date(Date.now() + 60000).toISOString(), rows: Array.from({ length: 7 }, (_, i) => ({ rowNumber: i + 2, rowKey: `row-${i}`, name: `Person ${i}`, status: "NEW", topicIds: ["elder-watch"] })) };
+  let summary = crmImportSummary(preview, Date.now());
+  assert.equal(summary.shown.length, 5); assert.equal(summary.targets.length, 7); assert.equal(summary.canSubmit, true);
+  preview.rows[5].status = "INVALID"; summary = crmImportSummary(preview, Date.now());
+  assert.equal(summary.canSubmit, false); assert.equal(summary.errors[0].rowNumber, 7);
+  preview.rows.forEach(row => { row.status = "IMPORTED"; }); preview.rows[5].status = "FAILED";
+  summary = crmImportSummary(preview, Date.now());
+  assert.equal(summary.canSubmit, true); assert.deepEqual(summary.targets, ["row-5"]); assert.equal(summary.imported, 6);
+  assert.equal(crmImportSummary(preview, Date.now()+120000).canSubmit, false);
+  assert.equal(crmImportSummary({...preview, rows: preview.rows.slice(0,1)}, Date.now()).shown.length, 1);
+});
+
+test("CONTACT-SUBPAGE-01: CSV child routes retain tenant breadcrumbs while retired settings return to contacts", async () => {
+  const { isOutreachDetailPage, outreachParentHref } = await import("../lib/admin-routing");
+  for (const tenant of ["lg", "univ"] as const) for (const state of ["csv-upload", "csv-preview", "csv-error", "registration-settings"]) {
+    const query = new URLSearchParams({tenant, view: "contact-lists", section: "contacts", state, importJob: "old", cursor: "old"});
+    assert.equal(isOutreachDetailPage("contact-lists", query), true);
+    assert.equal(isOutreachDetailPage("messages", query), false);
+    assert.equal(outreachParentHref(tenant, query, "contacts"), `/admin/zaad?tenant=${tenant}&view=contact-lists&section=contacts`);
+  }
 });

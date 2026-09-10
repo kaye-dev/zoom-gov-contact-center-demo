@@ -18,12 +18,17 @@ export function outreachError(c: OutreachContext, error: unknown) {
   if (error instanceof ZaadZoomError) return c.json({ code: error.code, error: error.code, tenantKey: c.get("tenantKey"), retryable: !error.resultUnknown }, error.httpStatus as 400 | 401 | 403 | 404 | 409 | 429 | 502 | 503);
   return c.json({ code: "SERVICE_UNAVAILABLE", error: "SERVICE_UNAVAILABLE", retryable: true }, 503);
 }
-export async function withOutreach(c: OutreachContext, action: AdminAccessAction, fn: (db: PrismaClient, scope: OutreachScope) => Promise<unknown>, status: 200 | 202 = 200) {
+export async function withOutreach(c: OutreachContext, action: AdminAccessAction | readonly AdminAccessAction[], fn: (db: PrismaClient, scope: OutreachScope) => Promise<unknown>, status: 200 | 202 = 200) {
   try {
     const tenant = parseAdminTenant(c.req.queries("tenant") ?? []);
     if (!tenant.ok) throw new OutreachContractError(tenant.code);
-    const db = c.get("prisma"), auth = await authorizeAdminApi(c.get("auth"), db, c.req.raw.headers, "zaad", action);
+    const db = c.get("prisma"), actions = typeof action === "string" ? [action] : action;
+    const auth = await authorizeAdminApi(c.get("auth"), db, c.req.raw.headers, "zaad", actions[0]);
     if (!auth.ok) return c.json({ code: auth.error, error: auth.error }, auth.status);
+    for (const extra of actions.slice(1)) {
+      const additional = await authorizeAdminApi(c.get("auth"), db, c.req.raw.headers, "zaad", extra);
+      if (!additional.ok) return c.json({ code: additional.error, error: additional.error }, additional.status);
+    }
     const scope = await resolveOutreachScope(db, auth.actor, tenant.tenantKey);
     const result = await fn(db, scope);
     return c.json(result as Record<string, unknown>, status);
