@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useReducer, useRef } from "react";
+import { useEffect, useLayoutEffect, useReducer, useRef, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { InfoIcon } from "@/app/components/svg/InfoIcon";
 import {
   helpReducer,
@@ -7,25 +8,41 @@ import {
   isHelpOpen,
 } from "./AdminPageTitleHelp";
 
+const subscribeToHydration = () => () => {};
+const clientSnapshot = () => true;
+const serverSnapshot = () => false;
+
+export function fieldHelpPosition(anchor: { right: number; top: number; bottom: number }, width: number, height: number, viewport: { width: number; height: number }) {
+  return {
+    left: Math.max(20, Math.min(anchor.right - width, viewport.width - width - 20)),
+    top: anchor.bottom + 8 + height <= viewport.height - 8 ? anchor.bottom + 8 : Math.max(8, anchor.top - height - 8),
+  };
+}
+
 export function AdminFieldHelp({
   id,
   description,
   label,
   fieldLabel,
   defaultOpen = false,
+  portal = false,
 }: {
   id: string;
   description: string;
   label: string;
   fieldLabel?: { htmlFor: string; text: string };
   defaultOpen?: boolean;
+  portal?: boolean;
 }) {
   const group = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null), tooltip = useRef<HTMLDivElement>(null);
+  const hydrated = useSyncExternalStore(subscribeToHydration, clientSnapshot, serverSnapshot);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
   const [state, dispatch] = useReducer(helpReducer, { ...initialHelpState, pinned: defaultOpen });
   const open = isHelpOpen(state);
+  const floating = portal && hydrated && open;
   const clearClose = () => {
     clearTimeout(closeTimer.current);
   };
@@ -44,7 +61,8 @@ export function AdminFieldHelp({
     const outside = (event: Event) => {
       if (
         event.target instanceof Node &&
-        !group.current?.contains(event.target)
+        !group.current?.contains(event.target) &&
+        !tooltip.current?.contains(event.target)
       )
         dispatch("dismiss");
     };
@@ -63,6 +81,28 @@ export function AdminFieldHelp({
       document.removeEventListener("keydown", escape);
     };
   }, [open]);
+  useLayoutEffect(() => {
+    if (!floating || !trigger.current || !tooltip.current) return;
+    const position = fieldHelpPosition(trigger.current.getBoundingClientRect(), tooltip.current.offsetWidth, tooltip.current.offsetHeight, { width: window.innerWidth, height: window.innerHeight });
+    tooltip.current.style.left = `${position.left}px`;
+    tooltip.current.style.top = `${position.top}px`;
+    const dismiss = () => { clearTimeout(closeTimer.current); dispatch("dismiss"); };
+    window.addEventListener("scroll", dismiss, true);
+    window.addEventListener("resize", dismiss);
+    return () => { window.removeEventListener("scroll", dismiss, true); window.removeEventListener("resize", dismiss); };
+  }, [floating]);
+  const descriptionElement = <div
+    ref={tooltip}
+    id={id}
+    role="tooltip"
+    onPointerEnter={(event) => enter(event.pointerType)}
+    onPointerLeave={leave}
+    className={floating
+      ? "fixed z-50 w-80 max-w-[calc(100vw-2.5rem)] max-h-[calc(100dvh-1rem)] overflow-y-auto rounded-lg bg-fg px-3 py-2 text-sm font-normal leading-6 text-surface shadow-lg"
+      : open && !portal
+        ? "absolute left-0 md:left-auto md:right-0 top-full z-50 mt-2 w-80 max-w-[calc(100vw-2.5rem)] rounded-lg bg-fg px-3 py-2 text-sm leading-6 text-surface shadow-lg"
+        : "sr-only"}
+  >{description}</div>;
   return (
     <div
       ref={group}
@@ -70,6 +110,7 @@ export function AdminFieldHelp({
     >
       {fieldLabel && <label htmlFor={fieldLabel.htmlFor} className="block text-sm font-semibold">{fieldLabel.text}</label>}
       <button
+        ref={trigger}
         data-field-help-trigger
         type="button"
         aria-label={label}
@@ -84,19 +125,7 @@ export function AdminFieldHelp({
       >
         <InfoIcon className="h-5 w-5" />
       </button>
-      <div
-        id={id}
-        role="tooltip"
-        onPointerEnter={(event) => enter(event.pointerType)}
-        onPointerLeave={leave}
-        className={
-          open
-            ? "absolute left-0 md:left-auto md:right-0 top-full z-50 mt-2 w-80 max-w-[calc(100vw-2.5rem)] rounded-lg bg-fg px-3 py-2 text-sm leading-6 text-surface shadow-lg"
-            : "sr-only"
-        }
-      >
-        {description}
-      </div>
+      {floating ? createPortal(descriptionElement, document.body) : descriptionElement}
     </div>
   );
 }

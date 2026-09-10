@@ -1,3 +1,6 @@
+import { startRegularGroupSync } from "./regular-group-sync";
+import { bindDefaultGroup, defaultGroupCandidates, listOutreachGroups } from "./default-groups";
+import { getDefaultGroupDetail, startRegistrationGroupSync, getRegistrationSyncOperation, advanceRegistrationSync, linkRegistrationMember } from "./registration-group-sync";
 import { groupSyncCandidates, syncContactLists, groupSyncOperation } from "./group-sync";
 import { updateZaadResident, deleteZaadResident } from "./residents";
 import { listResourceBindings, previewResourceBinding, saveResourceBinding } from "./resource-bindings";
@@ -11,7 +14,7 @@ import { withOutreach, outreachJson, requireSameOrigin, boundedBody } from "./ou
 import { deleteContact, createContact, getContact, listContacts, updateContact } from "./contacts";
 import { applyCrmImport, getCrmImport, previewCrmImport } from "./crm-imports";
 import { getRegularCampaign, pauseRegularCampaign, bindCampaigns, campaignSyncCandidates, campaignSyncOperation, listRegularCampaigns } from "./campaign-bindings";
-import { deleteZoomGroup, deleteZoomMember, linkZoomMember, listZoomGroups, saveZoomGroup, saveZoomMember, zoomGroupMembers } from "./zoom-groups";
+import { deleteZoomGroup, deleteZoomMember, linkZoomMember, saveZoomGroup, saveZoomMember, zoomGroupMembers } from "./zoom-groups";
 import { getOutreachMessage, listOutreachMessages, requireMessageAudio, retireOutreachMessage, saveOutreachMessage } from "./message-revisions";
 import { getZaadConnection } from "./resources";
 import { audioCapabilities } from "@/lib/zaad/message-contracts";
@@ -73,11 +76,22 @@ export function registerOutreachRoutes(app: Hono<ZaadApiEnvironment>) {
     const body = record(await outreachJson(c));
     return previewZoomCrmImport(db, scope, c.req.param("id"), { ...body, contactIds: [c.req.param("contactId")] });
   }));
+  app.get(`${root}/default-groups/:id/candidates`, c => {
+    c.header("Cache-Control", "no-store");
+    return withOutreach(c, "UPDATE", (db, scope) => defaultGroupCandidates(db, scope, c.req.param("id"), c.req.query("cursor")));
+  });
+  app.get(`${root}/default-groups/:id`, c => withOutreach(c, "VIEW", (db, scope) => getDefaultGroupDetail(db, scope, c.req.param("id"), { cursor: c.req.query("cursor"), query: c.req.query("query") })));
+  app.put(`${root}/default-groups/:id`, c => withOutreach(c, "UPDATE", async (db, scope) => bindDefaultGroup(db, scope, c.req.param("id"), await outreachJson(c))));
+  app.post(`${root}/default-groups/:id/sync`, c => withOutreach(c, "UPDATE", async (db, scope) => startRegistrationGroupSync(db, scope, c.req.param("id"), await outreachJson(c)), 202));
+  app.get(`${root}/sync-operations/:operationId`, c => withOutreach(c, "UPDATE", (db, scope) => getRegistrationSyncOperation(db, scope, c.req.param("operationId"))));
+  app.post(`${root}/sync-operations/:operationId/advance`, c => withOutreach(c, "UPDATE", async (db, scope) => { await outreachJson(c); return advanceRegistrationSync(db, scope, c.req.param("operationId")); }));
+  app.post(`${root}/default-groups/:id/members/:memberId/link`, c => withOutreach(c, "UPDATE", async (db, scope) => linkRegistrationMember(db, scope, c.req.param("id"), c.req.param("memberId"), await outreachJson(c))));
   app.get(`${root}/contact-lists/sync-candidates`, c => withOutreach(c, "UPDATE", (db, scope) => groupSyncCandidates(db, scope, undefined, c.req.query("cursor"))));
   app.post(`${root}/contact-lists/sync-bindings`, c => withOutreach(c, "UPDATE", async (db, scope) => syncContactLists(db, scope, await outreachJson(c))));
   app.get(`${root}/contact-lists/sync-operations/:operationKey`, c => withOutreach(c, "UPDATE", (db, scope) => groupSyncOperation(db, scope, c.req.param("operationKey"))));
-  app.get(`${root}/contact-lists`, c => withOutreach(c, "VIEW", (db, scope) => listZoomGroups(db, scope)));
+  app.get(`${root}/contact-lists`, c => withOutreach(c, "VIEW", (db, scope) => listOutreachGroups(db, scope)));
   app.post(`${root}/contact-lists`, c => withOutreach(c, "CREATE", async (db, scope) => saveZoomGroup(db, scope, await outreachJson(c))));
+  app.post(`${root}/contact-lists/:id/sync`, c => withOutreach(c, "UPDATE", async (db, scope) => startRegularGroupSync(db, scope, c.req.param("id"), await outreachJson(c)), 202));
   app.get(`${root}/contact-lists/:id`, c => withOutreach(c, "VIEW", (db, scope) => zoomGroupMembers(db, scope, c.req.param("id"), undefined, true)));
   app.patch(`${root}/contact-lists/:id`, c => withOutreach(c, "UPDATE", async (db, scope) => saveZoomGroup(db, scope, await outreachJson(c), c.req.param("id"))));
   app.delete(`${root}/contact-lists/:id`, c => withOutreach(c, "DELETE", async (db, scope) => deleteZoomGroup(db, scope, c.req.param("id"), await outreachJson(c))));

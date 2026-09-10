@@ -17,7 +17,7 @@ test("group sync includes unassigned and other-site lists, disables own addition
     { zoomId: "detached", ownerSiteKey: "lg", purpose: "REGULAR", dispatchId: null, tombstone: true },
     { zoomId: "dispatch", ownerSiteKey: "univ", purpose: "ONE_TIME", dispatchId: "fixture", tombstone: false },
   ];
-  const db = { zoomResourceBinding: { findMany: async () => bindings } } as unknown as PrismaClient;
+  const db = { outreachDefaultGroup: { findMany: async () => [] }, zoomResourceBinding: { findMany: async () => bindings } } as unknown as PrismaClient;
   const calls: unknown[] = [];
   const reader = { accountId: "fixture-account", listContactLists: async (input: unknown) => { calls.push(input); return { lists: ["new", "own", "shared", "detached", "dispatch", "new"].map(list), nextPageToken: "next" }; } } as ContactListReader;
   const result = await groupSyncCandidates(db, scope, reader, "previous");

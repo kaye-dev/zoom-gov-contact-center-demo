@@ -1,14 +1,12 @@
 "use client";
-import { AdminTenantRouteSelect } from "@/app/components/admin/AdminTenantRouteSelect";
 import { adminFetch as fetch } from "@/lib/admin-fetch";
 
 import { settingsSectionClassName, settingsInputFocusClassName } from "@/app/components/admin/settings-form-styles";
-import { SettingsSaveScope } from "@/app/components/admin/SettingsSaveScope";
 import { AdminPageTitleHelp } from "@/app/components/admin/AdminPageTitleHelp";
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { parseAdminTenant, safeOutreachReturnPath } from "@/lib/admin-routing";
+import { safeOutreachReturnPath } from "@/lib/admin-routing";
 import { useState, type FormEvent } from "react";
 
 import { PasswordInput } from "@/app/components/PasswordInput";
@@ -58,8 +56,7 @@ export function DeveloperApiSettingsForm({ initialSettings, canEdit }: Props) {
   const { t } = useI18n();
   const router = useRouter();
   const query = useSearchParams();
-  const selectedTenant = parseAdminTenant(query.getAll("tenant"));
-  const returnTo = selectedTenant.ok ? safeOutreachReturnPath(query.get("returnTo"), selectedTenant.tenantKey) : null;
+  const returnTo = safeOutreachReturnPath(query.get("returnTo"));
   const [activeSection, setActiveSection] = useState<Section>("server-to-server-oauth");
   const [savedSettings, setSavedSettings] = useState(initialSettings);
   const [settings, setSettings] = useState(initialSettings);
@@ -256,7 +253,7 @@ export function DeveloperApiSettingsForm({ initialSettings, canEdit }: Props) {
             description={copy.description}
             label={t.admin.pageDescriptionLabel.replace("{title}", copy.title)}
           />
-          <AdminTenantRouteSelect dirty={hasUnsavedChanges} saving={isBusy} />
+          <p className="text-sm text-fg-muted">{t.outreachCommon.allIndustries}</p>
         </div>
         <DeveloperApiSectionTabs
           activeSection={activeSection}
@@ -466,7 +463,7 @@ function SaveButton({
 }) {
   return (
     <>
-    <SettingsSaveScope scope="section" id={`${id}-scope`} />
+    <GlobalSaveScope id={`${id}-scope`} />
     <button
       aria-describedby={`${id}-scope`}
       id={id}
@@ -479,3 +476,5 @@ function SaveButton({
     </>
   );
 }
+
+function GlobalSaveScope({ id }: { id: string }) { const { t } = useI18n(); return <p id={id} className="text-sm text-fg-muted">{t.outreachCommon.allIndustries}</p>; }

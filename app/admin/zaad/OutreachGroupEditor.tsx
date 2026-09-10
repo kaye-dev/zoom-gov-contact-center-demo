@@ -8,7 +8,7 @@ import { outreachMutation } from "./outreach-client";
 import type { OutreachPanelProps } from "./OutreachView";
 import { registrationInputClass as input, outreachPrimary as primary, outreachSecondary as secondary } from "@/app/notifications/register/StudentNotificationRegistration";
 
-export type OutreachGroup = { id: string; name: string; description: string; departmentKey: string | null; version: number; revision: string; updatedAt?: string | null; contactCount: number | null; mutationBlock?: "GROUP_IN_USE" | "CAMPAIGN_REFERENCE_UNKNOWN" | null };
+export type OutreachGroup = { kind?: "DEFAULT" | "REGULAR"; topicKey?: string; contactListId?: string | null; bindingState?: string; id: string; name: string; description: string; departmentKey: string | null; version: number; revision: string; updatedAt?: string | null; contactCount: number | null; mutationBlock?: "GROUP_IN_USE" | "CAMPAIGN_REFERENCE_UNKNOWN" | null };
 export function OutreachGroupEditor({ group, close, saved, tenant, departments, permissions, setDirty, setSaving }: OutreachPanelProps & { group: OutreachGroup | null; close: () => void; saved: () => void }) {
   const { t } = useI18n(), z = t.admin.zaad, d = t.outreachCommon;
   const [draft, setDraft] = useState(() => group ?? { id: "", name: "", description: "", departmentKey: departments[0], version: 0, revision: "", contactCount: 0 });

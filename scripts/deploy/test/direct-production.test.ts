@@ -443,6 +443,10 @@ test("reviewed migration manifest exactly classifies the current SHA-verified ch
         name: "20260909130000_shared_contact_list_bindings",
         classification: "destructive-reviewed",
       },
+      {
+        name: "20260910080000_global_api_default_groups",
+        classification: "destructive-reviewed",
+      },
     ],
   );
 });

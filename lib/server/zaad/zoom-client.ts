@@ -202,8 +202,8 @@ export class ZaadZoomClient {
       writeGates?: ZaadZoomWriteGates;
     } = {},
   ) {
-    const row = await prisma.siteDeveloperApiSetting.findUnique({
-      where: { siteKey: tenantKey },
+    const row = await prisma.globalDeveloperApiSetting.findUnique({
+      where: { id: "global" },
       select: {
         accountId: true,
         clientId: true,
@@ -323,12 +323,18 @@ export class ZaadZoomClient {
         `/contact_center/outbound_campaign/contact_lists/${encodeId(contactListId)}/contacts?${query.toString()}`,
       );
       const root = asRecord(payload);
-      for (const entry of requiredArray(root, ["contacts"])) {
+      const candidate = parseNextPageToken(root.next_page_token);
+      // Zoom omits contacts on empty terminal pages (HTTP 200, page_size only).
+      // Accept that pagination envelope, but keep malformed/error bodies invalid.
+      const omittedEmptyPage = root.contacts === undefined && candidate === null
+        && Number.isInteger(root.page_size) && Number(root.page_size) >= 1 && Number(root.page_size) <= 100
+        && (root.total_records === undefined || root.total_records === 0)
+        && Object.keys(root).every(key => ["page_size", "total_records", "next_page_token"].includes(key));
+      for (const entry of omittedEmptyPage ? [] : requiredArray(root, ["contacts"])) {
         const parsed = parseContact(asRecord(entry));
         if (!parsed) throw new ZaadZoomError(ZAAD_ERROR_CODES.zoomInvalidResponse, 502);
         contacts.push(parsed);
       }
-      const candidate = parseNextPageToken(root.next_page_token);
       if (!candidate) return contacts;
       if (seenNextPageTokens.has(candidate)) {
         throw new ZaadZoomError(ZAAD_ERROR_CODES.zoomInvalidResponse, 502);
@@ -1003,9 +1009,9 @@ async function boundedRetryDelay(retryAfter: string | null) {
 
 function parseContactList(value: Record<string, unknown>, assumedType?: "contact"): ZoomContactListDto | null {
   const id = stringAt(value, ["contact_list_id", "id"]);
-  const name = stringAt(value, ["contact_list_name", "name"]);
+  const name = stringAt(value, ["contact_list_name", "name"]) ?? "";
   const type = stringAt(value, ["contact_list_type", "type"]) ?? assumedType;
-  if (!id || !name || type !== "contact") return null;
+  if (!id || type !== "contact") return null;
   const result = {
     id,
     name,

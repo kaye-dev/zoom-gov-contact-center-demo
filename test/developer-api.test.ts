@@ -123,7 +123,7 @@ test("Developer API navigation and page use the approved route and sections", ()
   assert.match(form, /id="server-to-server-oauth-feedback"/u);
   assert.match(form, /id="webhook-only-app-feedback"/u);
   assert.doesNotMatch(form, /client-secret-help|secret-token-help/u);
-  assert.match(form, /SettingsSaveScope scope="section"/u);
+  assert.match(form, /GlobalSaveScope/u);
   assert.match(form, /aria-describedby=\{`\$\{id\}-scope`\}/u);
 });
 

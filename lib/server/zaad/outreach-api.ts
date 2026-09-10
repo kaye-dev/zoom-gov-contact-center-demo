@@ -18,7 +18,7 @@ export function outreachError(c: OutreachContext, error: unknown) {
   if (error instanceof ZaadZoomError) return c.json({ code: error.code, error: error.code, tenantKey: c.get("tenantKey"), retryable: !error.resultUnknown }, error.httpStatus as 400 | 401 | 403 | 404 | 409 | 429 | 502 | 503);
   return c.json({ code: "SERVICE_UNAVAILABLE", error: "SERVICE_UNAVAILABLE", retryable: true }, 503);
 }
-export async function withOutreach(c: OutreachContext, action: AdminAccessAction, fn: (db: PrismaClient, scope: OutreachScope) => Promise<unknown>) {
+export async function withOutreach(c: OutreachContext, action: AdminAccessAction, fn: (db: PrismaClient, scope: OutreachScope) => Promise<unknown>, status: 200 | 202 = 200) {
   try {
     const tenant = parseAdminTenant(c.req.queries("tenant") ?? []);
     if (!tenant.ok) throw new OutreachContractError(tenant.code);
@@ -26,7 +26,7 @@ export async function withOutreach(c: OutreachContext, action: AdminAccessAction
     if (!auth.ok) return c.json({ code: auth.error, error: auth.error }, auth.status);
     const scope = await resolveOutreachScope(db, auth.actor, tenant.tenantKey);
     const result = await fn(db, scope);
-    return c.json(result as Record<string, unknown>);
+    return c.json(result as Record<string, unknown>, status);
   } catch (error) { return outreachError(c, error); }
 }
 export async function boundedBody(request: Request, maximum = 65536) {

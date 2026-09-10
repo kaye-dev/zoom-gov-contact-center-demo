@@ -720,6 +720,7 @@ model ZoomResourceBinding {
   tombstone Boolean @default(false)
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  defaultGroups OutreachDefaultGroup[]
   memberships ZoomContactMembership[]
   municipalWorkflows MunicipalWorkflowRevision[] @relation("MunicipalWorkflowFlow")
   municipalAttempts MunicipalCallAttempt[] @relation("MunicipalAttemptFlow")
@@ -1429,4 +1430,85 @@ model OutreachImportCandidate {
   @@unique([siteKey, id])
   @@index([siteKey, departmentKey, id])
   @@map("outreach_import_candidates")
+}
+
+// Shared credentials; legacy site settings remain available for controlled migration/rollback.
+model GlobalDeveloperApiSetting {
+  id String @id @default("global")
+  accountId String
+  clientId String
+  clientSecretEncrypted String?
+  secretTokenEncrypted String?
+  updatedAt DateTime @default(now()) @updatedAt
+  @@map("global_developer_api_settings")
+}
+
+model OutreachDefaultGroup {
+  id String @id
+  siteKey String
+  topicKey String
+  bindingId String? @unique
+  revision Int @default(1)
+  binding ZoomResourceBinding? @relation(fields: [siteKey, bindingId], references: [ownerSiteKey, id], onDelete: Restrict)
+  memberships OutreachRegistrationMembership[]
+  @@unique([siteKey, topicKey])
+  @@unique([siteKey, id])
+  @@map("outreach_default_groups")
+}
+
+model OutreachRegistrationMembership {
+  id String @id @default(cuid())
+  siteKey String
+  defaultGroupId String
+  origin String
+  sourceId String
+  bindingRevision Int @default(0)
+  zoomContactId String?
+  syncStatus String @default("PENDING")
+  desiredDigest String?
+  observedDigest String?
+  version Int @default(1)
+  lastAttemptAt DateTime? @db.Timestamptz(3)
+  lastErrorCode String?
+  retryAfter DateTime? @db.Timestamptz(3)
+  attestation String?
+  reconciledBy String?
+  reconciledAt DateTime? @db.Timestamptz(3)
+  claimToken String?
+  leaseUntil DateTime? @db.Timestamptz(3)
+  group OutreachDefaultGroup @relation(fields: [siteKey, defaultGroupId], references: [siteKey, id], onDelete: Restrict)
+  @@unique([siteKey, defaultGroupId, origin, sourceId])
+  @@unique([siteKey, defaultGroupId, zoomContactId], map: "registration_membership_zoom_contact_key")
+  @@index([siteKey, defaultGroupId, syncStatus])
+  @@map("outreach_registration_memberships")
+}
+
+model OutreachGroupSyncOperation {
+  id String @id @default(cuid())
+  siteKey String
+  actorId String
+  groupId String
+  groupKind String @default("DEFAULT")
+  operationKey String
+  requestDigest String
+  revision Int
+  status String @default("PENDING")
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  items OutreachGroupSyncItem[]
+  @@unique([siteKey, actorId, operationKey])
+  @@map("outreach_group_sync_operations")
+}
+
+model OutreachGroupSyncItem {
+  claimedAt DateTime? @db.Timestamptz(3)
+  id String @id @default(cuid())
+  operationId String
+  membershipId String
+  version Int
+  status String @default("PENDING")
+  errorCode String?
+  operation OutreachGroupSyncOperation @relation(fields: [operationId], references: [id], onDelete: Restrict)
+  @@unique([operationId, membershipId])
+  @@index([operationId, status])
+  @@map("outreach_group_sync_items")
 }

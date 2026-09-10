@@ -4,7 +4,6 @@ import test from "node:test";
 
 import type { PrismaClient } from "../../lib/generated/prisma/client";
 import { saveDeveloperApiSettings } from "../../lib/server/developer-api-settings";
-import { DEFAULT_TENANT_KEY } from "../../lib/tenants";
 
 test("Developer API sections save independently and preserve the other ciphertext", async () => {
   const previous = process.env.DEVELOPER_API_SETTINGS_ENCRYPTION_KEY;
@@ -25,19 +24,19 @@ test("Developer API sections save independently and preserve the other ciphertex
     },
   };
   const prisma = {
-    siteDeveloperApiSetting: model,
+    globalDeveloperApiSetting: model,
     async $transaction(operation: (transaction: unknown) => unknown) {
-      return operation({ siteDeveloperApiSetting: model });
+      return operation({ globalDeveloperApiSetting: model });
     },
   } as unknown as PrismaClient;
 
   try {
-    assert.equal(await saveDeveloperApiSettings(prisma, DEFAULT_TENANT_KEY, {
+    assert.equal(await saveDeveloperApiSettings(prisma, {
       section: "server-to-server-oauth",
       accountId: "a",
       clientId: "c",
     }), null);
-    const first = await saveDeveloperApiSettings(prisma, DEFAULT_TENANT_KEY, {
+    const first = await saveDeveloperApiSettings(prisma, {
       section: "server-to-server-oauth",
       accountId: "a",
       clientId: "c",
@@ -52,7 +51,7 @@ test("Developer API sections save independently and preserve the other ciphertex
     const clientCiphertext = row!.clientSecretEncrypted;
     assert.equal(clientCiphertext?.includes("client-secret-plain"), false);
 
-    const webhook = await saveDeveloperApiSettings(prisma, DEFAULT_TENANT_KEY, {
+    const webhook = await saveDeveloperApiSettings(prisma, {
       section: "webhook-only-app",
       secretToken: "secret-token-plain",
     });
@@ -60,7 +59,7 @@ test("Developer API sections save independently and preserve the other ciphertex
     const tokenCiphertext = row!.secretTokenEncrypted;
     assert.equal(tokenCiphertext?.includes("secret-token-plain"), false);
 
-    await saveDeveloperApiSettings(prisma, DEFAULT_TENANT_KEY, {
+    await saveDeveloperApiSettings(prisma, {
       section: "server-to-server-oauth",
       accountId: "a2",
       clientId: "c2",
@@ -69,7 +68,7 @@ test("Developer API sections save independently and preserve the other ciphertex
     assert.equal(row!.secretTokenEncrypted, tokenCiphertext);
 
     row = null;
-    const webhookFirst = await saveDeveloperApiSettings(prisma, DEFAULT_TENANT_KEY, {
+    const webhookFirst = await saveDeveloperApiSettings(prisma, {
       section: "webhook-only-app",
       secretToken: "webhook-first",
     });

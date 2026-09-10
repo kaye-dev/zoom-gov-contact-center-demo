@@ -1,13 +1,13 @@
 import { isTenantKey, type TenantKey } from "./tenants";
 
 export const ADMIN_REQUEST_PATH_HEADER = "x-admin-request-path";
-export const OUTREACH_VIEWS = ["contacts", "contact-lists", "campaigns", "one-time", "messages"] as const;
+export const OUTREACH_VIEWS = ["contact-lists", "campaigns", "one-time", "messages"] as const;
 export function resolveOutreachView(tenant: TenantKey, requested: string | null, workflow: string | null) {
   if (tenant === "lg" && workflow === "fraud") return "one-time";
-  if (requested === "residents") return "contacts";
+  if (requested === "residents" || requested === "contacts") return "contact-lists";
   if (requested === "groups") return "contact-lists";
   if (requested === "dispatches") return "one-time";
-  return OUTREACH_VIEWS.find(view => view === requested) ?? "contacts";
+  return OUTREACH_VIEWS.find(view => view === requested) ?? "contact-lists";
 }
 const LOCAL_ADMIN_ORIGIN = "http://localhost:3000";
 const authPaths = new Set(["/admin/login", "/admin/change-password", "/admin/forgot-password"]);
@@ -29,11 +29,11 @@ export function classifyAdminApi(pathname: string) {
   const path = pathname.replace(/^\/api(?=\/)/u, "");
   if (!path.startsWith("/admin/")) return { kind: "public" } as const;
   const root = path.split("/")[2];
-  if (["users", "roles", "password-reset-requests"].includes(root)) return { kind: "global" } as const;
+  if (["users", "roles", "password-reset-requests", "developer-api"].includes(root)) return { kind: "global" } as const;
   if (root === "online-consultation-settings") return { kind: "tenant", resource: "online-consultation-settings" } as const;
   if (["reservations", "reservation-api-keys", "reservation-api-usage-limit", "reservation-api-request-logs"].includes(root))
     return { kind: "tenant", resource: "reservations" } as const;
-  if (root === "phone-settings" || root === "chat-settings" || root === "language-settings" || root === "maintenance-settings" || root === "developer-api" || root === "zaad")
+  if (root === "phone-settings" || root === "chat-settings" || root === "language-settings" || root === "maintenance-settings" || root === "zaad")
     return { kind: "tenant", resource: root } as const;
   return { kind: "unknown" } as const;
 }
@@ -101,12 +101,12 @@ export function publicAdminHref(tenant: TenantKey, hostname?: string) {
 }
 
 /** Settings may return only to the selected industry's outreach screen. */
-export function safeOutreachReturnPath(value: unknown, tenant: TenantKey): string | null {
+export function safeOutreachReturnPath(value: unknown, tenant?: TenantKey): string | null {
   if (typeof value !== "string" || !value.startsWith("/")) return null;
   const safe = safeAdminCallback(value);
   const parsed = new URL(safe, LOCAL_ADMIN_ORIGIN);
   const scope = parseAdminTenant(parsed.searchParams.getAll("tenant"));
-  if (parsed.pathname !== "/admin/zaad" || !scope.ok || scope.tenantKey !== tenant) return null;
+  if (parsed.pathname !== "/admin/zaad" || !scope.ok || (tenant !== undefined && scope.tenantKey !== tenant)) return null;
   for (const key of ["returnTo", "callbackURL", "state", "theme"]) parsed.searchParams.delete(key);
   return parsed.pathname + parsed.search;
 }

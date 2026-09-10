@@ -1407,6 +1407,36 @@ test("contact pagination rejects repeated tokens and an overlarge page chain", a
   clearZaadZoomTokenCache();
 });
 
+test("empty contact pages accept Zoom's omitted contacts pagination envelope", async () => {
+  for (const payload of [{ page_size: 100 }, { page_size: 30, total_records: 0, next_page_token: "" }]) {
+    clearZaadZoomTokenCache();
+    const zoom = client(async input => new URL(String(input)).pathname === "/oauth/token"
+      ? Response.json({ access_token: "token", expires_in: 3600 }) : Response.json(payload), false);
+    assert.deepEqual(await zoom.listContacts("empty-list"), []);
+  }
+  clearZaadZoomTokenCache();
+});
+
+test("omitted contacts never hide malformed or incomplete contact pages", async () => {
+  const payloads = [
+    {}, { page_size: 0 }, { page_size: 101 }, { page_size: "100" },
+    { page_size: 100, total_records: 1 }, { page_size: 100, total_records: "0" },
+    { page_size: 100, next_page_token: "next" }, { page_size: 100, code: 9001 },
+    { page_size: 100, contacts: null }, { page_size: 100, contacts: {} },
+  ];
+  for (const payload of payloads) {
+    clearZaadZoomTokenCache();
+    const zoom = client(async input => new URL(String(input)).pathname === "/oauth/token"
+      ? Response.json({ access_token: "token", expires_in: 3600 }) : Response.json(payload), false);
+    await assert.rejects(zoom.listContacts("list-1"), (error: unknown) => {
+      assert.ok(error instanceof ZaadZoomError);
+      assert.equal(error.code, ZAAD_ERROR_CODES.zoomInvalidResponse);
+      return true;
+    });
+  }
+  clearZaadZoomTokenCache();
+});
+
 test("credential update version invalidates the in-memory OAuth token cache", async () => {
   clearZaadZoomTokenCache();
   let tokenRequests = 0;
@@ -1422,5 +1452,16 @@ test("credential update version invalidates the in-memory OAuth token cache", as
   await clientAtVersion(fetchImpl, "2026-09-01T00:00:00.000Z").listContactLists();
   await clientAtVersion(fetchImpl, "2026-09-01T00:01:00.000Z").listContactLists();
   assert.equal(tokenRequests, 2);
+  clearZaadZoomTokenCache();
+});
+
+test("contact list candidates retain empty names and zero counts for ID fallback", async () => {
+  clearZaadZoomTokenCache();
+  const zoom = client(async input => {
+    if (new URL(String(input)).pathname === "/oauth/token") return Response.json({ access_token: "token", expires_in: 3600 });
+    return Response.json({ contact_lists: [{ contact_list_id: "empty-name", contact_list_name: "", contacts_count: 0 }] });
+  }, false);
+  const result = await zoom.listContactLists();
+  assert.equal(result.lists[0].name, ""); assert.equal(result.lists[0].id, "empty-name"); assert.equal(result.lists[0].contactCount, 0);
   clearZaadZoomTokenCache();
 });

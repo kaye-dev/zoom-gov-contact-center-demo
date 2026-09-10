@@ -65,15 +65,37 @@ test(
         assert.equal((await missingTenant.json()).code, "TENANT_REQUIRED");
 
         await t.test("contact group sync endpoints require authentication and update access", async () => {
-          for (const path of ["/api/admin/zaad/contact-lists/sync-candidates", "/api/admin/zaad/contact-lists/sync-operations/fixture-operation"]) {
+          for (const path of ["/api/admin/zaad/default-groups/default-lg-elder-watch/candidates", "/api/admin/zaad/contact-lists/sync-candidates", "/api/admin/zaad/contact-lists/sync-operations/fixture-operation"]) {
             const anonymous = await invoke(route.GET, "GET", path);
             assert.equal(anonymous.status, 401);
             const readonly = await invoke(route.GET, "GET", path, { cookie: viewCookie });
             assert.equal(readonly.status, 403);
+            if (path.endsWith("/candidates")) { assert.equal(anonymous.headers.get("cache-control"), "no-store"); assert.equal(readonly.headers.get("cache-control"), "no-store"); }
           }
           const denied = await invoke(route.POST, "POST", "/api/admin/zaad/contact-lists/sync-bindings", { cookie: viewCookie, body: { operationKey: "fixture-operation", accountId: "fixture-account", contactListIds: ["fixture-list-1"] } });
           assert.equal(denied.status, 403);
           assert.equal(externalFetches.length, 0);
+        });
+
+        await t.test("default group candidate route preserves no-store on success and provider errors", async () => {
+          await client.query(`INSERT INTO outreach_default_groups (id, "siteKey", "topicKey", revision) VALUES ('default-lg-elder-watch', 'lg', 'elder-watch', 1) ON CONFLICT DO NOTHING`);
+          const { ZaadZoomClient, ZaadZoomError } = await import("../../lib/server/zaad/zoom-client");
+          let status = 0;
+          const stub = t.mock.method(ZaadZoomClient, "fromDatabase", async () => ({
+            accountId: "fixture-account",
+            async listContactLists() { if (status) throw new ZaadZoomError(ZAAD_ERROR_CODES.zoomUnavailable, status); return { lists: [], nextPageToken: null }; },
+          }));
+          try {
+            for (const expected of [200, 403, 429, 503]) {
+              status = expected === 200 ? 0 : expected;
+              const response = await invoke(route.GET, "GET", "/api/admin/zaad/default-groups/default-lg-elder-watch/candidates", { cookie: fullCookie });
+              assert.equal(response.status, expected, await response.clone().text());
+              assert.equal(response.headers.get("cache-control"), "no-store");
+            }
+            assert.equal(externalFetches.length, 0);
+            assert.equal((await client.query(`SELECT revision FROM outreach_default_groups WHERE id = 'default-lg-elder-watch'`)).rows[0].revision, 1);
+            assert.equal((await client.query(`SELECT COUNT(*)::int AS count FROM zoom_resource_bindings`)).rows[0].count, 0);
+          } finally { stub.mock.restore(); }
         });
 
         await t.test("anonymous public registration accepts only the exact payload and hides duplicates", async () => {

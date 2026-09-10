@@ -18,8 +18,10 @@ export async function groupSyncCandidates(db: PrismaClient, scope: OutreachScope
   const bindings = await db.zoomResourceBinding.findMany({
     where: { accountId: client.accountId, resourceType: "CONTACT_LIST", zoomId: { in: lists.map(row => row.id) } },
   });
+  const defaults = await db.outreachDefaultGroup.findMany({ where: { binding: { accountId: client.accountId } }, include: { binding: true } });
   const items: GroupSyncCandidate[] = [];
   for (const list of lists) {
+    if (defaults.some(row => row.binding?.zoomId === list.id)) continue;
     // Internally generated dispatch resources are not regular groups, even in the other site.
     if (bindings.some(row => row.zoomId === list.id && (row.dispatchId !== null || row.purpose !== "REGULAR"))) continue;
     const added = bindings.some(row => row.zoomId === list.id && row.ownerSiteKey === scope.siteKey && !row.tombstone);
@@ -52,7 +54,7 @@ export async function syncContactLists(db: PrismaClient, scope: OutreachScope, p
   // Re-read ownership inside the serializable transaction: no provider mutations or CRM imports here.
   try {
     return await db.$transaction(async tx => {
-      const settings = await tx.siteDeveloperApiSetting.findUnique({ where: { siteKey: scope.siteKey }, select: { accountId: true } });
+      const settings = await tx.globalDeveloperApiSetting.findUnique({ where: { id: "global" }, select: { accountId: true } });
       if (settings?.accountId.trim() !== accountId) throw new OutreachContractError("ACCOUNT_CHANGED", 409);
       const currentOperation = await tx.outreachOperation.findUnique({ where: { siteKey_actorId_kind_operationKey: unique } });
       if (currentOperation) {
@@ -60,6 +62,8 @@ export async function syncContactLists(db: PrismaClient, scope: OutreachScope, p
         return { tenantKey: scope.siteKey, operationKey: key, status: currentOperation.status, result: currentOperation.result };
       }
       const bindings = await tx.zoomResourceBinding.findMany({ where: { accountId, resourceType: "CONTACT_LIST", zoomId: { in: ids } } });
+      const defaults = await tx.outreachDefaultGroup.findMany({ where: { binding: { accountId, zoomId: { in: ids } } } });
+      if (defaults.length) throw new OutreachContractError("RESOURCE_OWNERSHIP_CONFLICT", 409);
       for (const list of observed) {
         if (bindings.some(row => row.zoomId === list.id && (row.dispatchId !== null || row.purpose !== "REGULAR"))) throw new OutreachContractError("RESOURCE_OWNERSHIP_CONFLICT", 409);
         const existing = bindings.find(row => row.zoomId === list.id && row.ownerSiteKey === scope.siteKey);
