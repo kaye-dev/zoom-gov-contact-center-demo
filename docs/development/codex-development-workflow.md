@@ -140,15 +140,13 @@ HTML reportは`plans/<slug>/review/`へ作り、`採用 / 却下 / 未確定`、
 
 ### `$git-commit-push-pr`
 
-Git規約・状態・task範囲・remote/GitHub identityを確認し、既存PRのbaseを優先する。topic branchはrepository規約に従い、protected branchや安全に特定できるdetached HEADでは作成する。未承認の継承commit、分離不能なstage、ユーザー指定branchの衝突など判断が必要な場合だけ具体的選択を確認する。
+Git規約・状態・task範囲・remote/GitHub identityを確認する。既存PRは現在のbaseを維持し、新規PRは作業を開始したbaseブランチを使う。`main`起点の通常変更は`main`向けとする。起点はユーザー指示・作業開始時のブランチ・branch/worktree作成記録で特定し、baseとの差分とcommitがtask範囲に収まることを確認する。`develop`へ固定せず、topicのupstreamだけでも推測しない。起点不明または明示指定が競合する場合だけ確認する。topic branchはrepository規約に従い、protected branchや安全に特定できるdetached HEADでは作成する。未承認の継承commit、分離不能なstage、ユーザー指定branchの衝突など判断が必要な場合だけ具体的選択を確認する。
 
-対象pathだけをstageし、staged diffと空白・秘密混入を確認する。commit前に現在の自動PR/push CIが実行する全適用checkを、同じ実行環境とcommit予定の内容で検証する。手順は[commit前CI検証](../../.agents/skills/git-commit-push-pr/references/pre-commit-ci.md)を正本とする。限定テストや過去のCI成功で代替しない。同じ内容・環境・command・関連baseに対する有効な結果だけを再利用し、不足・失効分を実行する。
+対象pathだけをstageし、staged diffと空白・秘密混入を確認する。有効な実装checkを再利用し、commit時はhookを実行する。機械的hook修正が対象内だけなら限定restageして1回retryする。commit済みtaskは空commitを作らずその差分を出荷する。
 
-失敗時は、仕様・権限・データ契約・検証強度を保つ誤字、import、型、妥当な期待値の更新などの軽微修正を追加確認なしで行い、対象pathへ限定stageして失効したcheckを再実行する。大規模refactor、設計・権限・データ変更、migration履歴の変更、major依存更新、未決定仕様を伴う場合はcommit/push前に停止する。必須検証を実行できない場合も成功扱いで進めない。失敗check・直接原因・影響・保全した状態・推奨対応と選択肢を報告し、ユーザーの次の指示を待つ。
+エラーが発生した場合は原因を確認し、仕様・権限・データ契約・検証強度を保つ対象内の軽微修正を追加確認なしで行う。修正の影響するcheckだけを再実行し、関連pathだけをstageする。大規模変更や未決定事項が必要なら原因と対応案を報告して停止する。
 
-commit時はhookを実行する。機械的hook修正が対象内だけなら限定restageし、失効したCI checkを通して1回retryする。commit済みtaskもpush前に同じpreflightを満たすが、空commitは作らない。
-
-remote topicにlocal HEADにないcommitがあれば停止する。安全なnon-force push、PR作成または最小更新、local/remote/PR HEAD照合まで同じ依頼内で行う。base先行だけではbranch同期を必須としないが、CI対象のmerge結果は隔離して検証する。競合で必須検証ができなければcommit/push前に停止して対応案を返す。競合解消やbase同期は明示依頼時だけ行う。
+remote topicにlocal HEADにないcommitがあれば停止する。安全なnon-force push、PR作成または最小更新、local/remote/PR HEAD照合まで同じ依頼内で行う。base先行だけでは同期を必須とせず、PRに競合がある場合はDraftで競合を報告できる。競合解消やbase同期は明示依頼時だけ行う。
 
 PR本文はbase...HEADのdiff、base..HEADのcommit、実検証結果、現在のPR情報を根拠に日本語で書く。既存のbase・人間メモ・check・draft/ready・別Codex sessionを保持し、古い箇所だけ更新する。未確認UIがある新規PRはDraftとし、非UIは`UI 変更なし`を記載する。HEAD一致、mergeability、CI状態は別に報告する。
 
