@@ -84,6 +84,12 @@ LocalのPrisma Studioは[http://localhost:5555](http://localhost:5555)です。w
 
 `./dev-compose.sh`は変更操作のときだけ、必要に応じてColimaを起動します。`prepare`と`status`はColimaを起動しません。`ensure` が Compose Web を起動または再利用する前には、現在の Docker context が所有する Colima profile の実効メモリ、構成メモリ、CPU を確認します。開発用の推奨値は **Docker 実効メモリ 6 GiB / 4 CPU** です。Next.js の開発サーバーが Colima VM のメモリ不足で OOM 停止すると、loopback のポート転送も停止し、ブラウザでは接続拒否になります。
 
+並列 worktree のポートを確認・停止するには、任意のこのrepository checkoutから次を実行します。非対話実行では一覧だけを表示します。ターミナルでは矢印キーで移動し、Enter/Spaceで停止するcheckoutを複数選択、`s`で確認画面へ進み、Enterで停止します。named volumeは削除しません。
+
+```bash
+./dev-compose.sh worktrees
+```
+
 推奨値未満では、`ensure` が profile を永続的に再構成してから起動するか確認します。Colima VM のカーネル予約領域により Docker の実効メモリは構成値より小さくなるため、`ensure` は観測した差分を加算してGiB単位で切り上げます。たとえば構成 6 GiB に対して Docker が 5.77 GiB を報告した場合は、7 GiB を提案します。`y` または `yes` を入力すると、対象profileだけを算出した `--memory` 値と `--cpus 4 --save-config` で再起動し、Docker context・socket・メモリ・CPU を再検証してから続行します。最初の確認を拒否した場合は、設定を変えず今回だけ起動するかをもう一度確認します。非対話実行では低リソースのまま起動せず終了します。
 
 Colima の再起動は他の Docker workload も停止させるため、稼働中のコンテナが1つでもある場合は `ensure` は設定変更も起動も行いません。表示されたコンテナを利用者が明示的に停止または保全してから再実行してください。手動で復旧する場合は、対象profileを確認したうえで次を実行します。
@@ -206,6 +212,7 @@ prototypeのHTML/CSS・参照資産を視覚仕様とし、通常1〜3代表シ�
 | `./dev-compose.sh restart web` | 明示操作としてverified `web`だけを再起動 |
 | `./dev-compose.sh stop <services>` | 現在のprojectの明示serviceだけを停止 |
 | `./dev-compose.sh cleanup` | worktree sessionが作成したcontainerとnetworkだけを削除しvolumeを保持 |
+| `./dev-compose.sh worktrees` | 全worktreeのapp・Studio・prototype・review portを一覧し、TTYでは選択したcheckoutを確認付きで停止 |
 | `./dev-prototype.sh [slug]` | 最終更新または指定したUI prototypeを空きlocalhost portで配信 |
 | `./dev-compose.sh up studio` | Prisma Studio を Docker 上で起動 |
 | `npm run dev` | 開発サーバーを起動 |

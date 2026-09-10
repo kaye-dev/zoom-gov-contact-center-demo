@@ -362,3 +362,21 @@ test("workflow scenario登録は全採用要件の行動評価へ接続する", 
     assert.ok(registered[name].affectedPaths?.includes(".agents/skills/implement/"));
   }
 });
+
+
+test("worktree管理のhandoffは現行smokeと既存保持sessionを保全する", async () => {
+  const [plan, implement, workflow, devServer] = await Promise.all([
+    read(".agents/skills/plan/SKILL.md"),
+    read(".agents/skills/implement/SKILL.md"),
+    read("docs/development/codex-development-workflow.md"),
+    read(".claude/rules/dev-server.md"),
+  ]);
+  for (const contract of [plan, implement, workflow]) {
+    assert.ok(contract.includes("cd <current-checkout> && ./dev-prototype.sh <slug>"));
+    assert.ok(contract.includes("cd <current-checkout> && ./dev-compose.sh ensure"));
+  }
+  assert.match(implement, /stop every task-owned prototype\/review process created by this invocation/u);
+  assert.match(implement, /preserving pre-existing retained prototype sessions/u);
+  assert.match(devServer, /\.\/dev-compose\.sh worktrees/u);
+  assert.match(devServer, /named volumeは保持する/u);
+});

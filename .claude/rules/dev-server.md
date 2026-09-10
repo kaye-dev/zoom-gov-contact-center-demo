@@ -56,6 +56,8 @@ planは返却直前のsmoke後に`./dev-prototype.sh --retain <slug>`で保持�
 
 implementの実アプリ保持とreviewのreport保持は、現在のinvocationにexact phrase `確認セッションを保持`がある場合だけ行う。reviewではreportだけを保持し、実アプリやprototypeを起動・attachしない。HTML reportのcanonical assetsが未変更ならdesktopと390×844のload・console・networkを確認する。reportのinteraction変更時だけ影響操作を確認する。report確認と製品UI確認、保持URLのavailabilityは別の結果として報告する。
 
+並列checkoutの稼働状況は任意のcheckoutで`./dev-compose.sh worktrees`を実行して確認する。非対話実行は一覧だけを表示する。TTYでは矢印キーで移動し、Enter/Spaceで対象を選択、`s`で確認画面へ進み、Enterで停止する。これはユーザーが明示選択した停止操作だけに許可される例外であり、選択checkoutの確認session、Compose service、CWDとNext.js commandを照合できるnative processを対象とする。所有権を検証できないresourceは停止せず、named volumeは保持する。
+
 ## cleanup
 
 終了時はbaselineとの差分のうちtask所有と証明できる資源だけをcleanupする。worktreeは`./dev-compose.sh cleanup`でsession labelと一致するcontainer・networkを扱い、named volumeを保持する。Local cleanupはno-opとする。

@@ -47,7 +47,9 @@ For a requested design change, update the plan through an explicit `$plan` reque
 
 ## Cleanup and finish
 
-Treat exact phrase `確認セッションを保持` as an opt-in only when it appears in the current invocation. After smoke, use `./dev-confirmation.sh attach-app <slug>` and status to retain the owned app, and report `./dev-confirmation.sh stop <slug>`. Otherwise clean up only baseline-delta resources proven task-owned with `./dev-compose.sh cleanup`; never delete volumes or stop pre-existing/user resources.
+Treat exact phrase `確認セッションを保持` as an opt-in only when it appears in the current invocation. After smoke, use `./dev-confirmation.sh attach-app <slug>` and status to retain the owned app, and report `./dev-confirmation.sh stop <slug>`. Otherwise stop every task-owned prototype/review process created by this invocation, preserving pre-existing retained prototype sessions, and clean up only baseline-delta resources proven task-owned with `./dev-compose.sh cleanup`; never delete volumes or stop pre-existing/user resources.
+
+Always give the user the actual checkout-scoped commands to restart confirmation: `cd <current-checkout> && ./dev-compose.sh ensure`, and for UI work `cd <current-checkout> && ./dev-prototype.sh <slug>`. Report cleanup results.
 
 Report changed paths, actual checks and smoke outcomes, comparison conditions/matches/accepted differences, known failures, unverified items, and unchecked human UI items. If either surface could not be displayed, report `prototypeとの視覚照合は未確認`. Keep progress in the report, not in the goal. Review and shipping reuse valid results rather than rerunning Browser for an engineering phase change.
 

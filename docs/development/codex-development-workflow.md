@@ -84,7 +84,7 @@ node scripts/prototype-runtime.mjs check <slug>
 
 詳細な作成例は[prototype authoring](../../.agents/skills/plan/references/ui-prototype-quality.md)を使う。共通hostが初回に既存ソースを`prototype/.shared/`へ保存し、以後の実装変更から比較元を保つ。旧HTML prototypeは従来のCSS builderと配信を継続でき、変換は不要。
 
-pathと実際の内容で採用prototypeを特定し、live URL、PID、owner、smoke結果、未確認事項、`./dev-confirmation.sh stop <slug>`を返す。非UIはprototypeや確認sessionを作らず、`UI変更: なし`、`prototype: なし`、`UI検証方式: 対象外`を記す。
+pathと実際の内容で採用prototypeを特定し、live URL、PID、owner、smoke結果、未確認事項、`./dev-confirmation.sh stop <slug>`を返す。返却には実checkoutからの再確認手順（`cd <current-checkout> && ./dev-prototype.sh <slug>`、実アプリでは`cd <current-checkout> && ./dev-compose.sh ensure`）も含める。非UIはprototypeや確認sessionを作らず、`UI変更: なし`、`prototype: なし`、`UI検証方式: 対象外`を記す。
 
 #### プランの再整理
 
@@ -112,6 +112,8 @@ pathと実際の内容で採用prototypeを特定し、live URL、PID、owner、
 成功済み結果は対象path・内容・実行時点で有効性を判断して再利用する。digestは補助情報であり、欠落だけで全checkを再実行しない。修正後は影響checkだけを再実行する。
 
 UIは完成した実アプリを所有権確認済みURLで開き、代表smokeを実施する。既知のscope内不具合は限定修正して継続する。Browser利用不可は`UI未確認`として実装を保持し、PRにも明記して出荷できる。失敗を未確認や成功へ置き換えない。時間経過は範囲見直しの判断材料であり、延長承認のための停止条件にしない。
+
+現在のinvocationに`確認セッションを保持`がなければ、今回起動したtask-owned prototype/review processとbaseline差分のagent-owned runtimeを停止・cleanupし、結果を報告する。planで保持済みのprototypeは保全する。実checkoutからの再起動手順（`cd <current-checkout> && ./dev-compose.sh ensure`、UIでは`cd <current-checkout> && ./dev-prototype.sh <slug>`）を返す。
 
 ## UI smokeとフィードバック
 
