@@ -7,6 +7,7 @@ import { ModalDialog } from "@/app/components/admin/ModalDialog";
 import { Select } from "@/app/components/Select";
 import { RefreshIcon } from "@/app/components/svg/RefreshIcon";
 import type { DefaultGroupCandidatesResponse, DefaultGroupDto } from "@/lib/zaad/default-groups";
+import { ZAAD_ERROR_CODES } from "@/lib/zaad/contracts";
 import { loadDefaultGroupCandidates } from "@/lib/zaad/default-group-candidates";
 import type { TenantKey } from "@/lib/tenants";
 import { outreachMutation, outreachRequest, OutreachApiError } from "./outreach-client";
@@ -21,6 +22,7 @@ export function DefaultGroupBinding({ tenant, group, name, close, saved, setDirt
   const [explicitChoice, setExplicitChoice] = useState(false);
   const [snapshot, setSnapshot] = useState<DefaultGroupCandidatesResponse | null>(null), [loading, setLoading] = useState(true), [loadFailed, setLoadFailed] = useState(false), [reload, setReload] = useState(0);
   const lock = useRef(false), key = useRef<string | null>(null), cancel = useRef<HTMLButtonElement>(null);
+  const bindingCancel = useRef<HTMLButtonElement>(null);
   const descriptionId = useId(), errorId = useId(), selectedId = useId();
   const changed = listId !== (group.contactListId ?? "");
   useEffect(() => {
@@ -30,7 +32,7 @@ export function DefaultGroupBinding({ tenant, group, name, close, saved, setDirt
       .catch(failure => { if (!controller.signal.aborted) { setLoadCode(failure instanceof OutreachApiError ? failure.code : null); setLoadFailed(true); setLoading(false); } });
     return () => controller.abort();
   }, [tenant, group.id, group.contactListId, reload]);
-  function refresh() { if (loading || busy) return; setLoading(true); setLoadFailed(false); setLoadCode(null); setError(""); key.current = null; setReload(value => value + 1); }
+  function refresh() { if (loading || busy) return; bindingCancel.current?.focus(); setLoading(true); setLoadFailed(false); setLoadCode(null); setError(""); key.current = null; setReload(value => value + 1); }
   function finish() { setDirty(false); close(); }
   function requestClose() { if (lock.current) return; if (changed) setDiscard(true); else finish(); }
   const candidates = [...(snapshot?.items ?? [])];
@@ -53,9 +55,14 @@ export function DefaultGroupBinding({ tenant, group, name, close, saved, setDirt
       setLoadFailed(true);
     } finally { lock.current = false; setBusy(false); setSaving?.(false); }
   }
+  const candidateFailure = loadCode === ZAAD_ERROR_CODES.zoomUnavailable || loadCode === ZAAD_ERROR_CODES.zoomInvalidResponse
+    ? d.candidateTransientFailure
+    : [loadCode && getZaadErrorMessage(loadCode, t.admin.zaad), d.candidateFailure].filter(Boolean).join("\n");
   const candidateLabel = (row: { id: string; name: string }) => row.name ? `${row.name} — ${row.id}` : row.id;
-  return <><ModalDialog title={d.configureTitle} description={name} descriptionId={descriptionId} backdropClassName="bg-black/40" locked={busy || discard} onRequestClose={requestClose}>
+  return <><ModalDialog title={d.configureTitle} description={name} descriptionId={descriptionId} initialFocusRef={bindingCancel} backdropClassName="bg-black/40" locked={busy || discard} onRequestClose={requestClose}>
     <form className="mt-5 space-y-5" onSubmit={event => { event.preventDefault(); void save(); }}>
+      <div className="min-h-44" aria-busy={loading}>
+      {loading ? <div role="status" className="flex min-h-44 flex-col items-center justify-center gap-3 text-sm text-fg-muted"><span aria-hidden="true" className="h-6 w-6 motion-safe:animate-spin rounded-full border-2 border-line border-t-accent" />{d.candidateLoading}</div> : <div className="space-y-5">
       <div className="flex items-center gap-2">
         <Select required containerClassName="min-w-0 flex-1" aria-labelledby={descriptionId} aria-describedby={`${selectedId} ${errorId}`} aria-invalid={Boolean(error || loadFailed)} value={!explicitChoice && unavailableCurrent ? "__unavailable_current__" : listId} disabled={loading || busy} onChange={event => { setSelectionAccount(snapshot?.accountId ?? null); setExplicitChoice(true); setListId(event.target.value); setDirty(event.target.value !== (group.contactListId ?? "")); key.current = null; }}>
           <option value="">{snapshot && !candidates.some(row => row.selectable) ? d.candidateEmpty : d.candidateSelect}</option>
@@ -70,9 +77,10 @@ export function DefaultGroupBinding({ tenant, group, name, close, saved, setDirt
         {current?.unavailableReason && <p>{current.id !== listId && <span className="break-all">{d.listId}：{current.id} — </span>}{currentReasons[current.unavailableReason]}</p>}
         {group.contactListId && changed && <p>{d.rebindHelp}{group.rebindCount !== undefined && <> {d.rebindCount.replace("{count}", String(group.rebindCount))}</>}</p>}
       </div>
-      {loading && <p role="status" className="text-sm text-fg-muted">{d.candidateLoading}</p>}
-      <div id={errorId}>{error ? <p role="alert">{error}</p> : loadFailed && <p role="alert">{loadCode && <>{getZaadErrorMessage(loadCode, t.admin.zaad)} </>}{d.candidateFailure}</p>}</div>
-      <div className="flex justify-end gap-3"><button className={secondary} type="button" disabled={busy} onClick={requestClose}>{common.cancel}</button><button className={primary} disabled={!canSave}>{busy ? common.loading : common.save}</button></div>
+      <div id={errorId} className="whitespace-pre-line text-sm text-red-700 dark:text-red-300">{error ? <p role="alert">{error}</p> : loadFailed && <p role="alert">{candidateFailure}</p>}</div>
+      </div>}
+      </div>
+      <div className="flex justify-end gap-3"><button ref={bindingCancel} className={secondary} type="button" disabled={busy} onClick={requestClose}>{common.cancel}</button>{!loading && <button className={primary} disabled={!canSave}>{busy ? common.loading : common.save}</button>}</div>
     </form>
   </ModalDialog>{discard && <ModalDialog title={t.outreachCommon.confirmDiscard} description={name} initialFocusRef={cancel} onRequestClose={() => setDiscard(false)}><div className="mt-5 flex justify-end gap-3"><button ref={cancel} className={secondary} onClick={() => setDiscard(false)}>{common.cancel}</button><button className={primary} onClick={finish}>{t.outreachCommon.discard}</button></div></ModalDialog>}</>;
 }
