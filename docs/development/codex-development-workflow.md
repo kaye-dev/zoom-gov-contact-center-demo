@@ -140,7 +140,7 @@ HTML reportは`plans/<slug>/review/`へ作り、`採用 / 却下 / 未確定`、
 
 ### `$git-commit-push-pr`
 
-Git規約・状態・task範囲・remote/GitHub identityを確認する。既存PRは現在のbaseを維持し、新規PRは作業を開始したbaseブランチを使う。`main`起点の通常変更は`main`向けとする。起点はユーザー指示・作業開始時のブランチ・branch/worktree作成記録で特定し、baseとの差分とcommitがtask範囲に収まることを確認する。`develop`へ固定せず、topicのupstreamだけでも推測しない。起点不明または明示指定が競合する場合だけ確認する。topic branchはrepository規約に従い、protected branchや安全に特定できるdetached HEADでは作成する。未承認の継承commit、分離不能なstage、ユーザー指定branchの衝突など判断が必要な場合だけ具体的選択を確認する。
+Git規約・状態・task範囲・remote/GitHub identityを確認する。既存PRは現在のbaseを維持し、新規PRは作業を開始したbaseブランチを使う。`main`起点の通常変更は`main`向けとする。起点はユーザー指示・作業開始時のブランチ・branch/worktree作成記録で特定し、baseとの差分とcommitがtask範囲に収まることを確認する。topicのupstreamだけでは起点を判断しない。起点不明または明示指定が競合する場合だけ確認する。topic branchはrepository規約に従い、protected branchや安全に特定できるdetached HEADでは作成する。未承認の継承commit、分離不能なstage、ユーザー指定branchの衝突など判断が必要な場合だけ具体的選択を確認する。
 
 対象pathだけをstageし、staged diffと空白・秘密混入を確認する。有効な実装checkを再利用し、commit時はhookを実行する。機械的hook修正が対象内だけなら限定restageして1回retryする。commit済みtaskは空commitを作らずその差分を出荷する。
 

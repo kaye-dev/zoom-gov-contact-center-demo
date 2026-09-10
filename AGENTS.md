@@ -15,7 +15,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Git・PR規約
 
-- 既存PRは現在のbaseを維持する。新規PRは作業を開始したbaseブランチを使い、`main`起点の通常変更は`main`向けとする。ユーザー指示・作業開始時のブランチ・branch/worktree作成記録から起点を特定し、baseとの差分とcommitが対象範囲に収まることを確認する。起点が不明または明示指定が競合する場合だけ確認する。`develop`への固定やtopicのupstreamだけによる推測はしない。
+- 既存PRは現在のbaseを維持する。新規PRは作業を開始したbaseブランチを使い、`main`起点の通常変更は`main`向けとする。ユーザー指示・作業開始時のブランチ・branch/worktree作成記録から起点を特定し、baseとの差分とcommitが対象範囲に収まることを確認する。起点が不明または明示指定が競合する場合だけ確認する。topicのupstreamだけでは起点を判断しない。
 
 # Codex計画駆動開発
 
