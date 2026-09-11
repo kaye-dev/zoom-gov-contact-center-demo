@@ -961,13 +961,16 @@ function ttsAssetFormData(input: ZoomTtsAssetInput) {
   form.set("asset_name", input.name);
   form.set("asset_description", "ZAAD TTS message");
   form.set("asset_type", "audio");
-  form.set("asset_items", JSON.stringify([{
+  const item = {
     asset_item_name: input.name,
     asset_item_language: input.languageCode,
     asset_item_content: input.body,
     asset_item_voice: input.voiceId,
     is_default: true,
-  }]));
+  };
+  for (const [key, value] of Object.entries(item)) {
+    form.set(`asset_items[0].${key}`, String(value));
+  }
   return form;
 }
 

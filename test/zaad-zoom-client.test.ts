@@ -349,13 +349,11 @@ test("TTS asset CRUD uses the official create, item-update, and two-stage delete
     asset_name: ttsInput.name,
     asset_description: "ZAAD TTS message",
     asset_type: "audio",
-    asset_items: JSON.stringify([{
-      asset_item_name: ttsInput.name,
-      asset_item_language: ttsInput.languageCode,
-      asset_item_content: ttsInput.body,
-      asset_item_voice: ttsInput.voiceId,
-      is_default: true,
-    }]),
+    "asset_items[0].asset_item_name": ttsInput.name,
+    "asset_items[0].asset_item_language": ttsInput.languageCode,
+    "asset_items[0].asset_item_content": ttsInput.body,
+    "asset_items[0].asset_item_voice": ttsInput.voiceId,
+    "asset_items[0].is_default": "true",
   });
   assert.equal(requests[1]?.form, null);
   assert.deepEqual(requests[1]?.json, {
