@@ -20,7 +20,7 @@ const { registerHooks } = nodeModule as unknown as {
 };
 const secret = "university-outreach-integration-0000000000000000";
 test(
-  "PUBLIC-REGISTRATION-ISOLATION: real API, database, consent, departmental scope and demo lifecycle",
+  "PUBLIC-REGISTRATION-ISOLATION: real API, database, consent, tenant scope and demo lifecycle",
   { timeout: 180000 },
   async (t) => {
     await withIsolatedPostgresDatabase(async (databaseUrl) => {
@@ -73,11 +73,11 @@ test(
           ["outreach-view", "ALL"],
         ])
           await db.query(
-            `INSERT INTO university_zaad_grants (id,"siteKey","userId","departmentKey") VALUES ($1,'univ',$1,$2)`,
-            [id, department],
+            `INSERT INTO outreach_tenant_grants (id,"siteKey","userId","accessEnabled","serviceFullAccess") VALUES ($1,'univ',$1,true,$2)`,
+            [id, department === "ALL"],
           );
         await db.query(
-          `INSERT INTO university_zaad_grants (id,"siteKey","userId","departmentKey") VALUES ('outreach-all-lg','lg','outreach-all','ALL')`,
+          `INSERT INTO outreach_tenant_grants (id,"siteKey","userId","accessEnabled") VALUES ('outreach-all-lg','lg','outreach-all',true)`,
         );
         await db.query(
           `INSERT INTO admin_access_roles (id,name,"nameKey") VALUES ('outreach-view','Outreach view','outreach view')`,
@@ -285,7 +285,7 @@ test(
           },
         );
         await t.test(
-          "explicit grants, basic RBAC, lists and detail enforce departments and tenant",
+          "explicit grants, basic RBAC, lists and detail enforce operation and tenant permissions",
           async () => {
             assert.equal(
               (
@@ -296,7 +296,7 @@ test(
                   "outreach-facilities",
                 )
               ).status,
-              404,
+              200,
             );
             assert.equal(
               (
@@ -364,7 +364,7 @@ test(
                   "outreach-facilities",
                 )
               ).status,
-              404,
+              200,
             );
             assert.equal(
               (
@@ -447,7 +447,8 @@ test(
                 "outreach-facilities",
               ),
             );
-            assert.equal(facilities.rows.length, 0);
+            assert.equal(facilities.rows.length, 1);
+            assert.equal((facilities.rows[0] as { eligible: boolean }).eligible, false);
             assert.equal(
               (
                 await request(
@@ -676,7 +677,7 @@ test(
               (
                 await request("PATCH", `${prefix}/cases/${firstCase}`, {
                   ...saved,
-                  assigneeId: "outreach-facilities",
+                  assigneeId: "outreach-legacy",
                 })
               ).status,
               422,
@@ -746,7 +747,7 @@ test(
           },
         );
         await t.test(
-          "cross-department IDs, CSV, update, delete and idempotency do not cross tenant boundaries",
+          "same-tenant IDs are accessible while stale mutations and cross-tenant references remain rejected",
           async () => {
             for (const path of [
               `batches/${batchId}/results`,
@@ -761,7 +762,7 @@ test(
                     "outreach-facilities",
                   )
                 ).status,
-                404,
+                200,
               );
             assert.equal(
               (
@@ -780,7 +781,7 @@ test(
                   "outreach-facilities",
                 )
               ).status,
-              404,
+              409,
             );
             assert.equal(
               (
@@ -791,7 +792,7 @@ test(
                   "outreach-facilities",
                 )
               ).status,
-              404,
+              409,
             );
             const csv = await data<{ csv: string }>(
               await request("GET", `${prefix}/batches/${batchId}/export`),

@@ -20,16 +20,14 @@ export function nextDueSlot(after: Date, deadline: Date, schedules: Availability
 }
 export type EligibilityContact = {
   status: string; identityVerified: boolean; phoneVerified: boolean; deletedAt?: Date | null;
-  district: string | null; departmentKey: string;
-  preferences: { topic: string; enabled: boolean; consentVersion: string | null; consentedAt: Date | null; confirmedAt: Date | null }[];
+  district: string | null; preferences: { topic: string; enabled: boolean; consentVersion: string | null; consentedAt: Date | null; confirmedAt: Date | null }[];
 };
 export function eligibleMunicipalTarget(input: {
   purpose: MunicipalPurpose; contact: EligibilityContact; businessEvidence: unknown;
-  allowedDepartments: readonly string[]; excluded: boolean; dueAt: Date; now: Date;
+  excluded: boolean; dueAt: Date; now: Date;
   schedule: Availability; dispatch?: boolean;
 }) {
   const { contact, now } = input, reasons: string[] = [];
-  if (!input.allowedDepartments.includes(contact.departmentKey)) reasons.push("DEPARTMENT_ACCESS_DENIED");
   if (input.excluded || contact.deletedAt) reasons.push("EXCLUDED");
   if (contact.status !== "ACTIVE" || !contact.identityVerified || !contact.phoneVerified) reasons.push("CONFIRMATION_REQUIRED");
   if (!contact.preferences.some(p => p.topic === purposeTopic[input.purpose] && p.enabled && p.consentVersion && p.consentedAt && p.confirmedAt)) reasons.push("TOPIC_CONSENT_REQUIRED");

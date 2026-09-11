@@ -182,6 +182,16 @@ const EXACT_POST_REVIEWED_CHAIN = [
     sha256: "917a0055913fe25740c1dd2d6e474ba1e78733ed0ea7f4bad08a27826408495b",
     classification: "expand-compatible",
   },
+  {
+    name: "20260911050000_outreach_tenant_scope",
+    sha256: "73c44229457793636675f400c4ca2b9cd99caf1e201fc757ab1858ccd6713d9a",
+    classification: "destructive-reviewed",
+  },
+  {
+    name: "20260911051000_outreach_message_content",
+    sha256: "b15257940dc85f1374e75aa267a7c5b5326f1693045f80f92f56474cbe88a220",
+    classification: "destructive-reviewed",
+  },
 ] as const satisfies readonly ExactBatchMigration[];
 
 export type ReviewedMigrationBatchPlan = {

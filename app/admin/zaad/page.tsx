@@ -13,7 +13,7 @@ export default async function ZaadPage() {
   const selected = await getAdminPageTenant("zaad");
   if (!selected.ok) redirect("/admin?error=access-denied");
   const tenant = selected.tenant.key;
-  const scope = await withPrisma(db => resolveOutreachScope(db, actor, tenant));
+  await withPrisma(db => resolveOutreachScope(db, actor, tenant));
   const now = new Date();
-  return <OutreachView years={admissionYears(now)} serverDate={now.toISOString()} key={`${actor.id}:${tenant}:${scope.departments.join(",")}`} tenant={tenant} departments={scope.departments} allowedTenants={selected.allowed} permissions={{ create: canAdminAccess(actor, "zaad", "CREATE"), update: canAdminAccess(actor, "zaad", "UPDATE"), delete: canAdminAccess(actor, "zaad", "DELETE") }} canConfigure={canAdminAccess(actor, "developer-api", "VIEW")} />;
+  return <OutreachView years={admissionYears(now)} serverDate={now.toISOString()} key={`${actor.id}:${tenant}`} tenant={tenant} allowedTenants={selected.allowed} permissions={{ create: canAdminAccess(actor, "zaad", "CREATE"), update: canAdminAccess(actor, "zaad", "UPDATE"), delete: canAdminAccess(actor, "zaad", "DELETE") }} canConfigure={canAdminAccess(actor, "developer-api", "VIEW")} />;
 }

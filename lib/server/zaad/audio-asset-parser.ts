@@ -24,8 +24,10 @@ export function parseAudioAsset(payload: unknown, expectedId: string): AudioAsse
     const item = object(raw), assetItemId = text(item.asset_item_id);
     if (assetItemId && seen.has(assetItemId)) return invalid();
     seen.add(assetItemId);
-    // Do not return a temporary file URL to callers or persist it.
-    return { assetItemId, name: text(item.asset_item_name) || name, languageCode: text(item.asset_item_language), voiceId: text(item.asset_item_voice) || null, hasAudioFile: Boolean(text(item.asset_item_file_url)) };
+    // Preserve content exactly; the temporary file URL is server-only.
+    if (item.asset_item_content != null && typeof item.asset_item_content !== "string") return invalid();
+    const body = typeof item.asset_item_content === "string" && item.asset_item_content.trim() ? item.asset_item_content : null;
+    return { assetItemId, name: text(item.asset_item_name) || name, languageCode: text(item.asset_item_language), voiceId: text(item.asset_item_voice) || null, hasAudioFile: Boolean(text(item.asset_item_file_url)), body, fileUrl: text(item.asset_item_file_url) || null };
   });
   return { assetId, name, type: value.asset_type, archived: value.archived === true || value.is_archived === true || value.status === "archived", sourceModifiedAt: modified && Number.isFinite(Date.parse(modified)) ? new Date(modified).toISOString() : null, items };
 }

@@ -21,8 +21,8 @@ import { OutreachGroups } from "./OutreachGroups";
 import { OutreachCampaigns } from "./OutreachCampaigns";
 import { OutreachDispatches } from "./OutreachDispatches";
 export type OutreachPermissions = { create: boolean; update: boolean; delete: boolean };
-export type OutreachPanelProps = { fullAccess?: boolean; tenant: TenantKey; departments: string[]; permissions: OutreachPermissions; setDirty: (dirty: boolean) => void; setSaving?: (saving: boolean) => void; years?: number[]; serverDate?: string };
-export function OutreachView({ tenant, allowedTenants, departments, permissions, canConfigure, years, serverDate }: Omit<OutreachPanelProps, "setDirty"> & { allowedTenants: readonly TenantKey[]; canConfigure: boolean }) {
+export type OutreachPanelProps = { fullAccess?: boolean; tenant: TenantKey; permissions: OutreachPermissions; setDirty: (dirty: boolean) => void; setSaving?: (saving: boolean) => void; years?: number[]; serverDate?: string };
+export function OutreachView({ tenant, allowedTenants, permissions, canConfigure, years, serverDate }: Omit<OutreachPanelProps, "setDirty"> & { allowedTenants: readonly TenantKey[]; canConfigure: boolean }) {
   const { t } = useI18n(), d = t.outreachCommon, z = t.admin.zaad, router = useRouter(), query = useSearchParams();
   const selected = resolveOutreachView(tenant, query.get("view"), query.get("workflow"));
   const showingGroupDetail = isOutreachDetailPage(selected, new URLSearchParams(query.toString()));
@@ -63,7 +63,7 @@ export function OutreachView({ tenant, allowedTenants, departments, permissions,
     return () => { document.removeEventListener("click", click, true); window.removeEventListener("popstate", pop, true); };
   }, [dirty, saving, query]);
   function navigate(href: string) { if (saving) return; if (dirty) setPending(href); else router.push(href); }
-  const panelProps = { fullAccess, tenant, departments, permissions, setDirty, setSaving, years, serverDate };
+  const panelProps = { fullAccess, tenant, permissions, setDirty, setSaving, years, serverDate };
   let panel: ReactNode;
   if (selected === "contact-lists" && query.get("section") === "contacts") panel = <OutreachContacts {...panelProps} />;
   else if (selected === "messages") panel = <OutreachMessages {...panelProps} />;

@@ -66,7 +66,7 @@ export function contactSource(source: string): "CSV" | "MANUAL" | "ZCC" | "HP" |
 }
 export type ContactDto = {
   reference: PersonReference; name: string; phone: string; studentNumber: string | null;
-  departmentKey: string; source: ReturnType<typeof contactSource>; status: string;
+  source: ReturnType<typeof contactSource>; status: string;
   topics: string[]; requestedTopics: string[]; identityVerified: boolean; phoneVerified: boolean;
   version: number; district?: string | null; consentVersion?: string | null;
 };

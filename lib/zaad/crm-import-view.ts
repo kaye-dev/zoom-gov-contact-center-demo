@@ -1,6 +1,6 @@
 import type { CrmCsvRow } from "./crm-csv";
 export type CrmImportRow = Omit<CrmCsvRow, "status" | "topicIds"> & { status: string; topicIds?: string[] };
-export type CrmImportResult = { id: string; departmentKey: string; previewDigest: string; status: string; expiresAt: string; rows: CrmImportRow[] };
+export type CrmImportResult = { id: string; previewDigest: string; status: string; expiresAt: string; rows: CrmImportRow[] };
 export function crmImportSummary(preview: CrmImportResult, now: number) {
   const rows = preview.rows;
   const targets = rows.filter(row => ["NEW", "FAILED"].includes(row.status)).map(row => row.rowKey);

@@ -19,19 +19,19 @@ test("municipal queue and authenticated receipts preserve independent states", {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async () => { throw new Error("External calls forbidden"); };
     try {
-      const scope: OutreachScope = { siteKey: "lg", actorId: "municipal-runtime-actor", all: true, live: true, departments: ["resident-support"] };
+      const scope: OutreachScope = { siteKey: "lg", actorId: "municipal-runtime-actor", all: true, live: true };
       await db.user.create({ data: { id: scope.actorId, name: "Test municipal actor", email: "municipal-runtime@example.invalid", emailVerified: true, createdAt: new Date(), updatedAt: new Date() } });
       const role = await db.adminAccessRole.findFirstOrThrow({ where: { systemKey: "FULL_ACCESS" } });
       await db.adminAccessRoleAssignment.update({ where: { userId: scope.actorId }, data: { roleId: role.id } });
-      await db.universityZaadGrant.create({ data: { siteKey: "lg", userId: scope.actorId, departmentKey: "resident-support", liveExecution: true } });
-      const flow = await db.zoomResourceBinding.create({ data: { ownerSiteKey: "lg", accountId: "municipal-test-account", resourceType: "FLOW", zoomId: "test-flow", departmentKey: "resident-support", purpose: "ELDER_WATCH" } });
+      await db.outreachTenantGrant.create({ data: { siteKey: "lg", userId: scope.actorId, liveExecution: true } });
+      const flow = await db.zoomResourceBinding.create({ data: { ownerSiteKey: "lg", accountId: "municipal-test-account", resourceType: "FLOW", zoomId: "test-flow", purpose: "ELDER_WATCH" } });
       const schedule = { weekdays: [0, 1, 2, 3, 4, 5, 6], windows: [{ start: "00:00", end: "23:59" }] };
       const registered = await registerMunicipalContact(db, "lg", { operationKey: "municipal_runtime_registration", name: "架空の確認対象者", phone: "09000000991", district: "central", topics: ["elder-watch"], availability: schedule, consent: true, consentVersion: MUNICIPAL_CONSENT_VERSION });
       await updateContact(db, scope, "MUNICIPAL_CONTACT", registered.contactId, { version: 1, name: "架空の確認対象者", phone: "09000000991", district: "central", status: "ACTIVE", topics: ["elder-watch"], identityVerified: true, phoneVerified: true, attestation: "架空の確認記録", confirmationMethod: "対面", confirmedAt: new Date().toISOString(), availability: schedule });
-      const { workflow } = await saveWorkflow(db, scope, { name: "架空の見守り", purpose: "ELDER_WATCH", departmentKey: "resident-support", body: "電話確認です", voiceId: "Takumi", questionVersion: QUESTION_VERSION, schedule, maxRetries: 1, retryIntervalMinutes: 5, assigneeId: scope.actorId, dueAt: new Date(Date.now() + 7 * 86400000).toISOString(), flowBindingId: flow.id });
+      const { workflow } = await saveWorkflow(db, scope, { name: "架空の見守り", purpose: "ELDER_WATCH", body: "電話確認です", voiceId: "Takumi", questionVersion: QUESTION_VERSION, schedule, maxRetries: 1, retryIntervalMinutes: 5, assigneeId: scope.actorId, dueAt: new Date(Date.now() + 7 * 86400000).toISOString(), flowBindingId: flow.id });
       const { target } = await setWorkflowTarget(db, scope, workflow.workflowId, { version: workflow.revision, contactId: registered.contactId, businessEvidence: { purpose: "ELDER_WATCH", availabilityRevision: 2, confirmedAvailability: schedule }, excluded: false });
       await t.test("targets selected before setup are saved atomically with their workflow", async () => {
-        const setup = { name: "対象者から作成", purpose: "ELDER_WATCH", departmentKey: "resident-support", body: "電話確認です", voiceId: "Takumi", questionVersion: QUESTION_VERSION, schedule, maxRetries: 0, retryIntervalMinutes: 5, assigneeId: scope.actorId, dueAt: new Date(Date.now() + 86400000).toISOString(), flowBindingId: flow.id };
+        const setup = { name: "対象者から作成", purpose: "ELDER_WATCH", body: "電話確認です", voiceId: "Takumi", questionVersion: QUESTION_VERSION, schedule, maxRetries: 0, retryIntervalMinutes: 5, assigneeId: scope.actorId, dueAt: new Date(Date.now() + 86400000).toISOString(), flowBindingId: flow.id };
         const evidence = { purpose: "ELDER_WATCH", availabilityRevision: 2, confirmedAvailability: schedule };
         const count = await db.municipalWorkflowRevision.count();
         await assert.rejects(saveWorkflow(db, scope, { ...setup, initialTargets: [{ contactId: registered.contactId, businessEvidence: evidence, excluded: false }, { contactId: "foreign-contact", businessEvidence: evidence, excluded: false }] }), error => error instanceof OutreachContractError && error.code === "NOT_FOUND");

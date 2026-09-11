@@ -13,7 +13,6 @@ async function currentBinding(db: PrismaClient, scope: OutreachScope, mode: stri
   const row = await db.outreachPurposeCampaign.findUnique({ where: { siteKey_mode_purpose: key }, include: { binding: true } });
   const binding = row?.binding;
   const result: PurposeBinding = { mode: key.mode, purpose: key.purpose, version: row?.version ?? 0, campaignId: binding?.zoomId ?? null, campaignName: null, accountId: binding?.accountId ?? null, contactListName: null, status: null, available: !binding };
-  if (binding && !scope.all && (!binding.departmentKey || !scope.departments.includes(binding.departmentKey))) return { ...result, campaignId: null, accountId: null, available: false };
   if (!binding || binding.tombstone || binding.accountId !== client.accountId || binding.resourceType !== "CAMPAIGN" || binding.purpose !== "REGULAR") return result;
   const observed = await client.getCampaign(binding.zoomId).catch(error => { if (error instanceof ZaadZoomError && error.httpStatus === 404) return null; throw error; });
   if (!observed) return result;

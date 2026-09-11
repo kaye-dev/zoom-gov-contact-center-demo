@@ -83,23 +83,23 @@ export async function campaignSyncOperation(db: PrismaClient, scope: OutreachSco
 }
 export async function listRegularCampaigns(db: PrismaClient, scope: OutreachScope, reader?: CampaignReader) {
   const client = reader ?? await ZaadZoomClient.fromDatabase(db, scope.siteKey);
-  const bindings = await db.zoomResourceBinding.findMany({ where: { ownerSiteKey: scope.siteKey, accountId: client.accountId, resourceType: "CAMPAIGN", purpose: "REGULAR", tombstone: false, ...(!scope.all ? { departmentKey: { in: scope.departments } } : {}) }, orderBy: { id: "asc" } });
+  const bindings = await db.zoomResourceBinding.findMany({ where: { ownerSiteKey: scope.siteKey, accountId: client.accountId, resourceType: "CAMPAIGN", purpose: "REGULAR", tombstone: false, ...(!scope.all ? {  } : {}) }, orderBy: { id: "asc" } });
   const items = [];
   for (const binding of bindings) {
     const observed = await client.getCampaign(binding.zoomId);
     if (observed.id !== binding.zoomId || observed.dialingMethod !== "agentless") throw new OutreachContractError("CAMPAIGN_CHANGED", 409);
-    items.push({ ...observed, bindingId: binding.id, bindingVersion: binding.version, departmentKey: binding.departmentKey, notificationTopic: binding.notificationTopic, executionReady: false, disabledReason: "LIVE_CONTRACT_NOT_VERIFIED" });
+    items.push({ ...observed, bindingId: binding.id, bindingVersion: binding.version, notificationTopic: binding.notificationTopic, executionReady: false, disabledReason: "LIVE_CONTRACT_NOT_VERIFIED" });
   }
   return { tenantKey: scope.siteKey, items, total: items.length, nextCursor: null, observedAt: new Date().toISOString() };
 }
 
 export async function getRegularCampaign(db: PrismaClient, scope: OutreachScope, id: string, reader?: CampaignReader) {
   const client = reader ?? await ZaadZoomClient.fromDatabase(db, scope.siteKey);
-  const binding = await db.zoomResourceBinding.findFirst({ where: { ownerSiteKey: scope.siteKey, accountId: client.accountId, resourceType: "CAMPAIGN", zoomId: id, purpose: "REGULAR", tombstone: false, ...(!scope.all ? { departmentKey: { in: scope.departments } } : {}) } });
+  const binding = await db.zoomResourceBinding.findFirst({ where: { ownerSiteKey: scope.siteKey, accountId: client.accountId, resourceType: "CAMPAIGN", zoomId: id, purpose: "REGULAR", tombstone: false, ...(!scope.all ? {  } : {}) } });
   if (!binding) throw new OutreachContractError("NOT_FOUND", 404);
   const campaign = await client.getCampaign(id);
   if (campaign.id !== id || campaign.dialingMethod !== "agentless") throw new OutreachContractError("CAMPAIGN_CHANGED", 409);
-  return { tenantKey: scope.siteKey, campaign: { ...campaign, bindingId: binding.id, bindingVersion: binding.version, departmentKey: binding.departmentKey, notificationTopic: binding.notificationTopic, executionReady: false, pauseReady: scope.live && process.env.ZAAD_ZOOM_CAMPAIGN_WRITE_CONTRACT_CONFIRMED === "1" } };
+  return { tenantKey: scope.siteKey, campaign: { ...campaign, bindingId: binding.id, bindingVersion: binding.version, notificationTopic: binding.notificationTopic, executionReady: false, pauseReady: scope.live && process.env.ZAAD_ZOOM_CAMPAIGN_WRITE_CONTRACT_CONFIRMED === "1" } };
 }
 export async function pauseRegularCampaign(db: PrismaClient, scope: OutreachScope, id: string, payload: unknown, injected?: CampaignReader & Pick<ZaadZoomClient, "setCampaignStatus">) {
   const value = record(payload); fields(value, ["operationKey", "status", "version", "expectedRevision"]);

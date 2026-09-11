@@ -1,4 +1,6 @@
 import { audioImportCandidates, importAudioMessages, audioImportOperation, getImportedAudioMessage, messageCatalog } from "./message-imports";
+import { editImportedAudioMessage, unlinkImportedAudioMessage } from "./message-edit";
+import { importedMessageAudio } from "./message-audio";
 import { listPurposeCampaigns, purposeCampaignCandidates, purposeCampaignOperation, savePurposeCampaign } from "./purpose-campaign-bindings";
 import { startRegularGroupSync } from "./regular-group-sync";
 import { bindDefaultGroup, defaultGroupCandidates, listOutreachGroups } from "./default-groups";
@@ -44,12 +46,12 @@ export function registerOutreachRoutes(app: Hono<ZaadApiEnvironment>) {
   }));
   app.get(`${root}/flows`, c => withOutreach(c, "VIEW", async (db, scope) => {
     const client = await ZaadZoomClient.fromDatabase(db, scope.siteKey);
-    const bindings = await db.zoomResourceBinding.findMany({ where: { ownerSiteKey: scope.siteKey, accountId: client.accountId, departmentKey: { in: scope.departments }, resourceType: "FLOW", tombstone: false } });
+    const bindings = await db.zoomResourceBinding.findMany({ where: { ownerSiteKey: scope.siteKey, accountId: client.accountId, resourceType: "FLOW", tombstone: false } });
     const items = [];
     for (const binding of bindings) { const flow = await client.getFlow(binding.zoomId); items.push({ id: binding.id, name: flow.name, zoomId: flow.id, version: binding.version, executionReady: false }); }
     return { tenantKey: scope.siteKey, items, total: items.length, nextCursor: null };
   }));
-  app.get(`${root}/connection`, c => withOutreach(c, "VIEW", async (db, scope) => ({ tenantKey: scope.siteKey, connection: await getZaadConnection(db, scope.siteKey), departments: scope.departments, fullAccess: scope.all, liveExecution: scope.live, capabilities: { audio: audioCapabilities }, observedAt: new Date().toISOString() })));
+  app.get(`${root}/connection`, c => withOutreach(c, "VIEW", async (db, scope) => ({ tenantKey: scope.siteKey, connection: await getZaadConnection(db, scope.siteKey), fullAccess: scope.all, liveExecution: scope.live, capabilities: { audio: audioCapabilities }, observedAt: new Date().toISOString() })));
   app.get(`${root}/contacts`, c => withOutreach(c, "VIEW", (db, scope) => listContacts(db, scope, { search: c.req.query("query"), cursor: c.req.query("cursor"), ...(c.req.query("limit") ? { limit: Number(c.req.query("limit")) } : {}) })));
   app.post(`${root}/contacts`, c => withOutreach(c, "CREATE", async (db, scope) => ({ tenantKey: scope.siteKey, contact: await createContact(db, scope, await outreachJson(c)) })));
   app.post(`${root}/contacts/imports/preview`, c => withOutreach(c, "CREATE", async (db, scope) => {
@@ -114,12 +116,15 @@ export function registerOutreachRoutes(app: Hono<ZaadApiEnvironment>) {
   app.post(`${root}/message-import`, c => withOutreach(c, ["CREATE", "UPDATE"], async (db, scope) => importAudioMessages(db, scope, await outreachJson(c))));
   app.get(`${root}/message-import/operations/:key`, c => withOutreach(c, ["CREATE", "UPDATE"], (db, scope) => audioImportOperation(db, scope, c.req.param("key"))));
   app.get(`${root}/imported-audio-messages/:id`, c => withOutreach(c, "VIEW", (db, scope) => getImportedAudioMessage(db, scope, c.req.param("id"))));
+  app.get(`${root}/imported-audio-messages/:id/audio`, c => withOutreach(c, "VIEW", (db, scope) => importedMessageAudio(db, scope, c.req.param("id"), c.req.raw)));
+  app.patch(`${root}/imported-audio-messages/:id`, c => withOutreach(c, ["VIEW", "UPDATE"], async (db, scope) => editImportedAudioMessage(db, scope, c.req.param("id"), await outreachJson(c))));
+  app.delete(`${root}/imported-audio-messages/:id`, c => withOutreach(c, ["VIEW", "DELETE"], async (db, scope) => unlinkImportedAudioMessage(db, scope, c.req.param("id"), await outreachJson(c))));
   app.get(`${root}/messages`, c => withOutreach(c, "VIEW", (db, scope) => listOutreachMessages(db, scope)));
   app.post(`${root}/messages`, c => withOutreach(c, "CREATE", async (db, scope) => saveOutreachMessage(db, scope, await outreachJson(c))));
   app.get(`${root}/messages/:id`, c => withOutreach(c, "VIEW", (db, scope) => getOutreachMessage(db, scope, c.req.param("id"))));
   app.patch(`${root}/messages/:id`, c => withOutreach(c, "UPDATE", async (db, scope) => saveOutreachMessage(db, scope, await outreachJson(c), c.req.param("id"))));
-  app.delete(`${root}/messages/:id`, c => withOutreach(c, "DELETE", async (db, scope) => retireOutreachMessage(db, scope, c.req.param("id"), record(await outreachJson(c)).version, true)));
-  app.post(`${root}/messages/:id/retire`, c => withOutreach(c, "UPDATE", async (db, scope) => retireOutreachMessage(db, scope, c.req.param("id"), record(await outreachJson(c)).version)));
-  app.post(`${root}/messages/:id/sync`, c => withOutreach(c, "UPDATE", async (db, scope) => requireMessageAudio(db, scope, c.req.param("id"), record(await outreachJson(c)).version)));
-  app.get(`${root}/messages/:id/revisions/:revision/preview`, c => withOutreach(c, "VIEW", (db, scope) => requireMessageAudio(db, scope, c.req.param("id"), Number(c.req.param("revision")))));
+  app.delete(`${root}/messages/:id`, c => withOutreach(c, "DELETE", async (db, scope) => retireOutreachMessage(db, scope, c.req.param("id"), await outreachJson(c), true)));
+  app.post(`${root}/messages/:id/retire`, c => withOutreach(c, "UPDATE", async (db, scope) => retireOutreachMessage(db, scope, c.req.param("id"), await outreachJson(c))));
+  app.post(`${root}/messages/:id/sync`, c => withOutreach(c, "UPDATE", async (db, scope) => requireMessageAudio(db, scope, c.req.param("id"), record(await outreachJson(c)).snapshotId)));
+  app.get(`${root}/messages/:id/snapshots/:snapshotId/preview`, c => withOutreach(c, "VIEW", (db, scope) => requireMessageAudio(db, scope, c.req.param("id"), c.req.param("snapshotId"))));
 }

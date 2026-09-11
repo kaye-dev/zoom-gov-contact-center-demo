@@ -15,7 +15,7 @@ import {
   type RegistrationInput,
 } from "@/lib/zaad/university/contracts";
 import { opaqueTargetRef, writeZaadAudit } from "../audit";
-import { requireDepartment, type Scope, type Database } from "./permissions";
+import { type Scope, type Database } from "./permissions";
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
   if (value && typeof value === "object")
@@ -111,7 +111,7 @@ export async function listRegistrations(
   scope: Scope,
   query: { cursor?: string; limit?: string; status?: string; source?: string },
 ) {
-  requireDepartment(scope, "student-affairs");
+
   const limit =
     query.limit === undefined ? 50 : integer(Number(query.limit), 1, 100);
   const where: Prisma.UniversityStudentRegistrationWhereInput = {
@@ -171,7 +171,7 @@ export async function listRegistrations(
   };
 }
 export async function getRegistration(db: Database, scope: Scope, id: string) {
-  requireDepartment(scope, "student-affairs");
+
   const row = await db.universityStudentRegistration.findFirst({
     where: { siteKey: scope.siteKey, id },
     include: {
@@ -210,7 +210,7 @@ export async function reviewStudent(
   id: string,
   payload: unknown,
 ) {
-  requireDepartment(scope, "student-affairs");
+
   const v = object(payload);
   exact(v, [
     "version",
@@ -320,7 +320,6 @@ export async function reviewStudent(
                 data: {
                   ...identity,
                   ...data,
-                  departmentKey: "student-affairs",
                 },
               })
             ).id;

@@ -791,7 +791,7 @@ test("default detail keeps search and sync semantics with a portal help and cent
 
 test("CSV-AUTO-01: preview is capped at five rows, but submission and errors cover the entire CSV", async () => {
   const { crmImportSummary } = await import("../lib/zaad/crm-import-view");
-  const preview = { id: "job", departmentKey: "resident-support", previewDigest: "digest", status: "PREVIEW", expiresAt: new Date(Date.now() + 60000).toISOString(), rows: Array.from({ length: 7 }, (_, i) => ({ rowNumber: i + 2, rowKey: `row-${i}`, name: `Person ${i}`, status: "NEW", topicIds: ["elder-watch"] })) };
+  const preview = { id: "job", previewDigest: "digest", status: "PREVIEW", expiresAt: new Date(Date.now() + 60000).toISOString(), rows: Array.from({ length: 7 }, (_, i) => ({ rowNumber: i + 2, rowKey: `row-${i}`, name: `Person ${i}`, status: "NEW", topicIds: ["elder-watch"] })) };
   let summary = crmImportSummary(preview, Date.now());
   assert.equal(summary.shown.length, 5); assert.equal(summary.targets.length, 7); assert.equal(summary.canSubmit, true);
   preview.rows[5].status = "INVALID"; summary = crmImportSummary(preview, Date.now());

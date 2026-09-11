@@ -8,7 +8,7 @@ import type { OutreachScope } from "../../lib/server/zaad/outreach-scope";
 import { OutreachContractError } from "../../lib/zaad/outreach-contracts";
 import { ZaadZoomError, type ZoomCampaignDto } from "../../lib/server/zaad/zoom-client";
 import { ZAAD_ERROR_CODES } from "../../lib/zaad/contracts";
-const scope: OutreachScope = { siteKey: "lg", actorId: "purpose-admin", all: true, live: false, departments: ["resident-support"] };
+const scope: OutreachScope = { siteKey: "lg", actorId: "purpose-admin", all: true, live: false };
 const accountId = "purpose-fixture-account";
 const reject = (promise: Promise<unknown>, code: string) => assert.rejects(promise, error => error instanceof OutreachContractError && error.code === code);
 test("PURPOSE-02: additive mapping migration and transactional campaign binding", { timeout: 180000 }, async t => {
@@ -20,7 +20,7 @@ test("PURPOSE-02: additive mapping migration and transactional campaign binding"
     try {
       await db.user.create({ data: { id: scope.actorId, email: "purpose@example.invalid", name: "Fixture", emailVerified: true, createdAt: new Date(), updatedAt: new Date() } });
       await db.globalDeveloperApiSetting.create({ data: { id: "global", accountId, clientId: "fixture" } });
-      const existing = await db.zoomResourceBinding.create({ data: { ownerSiteKey: "lg", accountId, resourceType: "CAMPAIGN", zoomId: "existing", purpose: "REGULAR", departmentKey: "resident-support" } });
+      const existing = await db.zoomResourceBinding.create({ data: { ownerSiteKey: "lg", accountId, resourceType: "CAMPAIGN", zoomId: "existing", purpose: "REGULAR" } });
       const history = await db.zaadOneTimeDispatch.create({ data: { siteKey: "lg", operationKey: "prior-history", name: "Previous notice", body: "Fixture", voiceId: "fixture", baseCampaignId: "existing", zoomCampaignId: "existing", snapshot: { campaignId: "existing", recipients: ["fixture"] } } });
       await t.test("empty mappings produce the five fixed rows without changing provider resources", async () => {
         const result = await listPurposeCampaigns(db, scope, reader);

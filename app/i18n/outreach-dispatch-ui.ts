@@ -4,7 +4,7 @@ export const outreachDispatchDictionaries: Record<Locale, OutreachDispatchDictio
   "ja": {
     "flowGuideButton": "フローの作成手順",
     "flowGuideTitle": "フローの作成と確認",
-    "flowGuideSteps": ["Zoom Contact Centerで音声Flowを作成し、必要な音声再生や分岐を設定します。", "発信元番号のEntry Pointと公開済みの版を確認します。", "業種・部署の対応、読み上げ本文・音声の一致を確認します。"],
+    "flowGuideSteps": ["Zoom Contact Centerで音声Flowを作成し、必要な音声再生や分岐を設定します。", "発信元番号のEntry Pointと公開済みの版を確認します。", "業種の対応、読み上げ本文・音声の一致を確認します。"],
     "confirmationStatuses": {"TARGET_CHANGED": "確認後に通知希望・連絡先・所属が変更されました。内容を修正し、対象を更新して再確認してください。", "EXPIRED": "確認の有効期限が切れました。内容を修正し、新しい確認を作成してください。", "ALREADY_REQUESTED": "この案内は実行要求済み、または再実行できない状態です。同じ実行要求を重ねて送信できません。", "UNAVAILABLE": "最新の対象を確認できませんでした。再取得してください。"},
     "createTitle": "単発案内を作成",
     "confirmTitle": "実行前の確認",
@@ -21,12 +21,12 @@ export const outreachDispatchDictionaries: Record<Locale, OutreachDispatchDictio
     "observedAt": "所属の確認日時",
     "editContent": "内容を修正",
     "snapshotHelp": "本文・音声・対象者は確認時点の固定記録です。現在の連絡先やメッセージの変更はこの記録へ反映されません。",
-    "importLatest": "最新版を取り込む"
+    "importLatest": "最新の内容を取り込む"
   },
   "en": {
     "flowGuideButton": "Flow setup guide",
     "flowGuideTitle": "Create and verify a flow",
-    "flowGuideSteps": ["Create a voice flow in Zoom Contact Center and configure the required audio playback and branches.", "Check the caller number entry point and the published version.", "Verify the industry and department mapping and that the text and voice match the playback configuration."],
+    "flowGuideSteps": ["Create a voice flow in Zoom Contact Center and configure the required audio playback and branches.", "Check the caller number entry point and the published version.", "Verify the industry mapping and that the text and voice match the playback configuration."],
     "confirmationStatuses": {"TARGET_CHANGED": "Preferences, contacts or group membership changed after confirmation. Edit the notice and review the updated targets.", "EXPIRED": "This confirmation has expired. Edit the notice to create a new confirmation.", "ALREADY_REQUESTED": "Execution was already requested or this notice cannot be repeated. A duplicate execution request cannot be sent.", "UNAVAILABLE": "The latest targets could not be checked. Please retry."},
     "createTitle": "Create one-time notice",
     "confirmTitle": "Review before execution",
@@ -43,12 +43,12 @@ export const outreachDispatchDictionaries: Record<Locale, OutreachDispatchDictio
     "observedAt": "Membership checked at",
     "editContent": "Edit content",
     "snapshotHelp": "Text, voice and recipients are fixed records from confirmation. Changes to current contacts or messages do not update these records.",
-    "importLatest": "Import latest revision"
+    "importLatest": "Import current content"
   },
   "zh-Hans": {
     "flowGuideButton": "流程创建步骤",
     "flowGuideTitle": "创建并验证流程",
-    "flowGuideSteps": ["在 Zoom Contact Center 中创建语音流程，并配置所需的音频播放和分支。", "确认呼出号码的入口点和已发布版本。", "确认行业和部门映射，并核对正文和语音是否与播放配置一致。"],
+    "flowGuideSteps": ["在 Zoom Contact Center 中创建语音流程，并配置所需的音频播放和分支。", "确认呼出号码的入口点和已发布版本。", "确认行业映射，并核对正文和语音是否与播放配置一致。"],
     "confirmationStatuses": {"TARGET_CHANGED": "确认后通知偏好、联系人或群组成员发生了变化。请修改内容并重新确认更新后的对象。", "EXPIRED": "确认已过期。请修改内容以创建新的确认。", "ALREADY_REQUESTED": "此通知已请求执行或无法重复执行。不能重复发送执行请求。", "UNAVAILABLE": "无法检查最新对象。请重试。"},
     "createTitle": "创建单次通知",
     "confirmTitle": "执行前确认",
@@ -65,7 +65,7 @@ export const outreachDispatchDictionaries: Record<Locale, OutreachDispatchDictio
     "observedAt": "成员确认时间",
     "editContent": "修改内容",
     "snapshotHelp": "正文、语音和对象为确认时的固定记录。当前联系人或消息的更改不会更新此记录。",
-    "importLatest": "导入最新版本"
+    "importLatest": "导入最新内容"
   },
   "zh-Hant": {
     "flowGuideButton": "流程建立步驟",
@@ -87,7 +87,7 @@ export const outreachDispatchDictionaries: Record<Locale, OutreachDispatchDictio
     "observedAt": "成員確認時間",
     "editContent": "修改內容",
     "snapshotHelp": "本文、語音和對象為確認時的固定記錄。目前聯絡人或訊息的變更不會更新此記錄。",
-    "importLatest": "匯入最新版本"
+    "importLatest": "匯入最新內容"
   },
   "ko": {
     "flowGuideButton": "플로 만들기 안내",
@@ -109,6 +109,6 @@ export const outreachDispatchDictionaries: Record<Locale, OutreachDispatchDictio
     "observedAt": "그룹 구성 확인 일시",
     "editContent": "내용 수정",
     "snapshotHelp": "본문, 음성 및 대상자는 확인 시점의 고정 기록입니다. 현재 연락처나 메시지를 변경해도 이 기록은 바뀌지 않습니다.",
-    "importLatest": "최신 버전 가져오기"
+    "importLatest": "최신 내용 가져오기"
   }
 };

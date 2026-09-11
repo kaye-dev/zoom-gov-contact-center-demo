@@ -31,6 +31,8 @@ export async function withOutreach(c: OutreachContext, action: AdminAccessAction
     }
     const scope = await resolveOutreachScope(db, auth.actor, tenant.tenantKey);
     const result = await fn(db, scope);
+    // Preserve middleware headers (especially X-Admin-Tenant) for binary streams.
+    if (result instanceof Response) return c.newResponse(result.body, result);
     return c.json(result as Record<string, unknown>, status);
   } catch (error) { return outreachError(c, error); }
 }

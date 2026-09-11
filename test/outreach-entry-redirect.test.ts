@@ -41,7 +41,7 @@ test("ENTRY-03: page authenticates first and never loads outreach data for denie
       if (name === "@/lib/server/admin-access/server") return { requireAdminAccess: async (resource: string, action: string, callback: string) => { assert.equal(resource, "zaad"); assert.equal(action, "VIEW"); assert.equal(callback, "/admin/zaad?tenant=lg"); if (scenario === "anonymous") throw new Error("LOGIN"); if (scenario === "no-access") throw new Error("DENIED"); return { actor: { id: "actor" } }; } };
       if (name === "@/lib/server/admin-scope") return { getAdminPageTenant: async () => { tenantReads++; return ["lg", "univ"].includes(scenario) ? { ok: true, tenant: { key: scenario }, allowed: [scenario] } : { ok: false, allowed: scenario === "invalid" ? ["lg"] : ["univ"] }; } };
       if (name === "@/lib/server/prisma") return { withPrisma: async (fn: (db: unknown) => unknown) => { dataReads++; return fn({}); } };
-      if (name === "@/lib/server/zaad/outreach-scope") return { resolveOutreachScope: async () => ({ departments: ["fixture"] }) };
+      if (name === "@/lib/server/zaad/outreach-scope") return { resolveOutreachScope: async () => ({  }) };
       if (name === "@/lib/admin-access/authorization") return { canAdminAccess: () => false };
       if (name === "./OutreachView") return { OutreachView: () => null };
       return localRequire(name);

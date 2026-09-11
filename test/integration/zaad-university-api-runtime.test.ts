@@ -71,11 +71,11 @@ test(
           ["outreach-view", "ALL"],
         ])
           await db.query(
-            `INSERT INTO university_zaad_grants (id,"siteKey","userId","departmentKey") VALUES ($1,'univ',$1,$2)`,
-            [id, department],
+            `INSERT INTO outreach_tenant_grants (id,"siteKey","userId","accessEnabled","serviceFullAccess") VALUES ($1,'univ',$1,true,$2)`,
+            [id, department === "ALL"],
           );
         await db.query(
-          `INSERT INTO university_zaad_grants (id,"siteKey","userId","departmentKey") VALUES ('outreach-all-lg','lg','outreach-all','ALL')`,
+          `INSERT INTO outreach_tenant_grants (id,"siteKey","userId","accessEnabled") VALUES ('outreach-all-lg','lg','outreach-all',true)`,
         );
         await db.query(
           `INSERT INTO admin_access_roles (id,name,"nameKey") VALUES ('outreach-view','Outreach view','outreach view')`,
@@ -153,13 +153,12 @@ test(
         await t.test("FULL-ACCESS-API: grant-free role reaches all departments; limited and no-access remain isolated", async () => {
           const full = await data<{ departments: string[]; templates: unknown[] }>(await request("GET", `${prefix}/templates`, undefined, "outreach-full"));
           assert.equal(full.templates.length, 7);
-          assert.ok(full.departments.includes("facilities"));
-          assert.ok(full.departments.includes("student-affairs"));
+          assert.ok(!("departments" in full));
           for (const routePath of ["contacts?purpose=scholarship&mode=DEMO", "registrations", "groups", "batches", "intakes"]) {
             assert.equal((await request("GET", `${prefix}/${routePath}`, undefined, "outreach-full")).status, 200, routePath);
           }
           const limited = await data<{ departments: string[] }>(await request("GET", `${prefix}/templates`, undefined, "outreach-students"));
-          assert.deepEqual(limited.departments, ["student-affairs"]);
+          assert.equal("departments" in limited, false);
           assert.equal((await request("GET", `${prefix}/templates`, undefined, "outreach-none")).status, 403);
           assert.equal((await request("GET", `${prefix}/templates`, undefined, "outreach-legacy")).status, 403);
           assert.equal((await request("GET", `${prefix}/templates?tenant=lg`, undefined, "outreach-full")).status, 404);
@@ -367,7 +366,7 @@ test(
                   "outreach-students",
                 )
               ).status,
-              404,
+              200,
             );
             assert.deepEqual(external, []);
           },

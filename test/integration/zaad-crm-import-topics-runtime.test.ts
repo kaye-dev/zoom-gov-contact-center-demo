@@ -15,12 +15,12 @@ test("CSV topics persist for all rows while retaining pending review and retry s
     try {
       await db.user.create({ data: { id: "csv-topics-actor", name: "Test", email: "csv-topics@example.invalid", emailVerified: true, createdAt: new Date(), updatedAt: new Date() } });
       for (const siteKey of ["lg", "univ"] as const) {
-        const scope: OutreachScope = { siteKey, actorId: "csv-topics-actor", all: true, departments: [siteKey === "lg" ? "resident-support" : "student-affairs"], live: false };
+        const scope: OutreachScope = { siteKey, actorId: "csv-topics-actor", all: true, live: false };
         const topics = siteKey === "lg" ? "elder-watch;procedure-support" : "scholarship;class-change";
         const header = siteKey === "lg" ? "name,phone,topicIds" : "name,phone,studentNumber,topicIds";
         const rows = Array.from({ length: 7 }, (_, i) => `CSV${i},0900000000${i + 1},${siteKey === "univ" ? `126000${i + 1},` : ""}${topics}`);
-        const preview = await previewCrmImport(db, scope, { operationKey: `topics_preview_${siteKey}`, departmentKey: "foreign-input-ignored", bytes: new TextEncoder().encode([header, ...rows].join("\r\n")) });
-        assert.equal(preview.departmentKey, scope.departments[0]);
+        const preview = await previewCrmImport(db, scope, { operationKey: `topics_preview_${siteKey}`, bytes: new TextEncoder().encode([header, ...rows].join("\r\n")) });
+        assert.equal("departmentKey" in preview, false);
         assert.ok(preview.rows.every(row => row.status === "NEW"));
         const selection = { jobId: preview.id, previewDigest: preview.previewDigest, rowKeys: preview.rows.map(row => row.rowKey) };
         const applied = await applyCrmImport(db, scope, selection);

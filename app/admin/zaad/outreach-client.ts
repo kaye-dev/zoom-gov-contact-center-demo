@@ -10,6 +10,21 @@ export async function outreachRequest<T>(tenant: TenantKey, path: string, init: 
   return body as T;
 }
 export const outreachMutation = <T>(tenant: TenantKey, path: string, body: unknown, method = "POST") => outreachRequest<T>(tenant, path, { method, body: JSON.stringify(body) });
+export async function loadImportedAudio(tenant: TenantKey, id: string, signal: AbortSignal) {
+  const response = await adminFetch(`/api/admin/zaad/imported-audio-messages/${encodeURIComponent(id)}/audio?tenant=${tenant}`, { signal, cache: "no-store", headers: { Accept: "audio/*" } });
+  if (!response.ok || !response.headers.get("content-type")?.startsWith("audio/") || !response.body) throw new Error("AUDIO_UNAVAILABLE");
+  const reader = response.body.getReader(), chunks: ArrayBuffer[] = []; let size = 0;
+  try {
+    while (true) {
+      const next = await reader.read(); if (next.done) break;
+      size += next.value.length;
+      if (size > 10 * 1024 * 1024) { await reader.cancel(); throw new Error("AUDIO_TOO_LARGE"); }
+      chunks.push(next.value.slice().buffer);
+    }
+    signal.throwIfAborted();
+    return URL.createObjectURL(new Blob(chunks, { type: response.headers.get("content-type")! }));
+  } finally { reader.releaseLock(); }
+}
 export type ListResult<T> = { tenantKey: TenantKey; items: T[]; total: number | null; nextCursor: string | null };
 export async function outreachAll<T>(tenant: TenantKey, path: string, init: RequestInit = {}): Promise<T[]> {
   const [route, query = ""] = path.split("?"), params = new URLSearchParams(query), seen = new Set<string>(), items: T[] = [];

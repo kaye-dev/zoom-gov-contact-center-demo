@@ -21,7 +21,7 @@ export async function ensureMunicipalCase(db: Database, siteKey: string, targetS
     if (existing.status !== "COMPLETED") await db.municipalSupportCase.update({ where: { id: existing.id }, data: { reasons: [...new Set([...existing.reasons, ...reasons])], version: { increment: 1 } } });
     return existing;
   }
-  return db.municipalSupportCase.create({ data: { siteKey, targetSnapshotId, departmentKey: workflow.departmentKey, purpose: workflow.purpose, reasons: [...new Set(reasons)], assigneeId: workflow.assigneeId, dueAt: workflow.dueAt } });
+  return db.municipalSupportCase.create({ data: { siteKey, targetSnapshotId, purpose: workflow.purpose, reasons: [...new Set(reasons)], assigneeId: workflow.assigneeId, dueAt: workflow.dueAt } });
 }
 export async function scheduleMunicipalRetry(db: Database, siteKey: string, attemptId: string, now = new Date()) {
   const attempt = await db.municipalCallAttempt.findFirstOrThrow({ where: { siteKey, id: attemptId }, include: { target: { include: { run: { include: { workflow: true } }, cases: true } } } });
@@ -51,10 +51,10 @@ async function latestSendInput(db: PrismaClient, jobId: string, now: Date, provi
   if (workflow.revision !== job.scheduleRevision || job.target.cases.length || job.target.state === "CONFIRMED") throw new OutreachContractError("TARGET_CHANGED", 409);
   const target = await db.municipalWorkflowTarget.findFirst({ where: { id: job.target.targetId, siteKey: "lg", workflowRevisionId: workflow.id }, include: { contact: { include: { preferences: true } } } });
   if (!target || target.version !== job.target.targetVersion || target.contact.version !== job.target.contactVersion || municipalContactDigest(target.contact) !== municipalContactDigest(record(job.target.snapshot).contact)) throw new OutreachContractError("TARGET_CHANGED", 409);
-  const eligibility = eligibleMunicipalTarget({ purpose: choice(workflow.purpose, MUNICIPAL_PURPOSES), contact: target.contact, businessEvidence: target.businessEvidence, allowedDepartments: scope.departments, excluded: target.excluded, dueAt: workflow.dueAt, now, schedule: settings.schedule, dispatch: true });
+  const eligibility = eligibleMunicipalTarget({ purpose: choice(workflow.purpose, MUNICIPAL_PURPOSES), contact: target.contact, businessEvidence: target.businessEvidence, excluded: target.excluded, dueAt: workflow.dueAt, now, schedule: settings.schedule, dispatch: true });
   if (eligibility.evidence) await requireCurrentMunicipalEvidence(db, "lg", target.contactId, eligibility.evidence);
   if (!eligibility.eligible) throw new OutreachContractError(eligibility.reasons[0], 409);
-  await requireMunicipalAssignee(db, scope, workflow.assigneeId, workflow.departmentKey);
+  await requireMunicipalAssignee(db, scope, workflow.assigneeId);
   const readiness = await provider.readiness(workflow.flowBindingId);
   if (!readiness.ready || !readiness.accountId || !readiness.flowBindingId) throw new OutreachContractError("PROVIDER_NOT_CONFIGURED", 503);
   return { job, settings, readiness, phone: target.contact.phone };

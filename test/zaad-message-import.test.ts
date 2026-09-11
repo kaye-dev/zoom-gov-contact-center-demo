@@ -6,11 +6,12 @@ import { audioItemDigest } from "../lib/server/zaad/message-imports";
 import { ZaadZoomClient, clearZaadZoomTokenCache } from "../lib/server/zaad/zoom-client";
 
 const payload = { asset_id: "asset", asset_name: "録音", asset_type: "audio", asset_items: [{ asset_item_id: "ja", asset_item_name: "日本語", asset_item_language: "ja-JP", asset_item_file_url: "https://example.invalid/temporary?secret=one" }, { asset_item_id: "en", asset_item_language: "en-US", asset_item_voice: "Joanna", asset_item_file_url: "https://example.invalid/file" }] };
-test("MESSAGE-API-01: audio metadata preserves missing voice and excludes temporary URLs and text", () => {
+test("MESSAGE-API-01: provider parser retains server-only URLs and missing voice; digests exclude rotated URLs", () => {
   const value = parseAudioAsset(payload, "asset");
   assert.equal(value.items.length, 2); assert.equal(value.items[0].voiceId, null);
   assert.equal(value.items[0].hasAudioFile, true);
-  assert.doesNotMatch(JSON.stringify(value), /https:|secret|body/);
+  assert.equal(value.items[0].fileUrl, payload.asset_items[0].asset_item_file_url);
+  assert.equal(value.items[0].body, null);
   const next = parseAudioAsset({ ...payload, asset_items: payload.asset_items.map(item => ({ ...item, asset_item_file_url: "https://example.invalid/rotated" })) }, "asset");
   assert.equal(audioItemDigest(value,value.items[0]), audioItemDigest(next,next.items[0]));
   assert.equal(parseAudioAsset({ ...payload, archived: true }, "asset").archived, true);
@@ -19,11 +20,19 @@ test("MESSAGE-API-01: audio metadata preserves missing voice and excludes tempor
   assert.throws(()=>parseAudioAssetsPage({}));
   assert.throws(()=>parseAudioAsset({...payload,asset_items:[payload.asset_items[0],payload.asset_items[0]]},"asset"));
 });
+test("MESSAGE-CONTENT-01: actual audio text is preserved exactly, unavailable and malformed responses differ", () => {
+  const parse = (content: unknown) => parseAudioAsset({ ...payload, asset_items: [{ ...payload.asset_items[0], asset_item_content: content }] }, "asset");
+  const body = "  実際の本文\n<script>plain text</script>  ";
+  assert.equal(parse(body).items[0].body, body);
+  for (const value of [undefined, null, "", "  "]) assert.equal(parse(value).items[0].body, null);
+  for (const value of [42, {}, []]) assert.throws(() => parse(value));
+  assert.notEqual(audioItemDigest(parse(body), parse(body).items[0]), audioItemDigest(parse("異なる本文"), parse("異なる本文").items[0]));
+});
 test("MESSAGE-IMPORT: payload is bounded, deduplicated and does not accept client text/metadata", () => {
-  const item={assetId:"asset",assetItemId:"ja",observedDigest:"a".repeat(64),version:0};
-  const value={operationKey:"audio_import_operation",accountId:"account",departmentKey:"welfare",items:[item]};
+  const item={assetId:"asset",assetItemId:"ja",observedDigest:"a".repeat(64),expectedUpdatedAt:null};
+  const value={operationKey:"audio_import_operation",accountId:"account",items:[item]};
   assert.equal(parseAudioImport(value).items.length,1);
-  for(const items of [[],Array.from({length:101},()=>item),[item,item],[{...item,body:"fake"}],[{...item,version:-1}],[{...item,observedDigest:"no"}]])assert.throws(()=>parseAudioImport({...value,items}));
+  for(const items of [[],Array.from({length:101},()=>item),[item,item],[{...item,body:"fake"}],[{...item,expectedUpdatedAt:"bad"}],[{...item,observedDigest:"no"}]])assert.throws(()=>parseAudioImport({...value,items}));
   assert.throws(()=>parseAudioImport({...value,body:"invented"}));
 });
 test("MESSAGE-API-01: asset methods use GET with pagination and no write gate", async () => {

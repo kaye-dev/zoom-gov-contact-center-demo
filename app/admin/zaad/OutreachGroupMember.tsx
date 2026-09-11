@@ -11,7 +11,7 @@ import { registrationInputClass as input, outreachPrimary as primary, outreachSe
 export type GroupMember = { id: string; displayName: string; phones: { number: string }[]; observedDigest: string; source?: string; syncStatus?: import("@/lib/zaad/default-groups").MemberSyncStatus; remotePresent?: boolean; mapping: { id?: string; syncState: string; version: number; personId: string | null; personOrigin: string | null } | null };
 export type MemberAction = { mode: "add" | "edit" | "delete" | "link"; member?: GroupMember };
 export function OutreachGroupMember({ tenant, group, action, close, saved, setDirty, setSaving }: {
-  tenant: TenantKey; group: { id: string; name: string; departmentKey: string | null }; action: MemberAction;
+  tenant: TenantKey; group: { id: string; name: string }; action: MemberAction;
   close: () => void; saved: () => void; setDirty: (value: boolean) => void; setSaving?: (value: boolean) => void;
 }) {
   const { t } = useI18n(), d = t.outreachCommon, z = t.admin.zaad;
@@ -26,10 +26,10 @@ export function OutreachGroupMember({ tenant, group, action, close, saved, setDi
     if (!selecting) return;
     const controller = new AbortController();
     outreachAll<ContactDto>(tenant, "contacts", { signal: controller.signal }).then(rows => {
-      if (!controller.signal.aborted) { setContacts(rows.filter(row => row.departmentKey === group.departmentKey && row.reference.origin !== "IMPORT_CANDIDATE")); setFailed(false); }
+      if (!controller.signal.aborted) { setContacts(rows.filter(row => row.reference.origin !== "IMPORT_CANDIDATE")); setFailed(false); }
     }).catch(() => { if (!controller.signal.aborted) setFailed(true); });
     return () => controller.abort();
-  }, [tenant, selecting, group.departmentKey, reload]);
+  }, [tenant, selecting, reload]);
   const finish = () => { setDirty(false); close(); };
   const requestClose = () => { if (lock.current) return; if (dirty.current) setDiscard(true); else finish(); };
   async function submit() {

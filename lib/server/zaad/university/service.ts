@@ -1,10 +1,11 @@
+import { canAdminAccess } from "@/lib/admin-access/authorization";
+import { getAdminAccessActor } from "@/lib/server/admin-access/queries";
+import { universityScope } from "./permissions";
 import type { Prisma, PrismaClient } from "@/lib/generated/prisma/client";
 import { normalizeJapanPhone } from "@/lib/disaster-radio-subscriptions/validation";
 import { CASES, recipientsFor } from "@/lib/zaad/university/demo";
 import {
   PURPOSES,
-  PURPOSE_DEPARTMENT,
-  TOPICS,
   OutreachError,
   object,
   exact,
@@ -25,7 +26,6 @@ import {
 } from "@/lib/zaad/university/contracts";
 import {
   scopedWhere,
-  requireDepartment,
   type Scope,
   type Database,
 } from "./permissions";
@@ -34,27 +34,19 @@ import { writeZaadAudit } from "../audit";
 const json = (value: unknown): Prisma.InputJsonValue =>
   JSON.parse(JSON.stringify(value));
 export const template = (scope: Scope, purpose: Purpose) => {
-  requireDepartment(scope, PURPOSE_DEPARTMENT[purpose]);
+
   return CASES.find((t) => t.id === purpose)!;
 };
-export async function assignees(
-  db: Database,
-  scope: Scope,
-  department: string,
-) {
-  requireDepartment(scope, department);
-  const grants = await db.universityZaadGrant.findMany({
-    where: {
-      siteKey: scope.siteKey,
-      departmentKey: { in: [department, "ALL"] },
-    },
-    select: { userId: true },
-  });
-  return db.user.findMany({
-    where: { id: { in: grants.map((g) => g.userId) }, banned: false },
-    select: { id: true, name: true },
-    take: 100,
-  });
+export async function assignees(db: Database, scope: Scope) {
+  const users = await db.user.findMany({ where: { OR: [{ banned: false }, { banned: null }] }, select: { id: true, name: true }, orderBy: { id: "asc" } });
+  const items = [];
+  for (const user of users) {
+    const actor = await getAdminAccessActor(db, user.id);
+    if (!actor || !canAdminAccess(actor, "zaad", "UPDATE")) continue;
+    try { await universityScope(db, scope.siteKey, actor); items.push(user); }
+    catch (error) { if (!(error instanceof OutreachError)) throw error; }
+  }
+  return items;
 }
 export async function contacts(
   db: Database,
@@ -86,25 +78,7 @@ export async function contacts(
   const contactWhere: Prisma.UniversityContactWhereInput = {
     siteKey: scope.siteKey,
     ...(selectedIds ? { id: { in: selectedIds } } : {}),
-    OR: [
-      { departmentKey: PURPOSE_DEPARTMENT[purpose] },
-      ...(purpose !== "group" && (TOPICS as readonly string[]).includes(purpose)
-        ? [
-            {
-              identityVerified: true,
-              phoneVerified: true,
-              phoneEligible: true,
-              preferences: {
-                some: {
-                  siteKey: scope.siteKey,
-                  topicId: purpose,
-                  enabled: true,
-                },
-              },
-            },
-          ]
-        : []),
-    ],
+
   };
   const stored = await db.universityContact.findMany({
     where: {
@@ -125,6 +99,7 @@ export async function contacts(
     maskedContact: `${c.displayStudentNumber ?? ""} / • ${c.phone.slice(-4)}`,
     contactKey: c.id,
     eligible:
+      !c.deletedAt && !["WITHDRAWN", "DELETED"].includes(c.registrationStatus) &&
       c.identityVerified &&
       c.phoneVerified &&
       c.phoneEligible &&
@@ -148,7 +123,6 @@ export async function contacts(
   if (purpose === "group") {
     const groupWhere = {
       ...scopedWhere(scope),
-      departmentKey: PURPOSE_DEPARTMENT.group,
       ...(selectedIds ? { id: { in: selectedIds } } : {}),
     };
     const groups = await db.universityContactGroup.findMany({
@@ -176,6 +150,7 @@ export async function contacts(
     const groupRows = groups.slice(0, realSlots).map((g) => {
       const c = g.representative;
       const eligible =
+        !c.deletedAt && !["WITHDRAWN", "DELETED"].includes(c.registrationStatus) &&
         c.identityVerified &&
         c.phoneVerified &&
         c.phoneEligible &&
@@ -246,8 +221,7 @@ export async function createContact(
     "phoneVerified",
     "phoneEligible",
   ]);
-  const departmentKey = text(v.departmentKey, 100);
-  requireDepartment(scope, departmentKey);
+
   const phone = normalizeJapanPhone(text(v.phone, 30));
   if (!phone) throw new OutreachError("INVALID_REQUEST");
   const priorNoticeAt = v.priorNoticeAt
@@ -259,7 +233,6 @@ export async function createContact(
     const row = await tx.universityContact.create({
       data: {
         siteKey: scope.siteKey,
-        departmentKey,
         name: text(v.name, 100),
         phone,
         registrationSource: "UNIVERSITY_MANUAL",
@@ -350,6 +323,7 @@ export async function preflight(db: Database, scope: Scope, payload: unknown) {
   };
   // The digest binds identity, eligibility and consent revision, never only the selected IDs.
   const preflightHash = payloadDigest({
+    scopeContract: "tenant-v1",
     canonical,
     rows: rows.map((r) => ({
       id: r.id,
@@ -404,7 +378,6 @@ export async function createBatch(
         const row = await tx.universityOutreachBatch.create({
           data: {
             siteKey: scope.siteKey,
-            departmentKey: PURPOSE_DEPARTMENT[checked.purpose],
             purpose: checked.purpose,
             mode: checked.mode,
             trigger: checked.trigger,
@@ -427,7 +400,7 @@ export async function createBatch(
                     ? new Date(r.priorNoticeAt)
                     : null,
                   groupMemberCount: r.groupMemberCount,
-                  snapshot: json(r),
+                  snapshot: json({ ...r, scopeContract: "tenant-v1" }),
                 }),
               ),
             },
@@ -580,6 +553,7 @@ export async function executeBatch(
           return results(tx, scope, id);
         if (b.version !== version || b.status !== "PREPARED")
           throw new OutreachError("VERSION_CONFLICT", 409);
+        if (b.targets.some(target => object(target.snapshot).scopeContract !== "tenant-v1")) throw new OutreachError("SNAPSHOT_STALE", 409);
         if (b.mode !== "DEMO")
           throw new OutreachError("PROVIDER_NOT_CONFIGURED", 503);
         const purpose = enumValue(b.purpose, PURPOSES),
@@ -595,6 +569,8 @@ export async function executeBatch(
                 identityVerified: true,
                 phoneVerified: true,
                 phoneEligible: true,
+                deletedAt: null,
+                registrationStatus: { notIn: ["WITHDRAWN", "DELETED"] },
               },
               include: {
                 preferences: {
@@ -663,7 +639,6 @@ export async function executeBatch(
           await tx.universitySupportCase.create({
             data: {
               siteKey: scope.siteKey,
-              departmentKey: b.departmentKey,
               targetId: target.id,
               procedureStatus: t.procedureApplicable ? "UNKNOWN" : "NA",
             },
@@ -764,7 +739,7 @@ export async function updateCase(
         });
         if (!row) throw new OutreachError("NOT_FOUND", 404);
         if (
-          !(await assignees(tx, scope, row.departmentKey)).some(
+          !(await assignees(tx, scope)).some(
             (a) => a.id === assigneeId,
           )
         )
@@ -827,20 +802,19 @@ export async function createIntake(
   scope: Scope,
   payload: unknown,
 ) {
-  requireDepartment(scope, "facilities");
+
   const v = object(payload);
   exact(v, ["place", "issue", "support", "callback"]);
   return db.$transaction(async (tx) => {
     const row = await tx.universityIntake.create({
       data: {
         siteKey: scope.siteKey,
-        departmentKey: "facilities",
         place: text(v.place, 200),
         issue: text(v.issue),
         support: text(v.support),
         callback: text(v.callback, 200),
         cases: {
-          create: { departmentKey: "facilities", procedureStatus: "NA" },
+          create: { procedureStatus: "NA" },
         },
       },
       include: { cases: true },

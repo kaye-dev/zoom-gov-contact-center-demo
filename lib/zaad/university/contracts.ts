@@ -18,21 +18,6 @@ export const TOPICS = [
   "continuity",
 ] as const;
 export type Topic = (typeof TOPICS)[number];
-export const DEPARTMENTS = [
-  "admissions",
-  "student-affairs",
-  "exam-office",
-  "academic-affairs",
-  "facilities",
-  "international",
-  "student-support",
-] as const;
-export type Department = (typeof DEPARTMENTS)[number];
-export const PURPOSE_DEPARTMENT: Record<Purpose, Department> =
-  Object.fromEntries(PURPOSES.map((p, i) => [p, DEPARTMENTS[i]])) as Record<
-    Purpose,
-    Department
-  >;
 export const CONSENT_VERSION = "univ-phone-notice-v1";
 export const FACULTY_CODES = ["1", "2", "3", "4", "5", "6", "7"] as const;
 export class OutreachError extends Error {
@@ -227,7 +212,6 @@ export type Template = {
   id: Purpose;
   number: string;
   name: string;
-  department: string;
   icon: string;
   audience: string;
   trigger: string;

@@ -6,7 +6,7 @@ import type { OutreachScope } from "../lib/server/zaad/outreach-scope";
 import type { ZoomContactListDto } from "../lib/server/zaad/zoom-client";
 import { OutreachContractError } from "../lib/zaad/outreach-contracts";
 import { formatGroupUpdatedAt, sortContactLists } from "../lib/zaad/group-sync";
-const scope: OutreachScope = { siteKey: "lg", actorId: "fixture-admin", all: true, departments: ["resident-support"], live: false };
+const scope: OutreachScope = { siteKey: "lg", actorId: "fixture-admin", all: true, live: false };
 const list = (id: string): ZoomContactListDto => ({ id, name: id, type: "contact", description: "", contactCount: 0, updatedAt: null, revision: "fixture" });
 const rejects = (promise: Promise<unknown>, code: string) => assert.rejects(promise, error => error instanceof OutreachContractError && error.code === code);
 

@@ -17,7 +17,7 @@ import { digest } from "../../lib/server/zaad/outreach-data";
 import { previewCrmImport, applyCrmImport } from "../../lib/server/zaad/crm-imports";
 import { OutreachContractError } from "../../lib/zaad/outreach-contracts";
 import type { OutreachScope } from "../../lib/server/zaad/outreach-scope";
-const scope: OutreachScope = { siteKey: "lg", actorId: "outreach-test-actor", all: true, departments: ["resident-support", "welfare"], live: false };
+const scope: OutreachScope = { siteKey: "lg", actorId: "outreach-test-actor", all: true, live: false };
 const rejects = (promise: Promise<unknown>, code: string) => assert.rejects(promise, (error: unknown) => error instanceof OutreachContractError && error.code === code);
 test("outreach persists scoped registration, consent, immutable messages and snapshots", { timeout: 180000 }, async t => {
   await withIsolatedPostgresDatabase(async databaseUrl => {
@@ -42,10 +42,10 @@ test("outreach persists scoped registration, consent, immutable messages and sna
         await rejects(updateContact(db, scope, "MUNICIPAL_CONTACT", registered.contactId, { ...input, topics: ["fraud-alert"] }), "CONSENT_EVIDENCE_REQUIRED");
         const active = await updateContact(db, scope, "MUNICIPAL_CONTACT", registered.contactId, input);
         assert.equal(active.status, "ACTIVE"); assert.deepEqual(active.topics, ["elder-watch"]);
-        await rejects(getContact(db, { ...scope, siteKey: "univ", departments: ["student-affairs"] }, "MUNICIPAL_CONTACT", registered.contactId), "NOT_FOUND");
+        await rejects(getContact(db, { ...scope, siteKey: "univ" }, "MUNICIPAL_CONTACT", registered.contactId), "NOT_FOUND");
         await rejects(updateContact(db, scope, "MUNICIPAL_CONTACT", registered.contactId, input), "VERSION_CONFLICT");
       });
-      const messageInput = { departmentKey: "resident-support", name: "確認案内", body: "ご登録いただいた電話連絡です。", voiceId: "Takumi", languageCode: "ja-JP" };
+      const messageInput = { name: "確認案内", body: "ご登録いただいた電話連絡です。", voiceId: "Takumi", languageCode: "ja-JP" };
       const message = await saveOutreachMessage(db, scope, messageInput), firstRevision = message.revisions[0];
       await t.test("message list reports persisted generation state and preserves legacy uncertainty", async () => {
         assert.equal((await listOutreachMessages(db, scope)).items.find(row => row.id === message.id)?.generationState, "NOT_GENERATED");
@@ -53,25 +53,33 @@ test("outreach persists scoped registration, consent, immutable messages and sna
         const unknown = (await listOutreachMessages(db, scope)).items.find(row => row.id === message.id);
         assert.equal(unknown?.generationState, "UNKNOWN"); assert.equal(unknown?.zoomAssetId, "test-unverified-asset");
         await db.messageRevision.update({ where: { id: firstRevision.id }, data: { generationState: "NOT_GENERATED", zoomAssetId: null } });
-        const legacy = await db.zaadOutboundMessage.create({ data: { siteKey: "lg", departmentKey: "resident-support", name: "Legacy audio", body: "Legacy", voiceId: "Takumi", languageCode: "ja-JP", zoomAssetId: "test-legacy-asset" } });
+        const legacy = await db.zaadOutboundMessage.create({ data: { siteKey: "lg", name: "Legacy audio", body: "Legacy", voiceId: "Takumi", languageCode: "ja-JP", zoomAssetId: "test-legacy-asset" } });
         assert.equal((await listOutreachMessages(db, scope)).items.find(row => row.id === legacy.id)?.generationState, "LEGACY_UNVERIFIED");
         await db.zaadOutboundMessage.delete({ where: { id: legacy.id } });
       });
-      const confirmation = await preflightDispatch(db, scope, { operationKey: "dispatch_000001", name: "見守り確認", departmentKey: "resident-support", connectionMode: "MEDIA", messageRevisionId: firstRevision.id, body: messageInput.body, voiceId: messageInput.voiceId, languageCode: "ja-JP", targetMode: "PEOPLE", people: [{ siteKey: "lg", kind: "resident", origin: "MUNICIPAL_CONTACT", id: registered.contactId }], groupIds: [], topic: "elder-watch" });
+      const confirmation = await preflightDispatch(db, scope, { operationKey: "dispatch_000001", name: "見守り確認", connectionMode: "MEDIA", messageRevisionId: firstRevision.id, body: messageInput.body, voiceId: messageInput.voiceId, languageCode: "ja-JP", targetMode: "PEOPLE", people: [{ siteKey: "lg", kind: "resident", origin: "MUNICIPAL_CONTACT", id: registered.contactId }], groupIds: [], topic: "elder-watch" });
       await t.test("new message revisions never rewrite a dispatch snapshot", async () => {
         assert.equal((await listOutreachMessages(db, scope)).items.find(row => row.id === message.id)?.inUse, true);
         const snapshotBefore = JSON.stringify((await db.zaadOneTimeDispatch.findUniqueOrThrow({ where: { id: confirmation.id } })).snapshot);
         assert.equal((JSON.parse(snapshotBefore) as { targets: { name: string }[] }).targets[0].name, payload.name);
+        const legacySnapshot = JSON.parse(snapshotBefore);
+        delete legacySnapshot.scopeContract;
+        legacySnapshot.departmentKey = "welfare";
+        await db.zaadOneTimeDispatch.update({ where: { id: confirmation.id }, data: { snapshot: legacySnapshot } });
+        assert.equal((await inspectDispatchConfirmation(db, scope, confirmation.id)).confirmationStatus, "TARGET_CHANGED");
+        await rejects(prepareDispatch(db, scope, { id: confirmation.id, version: confirmation.version, snapshotDigest: confirmation.snapshotDigest, operationKey: "dispatch_000001" }), "TARGET_CHANGED");
+        assert.deepEqual((await db.zaadOneTimeDispatch.findUniqueOrThrow({ where: { id: confirmation.id } })).snapshot, legacySnapshot);
+        await db.zaadOneTimeDispatch.update({ where: { id: confirmation.id }, data: { snapshot: JSON.parse(snapshotBefore) } });
         await db.municipalContact.update({ where: { id: registered.contactId }, data: { name: "変更後の氏名" } });
         assert.equal(JSON.stringify((await db.zaadOneTimeDispatch.findUniqueOrThrow({ where: { id: confirmation.id } })).snapshot), snapshotBefore);
         await db.municipalContact.update({ where: { id: registered.contactId }, data: { name: payload.name } });
-        const edited = await saveOutreachMessage(db, scope, { ...messageInput, body: "新しい案内です。", version: message.version }, message.id);
+        const edited = await saveOutreachMessage(db, scope, { ...messageInput, body: "新しい案内です。", expectedUpdatedAt: message.updatedAt.toISOString(), expectedDigest: message.expectedDigest }, message.id);
         assert.equal(edited.revisions.length, 2); assert.equal(edited.revisions.find(row => row.id === firstRevision.id)?.body, messageInput.body);
         assert.equal(JSON.stringify((await db.zaadOneTimeDispatch.findUniqueOrThrow({ where: { id: confirmation.id } })).snapshot), snapshotBefore);
-        await rejects(retireOutreachMessage(db, scope, message.id, edited.version, true), "MESSAGE_IN_USE");
-        await rejects(requireMessageAudio(db, scope, message.id, 1), "AUDIO_CONTRACT_NOT_VERIFIED");
+        await rejects(retireOutreachMessage(db, scope, message.id, {expectedUpdatedAt: edited.updatedAt.toISOString(), expectedDigest: edited.expectedDigest}, true), "MESSAGE_IN_USE");
+        await rejects(requireMessageAudio(db, scope, message.id, firstRevision.id), "AUDIO_CONTRACT_NOT_VERIFIED");
         await rejects(executeDispatch(db, scope, confirmation.id, { id: confirmation.id, version: confirmation.version, snapshotDigest: confirmation.snapshotDigest, operationKey: "dispatch_000001" }), "LIVE_DISABLED");
-        assert.equal((await getOutreachMessage(db, scope, message.id)).version, 2);
+        assert.equal((await getOutreachMessage(db, scope, message.id)).currentRevisionId, edited.currentRevisionId);
       });
       await t.test("preparation rechecks current contact and consent without rewriting history", async () => {
         const request = { id: confirmation.id, version: confirmation.version, snapshotDigest: confirmation.snapshotDigest, operationKey: "dispatch_000001" };
@@ -85,7 +93,7 @@ test("outreach persists scoped registration, consent, immutable messages and sna
           assert.equal((await inspectDispatchConfirmation(db, scope, confirmation.id)).confirmationStatus, "TARGET_CHANGED");
           await db.municipalContact.update({ where: { id: before.id }, data: { status: before.status, phoneVerified: before.phoneVerified, version: before.version, name: before.name } });
         }
-        await rejects(prepareDispatch(db, { ...scope, all: false, departments: ["welfare"] }, request), "NOT_FOUND");
+        await rejects(prepareDispatch(db, { ...scope, all: false }, request), "AUDIO_CONTRACT_NOT_VERIFIED");
         await db.zaadOneTimeDispatch.update({ where: { id: confirmation.id }, data: { appState: "EXECUTION_REQUESTED" } });
         await rejects(prepareDispatch(db, scope, request), "DISPATCH_NOT_REPEATABLE");
         assert.equal((await inspectDispatchConfirmation(db, scope, confirmation.id)).confirmationStatus, "ALREADY_REQUESTED");
@@ -96,12 +104,12 @@ test("outreach persists scoped registration, consent, immutable messages and sna
         assert.deepEqual((await db.zaadOneTimeDispatch.findUniqueOrThrow({ where: { id: confirmation.id } })).snapshot, stored.snapshot);
       });
       await t.test("preparation rechecks live membership while ignoring observation time", async () => {
-        const binding = await db.zoomResourceBinding.create({ data: { ownerSiteKey: "lg", accountId: "recheck-account", resourceType: "CONTACT_LIST", zoomId: "recheck-list", departmentKey: "resident-support", purpose: "REGULAR" } });
+        const binding = await db.zoomResourceBinding.create({ data: { ownerSiteKey: "lg", accountId: "recheck-account", resourceType: "CONTACT_LIST", zoomId: "recheck-list", purpose: "REGULAR" } });
         const member = { id: "recheck-member", displayName: payload.name, phones: [{ type: "main", number: "+819000000001" }], emails: [] };
         let members = [member];
         const reader = { accountId: "recheck-account", async getContactList() { return { id: "recheck-list", name: "Recheck group", revision: "r1" }; }, async listContacts() { return structuredClone(members); } } as unknown as GroupClient;
         const mapping = await db.zoomContactMembership.create({ data: { siteKey: "lg", bindingId: binding.id, zoomContactId: member.id, personOrigin: "MUNICIPAL_CONTACT", personId: registered.contactId, observedDigest: digest(member), syncState: "LINKED" } });
-        const result = await preflightDispatch(db, scope, { operationKey: "recheck_group_001", name: "所属確認", departmentKey: "resident-support", connectionMode: "MEDIA", body: messageInput.body, voiceId: "Takumi", languageCode: "ja-JP", targetMode: "GROUPS", groupIds: ["recheck-list"], topic: "elder-watch" }, reader);
+        const result = await preflightDispatch(db, scope, { operationKey: "recheck_group_001", name: "所属確認", connectionMode: "MEDIA", body: messageInput.body, voiceId: "Takumi", languageCode: "ja-JP", targetMode: "GROUPS", groupIds: ["recheck-list"], topic: "elder-watch" }, reader);
         assert.equal((result.snapshot as { recipientCount: number }).recipientCount, 1);
         const request = { id: result.id, version: result.version, snapshotDigest: result.snapshotDigest, operationKey: "recheck_group_001" };
         await rejects(prepareDispatch(db, scope, request, reader), "AUDIO_CONTRACT_NOT_VERIFIED");
@@ -120,7 +128,7 @@ test("outreach persists scoped registration, consent, immutable messages and sna
       });
       await t.test("zero eligible preview explains exclusions and legacy consent stays disaster-only", async () => {
         const legacy = await db.disasterRadioSubscription.create({ data: { siteKey: "lg", name: "旧防災登録", normalizedEmail: "legacy@example.invalid", normalizedPhone: "+819000000099", consentStatus: "CONSENTED", consentVersion: "legacy-v1", consentedAt: new Date(), source: "PUBLIC_FORM", syncStatus: "NOT_ASSIGNED" } });
-        const draft = { operationKey: "legacy_dispatch_001", name: "防災通知", departmentKey: "resident-support", connectionMode: "MEDIA", body: "防災のお知らせ", voiceId: "Takumi", languageCode: "ja-JP", targetMode: "PEOPLE", people: [{ siteKey: "lg", kind: "resident", origin: "DISASTER_RADIO", id: legacy.id }], groupIds: [], topic: "disaster-radio" };
+        const draft = { operationKey: "legacy_dispatch_001", name: "防災通知", connectionMode: "MEDIA", body: "防災のお知らせ", voiceId: "Takumi", languageCode: "ja-JP", targetMode: "PEOPLE", people: [{ siteKey: "lg", kind: "resident", origin: "DISASTER_RADIO", id: legacy.id }], groupIds: [], topic: "disaster-radio" };
         const valid = await preflightDispatch(db, scope, draft);
         assert.equal((valid.snapshot as { recipientCount: number }).recipientCount, 1);
         const excluded = await preflightDispatch(db, scope, { ...draft, operationKey: "legacy_dispatch_002", topic: "elder-watch" });
@@ -138,8 +146,8 @@ test("outreach persists scoped registration, consent, immutable messages and sna
         await rejects(preflightDispatch(db, scope, { ...draft, operationKey: "legacy_dispatch_004", parentDispatchId: valid.id }), "DISPATCH_NOT_REPEATABLE");
       });
       await t.test("CSV imports preserve row idempotency and do not grant consent", async () => {
-        const preview = await previewCrmImport(db, scope, { operationKey: "csv_import_00001", departmentKey: "resident-support", bytes: new TextEncoder().encode("name,phone\r\nCSV住民,09000000002\r\n") });
-        assert.equal(preview.departmentKey, "resident-support");
+        const preview = await previewCrmImport(db, scope, { operationKey: "csv_import_00001", bytes: new TextEncoder().encode("name,phone\r\nCSV住民,09000000002\r\n") });
+        assert.equal("departmentKey" in preview, false);
         const selection = { jobId: preview.id, previewDigest: preview.previewDigest, rowKeys: preview.rows.map(row => row.rowKey) };
         await applyCrmImport(db, scope, selection); await applyCrmImport(db, scope, selection);
         const contacts = await db.municipalContact.findMany({ where: { source: "CSV" } });
@@ -147,15 +155,15 @@ test("outreach persists scoped registration, consent, immutable messages and sna
         assert.equal(await db.municipalNotificationPreference.count({ where: { contactId: contacts[0].id, enabled: true } }), 0);
       });
       await t.test("CSV treats visible unreviewed student registrations as matches and rechecks before applying", async () => {
-        const univ: OutreachScope = { ...scope, siteKey: "univ", departments: ["student-affairs"] };
+        const univ: OutreachScope = { ...scope, siteKey: "univ" };
         const registration = { siteKey: "univ", name: "CSV照合用学生", facultyCode: "2", admissionYear: 2026, serial: "0098", phone: "+819000000098", topicIds: ["scholarship"], source: "STUDENT_PUBLIC", consentVersion: CONSENT_VERSION, consentedAt: new Date(), requestKey: "csv_match_receipt", requestDigest: "synthetic-test-not-real-consent" };
         const receipt = await db.universityStudentRegistration.create({ data: registration });
-        const preview = await previewCrmImport(db, univ, { operationKey: "csv_receipt_match_001", departmentKey: "student-affairs", bytes: new TextEncoder().encode("name,phone,studentNumber\nCSV別名,09000000099,2260098\n") });
+        const preview = await previewCrmImport(db, univ, { operationKey: "csv_receipt_match_001", bytes: new TextEncoder().encode("name,phone,studentNumber\nCSV別名,09000000099,2260098\n") });
         assert.equal(preview.rows[0].status, "MATCH");
         await rejects(applyCrmImport(db, univ, { jobId: preview.id, previewDigest: preview.previewDigest, rowKeys: [preview.rows[0].rowKey] }), "INVALID_IMPORT_SELECTION");
         assert.deepEqual(await db.universityStudentRegistration.findUnique({ where: { id: receipt.id } }), receipt);
         assert.equal(await db.universityContact.count({ where: { displayStudentNumber: "2260098" } }), 0);
-        const race = await previewCrmImport(db, univ, { operationKey: "csv_receipt_race_001", departmentKey: "student-affairs", bytes: new TextEncoder().encode("name,phone,studentNumber\n後から申請,09000000097,2260097\n") });
+        const race = await previewCrmImport(db, univ, { operationKey: "csv_receipt_race_001", bytes: new TextEncoder().encode("name,phone,studentNumber\n後から申請,09000000097,2260097\n") });
         assert.equal(race.rows[0].status, "NEW");
         await db.universityStudentRegistration.create({ data: { ...registration, serial: "0097", requestKey: "csv_race_receipt" } });
         const result = await applyCrmImport(db, univ, { jobId: race.id, previewDigest: race.previewDigest, rowKeys: [race.rows[0].rowKey] });
@@ -163,7 +171,7 @@ test("outreach persists scoped registration, consent, immutable messages and sna
         assert.equal(await db.universityContact.count({ where: { displayStudentNumber: "2260097" } }), 0);
       });
       await t.test("Zoom membership edits detect drift and deletion preserves the CRM person", async () => {
-        await db.zoomResourceBinding.create({ data: { ownerSiteKey: "lg", accountId: "group-account", resourceType: "CONTACT_LIST", zoomId: "group-list", departmentKey: "resident-support", purpose: "REGULAR" } });
+        await db.zoomResourceBinding.create({ data: { ownerSiteKey: "lg", accountId: "group-account", resourceType: "CONTACT_LIST", zoomId: "group-list", purpose: "REGULAR" } });
         let members = [{ id: "group-member", displayName: "Zoomの名前", phones: [{ type: "main", number: "+819000000001" }], emails: [] }];
         let writes = 0;
         const reader = { accountId: "group-account", async getContactList() { return { id: "group-list", name: "Group", description: "", type: "contact", revision: "r1" }; }, async listContacts() { return structuredClone(members); }, async listCampaigns() { return { campaigns: [], nextPageToken: null }; }, async updateContact(_list: string, id: string, input: { name: string; phone: string }) { writes++; members = members.map(row => row.id === id ? { ...row, displayName: input.name, phones: [{ type: "main", number: input.phone }] } : row); }, async deleteContact(_list: string, id: string) { writes++; members = members.filter(row => row.id !== id); } } as unknown as GroupClient;
@@ -209,9 +217,9 @@ test("outreach persists scoped registration, consent, immutable messages and sna
         assert.equal(writes, 2);
       });
       await t.test("a stopped university contact can be reactivated with new consent evidence", async () => {
-        const univ: OutreachScope = { ...scope, siteKey: "univ", departments: ["student-affairs"] };
-        const contact = await db.universityContact.create({ data: { siteKey: "univ", departmentKey: "student-affairs", name: "再確認用学生", phone: "+819000000008", facultyCode: "4", admissionYear: 2026, serial: "0008", displayStudentNumber: "4260008", registrationSource: "STAFF", registrationStatus: "WITHDRAWN", phoneEligible: false, identityVerified: true, phoneVerified: true } });
-        const updated = await updateContact(db, univ, "UNIVERSITY_CONTACT", contact.id, { version: contact.version, departmentKey: "student-affairs", name: contact.name, phone: contact.phone, status: "ACTIVE", topics: ["scholarship"], identityVerified: true, phoneVerified: true, studentNumber: "4260008", attestation: "合成データの再確認", confirmationMethod: "合成データの再確認", confirmedAt: new Date().toISOString(), consentEvidence: { topics: ["scholarship"], consentVersion: CONSENT_VERSION, consentedAt: "2026-09-08T00:00:00.000Z" } });
+        const univ: OutreachScope = { ...scope, siteKey: "univ" };
+        const contact = await db.universityContact.create({ data: { siteKey: "univ", name: "再確認用学生", phone: "+819000000008", facultyCode: "4", admissionYear: 2026, serial: "0008", displayStudentNumber: "4260008", registrationSource: "STAFF", registrationStatus: "WITHDRAWN", phoneEligible: false, identityVerified: true, phoneVerified: true } });
+        const updated = await updateContact(db, univ, "UNIVERSITY_CONTACT", contact.id, { version: contact.version, name: contact.name, phone: contact.phone, status: "ACTIVE", topics: ["scholarship"], identityVerified: true, phoneVerified: true, studentNumber: "4260008", attestation: "合成データの再確認", confirmationMethod: "合成データの再確認", confirmedAt: new Date().toISOString(), consentEvidence: { topics: ["scholarship"], consentVersion: CONSENT_VERSION, consentedAt: "2026-09-08T00:00:00.000Z" } });
         assert.equal(updated.status, "ACTIVE");
         assert.deepEqual(updated.topics, ["scholarship"]);
         assert.equal(await db.outreachConsentEvidence.count({ where: { personId: contact.id } }), 1);
@@ -219,7 +227,7 @@ test("outreach persists scoped registration, consent, immutable messages and sna
         await db.universityContact.delete({ where: { id: contact.id } });
       });
       await t.test("concurrent Zoom import previews share one job and reject changed input", async () => {
-        await db.zoomResourceBinding.create({ data: { ownerSiteKey: "lg", accountId: "preview-account", resourceType: "CONTACT_LIST", zoomId: "preview-list", departmentKey: "welfare", purpose: "REGULAR" } });
+        await db.zoomResourceBinding.create({ data: { ownerSiteKey: "lg", accountId: "preview-account", resourceType: "CONTACT_LIST", zoomId: "preview-list", purpose: "REGULAR" } });
         let name = "同時プレビュー検証";
         const reader = { accountId: "preview-account", async getContactList() { return { id: "preview-list", name: "Preview list", description: "", type: "contact", revision: "r1" }; }, async listContacts() { return [{ id: "preview-member", displayName: name, phones: [{ type: "mobile", number: "+819088880091" }], emails: [] }]; } } as unknown as GroupClient;
         const key = "concurrent_zoom_preview_001";
@@ -231,8 +239,8 @@ test("outreach persists scoped registration, consent, immutable messages and sna
         await rejects(previewZoomCrmImport(db, scope, "preview-list", { operationKey: key }, reader), "OPERATION_CONFLICT");
       });
       await t.test("university Zoom imports require completion before creating a student", async () => {
-        const univ: OutreachScope = { ...scope, siteKey: "univ", departments: ["student-affairs"] };
-        await db.zoomResourceBinding.create({ data: { ownerSiteKey: "univ", accountId: "test-account", resourceType: "CONTACT_LIST", zoomId: "test-list", departmentKey: "student-affairs", purpose: "REGULAR" } });
+        const univ: OutreachScope = { ...scope, siteKey: "univ" };
+        await db.zoomResourceBinding.create({ data: { ownerSiteKey: "univ", accountId: "test-account", resourceType: "CONTACT_LIST", zoomId: "test-list", purpose: "REGULAR" } });
         const reader = { accountId: "test-account", async getContactList() { return { id: "test-list", name: "Test list", description: "", type: "contact", revision: "revision-1" }; }, async listContacts() { return [{ id: "test-zoom-contact", displayName: "取込学生", phones: [{ type: "mobile", number: "+819000000003" }], emails: [] }]; } } as unknown as GroupClient;
         const preview = await previewZoomCrmImport(db, univ, "test-list", { operationKey: "zoom_import_001" }, reader);
         const imported = await applyZoomCrmImport(db, univ, "test-list", { jobId: preview.id, previewDigest: preview.previewDigest, rowKeys: preview.rows.map(row => row.rowKey) }, reader);
@@ -242,7 +250,7 @@ test("outreach persists scoped registration, consent, immutable messages and sna
         assert.equal(imported.rows[0].reference?.origin, "IMPORT_CANDIDATE");
         const candidate = await db.outreachImportCandidate.findFirstOrThrow();
         const now = new Date().toISOString();
-        const confirmation = { version: candidate.version, departmentKey: "student-affairs", name: candidate.name, phone: candidate.phone, studentNumber: "1260003", status: "ACTIVE", topics: ["scholarship"], identityVerified: true, phoneVerified: true, attestation: "本人と学内記録・電話番号・同意を確認", confirmationMethod: "対面確認", confirmedAt: now, consentEvidence: { topics: ["scholarship"], consentVersion: CONSENT_VERSION, consentedAt: now } };
+        const confirmation = { version: candidate.version, name: candidate.name, phone: candidate.phone, studentNumber: "1260003", status: "ACTIVE", topics: ["scholarship"], identityVerified: true, phoneVerified: true, attestation: "本人と学内記録・電話番号・同意を確認", confirmationMethod: "対面確認", confirmedAt: now, consentEvidence: { topics: ["scholarship"], consentVersion: CONSENT_VERSION, consentedAt: now } };
         const completed = await updateContact(db, univ, "IMPORT_CANDIDATE", candidate.id, confirmation);
         assert.equal(completed.reference.origin, "UNIVERSITY_CONTACT"); assert.equal(completed.studentNumber, "1260003"); assert.equal(completed.source, "ZCC");
         assert.equal(await db.universityContact.count(), 1);
@@ -250,10 +258,10 @@ test("outreach persists scoped registration, consent, immutable messages and sna
       });
       await t.test("matching Zoom members require explicit linking and never overwrite CRM identity or consent", async () => {
         for (const siteKey of ["lg", "univ"] as const) {
-          const currentScope: OutreachScope = { ...scope, siteKey, departments: [siteKey === "lg" ? "resident-support" : "student-affairs"] };
+          const currentScope: OutreachScope = { ...scope, siteKey };
           const existing = siteKey === "lg" ? await db.municipalContact.findUniqueOrThrow({ where: { id: registered.contactId } }) : await db.universityContact.findFirstOrThrow({ where: { siteKey } });
           const accountId = `identity-${siteKey}`, listId = `identity-list-${siteKey}`;
-          const binding = await db.zoomResourceBinding.create({ data: { ownerSiteKey: siteKey, accountId, resourceType: "CONTACT_LIST", zoomId: listId, departmentKey: currentScope.departments[0], purpose: "REGULAR" } });
+          const binding = await db.zoomResourceBinding.create({ data: { ownerSiteKey: siteKey, accountId, resourceType: "CONTACT_LIST", zoomId: listId, purpose: "REGULAR" } });
           const member = { id: "identity-member", displayName: existing.name, phones: [{ type: "mobile", number: "+819077779999" }], emails: [] };
           const reader = { accountId, async getContactList() { return { id: listId, name: "Identity list", description: "", type: "contact", revision: "r1" }; }, async listContacts() { return [member]; } } as unknown as GroupClient;
           const preview = await previewZoomCrmImport(db, currentScope, listId, { operationKey: `identity_preview_${siteKey}` }, reader);
@@ -276,9 +284,9 @@ test("outreach persists scoped registration, consent, immutable messages and sna
       });
       await t.test("partial Zoom imports preserve concurrent links and retry without duplicating successful rows", async () => {
         for (const siteKey of ["lg", "univ"] as const) {
-          const currentScope: OutreachScope = { ...scope, siteKey, departments: [siteKey === "lg" ? "resident-support" : "student-affairs"] };
+          const currentScope: OutreachScope = { ...scope, siteKey };
           const accountId = `partial-${siteKey}`, listId = `partial-list-${siteKey}`;
-          const binding = await db.zoomResourceBinding.create({ data: { ownerSiteKey: siteKey, accountId, resourceType: "CONTACT_LIST", zoomId: listId, departmentKey: currentScope.departments[0], purpose: "REGULAR" } });
+          const binding = await db.zoomResourceBinding.create({ data: { ownerSiteKey: siteKey, accountId, resourceType: "CONTACT_LIST", zoomId: listId, purpose: "REGULAR" } });
           const existing = siteKey === "lg" ? await db.municipalContact.findUniqueOrThrow({ where: { id: registered.contactId } }) : await db.universityContact.findFirstOrThrow({ where: { siteKey } });
           const reader = { accountId, async getContactList() { return { id: listId, name: "Partial import", description: "", type: "contact", revision: "r1" }; }, async listContacts() { return ["a", "b"].map((id, index) => ({ id, displayName: `部分取込 ${siteKey} ${id}`, phones: [{ type: "mobile", number: `+81908888009${index + 4}` }], emails: [] })); } } as unknown as GroupClient;
           const preview = await previewZoomCrmImport(db, currentScope, listId, { operationKey: `partial_import_${siteKey}` }, reader);
@@ -331,7 +339,7 @@ test("outreach persists scoped registration, consent, immutable messages and sna
         await rejects(previewResourceBinding(db, { ...scope, all: false }, { resourceType: "CONTACT_LIST", zoomId: "new-list" }, reader), "FULL_ACCESS_REQUIRED");
         assert.equal(reads, 0);
         const preview = await previewResourceBinding(db, scope, { resourceType: "CONTACT_LIST", zoomId: "new-list" }, reader);
-        const input = { operationKey: "mapping_save_001", resourceType: "CONTACT_LIST", zoomId: "new-list", accountId: preview.accountId, observedDigest: preview.observedDigest, version: preview.version, departmentKey: "resident-support", notificationTopic: "elder-watch" };
+        const input = { operationKey: "mapping_save_001", resourceType: "CONTACT_LIST", zoomId: "new-list", accountId: preview.accountId, observedDigest: preview.observedDigest, version: preview.version, notificationTopic: "elder-watch" };
         const first = await saveResourceBinding(db, scope, input, reader);
         assert.deepEqual(await saveResourceBinding(db, scope, input, reader), first);
         assert.equal(await db.zoomResourceBinding.count({ where: { accountId: reader.accountId, zoomId: "new-list" } }), 1);
@@ -341,7 +349,7 @@ test("outreach persists scoped registration, consent, immutable messages and sna
         let patches = 0, reads = 0;
         const client = { accountId: "pause-account", async getCampaign() { reads++; return { ...campaign }; }, async setCampaignStatus(_id: string, status: string) { assert.equal(status, "Paused"); patches++; campaign.status = "paused"; campaign.revision = "r2"; } } as unknown as Pick<ZaadZoomClient, "accountId" | "getCampaign" | "listCampaigns" | "setCampaignStatus">;
         await rejects(getRegularCampaign(db, scope, "unknown-id", client), "NOT_FOUND"); assert.equal(reads, 0);
-        await db.zoomResourceBinding.create({ data: { accountId: client.accountId, resourceType: "CAMPAIGN", zoomId: campaign.id, ownerSiteKey: "lg", departmentKey: "resident-support", purpose: "REGULAR" } });
+        await db.zoomResourceBinding.create({ data: { accountId: client.accountId, resourceType: "CAMPAIGN", zoomId: campaign.id, ownerSiteKey: "lg", purpose: "REGULAR" } });
         const input = { operationKey: "pause_operation_001", status: "Paused", version: 1, expectedRevision: "r1" };
         await rejects(pauseRegularCampaign(db, scope, campaign.id, input, client), "LIVE_DISABLED"); assert.equal(patches, 0);
         assert.equal((await pauseRegularCampaign(db, { ...scope, live: true }, campaign.id, input, client)).campaign.status, "paused");

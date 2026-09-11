@@ -259,7 +259,7 @@ test(
           assert.equal(connectionBody.tenantKey, "lg");
           assert.equal(connectionBody.fullAccess, true);
           assert.equal(connectionBody.liveExecution, false);
-          assert.ok(Array.isArray(connectionBody.departments));
+          assert.equal("departments" in connectionBody, false);
         });
 
         await t.test("CSV multipart import is atomic and rejects unknown parts", async () => {

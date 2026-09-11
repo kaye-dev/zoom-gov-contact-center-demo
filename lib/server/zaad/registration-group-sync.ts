@@ -224,7 +224,7 @@ export async function advanceRegistrationSync(db: PrismaClient, scope: OutreachS
 }
 export async function syncRegisteredSource(db: PrismaClient, siteKey: TenantKey, origin: RegistrationOrigin, sourceId: string, injected?: RegistrationGroupClient) {
   // The receipt has committed. Provider failure must never undo acceptance.
-  const scope: OutreachScope = { siteKey, actorId: `public:${origin}:${sourceId}`, all: true, departments: [], live: false };
+  const scope: OutreachScope = { siteKey, actorId: `public:${origin}:${sourceId}`, all: true, live: false };
   try {
     const memberships = await db.outreachRegistrationMembership.findMany({ where: { siteKey, origin, sourceId }, include: { group: true } });
     for (const member of memberships) {

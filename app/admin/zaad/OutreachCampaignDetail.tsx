@@ -12,7 +12,6 @@ import { OutreachFailure, OutreachLoading, type OutreachPanelProps } from "./Out
 type CampaignDetail = ZoomCampaignDto & {
   bindingVersion: number;
   pauseReady: boolean;
-  departmentKey: string | null;
   notificationTopic: string | null;
 };
 
@@ -71,7 +70,6 @@ export function OutreachCampaignDetail({ tenant, permissions, setSaving, id, con
         [z.oneTime.retryPolicy, detail.retryPolicy ?? d.unknown],
         [z.oneTime.dncPolicy, detail.dncPolicy ?? d.unknown],
         [z.oneTime.alwaysRunning, detail.alwaysRunning ? z.oneTime.enabled : z.oneTime.disabled],
-        [d.department, detail.departmentKey ? d.departments[detail.departmentKey] ?? d.unknown : d.pending],
       ].map(([label, value]) => <div key={label} className="contents"><dt className="text-fg-muted">{label}</dt><dd className="break-words">{value}</dd></div>)}
     </dl>
     <p className="text-sm leading-7 text-fg-muted">{d.liveGate}</p>

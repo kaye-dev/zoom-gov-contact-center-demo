@@ -8,7 +8,7 @@ import { SearchParamsContext } from "next/dist/shared/lib/hooks-client-context.s
 import { LanguageProvider } from "../app/i18n/LanguageProvider";
 import { OutreachView } from "../app/admin/zaad/OutreachView";
 
-const props = { tenant: "lg" as const, allowedTenants: ["lg"] as const, departments: ["resident-support"], permissions: { create: true, update: true, delete: true }, canConfigure: true };
+const props = { tenant: "lg" as const, allowedTenants: ["lg"] as const, permissions: { create: true, update: true, delete: true }, canConfigure: true };
 
 test("LOADING-01: connection gates list requests and preserves toolbar and columns through deferred loading", async () => {
   const dom = new JSDOM('<html lang="ja"><body><div id="root"></div></body></html>', { url: "http://localhost/admin/zaad?tenant=lg&view=messages" });

@@ -1,4 +1,5 @@
 import { parseAudioAsset, parseAudioAssetsPage } from "./audio-asset-parser";
+import { assertAudioUpdateResponse, audioItemUpdatePayload, type AudioItemUpdate } from "@/lib/zaad/message-edit-contracts";
 import { createHash } from "node:crypto";
 
 import type { PrismaClient } from "@/lib/generated/prisma/client";
@@ -609,6 +610,12 @@ export class ZaadZoomClient {
 
   async getAudioAsset(id: string) {
     return parseAudioAsset(await this.requestJson("GET", `/contact_center/asset_library/assets/${encodeId(id)}`), id);
+  }
+
+  async updateAudioAssetItem(input: AudioItemUpdate) {
+    this.assertWriteEnabled("tts");
+    const payload = audioItemUpdatePayload(input);
+    assertAudioUpdateResponse(await this.requestJson("PATCH", "/contact_center/asset_library/assets/items", payload), input);
   }
 
   async getTtsAsset(id: string): Promise<ZoomTtsAssetResult> {

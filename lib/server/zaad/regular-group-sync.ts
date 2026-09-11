@@ -52,7 +52,7 @@ export async function advanceRegularSync(db: PrismaClient, scope: OutreachScope,
       const member = await db.zoomContactMembership.findFirst({ where: { id: item.membershipId, siteKey: scope.siteKey, bindingId: binding.id, version: item.version } });
       if (!member?.personId || !member.personOrigin) throw new OutreachContractError("VERSION_CONFLICT", 409);
       const source = await getContact(db, scope, member.personOrigin as PersonOrigin, member.personId);
-      if (source.departmentKey !== binding.departmentKey || ["WITHDRAWN", "REJECTED", "NOT_CONSENTED"].includes(source.status)) throw new OutreachContractError("CONSENT_WITHDRAWN", 409);
+      if (["WITHDRAWN", "REJECTED", "NOT_CONSENTED"].includes(source.status)) throw new OutreachContractError("CONSENT_WITHDRAWN", 409);
       if (member.syncState === "SYNCING") throw new OutreachContractError("PROVIDER_RESULT_REQUIRES_RECONCILIATION", 409);
       const recentRateLimit = await db.outreachGroupSyncItem.count({ where: { membershipId: member.id, errorCode: "ZAAD_ZOOM_RATE_LIMITED", claimedAt: { gt: new Date(Date.now() - 60_000) } } });
       if (recentRateLimit) throw new OutreachContractError("RATE_LIMITED", 429);

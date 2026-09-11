@@ -8,7 +8,7 @@ import type { outreachRequest } from "../app/admin/zaad/outreach-client";
 import type { CampaignReader } from "../lib/server/zaad/campaign-bindings";
 import type { OutreachScope } from "../lib/server/zaad/outreach-scope";
 import type { ZoomCampaignDto } from "../lib/server/zaad/zoom-client";
-const scope: OutreachScope = { siteKey: "lg", actorId: "fixture", departments: ["resident-support"], all: true, live: false };
+const scope: OutreachScope = { siteKey: "lg", actorId: "fixture", all: true, live: false };
 const campaign = (id: string) => ({ id, name: id, dialingMethod: id === "agent" ? "progressive" : "agentless", status: id === "running" ? "running" : "ready" }) as ZoomCampaignDto;
 test("PURPOSE-02: only municipal regular purposes and one-time fraud are accepted", async () => {
   for (const purpose of ["ELDER_WATCH", "PROCEDURE_SUPPORT", "SERVICE_CONFIRMATION", "FRAUD_ALERT"]) assert.equal(purposeCampaignKey("lg", "regular", purpose).purpose, purpose);
