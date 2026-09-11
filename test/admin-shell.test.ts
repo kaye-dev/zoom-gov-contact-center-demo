@@ -50,8 +50,9 @@ test("desktop sidebar toggle and shortcut share one guarded state transition", (
   assert.match(shell, /aria-controls="admin-desktop-sidebar"/u);
   assert.match(shell, /aria-expanded=\{isSidebarExpanded\}/u);
   assert.match(shell, /aria-keyshortcuts="Meta\+B"/u);
-  assert.match(shell, /LeftPanelCloseIcon/u);
-  assert.match(shell, /LeftPanelOpenIcon/u);
+  assert.match(shell, /<SidebarToggleIcon collapsed=\{!isSidebarExpanded\} className="h-6 w-6"/u);
+  const toggleIcon = source("../app/components/svg/SidebarToggleIcon.tsx");
+  assert.match(toggleIcon, /collapsed \? "M15 2.75v18.5" : "M9 2.75v18.5"/u);
   assert.match(shell, /onClick=\{toggleSidebar\}/u);
   assert.match(shell, /event\.key\.toLowerCase\(\) !== "b"/u);
   assert.match(shell, /!event\.metaKey/u);
