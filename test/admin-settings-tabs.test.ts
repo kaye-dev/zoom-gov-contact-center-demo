@@ -25,9 +25,9 @@ test("phone and chat are independently permission-filtered and translated primar
     const t = dictionaries[locale];
     for (const [key, label] of [["phone-settings", t.admin.phoneSettings], ["chat-settings", t.admin.chatSettings]] as const) {
       const model = buildAdminNavigation([key], t);
-      assert.deepEqual(model.primaryItems.map(({ key }) => key), ["dashboard", key]);
+      assert.deepEqual(model.primaryItems.map(({ key }) => key), [key]);
       assert.deepEqual(model.sections, {});
-      assert.equal(model.primaryItems[1].label, label);
+      assert.equal(model.primaryItems[0].label, label);
     }
     assert.ok(t.admin.chatManagement.methodTab);
     assert.ok(t.admin.chatManagement.campaignTab);

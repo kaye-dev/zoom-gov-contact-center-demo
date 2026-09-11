@@ -1,5 +1,8 @@
-import { AdminHome } from "./AdminHome";
+import { redirect } from "next/navigation";
+import { adminHomeDestination } from "@/lib/admin-routing";
 
-export default function AdminPage() {
-  return <AdminHome />;
+export default async function AdminPage({ searchParams }: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  redirect(adminHomeDestination(await searchParams));
 }

@@ -33,7 +33,6 @@ test("full-access navigation model exposes flat primary and ordered section link
   assert.deepEqual(
     model.primaryItems.map(({ key, href }) => ({ key, href })),
     [
-      { key: "dashboard", href: "/admin" },
       { key: "reservations", href: "/admin/reservations" },
       { key: "zaad", href: "/admin/zaad?tenant=lg" },
       { key: "users", href: "/admin/users" },
@@ -76,7 +75,6 @@ test("navigation model filters permissions and chooses the first allowed section
   assert.deepEqual(
     model.primaryItems.map(({ key, href }) => ({ key, href })),
     [
-      { key: "dashboard", href: "/admin" },
       { key: "reservations", href: "/admin/reservations" },
       { key: "users", href: "/admin/users/new" },
       { key: "developer-api", href: "/admin/developer-api" },
@@ -85,12 +83,11 @@ test("navigation model filters permissions and chooses the first allowed section
   assert.deepEqual(model.sections.users?.map(({ key }) => key), ["new-user"]);
   assert.equal(model.sections.settings, undefined);
   const rolesOnly = buildAdminNavigation(["roles"], dictionaries.ja);
-  assert.deepEqual(rolesOnly.primaryItems.map(({ key }) => key), ["dashboard", "roles"]);
+  assert.deepEqual(rolesOnly.primaryItems.map(({ key }) => key), ["roles"]);
   assert.deepEqual(rolesOnly.sections, {});
 
   const standalone = buildAdminNavigation(["zaad"], dictionaries.ja);
   assert.deepEqual(standalone.primaryItems.map(({ key }) => key), [
-    "dashboard",
     "zaad",
   ]);
   assert.deepEqual(standalone.sections, {});
@@ -98,7 +95,8 @@ test("navigation model filters permissions and chooses the first allowed section
 
 test("route matcher selects at most one primary and section destination", () => {
   const cases = [
-    ["/admin", "dashboard", null, null],
+    ["/admin", null, null, null],
+    ["/admin/my-page", null, null, null],
     ["/admin/users", "users", "users", "users"],
     ["/admin/users/new", "users", "users", "new-user"],
     ["/admin/users/user-1", "users", "users", "users"],
@@ -138,13 +136,6 @@ test("route matcher selects at most one primary and section destination", () => 
     sectionKey: null,
     sectionItemKey: null,
   });
-});
-
-test("the admin root renders the dashboard instead of redirecting away", () => {
-  const page = source("../app/admin/page.tsx");
-
-  assert.match(page, /return <AdminHome \/>/u);
-  assert.doesNotMatch(page, /redirect\(/u);
 });
 
 test("PHONE-ALIGN-11: phone header and form align to first tab text without changing full-width navigation", () => {
@@ -194,4 +185,23 @@ test("outreach sidebar preserves explicit selection without inferring a tenant f
   assert.equal(href(["univ"], "lg", null), "/admin/zaad?tenant=lg");
   assert.equal(href(["univ"], "univ", "lg"), "/admin/zaad?tenant=lg");
   assert.equal(href([], "univ", null), undefined);
+});
+
+
+test("empty permissions have no primary navigation and the account menu includes my page", () => {
+  assert.deepEqual(buildAdminNavigation([], dictionaries.ja).primaryItems, []);
+  const nav = source("../app/admin/AdminNavigation.tsx");
+  assert.match(nav, /href="\/admin\/my-page" role="menuitem"/u);
+  assert.match(nav, /t\.admin\.myPage\.title/u);
+  assert.match(nav, /t\.admin\.navigation\.backToSite/u);
+  assert.match(nav, /t\.auth\.signOut/u);
+});
+
+test("sidebar toggle keeps accessible state and keyboard behavior", () => {
+  const shell = source("../app/admin/AdminShellView.tsx");
+  assert.match(shell, /<SidebarToggleIcon collapsed=\{!isSidebarExpanded\}/u);
+  for (const attribute of ["aria-expanded", "aria-label", "aria-controls", "title"]) assert.ok(shell.includes(attribute));
+  assert.match(shell, /event\.metaKey/u);
+  const icon = source("../app/components/svg/SidebarToggleIcon.tsx");
+  assert.match(icon, /collapsed \? "M15 2.75v18.5" : "M9 2.75v18.5"/u);
 });

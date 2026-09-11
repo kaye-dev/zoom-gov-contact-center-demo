@@ -13,11 +13,10 @@ import {
 import { usePathname, useSearchParams } from "next/navigation";
 
 import { CloseIcon } from "@/app/components/svg/CloseIcon";
-import { LeftPanelCloseIcon } from "@/app/components/svg/LeftPanelCloseIcon";
-import { LeftPanelOpenIcon } from "@/app/components/svg/LeftPanelOpenIcon";
+import { SidebarToggleIcon } from "@/app/components/svg/SidebarToggleIcon";
 import { MenuIcon } from "@/app/components/svg/MenuIcon";
 
-import { useI18n } from "../i18n/LanguageProvider";
+import { useI18n } from "@/app/i18n/LanguageProvider";
 import { AdminNavigation } from "./AdminNavigation";
 import {
   buildAdminNavigation,
@@ -284,11 +283,7 @@ export function AdminShellView({
                 onClick={toggleSidebar}
                 className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               >
-                {isSidebarExpanded ? (
-                  <LeftPanelCloseIcon className="h-6 w-6" />
-                ) : (
-                  <LeftPanelOpenIcon className="h-6 w-6" />
-                )}
+                <SidebarToggleIcon collapsed={!isSidebarExpanded} className="h-6 w-6" />
               </button>
               <span
                 data-sidebar-label

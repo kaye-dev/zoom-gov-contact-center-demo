@@ -41,7 +41,7 @@ export async function requireAdminAccess(
   const decision = evaluateAdminAccess(context.actor, resourceKey, action);
 
   if (!canAdminAccess(context.actor, resourceKey, action)) {
-    redirect("/admin?error=access-denied");
+    redirect("/admin/my-page?error=access-denied");
   }
 
   return { ...context, decision };

@@ -448,7 +448,6 @@ test("all locales include navigation, create-action, and pagination copy", () =>
       "closeAccountMenu",
       "closeMenu",
       "collapseSidebar",
-      "dashboard",
       "expandSidebar",
       "openAccountMenu",
       "openMenu",
