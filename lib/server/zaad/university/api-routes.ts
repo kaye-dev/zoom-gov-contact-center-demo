@@ -10,7 +10,6 @@ import {
   TOPICS,
   CONSENT_VERSION,
   PURPOSES,
-  PURPOSE_DEPARTMENT,
   enumValue,
   object,
   exact,
@@ -20,7 +19,6 @@ import {
 import {
   universityScope,
   scopedWhere,
-  requireDepartment,
   type Scope,
 } from "./permissions";
 import {
@@ -154,12 +152,9 @@ export function registerUniversityApiRoutes(app: Hono<ZaadApiEnvironment>) {
     await next();
   });
   app.get(`${prefix}/templates`, (c) =>
-    admin(c, "VIEW", async (_db, scope) => ({
-      templates: CASES.filter((t) =>
-        scope.departments.includes(PURPOSE_DEPARTMENT[t.id]),
-      ),
-      departments: scope.departments,
-      registrationReview: scope.departments.includes("student-affairs"),
+    admin(c, "VIEW", async () => ({
+      templates: CASES,
+      registrationReview: true,
     })),
   );
   app.get(`${prefix}/contacts`, (c) =>
@@ -203,7 +198,7 @@ export function registerUniversityApiRoutes(app: Hono<ZaadApiEnvironment>) {
   );
   app.get(`${prefix}/assignees`, (c) =>
     admin(c, "VIEW", async (db, scope) =>
-      service.assignees(db, scope, text(c.req.query("department"), 100)),
+      service.assignees(db, scope),
     ),
   );
   app.post(`${prefix}/batches/preflight`, (c) =>
@@ -327,10 +322,10 @@ export function registerUniversityApiRoutes(app: Hono<ZaadApiEnvironment>) {
   );
   app.get(`${prefix}/intakes`, (c) =>
     admin(c, "VIEW", async (db, scope) => {
-      requireDepartment(scope, "facilities");
+
       const limit = integer(Number(c.req.query("limit") ?? 50), 1, 100),
         cursor = c.req.query("cursor");
-      const where = { ...scopedWhere(scope), departmentKey: "facilities" };
+      const where = { ...scopedWhere(scope) };
       const rows = await db.universityIntake.findMany({
         where: {
           ...where,
@@ -385,7 +380,7 @@ export function registerUniversityApiRoutes(app: Hono<ZaadApiEnvironment>) {
   );
   app.post(`${prefix}/registrations`, (c) =>
     admin(c, "CREATE", async (db, scope) => {
-      requireDepartment(scope, "student-affairs");
+
       const v = object(await body(c));
       exact(v, ["registration", "attestation"]);
       return registerStudent(

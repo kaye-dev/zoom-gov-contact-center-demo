@@ -60,7 +60,6 @@ export type ZaadMessageInput = {
   body: string;
   languageCode: "ja-JP";
   voiceId: ZaadVoiceId;
-  revision?: number;
 };
 
 export type ZaadContactListInput = {
@@ -101,22 +100,18 @@ type ParseResult<T> =
   | { ok: true; value: T }
   | { ok: false; code: typeof ZAAD_ERROR_CODES.invalidRequest };
 
-export function parseZaadMessageInput(value: unknown, requireRevision = false): ParseResult<ZaadMessageInput> {
-  const allowed = requireRevision
-    ? ["name", "body", "languageCode", "voiceId", "revision"]
-    : ["name", "body", "languageCode", "voiceId"];
+export function parseZaadMessageInput(value: unknown): ParseResult<ZaadMessageInput> {
+  const allowed = ["name", "body", "languageCode", "voiceId"];
   if (!hasExactKeys(value, allowed)) return invalid();
   const name = parseLabel(value.name, ZAAD_LIMITS.label);
   const body = parseLabel(value.body, ZAAD_LIMITS.messageBody, true);
-  const revision = requireRevision ? parsePositiveInteger(value.revision) : undefined;
   if (
     !name ||
     !body ||
     value.languageCode !== "ja-JP" ||
-    !isZaadVoiceId(value.voiceId) ||
-    (requireRevision && !revision)
+    !isZaadVoiceId(value.voiceId)
   ) return invalid();
-  return { ok: true, value: { name, body, languageCode: "ja-JP", voiceId: value.voiceId, revision: revision ?? undefined } };
+  return { ok: true, value: { name, body, languageCode: "ja-JP", voiceId: value.voiceId } };
 }
 
 export function parseZaadContactListInput(value: unknown, requireRevision = false): ParseResult<ZaadContactListInput> {

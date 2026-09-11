@@ -10,7 +10,6 @@ export async function previewZoomCrmImport(db: PrismaClient, scope: OutreachScop
   const v = record(payload); fields(v, ["operationKey", "contactIds"]);
   const key = operationKey(v.operationKey), selected = v.contactIds === undefined ? null : stringList(v.contactIds, 1000);
   const client = injected ?? await ZaadZoomClient.fromDatabase(db, scope.siteKey), binding = await requireZoomBinding(db, scope, client, "CONTACT_LIST", listId);
-  if (!binding.departmentKey || !scope.departments.includes(binding.departmentKey)) throw new OutreachContractError("DEPARTMENT_REQUIRED", 409);
   const members = await zoomGroupMembers(db, scope, listId, client);
   if (selected?.some(id => !members.items.some(member => member.id === id))) throw new OutreachContractError("TARGET_CHANGED", 409);
   const rows: { rowKey: string; rowNumber: number; status: string; candidate: Record<string, unknown> }[] = [];
@@ -19,8 +18,8 @@ export async function previewZoomCrmImport(db: PrismaClient, scope: OutreachScop
     let phone: string | null = null;
     try { if (member.phones.length === 1) phone = phoneValue(member.phones[0].number); } catch { /* A staff review must choose/verify the main number. */ }
     const match = !member.mapping?.personId && phone ? scope.siteKey === "lg"
-      ? await db.municipalContact.findMany({ where: { siteKey: scope.siteKey, departmentKey: { in: scope.departments }, OR: [{ phone }, { name: member.displayName }] }, select: { id: true, name: true }, take: 10 })
-      : await db.universityContact.findMany({ where: { siteKey: scope.siteKey, departmentKey: { in: scope.departments }, OR: [{ phone }, { name: member.displayName }] }, select: { id: true, name: true }, take: 10 }) : [];
+      ? await db.municipalContact.findMany({ where: { siteKey: scope.siteKey, OR: [{ phone }, { name: member.displayName }] }, select: { id: true, name: true }, take: 10 })
+      : await db.universityContact.findMany({ where: { siteKey: scope.siteKey, OR: [{ phone }, { name: member.displayName }] }, select: { id: true, name: true }, take: 10 }) : [];
     const status = member.mapping?.personId ? "LINKED" : !phone || !member.displayName.trim() ? "INCOMPLETE" : match.length ? "CANDIDATE" : "NEW";
     rows.push({ rowKey: member.id, rowNumber: index + 1, status, candidate: { source: "ZCC", accountId: client.accountId, bindingId: binding.id, bindingVersion: binding.version, listId, zoomContactId: member.id, name: member.displayName, phone, observedDigest: digest({ id: member.id, displayName: member.displayName, phones: member.phones, emails: member.emails }), candidates: match, status } });
   }
@@ -30,7 +29,7 @@ export async function previewZoomCrmImport(db: PrismaClient, scope: OutreachScop
       const job = await db.$transaction(async tx => {
         const existing = await tx.crmImportJob.findUnique({ where: { siteKey_actorId_operationKey: { siteKey: scope.siteKey, actorId: scope.actorId, operationKey: key } } });
         if (existing) { if (existing.previewDigest !== previewDigest) throw new OutreachContractError("OPERATION_CONFLICT", 409); return existing; }
-        return tx.crmImportJob.create({ data: { siteKey: scope.siteKey, actorId: scope.actorId, departmentKey: binding.departmentKey!, source: "ZCC", operationKey: key, previewDigest, expiresAt: new Date(Date.now() + 1800000), rows: { create: rows.map(row => ({ rowKey: row.rowKey, rowNumber: row.rowNumber, status: row.status, candidate: json(row.candidate) })) } } });
+        return tx.crmImportJob.create({ data: { siteKey: scope.siteKey, actorId: scope.actorId, source: "ZCC", operationKey: key, previewDigest, expiresAt: new Date(Date.now() + 1800000), rows: { create: rows.map(row => ({ rowKey: row.rowKey, rowNumber: row.rowNumber, status: row.status, candidate: json(row.candidate) })) } } });
       }, { isolationLevel: "Serializable" });
       return getCrmImport(db, scope, job.id);
     } catch (error) {
@@ -45,7 +44,7 @@ export async function applyZoomCrmImport(db: PrismaClient, scope: OutreachScope,
   const v = record(payload); fields(v, ["jobId", "previewDigest", "rowKeys"]);
   const jobId = stringValue(v.jobId), expected = stringValue(v.previewDigest), selected = stringList(v.rowKeys, 1000);
   if (!selected.length) throw new OutreachContractError("EMPTY_SELECTION");
-  const job = await db.crmImportJob.findFirst({ where: { id: jobId, siteKey: scope.siteKey, actorId: scope.actorId, departmentKey: { in: scope.departments }, source: "ZCC" }, include: { rows: true } });
+  const job = await db.crmImportJob.findFirst({ where: { id: jobId, siteKey: scope.siteKey, actorId: scope.actorId, source: "ZCC" }, include: { rows: true } });
   if (!job) throw new OutreachContractError("NOT_FOUND", 404);
   if (job.previewDigest !== expected || job.expiresAt < new Date()) throw new OutreachContractError("PREVIEW_EXPIRED", 409);
   const client = injected ?? await ZaadZoomClient.fromDatabase(db, scope.siteKey), binding = await requireZoomBinding(db, scope, client, "CONTACT_LIST", listId);
@@ -66,7 +65,7 @@ export async function applyZoomCrmImport(db: PrismaClient, scope: OutreachScope,
         const existing = await tx.zoomContactMembership.findUnique({ where: { siteKey_bindingId_zoomContactId: unique } });
         if (existing?.personId) throw new OutreachContractError("MEMBERSHIP_ALREADY_LINKED", 409);
         const name = stringValue(candidate.name), phone = phoneValue(candidate.phone);
-        const person = scope.siteKey === "lg" ? await tx.municipalContact.create({ data: { siteKey: scope.siteKey, departmentKey: job.departmentKey, name, phone, source: "ZCC" } }) : await tx.outreachImportCandidate.create({ data: { siteKey: scope.siteKey, departmentKey: job.departmentKey, name, phone, source: "ZCC" } });
+        const person = scope.siteKey === "lg" ? await tx.municipalContact.create({ data: { siteKey: scope.siteKey, name, phone, source: "ZCC" } }) : await tx.outreachImportCandidate.create({ data: { siteKey: scope.siteKey, name, phone, source: "ZCC" } });
         const personOrigin = scope.siteKey === "lg" ? "MUNICIPAL_CONTACT" : "IMPORT_CANDIDATE";
         await tx.zoomContactMembership.upsert({ where: { siteKey_bindingId_zoomContactId: unique }, create: { ...unique, personOrigin, personId: person.id, observedDigest: stringValue(candidate.observedDigest), syncState: "PENDING_REVIEW" }, update: { personOrigin, personId: person.id, observedDigest: stringValue(candidate.observedDigest), syncState: "PENDING_REVIEW", version: { increment: 1 } } });
         await tx.crmImportRow.update({ where: { id: row.id }, data: { status: "IMPORTED", personOrigin, personId: person.id, errorCode: null } });

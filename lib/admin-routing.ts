@@ -65,7 +65,8 @@ export function safeAdminCallback(value: unknown, origin = LOCAL_ADMIN_ORIGIN): 
   if (tenants.length && !parseAdminTenant(tenants).ok) return "/admin";
   // A callback must not carry another redirect/callback through authentication.
   if (url.searchParams.has("callbackURL")) return "/admin";
-  return url.pathname + url.search;
+  const destination = resolveOutreachDefaultRedirect(url, "GET") ?? url;
+  return destination.pathname + destination.search;
 }
 
 export function adminAuthHref(path: "login" | "change-password", callback: unknown) {
@@ -109,4 +110,33 @@ export function safeOutreachReturnPath(value: unknown, tenant?: TenantKey): stri
   if (parsed.pathname !== "/admin/zaad" || !scope.ok || (tenant !== undefined && scope.tenantKey !== tenant)) return null;
   for (const key of ["returnTo", "callbackURL", "state", "theme"]) parsed.searchParams.delete(key);
   return parsed.pathname + parsed.search;
+}
+
+/** Normalize only an absent tenant on the outreach page; preserve explicit values. */
+export function resolveOutreachDefaultRedirect(url: URL, method: string): URL | null {
+  if (!["GET", "HEAD"].includes(method) || url.pathname !== "/admin/zaad" || url.searchParams.has("tenant")) return null;
+  const destination = new URL(url);
+  destination.searchParams.set("tenant", "lg");
+  return destination;
+}
+
+export function isOutreachDetailPage(view: string, query: URLSearchParams): boolean {
+  const state = query.get("state") ?? "";
+  if (query.get("section") === "contacts") return view === "contact-lists" && ["", "csv-upload", "csv-preview", "csv-error", "registration-settings"].includes(state);
+  if (query.get("workflow") || query.get("step") === "cases") return false;
+  const states: Record<string, readonly string[]> = {
+    "contact-lists": ["default-group-detail", "group-detail", "group-edit", "group-create", "group-sync"],
+    campaigns: ["campaign-detail", "campaign-sync"],
+    "one-time": ["dispatch-create", "dispatch-history", "dispatch-edit", "dispatch-retry", "dispatch-confirm"],
+    messages: ["message-create", "message-edit", "message-sync", "message-audio-detail"],
+  };
+  return Boolean(states[view]?.includes(state) && (state.endsWith("create") || state.endsWith("sync") || query.get("detail")));
+}
+export function outreachParentHref(tenant: TenantKey, query: URLSearchParams, parent: "section" | "contacts" = "section"): string {
+  const params = new URLSearchParams(query);
+  for (const key of ["state", "detail", "query", "search", "cursor", "section", "origin", "page", "trail", "importJob"]) params.delete(key);
+  params.set("tenant", tenant);
+  params.set("view", resolveOutreachView(tenant, query.get("view"), query.get("workflow")));
+  if (parent === "contacts") params.set("section", "contacts");
+  return `/admin/zaad?${params}`;
 }

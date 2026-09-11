@@ -68,7 +68,7 @@ export async function syncContactLists(db: PrismaClient, scope: OutreachScope, p
         if (bindings.some(row => row.zoomId === list.id && (row.dispatchId !== null || row.purpose !== "REGULAR"))) throw new OutreachContractError("RESOURCE_OWNERSHIP_CONFLICT", 409);
         const existing = bindings.find(row => row.zoomId === list.id && row.ownerSiteKey === scope.siteKey);
         if (!existing) {
-          await tx.zoomResourceBinding.create({ data: { accountId, resourceType: "CONTACT_LIST", zoomId: list.id, ownerSiteKey: scope.siteKey, departmentKey: null, purpose: "REGULAR", observedDigest: digest(list) } });
+          await tx.zoomResourceBinding.create({ data: { accountId, resourceType: "CONTACT_LIST", zoomId: list.id, ownerSiteKey: scope.siteKey, purpose: "REGULAR", observedDigest: digest(list) } });
         } else if (existing.tombstone) {
           // Restore the same binding so local memberships remain intact after detach/re-add.
           await tx.zoomResourceBinding.update({ where: { id: existing.id, version: existing.version }, data: { tombstone: false, observedDigest: digest(list), version: { increment: 1 } } });

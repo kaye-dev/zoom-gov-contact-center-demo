@@ -35,7 +35,6 @@ test("ALL-TEMPLATES: seven independent inputs, questions and completion criteria
     for (const locale of ["ja", "en", "zh-Hans", "zh-Hant", "ko"] as const) {
       const texts = [
         template.name,
-        template.department,
         template.audience,
         template.trigger,
         template.purpose,

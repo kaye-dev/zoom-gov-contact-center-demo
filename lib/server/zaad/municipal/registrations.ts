@@ -1,6 +1,5 @@
 import { addRegistrationMemberships } from "../default-groups";
 import { syncRegisteredSource } from "../registration-group-sync";
-import { getRegistrationReception } from "../registration-reception";
 import type { PrismaClient } from "@/lib/generated/prisma/client";
 import { MUNICIPAL_TOPICS, parseMunicipalRegistration } from "@/lib/zaad/municipal/contracts";
 import { OutreachContractError } from "@/lib/zaad/outreach-contracts";
@@ -18,7 +17,6 @@ export async function registerMunicipalContact(db: PrismaClient, siteKey: string
         if (previous.requestDigest !== requestDigest) throw new OutreachContractError("OPERATION_CONFLICT", 409);
         return previous;
       }
-        if (!actorId && !(await getRegistrationReception(tx, siteKey)).enabled) throw new OutreachContractError("REGISTRATION_UNAVAILABLE", 503);
       const count = await tx.municipalNotificationRegistration.count({ where: { siteKey, receivedAt: { gte: new Date(now.getTime() - 60000) } } });
       if (count >= 60) throw new OutreachContractError("RATE_LIMITED", 429);
       const contact = await tx.municipalContact.create({ data: { siteKey, name: input.name, phone: input.phone, district: input.district, source: actorId ? "MANUAL" : "HP" } });

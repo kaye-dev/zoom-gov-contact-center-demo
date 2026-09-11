@@ -18,8 +18,8 @@ test("group sync shares only lists, preserves CRM and migrates existing bindings
     const context = createDatabaseContext({ ...process.env, DATABASE_URL: databaseUrl }), db = context.prisma;
     const priorKey = process.env.DEVELOPER_API_SETTINGS_ENCRYPTION_KEY;
     process.env.DEVELOPER_API_SETTINGS_ENCRYPTION_KEY = Buffer.alloc(32, 8).toString("base64");
-    const scope: OutreachScope = { siteKey: "lg", actorId: "group-sync-admin", all: true, live: false, departments: ["resident-support"] };
-    const univ: OutreachScope = { ...scope, siteKey: "univ", departments: ["student-affairs"] };
+    const scope: OutreachScope = { siteKey: "lg", actorId: "group-sync-admin", all: true, live: false };
+    const univ: OutreachScope = { ...scope, siteKey: "univ" };
     try {
       await db.user.create({ data: { id: scope.actorId, name: "Fixture admin", email: "group-sync@example.invalid", emailVerified: true, createdAt: new Date(), updatedAt: new Date() } });
       const accountId = "fixture-group-account";
@@ -30,8 +30,8 @@ test("group sync shares only lists, preserves CRM and migrates existing bindings
       });
       const client = await ZaadZoomClient.fromDatabase(db, "lg", { fetchImpl: provider.fetch, apiBase: provider.apiBase, tokenUrl: provider.tokenUrl, writeGates: { contact: true, tts: false, campaign: false } });
       const payload = (key: string, ids = ["fixture-list-1", "fixture-list-2"]) => ({ operationKey: `fixture-${key}`, accountId, contactListIds: ids });
-      const oldBinding = await db.zoomResourceBinding.create({ data: { ownerSiteKey: "lg", accountId, resourceType: "CONTACT_LIST", zoomId: "fixture-list-1", departmentKey: "resident-support", purpose: "REGULAR" } });
-      const crm = await db.municipalContact.create({ data: { siteKey: "lg", departmentKey: "resident-support", name: "Fixture existing person", phone: "+819000000010", source: "MANUAL" } });
+      const oldBinding = await db.zoomResourceBinding.create({ data: { ownerSiteKey: "lg", accountId, resourceType: "CONTACT_LIST", zoomId: "fixture-list-1", purpose: "REGULAR" } });
+      const crm = await db.municipalContact.create({ data: { siteKey: "lg", name: "Fixture existing person", phone: "+819000000010", source: "MANUAL" } });
       const membership = await db.zoomContactMembership.create({ data: { siteKey: "lg", bindingId: oldBinding.id, zoomContactId: "fixture-contact-10", personOrigin: "MUNICIPAL_CONTACT", personId: crm.id, observedDigest: "fixture", syncState: "LINKED" } });
       const crmBefore = await db.municipalContact.findMany();
       const snapshotBefore = provider.snapshot();
@@ -64,15 +64,15 @@ test("group sync shares only lists, preserves CRM and migrates existing bindings
         await rejects(groupSyncOperation(db, { ...scope, actorId: "different-actor" }, "fixture-sync-lg"), "NOT_FOUND");
         await rejects(syncContactLists(db, scope, payload("sync-lg", ["fixture-list-3"]), client), "OPERATION_CONFLICT");
       });
-      await t.test("sharing does not expand department grants or other resource ownership", async () => {
+      await t.test("sharing preserves tenant membership and other resource ownership", async () => {
         const common = { accountId, ownerSiteKey: "lg", purpose: "REGULAR", zoomId: "fixture-resource" };
         for (const resourceType of ["CAMPAIGN", "FLOW", "ASSET"]) {
           await db.zoomResourceBinding.create({ data: { ...common, resourceType } });
           await assert.rejects(db.zoomResourceBinding.create({ data: { ...common, resourceType, ownerSiteKey: "univ" } }));
         }
         await assert.rejects(db.zoomResourceBinding.create({ data: { ...common, resourceType: "CONTACT_LIST", zoomId: "fixture-list-1" } }));
-        assert.equal((await listZoomGroups(db, { ...univ, all: false }, client)).total, 0);
-        await rejects(requireZoomBinding(db, { ...univ, all: false }, client, "CONTACT_LIST", "fixture-list-1"), "NOT_FOUND");
+        assert.equal((await listZoomGroups(db, { ...univ, all: false }, client)).total, 2);
+        assert.equal((await requireZoomBinding(db, { ...univ, all: false }, client, "CONTACT_LIST", "fixture-list-1")).ownerSiteKey, "univ");
       });
       await t.test("detach affects only the current tenant and re-add restores the same binding", async () => {
         const before = await db.zoomResourceBinding.findFirstOrThrow({ where: { ownerSiteKey: "lg", zoomId: "fixture-list-1", resourceType: "CONTACT_LIST" } });
@@ -87,7 +87,7 @@ test("group sync shares only lists, preserves CRM and migrates existing bindings
         assert.deepEqual(await db.municipalContact.findMany(), crmBefore);
         await syncContactLists(db, scope, payload("re-add", [before.zoomId]), client);
         const restored = await db.zoomResourceBinding.findUniqueOrThrow({ where: { id: before.id } });
-        assert.equal(restored.tombstone, false); assert.equal(restored.departmentKey, before.departmentKey);
+        assert.equal(restored.tombstone, false); assert.equal("departmentKey" in restored, false);
         assert.deepEqual(await db.zoomContactMembership.findUnique({ where: { id: membership.id } }), membership);
         assert.deepEqual(provider.snapshot(), snapshotBefore);
       });
@@ -113,7 +113,7 @@ test("group sync shares only lists, preserves CRM and migrates existing bindings
       });
       await t.test("editing a shared list updates Zoom and the other tenant observes it", async () => {
         const before = (await listZoomGroups(db, scope, client)).items.find(row => row.id === "fixture-list-1")!;
-        await saveZoomGroup(db, scope, { operationKey: "shared-edit", name: "Shared updated group", description: "Updated", departmentKey: "resident-support", version: before.version, expectedRevision: before.revision }, before.id, client);
+        await saveZoomGroup(db, scope, { operationKey: "shared-edit", name: "Shared updated group", description: "Updated", version: before.version, expectedRevision: before.revision }, before.id, client);
         const other = (await listZoomGroups(db, univ, client)).items.find(row => row.id === before.id)!;
         assert.equal(other.name, "Shared updated group");
         assert.deepEqual(await db.municipalContact.findMany(), crmBefore);

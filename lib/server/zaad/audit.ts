@@ -5,7 +5,7 @@ import type { TenantKey } from "@/lib/tenants";
 
 export type ZaadAuditInput = {
   actorUserId: string | null;
-  resourceKind: "default-group" | "registration-membership" | "caller-notice" | "municipal-registration" | "municipal-workflow" | "municipal-run" | "municipal-case" | "outreach-contact" | "crm-import" | "campaign-binding" | "resource-binding" | "university-registration" | "university-outreach" | "university-case" | "university-intake" | "resident" | "message" | "contact-list" | "registration-setting" | "campaign" | "one-time-dispatch";
+  resourceKind: "message-audio" | "message-audio-import" | "purpose-campaign" | "default-group" | "registration-membership" | "caller-notice" | "municipal-registration" | "municipal-workflow" | "municipal-run" | "municipal-case" | "outreach-contact" | "crm-import" | "campaign-binding" | "resource-binding" | "university-registration" | "university-outreach" | "university-case" | "university-intake" | "resident" | "message" | "contact-list" | "registration-setting" | "campaign" | "one-time-dispatch";
   targetId: string;
   action: string;
   result: "SUCCESS" | "REJECTED" | "FAILED" | "RESULT_UNKNOWN";

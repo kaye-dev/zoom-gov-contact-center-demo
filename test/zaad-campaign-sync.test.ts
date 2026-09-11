@@ -6,7 +6,7 @@ import type { OutreachScope } from "../lib/server/zaad/outreach-scope";
 import { OutreachContractError } from "../lib/zaad/outreach-contracts";
 import type { ZoomCampaignDto } from "../lib/server/zaad/zoom-client";
 
-const scope: OutreachScope = { siteKey: "lg", actorId: "actor", all: true, live: false, departments: ["resident-support"] };
+const scope: OutreachScope = { siteKey: "lg", actorId: "actor", all: true, live: false };
 const campaign = (id: string, dialingMethod = "agentless") => ({ id, name: `Campaign ${id}`, dialingMethod, status: "ready" }) as ZoomCampaignDto;
 test("sync excludes foreign and one-time bindings and keeps existing or non-agentless campaigns disabled", async () => {
   const rows = [campaign("new"), campaign("existing"), campaign("foreign"), campaign("one-time"), campaign("agent", "progressive")];

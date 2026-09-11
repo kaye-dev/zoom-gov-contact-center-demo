@@ -2,7 +2,7 @@ import type { PrismaClient } from "@/lib/generated/prisma/client";
 import { choice, fields, operationKey, record, stringValue, whole, OutreachContractError } from "@/lib/zaad/outreach-contracts";
 import { MUNICIPAL_TOPICS } from "@/lib/zaad/municipal/contracts";
 import { TOPICS } from "@/lib/zaad/university/contracts";
-import { requireFullAccess, requireOutreachDepartment, type OutreachScope } from "./outreach-scope";
+import { requireFullAccess, type OutreachScope } from "./outreach-scope";
 import { databaseError, digest, json } from "./outreach-data";
 import { writeZaadAudit } from "./audit";
 import { ZaadZoomClient } from "./zoom-client";
@@ -27,13 +27,13 @@ export async function previewResourceBinding(db: PrismaClient, scope: OutreachSc
   const observed = resourceType === "CONTACT_LIST" ? await client.getContactList(zoomId) : resourceType === "CAMPAIGN" ? await client.getCampaign(zoomId) : resourceType === "FLOW" ? await client.getFlow(zoomId) : await client.getTtsAsset(zoomId);
   if (("id" in observed ? observed.id : observed.assetId) !== zoomId) throw new OutreachContractError("PROVIDER_ID_MISMATCH", 502);
   if (resourceType === "CAMPAIGN" && "dialingMethod" in observed && observed.dialingMethod !== "agentless") throw new OutreachContractError("AGENTLESS_REQUIRED", 409);
-  return { tenantKey: scope.siteKey, accountId: client.accountId, resourceType, zoomId, name: "name" in observed ? observed.name : zoomId, observedDigest: digest(observed), version: binding?.version ?? 0, departmentKey: binding?.departmentKey ?? null, notificationTopic: binding?.notificationTopic ?? null, purpose: binding?.purpose ?? "REGULAR", running: "status" in observed && ["running", "unknown"].includes(observed.status) || "alwaysRunning" in observed && observed.alwaysRunning };
+  return { tenantKey: scope.siteKey, accountId: client.accountId, resourceType, zoomId, name: "name" in observed ? observed.name : zoomId, observedDigest: digest(observed), version: binding?.version ?? 0, notificationTopic: binding?.notificationTopic ?? null, purpose: binding?.purpose ?? "REGULAR", running: "status" in observed && ["running", "unknown"].includes(observed.status) || "alwaysRunning" in observed && observed.alwaysRunning };
 }
 export async function saveResourceBinding(db: PrismaClient, scope: OutreachScope, payload: unknown, injected?: Reader) {
   requireFullAccess(scope);
-  const value = record(payload); fields(value, ["operationKey", "resourceType", "zoomId", "accountId", "observedDigest", "version", "departmentKey", "notificationTopic"]);
-  const key = operationKey(value.operationKey), version = whole(value.version, 0), departmentKey = stringValue(value.departmentKey);
-  requireOutreachDepartment(scope, departmentKey);
+  const value = { ...record(payload) }; fields(value, ["operationKey", "resourceType", "zoomId", "accountId", "observedDigest", "version", "departmentKey", "notificationTopic"]); delete value.departmentKey;
+  const key = operationKey(value.operationKey), version = whole(value.version, 0);
+
   const notificationTopic = value.notificationTopic == null || value.notificationTopic === "" ? null : choice(value.notificationTopic, scope.siteKey === "lg" ? MUNICIPAL_TOPICS : TOPICS);
   const unique = { siteKey: scope.siteKey, actorId: scope.actorId, kind: "RESOURCE_BINDING", operationKey: key }, requestDigest = digest(value);
   const previousOperation = await db.outreachOperation.findUnique({ where: { siteKey_actorId_kind_operationKey: unique } });
@@ -51,9 +51,9 @@ export async function saveResourceBinding(db: PrismaClient, scope: OutreachScope
       if (current && (current.ownerSiteKey !== scope.siteKey || current.tombstone || current.dispatchId || current.version !== version)) throw new OutreachContractError("RESOURCE_OWNERSHIP_CONFLICT", 409);
       if (where.resourceType === "CONTACT_LIST" && await tx.outreachDefaultGroup.count({ where: { binding: { accountId: where.accountId, zoomId: where.zoomId } } })) throw new OutreachContractError("RESOURCE_OWNERSHIP_CONFLICT", 409);
       if (!current && version !== 0) throw new OutreachContractError("VERSION_CONFLICT", 409);
-      const result = current ? await tx.zoomResourceBinding.update({ where: { id: current.id, version }, data: { departmentKey, notificationTopic, observedDigest: observed.observedDigest, version: { increment: 1 } } }) : await tx.zoomResourceBinding.create({ data: { ...where, ownerSiteKey: scope.siteKey, departmentKey, notificationTopic, observedDigest: observed.observedDigest, purpose: "REGULAR" } });
+      const result = current ? await tx.zoomResourceBinding.update({ where: { id: current.id, version }, data: { notificationTopic, observedDigest: observed.observedDigest, version: { increment: 1 } } }) : await tx.zoomResourceBinding.create({ data: { ...where, ownerSiteKey: scope.siteKey, notificationTopic, observedDigest: observed.observedDigest, purpose: "REGULAR" } });
       await tx.outreachOperation.create({ data: { ...unique, requestDigest, status: "COMPLETED", result: json({ id: result.id, version: result.version }) } });
-      await writeZaadAudit(tx, scope.siteKey, { actorUserId: scope.actorId, resourceKind: "resource-binding", targetId: result.id, action: current ? "UPDATE" : "CREATE", result: "SUCCESS", changedFieldNames: ["departmentKey", "notificationTopic", "observedDigest"] });
+      await writeZaadAudit(tx, scope.siteKey, { actorUserId: scope.actorId, resourceKind: "resource-binding", targetId: result.id, action: current ? "UPDATE" : "CREATE", result: "SUCCESS", changedFieldNames: [ "notificationTopic", "observedDigest"] });
       return { tenantKey: scope.siteKey, result: { id: result.id, version: result.version } };
     }, { isolationLevel: "Serializable" });
   } catch (error) { databaseError(error); }

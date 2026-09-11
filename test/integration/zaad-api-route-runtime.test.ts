@@ -64,8 +64,17 @@ test(
         assert.equal(missingTenant.status, 400);
         assert.equal((await missingTenant.json()).code, "TENANT_REQUIRED");
 
+        await t.test("audio import writes require access and retired registration settings are unreachable", async () => {
+          const denied = await invoke(route.POST, "POST", "/api/admin/zaad/message-import", { cookie: viewCookie, body: {} });
+          assert.equal(denied.status, 403);
+          for (const path of ["/api/admin/zaad/registration-reception", "/api/admin/zaad/municipal/caller-notices"]) {
+            assert.equal((await invoke(route.GET, "GET", path, { cookie: fullCookie })).status, 404);
+            assert.equal((await invoke(route.PUT, "PUT", path, { cookie: fullCookie, body: {} })).status, 404);
+          }
+        });
+
         await t.test("contact group sync endpoints require authentication and update access", async () => {
-          for (const path of ["/api/admin/zaad/default-groups/default-lg-elder-watch/candidates", "/api/admin/zaad/contact-lists/sync-candidates", "/api/admin/zaad/contact-lists/sync-operations/fixture-operation"]) {
+          for (const path of ["/api/admin/zaad/message-import/candidates", "/api/admin/zaad/message-import/operations/fixture-operation", "/api/admin/zaad/purpose-campaigns/regular/ELDER_WATCH/candidates", "/api/admin/zaad/purpose-campaigns/operations/fixture-operation", "/api/admin/zaad/default-groups/default-lg-elder-watch/candidates", "/api/admin/zaad/contact-lists/sync-candidates", "/api/admin/zaad/contact-lists/sync-operations/fixture-operation"]) {
             const anonymous = await invoke(route.GET, "GET", path);
             assert.equal(anonymous.status, 401);
             const readonly = await invoke(route.GET, "GET", path, { cookie: viewCookie });
@@ -74,6 +83,10 @@ test(
           }
           const denied = await invoke(route.POST, "POST", "/api/admin/zaad/contact-lists/sync-bindings", { cookie: viewCookie, body: { operationKey: "fixture-operation", accountId: "fixture-account", contactListIds: ["fixture-list-1"] } });
           assert.equal(denied.status, 403);
+          const deniedPurpose = await invoke(route.PUT, "PUT", "/api/admin/zaad/purpose-campaigns/regular/ELDER_WATCH", { cookie: viewCookie, body: { operationKey: "fixture-purpose", accountId: "fixture-account", revision: 0, campaignId: "fixture-campaign" } });
+          assert.equal(deniedPurpose.status, 403);
+          const anonymousPurpose = await invoke(route.GET, "GET", "/api/admin/zaad/purpose-campaigns");
+          assert.equal(anonymousPurpose.status, 401);
           assert.equal(externalFetches.length, 0);
         });
 
@@ -246,7 +259,7 @@ test(
           assert.equal(connectionBody.tenantKey, "lg");
           assert.equal(connectionBody.fullAccess, true);
           assert.equal(connectionBody.liveExecution, false);
-          assert.ok(Array.isArray(connectionBody.departments));
+          assert.equal("departments" in connectionBody, false);
         });
 
         await t.test("CSV multipart import is atomic and rejects unknown parts", async () => {

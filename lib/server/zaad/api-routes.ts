@@ -30,21 +30,15 @@ import {
 } from "./residents";
 import {
   createZaadContactList,
-  createZaadMessage,
   deleteZaadContactList,
-  deleteZaadMessage,
   getZaadCampaign,
   getZaadConnection,
   getZaadContactList,
-  getZaadMessage,
   getZaadRegistrationSetting,
   listZaadCampaigns,
   listZaadContactLists,
-  listZaadMessages,
-  retryZaadMessage,
   updateZaadCampaignStatus,
   updateZaadContactList,
-  updateZaadMessage,
   updateZaadRegistrationSetting,
   ZaadResourceError,
 } from "./resources";
@@ -108,26 +102,6 @@ export function registerZaadApiRoutes(app: Hono<ZaadApiEnvironment>) {
     return c.json(await deleteZaadResident(prisma, tenantKey, actorUserId, c.req.param("id"), revision));
   }));
 
-  app.get("/admin/zaad/messages", (c) => withZaadAuth(c, "VIEW", async ({ prisma, tenantKey }) => c.json(await listZaadMessages(prisma, tenantKey))));
-  app.get("/admin/zaad/messages/:id", (c) => withZaadAuth(c, "VIEW", async ({ prisma, tenantKey }) => {
-    return c.json({ message: await getZaadMessage(prisma, tenantKey, c.req.param("id")) });
-  }));
-  app.post("/admin/zaad/messages", (c) => withZaadAuth(c, "CREATE", async ({ prisma, tenantKey, actorUserId }) => {
-    return c.json({ message: await createZaadMessage(prisma, tenantKey, actorUserId, await readJson(c)) }, 201);
-  }));
-  app.patch("/admin/zaad/messages/:id", (c) => withZaadAuth(c, "UPDATE", async ({ prisma, tenantKey, actorUserId }) => {
-    return c.json({ message: await updateZaadMessage(prisma, tenantKey, actorUserId, c.req.param("id"), await readJson(c)) });
-  }));
-  app.post("/admin/zaad/messages/:id/sync", (c) => withZaadAuth(c, "UPDATE", async ({ prisma, tenantKey, actorUserId }) => {
-    const revision = isExactRevision(await readJson(c));
-    if (!revision) throw new ZaadResourceError(ZAAD_ERROR_CODES.invalidRequest, 400);
-    return c.json({ message: await retryZaadMessage(prisma, tenantKey, actorUserId, c.req.param("id"), revision) });
-  }));
-  app.delete("/admin/zaad/messages/:id", (c) => withZaadAuth(c, "DELETE", async ({ prisma, tenantKey, actorUserId }) => {
-    const revision = isExactRevision(await readJson(c));
-    if (!revision) throw new ZaadResourceError(ZAAD_ERROR_CODES.invalidRequest, 400);
-    return c.json(await deleteZaadMessage(prisma, tenantKey, actorUserId, c.req.param("id"), revision));
-  }));
 
   app.get("/admin/zaad/contact-lists", (c) => withZaadAuth(c, "VIEW", async ({ prisma, tenantKey }) => {
     return c.json(await listZaadContactLists(prisma, tenantKey, c.req.query("nextPageToken")));
@@ -193,8 +167,7 @@ async function withZaadAuth(
     if (tenantValues.length > 1 || (tenantValues.length && tenantValues[0] !== "lg")) return c.json({ error: ZAAD_ERROR_CODES.invalidRequest }, 400);
     const tenantKey = tenantValues.length ? "lg" : c.get("tenantKey");
     if (tenantKey !== "lg" || !(await outreachTenants(prisma, authorization.actor)).includes("lg")) return c.json({ error: "NOT_FOUND" }, 404);
-    const scope = await resolveOutreachScope(prisma, authorization.actor, tenantKey);
-    if (!scope.departments.includes("resident-support")) return c.json({ error: "NOT_FOUND" }, 404);
+    await resolveOutreachScope(prisma, authorization.actor, tenantKey);
     return await run({
       prisma,
       tenantKey,

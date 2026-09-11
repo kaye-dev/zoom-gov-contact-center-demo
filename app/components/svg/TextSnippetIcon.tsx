@@ -1,0 +1,6 @@
+import type { SVGProps } from "react";
+// Google Material Symbols Outlined, text_snippet, 24px / weight 400 / FILL 0.
+// Apache-2.0: https://github.com/google/material-design-icons
+export function TextSnippetIcon(props: SVGProps<SVGSVGElement>) {
+ return <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="24" height="24" fill="currentColor" aria-hidden="true" focusable="false" {...props}><path d="M200-200h560v-367L567-760H200v560Zm0 80q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h400l240 240v400q0 33-23.5 56.5T760-120H200Zm80-160h400v-80H280v80Zm0-160h400v-80H280v80Zm0-160h280v-80H280v80Zm-80 400v-560 560Z"/></svg>;
+}

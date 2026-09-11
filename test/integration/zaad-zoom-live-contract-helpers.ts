@@ -229,7 +229,11 @@ export class LiveZoomContractContext {
     form.append("asset_name", input.name);
     form.append("asset_description", "Synthetic ZAAD live contract resource");
     form.append("asset_type", "audio");
-    form.append("asset_items", JSON.stringify(items));
+    for (const [index, item] of items.entries()) {
+      for (const [key, value] of Object.entries(item)) {
+        form.append(`asset_items[${index}].${key}`, String(value));
+      }
+    }
     let response: RequestResult;
     try {
       response = await this.request("create TTS asset", "POST", "/contact_center/asset_library/assets", {

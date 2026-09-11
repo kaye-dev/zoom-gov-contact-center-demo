@@ -5,12 +5,12 @@ import { parseDispatchDraft } from "../lib/zaad/dispatch-contracts";
 test("message candidate voices never imply a verified generation or playback contract", () => {
   assert.deepEqual(audioCapabilities.voices, ["Takumi", "Kazuha", "Tomoko", "Mizuki"]);
   assert.equal(audioCapabilities.generationEnabled, false); assert.equal(audioCapabilities.previewEnabled, false);
-  const message = { name: "案内", body: "確認です", voiceId: "Takumi", languageCode: "ja-JP", departmentKey: "resident-support" };
+  const message = { name: "案内", body: "確認です", voiceId: "Takumi", languageCode: "ja-JP" };
   assert.equal(parseOutreachMessage(message).body, "確認です");
   for (const override of [{ body: "" }, { voiceId: "browser-tts" }, { languageCode: "en-US" }, { version: 1 }]) assert.throws(() => parseOutreachMessage({ ...message, ...override }));
 });
 test("dispatch target-mode changes exclude hidden selections and prevent cross-tenant references", () => {
-  const draft = { operationKey: "dispatch_test_001", name: "案内", body: "確認です", voiceId: "Takumi", languageCode: "ja-JP", departmentKey: "resident-support", connectionMode: "MEDIA", targetMode: "GROUPS", groupIds: ["list-one"], people: [{ siteKey: "univ", id: "hidden", origin: "UNIVERSITY_CONTACT", kind: "student" }], topic: "elder-watch" };
+  const draft = { operationKey: "dispatch_test_001", name: "案内", body: "確認です", voiceId: "Takumi", languageCode: "ja-JP", connectionMode: "MEDIA", targetMode: "GROUPS", groupIds: ["list-one"], people: [{ siteKey: "univ", id: "hidden", origin: "UNIVERSITY_CONTACT", kind: "student" }], topic: "elder-watch" };
   assert.deepEqual(parseDispatchDraft(draft, "lg").people, []);
   assert.throws(() => parseDispatchDraft({ ...draft, targetMode: "PEOPLE" }, "lg"));
   assert.throws(() => parseDispatchDraft({ ...draft, connectionMode: "FLOW" }, "lg"));

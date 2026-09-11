@@ -540,7 +540,7 @@ model ZaadRegistrationSetting {
 model ZaadOutboundMessage {
   id              String                @id @default(cuid())
   siteKey         String
-  departmentKey   String?
+  departmentKey String? @ignore
   retiredAt       DateTime? @db.Timestamptz(3)
   name            String
   body            String
@@ -551,7 +551,7 @@ model ZaadOutboundMessage {
   syncStatus      ZaadMessageSyncStatus @default(PENDING)
   syncErrorCode   String?
   syncedAt        DateTime?             @db.Timestamptz(3)
-  revision        Int                   @default(1)
+  currentRevisionId String?
   createdByUserId String?
   updatedByUserId String?
   createdAt       DateTime              @default(now()) @db.Timestamptz(3)
@@ -559,7 +559,9 @@ model ZaadOutboundMessage {
 
   createdBy user? @relation("ZaadOutboundMessageCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   updatedBy user? @relation("ZaadOutboundMessageUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
-  revisions MessageRevision[]
+  revisions MessageRevision[] @relation("MessageSnapshots")
+  currentRevision MessageRevision? @relation("CurrentMessageSnapshot", fields: [siteKey, currentRevisionId], references: [siteKey, id], onDelete: Restrict)
+  @@unique([siteKey, currentRevisionId])
 
   @@unique([siteKey, id])
   @@index([siteKey, updatedAt, id])
@@ -570,7 +572,7 @@ model ZaadOneTimeDispatch {
   id                    String                   @id @default(cuid())
   siteKey               String
   operationKey          String
-  departmentKey         String?
+  departmentKey String? @ignore
   appState              String?
   connectionMode        String?
   messageRevisionId     String?
@@ -661,7 +663,7 @@ model ZaadAdminAudit {
   @@map("zaad_admin_audits")
 }
 
-// University outreach is opt-in and department scoped. Existing municipal rows are not migrated.
+// Legacy grants are retained for migration/audit only; current access uses OutreachTenantGrant.
 model UniversityZaadGrant {
   id            String @id @default(cuid())
   siteKey       String
@@ -669,13 +671,14 @@ model UniversityZaadGrant {
   departmentKey String
   liveExecution Boolean @default(false)
   @@unique([siteKey, userId, departmentKey])
+  @@ignore
   @@map("university_zaad_grants")
 }
 
 model UniversityContact {
   id                   String @id @default(cuid())
   siteKey              String
-  departmentKey        String
+  departmentKey String? @ignore
   name                 String
   phone                String
   facultyCode          String?
@@ -700,7 +703,7 @@ model UniversityContact {
   groupMemberships     UniversityGroupMembership[]
   @@unique([siteKey, id])
   @@unique([siteKey, facultyCode, admissionYear, serial])
-  @@index([siteKey, departmentKey, id])
+  @@index([siteKey, id])
   @@map("university_contacts")
 }
 
@@ -711,7 +714,7 @@ model ZoomResourceBinding {
   resourceType String
   zoomId String
   ownerSiteKey String
-  departmentKey String?
+  departmentKey String? @ignore
   purpose String
   notificationTopic String?
   dispatchId String?
@@ -720,6 +723,8 @@ model ZoomResourceBinding {
   tombstone Boolean @default(false)
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  importedAudioMessages OutreachImportedAudioMessage[]
+  purposeCampaigns OutreachPurposeCampaign[]
   defaultGroups OutreachDefaultGroup[]
   memberships ZoomContactMembership[]
   municipalWorkflows MunicipalWorkflowRevision[] @relation("MunicipalWorkflowFlow")
@@ -727,7 +732,7 @@ model ZoomResourceBinding {
   // Non-CONTACT_LIST resources retain account-wide ownership via a partial unique index in SQL.
   @@unique([accountId, resourceType, zoomId, ownerSiteKey], map: "zoom_resource_bindings_site_resource_key")
   @@unique([ownerSiteKey, id])
-  @@index([ownerSiteKey, departmentKey, purpose])
+  @@index([ownerSiteKey, purpose])
   @@map("zoom_resource_bindings")
 }
 
@@ -767,7 +772,7 @@ model CrmImportJob {
   id String @id @default(cuid())
   siteKey String
   actorId String
-  departmentKey String
+  departmentKey String? @ignore
   source String
   operationKey String
   previewDigest String
@@ -800,7 +805,7 @@ model MessageRevision {
   id String @id @default(cuid())
   siteKey String
   messageId String
-  revision Int
+  revision Int? @ignore
   name String
   body String
   voiceId String
@@ -812,7 +817,8 @@ model MessageRevision {
   zoomAssetItemId String?
   createdBy String
   createdAt DateTime @default(now()) @db.Timestamptz(3)
-  message ZaadOutboundMessage @relation(fields: [siteKey, messageId], references: [siteKey, id], onDelete: Restrict)
+  message ZaadOutboundMessage @relation("MessageSnapshots", fields: [siteKey, messageId], references: [siteKey, id], onDelete: Restrict)
+  currentFor ZaadOutboundMessage? @relation("CurrentMessageSnapshot")
   dispatches ZaadOneTimeDispatch[]
   audioRevisions ZoomAudioRevision[]
   @@unique([siteKey, messageId, revision])
@@ -823,7 +829,7 @@ model MessageRevision {
 model MunicipalContact {
   id String @id @default(cuid())
   siteKey String
-  departmentKey String @default("resident-support")
+  departmentKey String? @ignore
   name String
   phone String
   district String?
@@ -847,7 +853,7 @@ model MunicipalContact {
   targets MunicipalWorkflowTarget[]
   snapshots MunicipalTargetSnapshot[]
   @@unique([siteKey, id])
-  @@index([siteKey, departmentKey, createdAt, id])
+  @@index([siteKey, createdAt, id])
   @@index([siteKey, phone])
   @@map("municipal_contacts")
 }
@@ -937,7 +943,7 @@ model MunicipalWorkflowRevision {
   workflowId String
   revision Int
   purpose String
-  departmentKey String
+  departmentKey String? @ignore
   name String
   questionVersion String
   settings Json
@@ -976,7 +982,7 @@ model MunicipalWorkflowTarget {
 model MunicipalOutreachRun {
   id String @id @default(cuid())
   siteKey String
-  departmentKey String
+  departmentKey String? @ignore
   workflowRevisionId String
   actorId String
   operationKey String
@@ -1058,7 +1064,7 @@ model MunicipalResponse {
 model MunicipalSupportCase {
   id String @id @default(cuid())
   siteKey String
-  departmentKey String
+  departmentKey String? @ignore
   targetSnapshotId String
   purpose String
   reasons String[]
@@ -1073,7 +1079,7 @@ model MunicipalSupportCase {
   actions MunicipalCaseAction[]
   @@unique([siteKey, id])
   @@unique([siteKey, targetSnapshotId])
-  @@index([siteKey, departmentKey, status, dueAt])
+  @@index([siteKey, status, dueAt])
   @@map("municipal_support_cases")
 }
 
@@ -1196,7 +1202,7 @@ model UniversityNotificationPreference {
 model UniversityContactGroup {
   id                      String @id @default(cuid())
   siteKey                 String
-  departmentKey           String
+  departmentKey String? @ignore
   name                    String
   representativeContactId String
   memberCount             Int
@@ -1204,7 +1210,7 @@ model UniversityContactGroup {
   memberships             UniversityGroupMembership[]
   representative          UniversityContact @relation("GroupRepresentative", fields: [siteKey, representativeContactId], references: [siteKey, id], onDelete: Restrict)
   @@unique([siteKey, id])
-  @@index([siteKey, departmentKey])
+  @@index([siteKey])
   @@map("university_contact_groups")
 }
 
@@ -1222,7 +1228,7 @@ model UniversityGroupMembership {
 model UniversityOutreachBatch {
   id             String @id @default(cuid())
   siteKey        String
-  departmentKey  String
+  departmentKey String? @ignore
   purpose        String
   mode           String @default("DEMO")
   trigger        String
@@ -1242,7 +1248,7 @@ model UniversityOutreachBatch {
   reserves       UniversityVenueReserve[]
   @@unique([siteKey, id])
   @@unique([siteKey, operationKey])
-  @@index([siteKey, departmentKey, id])
+  @@index([siteKey, id])
   @@map("university_outreach_batches")
 }
 
@@ -1308,7 +1314,7 @@ model UniversityResponse {
 model UniversityIntake {
   id              String @id @default(cuid())
   siteKey         String
-  departmentKey   String
+  departmentKey String? @ignore
   direction       String @default("INBOUND")
   place           String
   issue           String
@@ -1318,14 +1324,14 @@ model UniversityIntake {
   receivedAt      DateTime @default(now()) @db.Timestamptz(3)
   cases           UniversitySupportCase[]
   @@unique([siteKey, id])
-  @@index([siteKey, departmentKey, id])
+  @@index([siteKey, id])
   @@map("university_intakes")
 }
 
 model UniversitySupportCase {
   id                    String @id @default(cuid())
   siteKey               String
-  departmentKey         String
+  departmentKey String? @ignore
   targetId              String?
   intakeId              String?
   assigneeId            String?
@@ -1341,7 +1347,7 @@ model UniversitySupportCase {
   @@unique([siteKey, id])
   @@unique([siteKey, targetId])
   @@unique([siteKey, intakeId])
-  @@index([siteKey, departmentKey, id])
+  @@index([siteKey, id])
   @@map("university_support_cases")
 }
 
@@ -1417,7 +1423,7 @@ model OutreachConsentEvidence {
 model OutreachImportCandidate {
   id String @id @default(cuid())
   siteKey String
-  departmentKey String
+  departmentKey String? @ignore
   name String
   phone String
   studentNumber String?
@@ -1428,7 +1434,7 @@ model OutreachImportCandidate {
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   deletedAt DateTime? @db.Timestamptz(3)
   @@unique([siteKey, id])
-  @@index([siteKey, departmentKey, id])
+  @@index([siteKey, id])
   @@map("outreach_import_candidates")
 }
 
@@ -1511,4 +1517,62 @@ model OutreachGroupSyncItem {
   @@unique([operationId, membershipId])
   @@index([operationId, status])
   @@map("outreach_group_sync_items")
+}
+
+model OutreachPurposeCampaign {
+  id String @id @default(cuid())
+  siteKey String
+  mode String
+  purpose String
+  bindingId String? @unique
+  version Int @default(1)
+  binding ZoomResourceBinding? @relation(fields: [siteKey, bindingId], references: [ownerSiteKey, id], onDelete: Restrict)
+  @@unique([siteKey, mode, purpose])
+  @@map("outreach_purpose_campaigns")
+}
+
+
+model OutreachImportedAudioMessage {
+  id String @id @default(cuid())
+  siteKey String
+  bindingId String
+  assetItemId String
+  name String
+  languageCode String
+  voiceId String?
+  bodyState String @default("UNCHECKED")
+  providerBody String?
+  bodyFetchedAt DateTime? @db.Timestamptz(3)
+  submittedBody String?
+  unlinkedAt DateTime? @db.Timestamptz(3)
+  observedDigest String
+  sourceModifiedAt DateTime? @db.Timestamptz(3)
+  createdBy String
+  updatedBy String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+  binding ZoomResourceBinding @relation(fields: [siteKey, bindingId], references: [ownerSiteKey, id], onDelete: Restrict)
+  @@unique([bindingId, assetItemId])
+  @@unique([siteKey, id])
+  @@index([siteKey, updatedAt, id])
+  @@map("outreach_imported_audio_messages")
+}
+
+model OutreachTenantGrant {
+  id String @id @default(cuid())
+  siteKey String
+  userId String
+  accessEnabled Boolean @default(false)
+  liveExecution Boolean @default(false)
+  serviceFullAccess Boolean @default(false)
+  @@unique([siteKey, userId])
+  @@map("outreach_tenant_grants")
+}
+
+// Persists ownership across provider requests and process crashes; unknown outcomes keep the lock.
+model OutreachMessageLock {
+  resourceKey String @id
+  operationId String @unique
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  @@map("outreach_message_locks")
 }

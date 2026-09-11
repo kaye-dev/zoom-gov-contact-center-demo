@@ -40,10 +40,6 @@ test("message boundary counts Unicode code points consistently", () => {
   assert.equal(truncateZaadTextCharacters(`${exactBoundary}🚨`, 500), exactBoundary);
 });
 
-test("message update uses the same 500-character boundary with a positive revision", () => {
-  assert.equal(parseZaadMessageInput(message("あ".repeat(500), 1), true).ok, true);
-  assert.deepEqual(parseZaadMessageInput(message("あ".repeat(501), 1), true), {
-    ok: false,
-    code: ZAAD_ERROR_CODES.invalidRequest,
-  });
+test("legacy message counters are rejected rather than used to overwrite content", () => {
+  assert.equal(parseZaadMessageInput(message("本文", 1)).ok, false);
 });

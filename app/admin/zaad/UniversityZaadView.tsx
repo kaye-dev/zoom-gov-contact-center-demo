@@ -11,7 +11,6 @@ import { AdminFieldHelp } from "@/app/components/admin/AdminFieldHelp";
 import { Select } from "@/app/components/Select";
 import { CASES } from "@/lib/zaad/university/demo";
 import {
-  PURPOSE_DEPARTMENT,
   parseConfig,
   type Template,
   type Outcome,
@@ -66,7 +65,6 @@ const defaults = (template: Template) =>
 
 export function UniversityZaadView({
   permissions,
-  departments,
   allowedTenants,
   years,
   serverDate,
@@ -74,7 +72,6 @@ export function UniversityZaadView({
 }: {
   embedded?: boolean;
   permissions: Permissions;
-  departments: string[];
   allowedTenants: ("lg" | "univ")[];
   years: number[];
   serverDate: string;
@@ -84,9 +81,7 @@ export function UniversityZaadView({
     a = c.admin;
   const router = useRouter();
   const urlParams = useSearchParams();
-  const available = CASES.filter((item) =>
-    departments.includes(PURPOSE_DEPARTMENT[item.id]),
-  );
+  const available = CASES;
   const [chosen, setChosen] = useState(
     available.find((item) => item.id === "scholarship") ??
       available[0] ??
@@ -212,7 +207,7 @@ export function UniversityZaadView({
   async function openCase(row: ResultRow) {
     await work(async () => {
       const users = await universityRequest<{ id: string; name: string }[]>(
-        `assignees?department=${PURPOSE_DEPARTMENT[chosen.id]}`,
+        "assignees",
       );
       setAssignees(users);
       setActiveRow(row);
@@ -377,16 +372,7 @@ export function UniversityZaadView({
         aria-label={a.navigation}
         className="-mx-4 mt-5 flex gap-7 overflow-x-auto border-b border-line px-4 md:-mx-6 md:px-6"
       >
-        {nav
-          .filter(
-            ([key]) =>
-              key !== "registrations" ||
-              departments.includes("student-affairs"),
-          )
-          .filter(
-            ([key]) => key !== "inbound" || departments.includes("facilities"),
-          )
-          .map(([key, label]) => (
+        {nav.map(([key, label]) => (
             <button
               key={key}
               data-stage={key}
@@ -467,9 +453,6 @@ export function UniversityZaadView({
               <h2 ref={title} tabIndex={-1} className="text-xl font-bold">
                 {c.templateText[chosen.name]}
               </h2>
-              <p className="mt-1 text-sm text-fg-muted">
-                {c.templateText[chosen.department]}
-              </p>
             </div>
             <ol
               aria-label={a.flow}
@@ -514,7 +497,6 @@ export function UniversityZaadView({
                       {c.templateText[item.name]}
                     </span>
                     <span className="mt-1 block text-xs font-semibold text-accent">
-                      {c.templateText[item.department]} ·{" "}
                       {item.mode === "direct" ? a.direct : a.followup}
                     </span>
                     <span className="mt-2 block text-sm leading-6 text-fg-muted">
@@ -582,7 +564,6 @@ export function UniversityZaadView({
                 [a.candidates, candidateTotal ?? candidates.length],
                 [a.selected, selected.length],
                 [a.excluded, candidates.filter((r) => !canSelect(r)).length],
-                [a.department, c.templateText[chosen.department]],
               ]}
             />
             <Table
@@ -764,7 +745,6 @@ export function UniversityZaadView({
               items={[
                 [a.selected, selected.length],
                 [a.templates, c.templateText[chosen.name]],
-                [a.department, c.templateText[chosen.department]],
                 [a.executeStep, "DEMO"],
               ]}
             />
@@ -1240,9 +1220,6 @@ function CaseForm({
         <h3 className="text-lg font-bold">
           {row.name} · {a.cases}
         </h3>
-        <p className="mt-2 text-sm text-fg-muted">
-          {c.templateText[template.department]}
-        </p>
       </div>
       <Table
         headers={[a.answerFields, a.result]}
@@ -1684,7 +1661,7 @@ function UniversityIntakes({ permissions }: { permissions: Permissions }) {
   async function open(row: Intake) {
     await work(async () => {
       const users = await universityRequest<{ id: string; name: string }[]>(
-        "assignees?department=facilities",
+        "assignees",
       );
       const task = row.cases[0];
       if (!task) return;

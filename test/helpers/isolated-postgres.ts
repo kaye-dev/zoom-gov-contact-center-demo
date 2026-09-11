@@ -14,6 +14,7 @@ const DATABASE_NAME_PATTERN = /^zoom_admin_access_runtime_test_[0-9a-f]{16}$/u;
 
 export async function withIsolatedPostgresDatabase(
   operation: (databaseUrl: string) => Promise<void>,
+  options: { migrate?: boolean } = {},
 ): Promise<void> {
   const adminUrl = readLocalAdminDatabaseUrl();
   const databaseName = `${DATABASE_NAME_PREFIX}${randomBytes(8).toString("hex")}`;
@@ -27,7 +28,7 @@ export async function withIsolatedPostgresDatabase(
   try {
     await admin.query(`CREATE DATABASE ${quoteDatabaseName(databaseName)}`);
     created = true;
-    runPrismaMigrateDeploy(databaseUrl.href);
+    if (options.migrate !== false) runPrismaMigrateDeploy(databaseUrl.href);
     await operation(databaseUrl.href);
   } finally {
     if (created) {

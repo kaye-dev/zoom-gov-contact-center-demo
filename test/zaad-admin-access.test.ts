@@ -108,7 +108,7 @@ test("ZAAD page and API routes apply the same resource-specific RBAC actions", (
     "utf8",
   );
 
-  assert.match(page, /requireAdminAccess\("zaad", "VIEW", "\/admin\/zaad"\)/u);
+  assert.match(page, /requireAdminAccess\("zaad", "VIEW", "\/admin\/zaad\?tenant=lg"\)/u);
   for (const action of ["VIEW", "CREATE", "UPDATE", "DELETE"] as const) {
     assert.match(routes, new RegExp(`withZaadAuth\\(c, "${action}"`, "u"));
   }

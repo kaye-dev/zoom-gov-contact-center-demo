@@ -3,7 +3,6 @@ export const MUNICIPAL_PURPOSES = ["ELDER_WATCH", "PROCEDURE_SUPPORT", "SERVICE_
 export type MunicipalPurpose = typeof MUNICIPAL_PURPOSES[number];
 export const MUNICIPAL_TOPICS = ["elder-watch", "procedure-support", "service-confirmation", "fraud-alert"] as const;
 export type MunicipalTopic = typeof MUNICIPAL_TOPICS[number];
-export const MUNICIPAL_DEPARTMENTS = ["resident-support", "welfare", "procedures", "services", "community-safety"] as const;
 // This demo master is explicit configuration, never inferred from a phone/address.
 export const MUNICIPAL_DISTRICTS = ["central", "east", "west"] as const;
 export const MUNICIPAL_CONSENT_VERSION = "municipal-phone-notice-v1";
@@ -75,7 +74,7 @@ export function parseBusinessEvidence(payload: unknown, purpose: MunicipalPurpos
 export function parseWorkflow(payload: unknown) {
   const v = record(payload); fields(v, ["version", "name", "purpose", "departmentKey", "body", "voiceId", "questionVersion", "schedule", "maxRetries", "retryIntervalMinutes", "assigneeId", "dueAt", "flowBindingId"]);
   if (v.questionVersion !== QUESTION_VERSION) throw new OutreachContractError("QUESTION_VERSION_MISMATCH");
-  return { version: v.version === undefined ? undefined : whole(v.version), name: stringValue(v.name), purpose: choice(v.purpose, MUNICIPAL_PURPOSES), departmentKey: choice(v.departmentKey, MUNICIPAL_DEPARTMENTS), body: stringValue(v.body, 500, true), voiceId: choice(v.voiceId, ["Tomoko", "Takumi", "Mizuki", "Kazuha"]), questionVersion: QUESTION_VERSION, schedule: parseAvailability(v.schedule), maxRetries: whole(v.maxRetries, 0, 3), retryIntervalMinutes: whole(v.retryIntervalMinutes, 5, 1440), assigneeId: stringValue(v.assigneeId), dueAt: dateValue(v.dueAt), flowBindingId: v.flowBindingId == null ? null : stringValue(v.flowBindingId) };
+  return { version: v.version === undefined ? undefined : whole(v.version), name: stringValue(v.name), purpose: choice(v.purpose, MUNICIPAL_PURPOSES), body: stringValue(v.body, 500, true), voiceId: choice(v.voiceId, ["Tomoko", "Takumi", "Mizuki", "Kazuha"]), questionVersion: QUESTION_VERSION, schedule: parseAvailability(v.schedule), maxRetries: whole(v.maxRetries, 0, 3), retryIntervalMinutes: whole(v.retryIntervalMinutes, 5, 1440), assigneeId: stringValue(v.assigneeId), dueAt: dateValue(v.dueAt), flowBindingId: v.flowBindingId == null ? null : stringValue(v.flowBindingId) };
 }
 export type Answer = { value: string; input: "DTMF" | "VOICE" };
 export function parseAnswers(payload: unknown, purpose: MunicipalPurpose): Record<string, Answer> {

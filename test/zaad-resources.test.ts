@@ -5,10 +5,6 @@ import type { PrismaClient } from "../lib/generated/prisma/client";
 import {
   createZaadContactList,
   deleteZaadContactList,
-  deleteZaadMessage,
-  getZaadMessage,
-  retryZaadMessage,
-  updateZaadMessage,
   updateZaadCampaignStatus,
   updateZaadContactList,
   updateZaadRegistrationSetting,
@@ -35,82 +31,14 @@ type AuditRecord = {
   stableErrorCode: string | null;
 };
 
-function prismaFixture(options: { messageInUse?: boolean } = {}) {
+function prismaFixture() {
   const audits: AuditRecord[] = [];
   const events: string[] = [];
-  let messageDeleted = false;
-  const message = {
-    id: "message-raw-id",
-    name: "synthetic message",
-    body: "synthetic body",
-    languageCode: "ja-JP",
-    voiceId: "Tomoko",
-    zoomAssetId: null as string | null,
-    zoomAssetItemId: null as string | null,
-    syncStatus: "SYNC_FAILED",
-    syncErrorCode: ZAAD_ERROR_CODES.zoomUnavailable as string | null,
-    syncedAt: null as Date | null,
-    revision: 3,
-    updatedAt: new Date("2026-09-01T00:00:00.000Z"),
-  };
   const prisma = {
     zaadAdminAudit: {
       create: async ({ data }: { data: AuditRecord }) => {
         audits.push(data);
         return { id: `audit-${audits.length}`, ...data };
-      },
-    },
-    zaadOutboundMessage: {
-      updateMany: async ({ where, data }: {
-        where: { id: string; revision?: number };
-        data: {
-          zoomAssetId?: string;
-          zoomAssetItemId?: string;
-          syncStatus?: string;
-          syncErrorCode?: string | null;
-          syncedAt?: Date | null;
-          revision?: { increment: number };
-          name?: string;
-          body?: string;
-          languageCode?: string;
-          voiceId?: string;
-        };
-      }) => {
-        if (messageDeleted || where.id !== message.id || (where.revision !== undefined && where.revision !== message.revision)) {
-          return { count: 0 };
-        }
-        if (data.zoomAssetId) message.zoomAssetId = data.zoomAssetId;
-        if (data.zoomAssetItemId) message.zoomAssetItemId = data.zoomAssetItemId;
-        if (data.syncStatus) message.syncStatus = data.syncStatus;
-        if (data.syncErrorCode !== undefined) message.syncErrorCode = data.syncErrorCode;
-        if (data.syncedAt !== undefined) message.syncedAt = data.syncedAt;
-        if (data.revision) message.revision += data.revision.increment;
-        if (data.name !== undefined) message.name = data.name;
-        if (data.body !== undefined) message.body = data.body;
-        if (data.languageCode !== undefined) message.languageCode = data.languageCode;
-        if (data.voiceId !== undefined) message.voiceId = data.voiceId;
-        return { count: 1 };
-      },
-      deleteMany: async ({ where }: { where: { id: string; revision: number } }) => {
-        events.push("local-delete");
-        if (messageDeleted || where.id !== message.id || where.revision !== message.revision) return { count: 0 };
-        messageDeleted = true;
-        return { count: 1 };
-      },
-      // テナント境界の導入で、id 指定の参照も siteKey を伴う findFirst になった。
-      findFirst: async ({ where }: { where: { id: string; siteKey: string } }) =>
-        !messageDeleted && where.id === message.id && where.siteKey === DEFAULT_TENANT_KEY
-          ? message
-          : null,
-      findFirstOrThrow: async ({ where }: { where: { id: string; siteKey: string } }) => {
-        if (
-          messageDeleted ||
-          where.id !== message.id ||
-          where.siteKey !== DEFAULT_TENANT_KEY
-        ) {
-          throw new Error("not found");
-        }
-        return message;
       },
     },
     zaadRegistrationSetting: {
@@ -125,11 +53,11 @@ function prismaFixture(options: { messageInUse?: boolean } = {}) {
       }),
     },
     disasterRadioSubscription: { count: async () => 0 },
-    zaadOneTimeDispatch: { count: async () => options.messageInUse ? 1 : 0 },
+    zaadOneTimeDispatch: { count: async () => 0 },
     zaadOneTimeDispatchSourceList: { count: async () => 0 },
     $transaction: async <T>(run: (transaction: unknown) => Promise<T>) => run(prisma),
   };
-  return { prisma: prisma as unknown as PrismaClient, audits, events, message, isMessageDeleted: () => messageDeleted };
+  return { prisma: prisma as unknown as PrismaClient, audits, events };
 }
 
 function stubZoom(t: TestContext, zoom: Partial<ZaadZoomClient>) {
@@ -403,252 +331,4 @@ test("campaign status uses readback after an uncertain PATCH and audits unresolv
   assert.equal(audits[0]?.result, "RESULT_UNKNOWN");
   assert.equal(audits[0]?.stableErrorCode, ZAAD_ERROR_CODES.campaignStatusUnknown);
   assertAuditSafe(audits, ["campaign-raw-id"]);
-});
-
-test("message sync retry records result-unknown with a distinct stable code", async (t) => {
-  const { prisma, audits, message } = prismaFixture();
-  stubZoom(t, {
-    createTtsAsset: async () => {
-      throw new ZaadZoomError(ZAAD_ERROR_CODES.zoomUnavailable, 502, true);
-    },
-  });
-
-  const result = await retryZaadMessage(prisma, DEFAULT_TENANT_KEY, "actor-user", message.id, message.revision);
-
-  assert.equal(result.syncStatus, "SYNC_FAILED");
-  assert.equal(result.syncErrorCode, ZAAD_ERROR_CODES.zoomResultUnknown);
-  assert.equal(audits[0]?.action, "SYNC_RETRY");
-  assert.equal(audits[0]?.result, "RESULT_UNKNOWN");
-  assert.equal(audits[0]?.stableErrorCode, ZAAD_ERROR_CODES.zoomResultUnknown);
-  assertAuditSafe(audits, [message.id, message.name, message.body]);
-});
-
-test("legacy messages over 500 characters remain readable but cannot sync until shortened", async (t) => {
-  const { prisma, audits, message } = prismaFixture();
-  message.body = "あ".repeat(501);
-  let zoomWrites = 0;
-  stubZoom(t, {
-    createTtsAsset: async () => {
-      zoomWrites += 1;
-      return { assetId: "unexpected", assetItemId: "unexpected" };
-    },
-  });
-
-  const detail = await getZaadMessage(prisma, DEFAULT_TENANT_KEY, message.id);
-  assert.equal(detail.body.length, 501);
-  await assert.rejects(
-    retryZaadMessage(prisma, DEFAULT_TENANT_KEY, "actor-user", message.id, message.revision),
-    (error) => assertResourceError(error, ZAAD_ERROR_CODES.messageBodyRequiresShortening),
-  );
-
-  assert.equal(zoomWrites, 0);
-  assert.equal(message.revision, 3);
-  assert.deepEqual(audits.map(({ action, result, stableErrorCode }) => ({ action, result, stableErrorCode })), [{
-    action: "SYNC_RETRY",
-    result: "REJECTED",
-    stableErrorCode: ZAAD_ERROR_CODES.messageBodyRequiresShortening,
-  }]);
-});
-
-test("legacy message updates reject an oversized body and allow a 500-character shortening", async (t) => {
-  const { prisma, audits, message } = prismaFixture();
-  message.body = "あ".repeat(501);
-  message.syncErrorCode = ZAAD_ERROR_CODES.zoomResultUnknown;
-  let zoomWrites = 0;
-  stubZoom(t, {
-    createTtsAsset: async () => {
-      zoomWrites += 1;
-      return { assetId: "unexpected", assetItemId: "unexpected" };
-    },
-  });
-
-  await assert.rejects(
-    updateZaadMessage(prisma, DEFAULT_TENANT_KEY, "actor-user", message.id, {
-      name: "metadata-only edit",
-      body: message.body,
-      languageCode: "ja-JP",
-      voiceId: "Tomoko",
-      revision: message.revision,
-    }),
-    (error) => assertResourceError(error, ZAAD_ERROR_CODES.messageBodyRequiresShortening),
-  );
-  assert.equal(message.revision, 3);
-
-  const shortened = await updateZaadMessage(prisma, DEFAULT_TENANT_KEY, "actor-user", message.id, {
-    name: "shortened message",
-    body: "あ".repeat(500),
-    languageCode: "ja-JP",
-    voiceId: "Tomoko",
-    revision: message.revision,
-  });
-  assert.equal(shortened.body.length, 500);
-  assert.equal(shortened.revision, 4);
-  assert.equal(zoomWrites, 0);
-  assert.deepEqual(audits.map(({ action, result, stableErrorCode }) => ({ action, result, stableErrorCode })), [
-    { action: "UPDATE", result: "REJECTED", stableErrorCode: ZAAD_ERROR_CODES.messageBodyRequiresShortening },
-    { action: "UPDATE", result: "SUCCESS", stableErrorCode: null },
-  ]);
-});
-
-test("message deletion reports the message-specific in-use code before Zoom or local deletion", async () => {
-  const { prisma, audits, events, message, isMessageDeleted } = prismaFixture({ messageInUse: true });
-  message.zoomAssetId = "asset-existing";
-
-  await assert.rejects(
-    deleteZaadMessage(prisma, DEFAULT_TENANT_KEY, "actor-user", message.id, message.revision),
-    (error) => assertResourceError(error, ZAAD_ERROR_CODES.messageInUse),
-  );
-
-  assert.deepEqual(events, []);
-  assert.equal(isMessageDeleted(), false);
-  assert.equal(audits[0]?.stableErrorCode, ZAAD_ERROR_CODES.messageInUse);
-});
-
-test("message sync never retries an unreconciled TTS create result", async (t) => {
-  const { prisma, audits, message } = prismaFixture();
-  message.syncErrorCode = ZAAD_ERROR_CODES.zoomResultUnknown;
-  let creates = 0;
-  stubZoom(t, {
-    createTtsAsset: async () => {
-      creates += 1;
-      return { assetId: "duplicate-asset", assetItemId: "duplicate-item" };
-    },
-  });
-
-  await assert.rejects(
-    retryZaadMessage(prisma, DEFAULT_TENANT_KEY, "actor-user", message.id, message.revision),
-    (error) => assertResourceError(error, ZAAD_ERROR_CODES.zoomResultUnknown, true),
-  );
-
-  assert.equal(creates, 0);
-  assert.equal(message.revision, 3);
-  assert.equal(message.syncStatus, "SYNC_FAILED");
-  assert.equal(message.syncErrorCode, ZAAD_ERROR_CODES.zoomResultUnknown);
-  assert.deepEqual(audits.map(({ action, result, stableErrorCode }) => ({ action, result, stableErrorCode })), [{
-    action: "SYNC_RETRY",
-    result: "REJECTED",
-    stableErrorCode: ZAAD_ERROR_CODES.zoomResultUnknown,
-  }]);
-  assertAuditSafe(audits, [message.id, message.name, message.body]);
-});
-
-test("message edit preserves the manual-reconciliation boundary after an unknown TTS create", async (t) => {
-  const { prisma, message } = prismaFixture();
-  message.syncErrorCode = ZAAD_ERROR_CODES.zoomResultUnknown;
-  let creates = 0;
-  stubZoom(t, {
-    createTtsAsset: async () => {
-      creates += 1;
-      return { assetId: "duplicate-asset", assetItemId: "duplicate-item" };
-    },
-  });
-
-  const result = await updateZaadMessage(prisma, DEFAULT_TENANT_KEY, "actor-user", message.id, {
-    name: "updated synthetic message",
-    body: "updated synthetic body",
-    languageCode: "ja-JP",
-    voiceId: "Tomoko",
-    revision: message.revision,
-  });
-
-  assert.equal(creates, 0);
-  assert.equal(result.revision, 4);
-  assert.equal(result.syncStatus, "SYNC_FAILED");
-  assert.equal(result.syncErrorCode, ZAAD_ERROR_CODES.zoomResultUnknown);
-  assert.equal(result.zoomAssetId, null);
-  assert.equal(result.zoomAssetItemId, null);
-});
-
-test("message sync persists SYNCED and both Zoom asset IDs after a confirmed TTS create", async (t) => {
-  const { prisma, audits, message } = prismaFixture();
-  stubZoom(t, {
-    createTtsAsset: async (input) => {
-      assert.deepEqual(input, {
-        name: message.name,
-        body: message.body,
-        languageCode: "ja-JP",
-        voiceId: "Tomoko",
-      });
-      return { assetId: "asset-created", assetItemId: "asset-item-created" };
-    },
-  });
-
-  const result = await retryZaadMessage(prisma, DEFAULT_TENANT_KEY, "actor-user", message.id, message.revision);
-
-  assert.equal(result.syncStatus, "SYNCED");
-  assert.equal(result.syncErrorCode, null);
-  assert.equal(result.zoomAssetId, "asset-created");
-  assert.equal(result.zoomAssetItemId, "asset-item-created");
-  assert.ok(message.syncedAt instanceof Date);
-  assert.equal(audits[0]?.action, "SYNC_RETRY");
-  assert.equal(audits[0]?.result, "SUCCESS");
-});
-
-test("message sync updates an existing Zoom TTS asset instead of creating a replacement", async (t) => {
-  const { prisma, message } = prismaFixture();
-  message.zoomAssetId = "asset-existing";
-  message.zoomAssetItemId = "asset-item-existing";
-  let creates = 0;
-  stubZoom(t, {
-    createTtsAsset: async () => {
-      creates += 1;
-      return { assetId: "unexpected", assetItemId: "unexpected" };
-    },
-    updateTtsAsset: async (assetId, assetItemId, input) => {
-      assert.equal(assetId, "asset-existing");
-      assert.equal(assetItemId, "asset-item-existing");
-      assert.equal(input.body, message.body);
-      return { assetId, assetItemId };
-    },
-  });
-
-  const result = await retryZaadMessage(prisma, DEFAULT_TENANT_KEY, "actor-user", message.id, message.revision);
-
-  assert.equal(creates, 0);
-  assert.equal(result.syncStatus, "SYNCED");
-  assert.equal(result.zoomAssetId, "asset-existing");
-  assert.equal(result.zoomAssetItemId, "asset-item-existing");
-});
-
-test("message deletion removes the exact Zoom asset before the local record", async (t) => {
-  const { prisma, audits, events, message, isMessageDeleted } = prismaFixture();
-  message.zoomAssetId = "asset-existing";
-  message.zoomAssetItemId = "asset-item-existing";
-  stubZoom(t, {
-    deleteTtsAsset: async (assetId) => {
-      assert.equal(assetId, "asset-existing");
-      events.push("zoom-delete");
-    },
-  });
-
-  assert.deepEqual(await deleteZaadMessage(prisma, DEFAULT_TENANT_KEY, "actor-user", message.id, message.revision), { deleted: true });
-
-  assert.deepEqual(events, ["zoom-delete", "local-delete"]);
-  assert.equal(isMessageDeleted(), true);
-  assert.equal(audits[0]?.action, "DELETE");
-  assert.equal(audits[0]?.result, "SUCCESS");
-  assertAuditSafe(audits, [message.id, message.name, message.body, "asset-existing"]);
-});
-
-test("message deletion preserves the local record when the Zoom delete is uncertain", async (t) => {
-  const { prisma, audits, events, message, isMessageDeleted } = prismaFixture();
-  message.zoomAssetId = "asset-existing";
-  message.zoomAssetItemId = "asset-item-existing";
-  stubZoom(t, {
-    deleteTtsAsset: async () => {
-      events.push("zoom-delete");
-      throw new ZaadZoomError(ZAAD_ERROR_CODES.zoomUnavailable, 502, true);
-    },
-  });
-
-  await assert.rejects(
-    deleteZaadMessage(prisma, DEFAULT_TENANT_KEY, "actor-user", message.id, message.revision),
-    (error) => assertResourceError(error, ZAAD_ERROR_CODES.zoomResultUnknown, true),
-  );
-
-  assert.deepEqual(events, ["zoom-delete"]);
-  assert.equal(isMessageDeleted(), false);
-  assert.equal(audits[0]?.result, "RESULT_UNKNOWN");
-  assert.equal(audits[0]?.stableErrorCode, ZAAD_ERROR_CODES.zoomResultUnknown);
-  assertAuditSafe(audits, [message.id, message.name, message.body, "asset-existing"]);
 });

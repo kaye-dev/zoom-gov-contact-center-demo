@@ -15,7 +15,7 @@ import type { ZoomContactDto } from "../../lib/server/zaad/zoom-client";
 import { ZaadZoomError } from "../../lib/server/zaad/zoom-client";
 import { ZAAD_ERROR_CODES } from "../../lib/zaad/contracts";
 
-const scope: OutreachScope = { siteKey: "lg", actorId: "group-fixture-admin", all: true, departments: ["resident-support"], live: false };
+const scope: OutreachScope = { siteKey: "lg", actorId: "group-fixture-admin", all: true, live: false };
 const rejects = (promise: Promise<unknown>, code: string) => assert.rejects(promise, e => e instanceof OutreachContractError && e.code === code);
 export function groupProvider(): RegistrationGroupClient & { contacts: Map<string, ZoomContactDto[]>; writes: string[]; failure: string | null; running: boolean } {
   return {
@@ -311,8 +311,8 @@ test("group list counts use Zoom values, isolate failures and never count pendin
         assert.ok(!calls.includes(id));
       }
       failListing = false;
-      const restricted = await listOutreachGroups(db, { ...scope, all: false, departments: [] }, provider);
-      assert.deepEqual(restricted.items, []);
+      const restricted = await listOutreachGroups(db, { ...scope, all: false }, provider);
+      assert.deepEqual(restricted.items.map(row => row.id), ["regular-1"]);
     } finally { await context.close(); }
   });
 });

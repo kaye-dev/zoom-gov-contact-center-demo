@@ -1,4 +1,5 @@
 "use client";
+import { DetailPageBreadcrumb } from "./DetailPageBreadcrumb";
 
 import { useEffect, useRef, useState } from "react";
 import { ModalDialog } from "@/app/components/admin/ModalDialog";
@@ -11,7 +12,6 @@ import { OutreachFailure, OutreachLoading, type OutreachPanelProps } from "./Out
 type CampaignDetail = ZoomCampaignDto & {
   bindingVersion: number;
   pauseReady: boolean;
-  departmentKey: string | null;
   notificationTopic: string | null;
 };
 
@@ -70,7 +70,6 @@ export function OutreachCampaignDetail({ tenant, permissions, setSaving, id, con
         [z.oneTime.retryPolicy, detail.retryPolicy ?? d.unknown],
         [z.oneTime.dncPolicy, detail.dncPolicy ?? d.unknown],
         [z.oneTime.alwaysRunning, detail.alwaysRunning ? z.oneTime.enabled : z.oneTime.disabled],
-        [d.department, detail.departmentKey ? d.departments[detail.departmentKey] ?? d.unknown : d.pending],
       ].map(([label, value]) => <div key={label} className="contents"><dt className="text-fg-muted">{label}</dt><dd className="break-words">{value}</dd></div>)}
     </dl>
     <p className="text-sm leading-7 text-fg-muted">{d.liveGate}</p>
@@ -88,7 +87,7 @@ export function OutreachCampaignDetail({ tenant, permissions, setSaving, id, con
     <div className="space-y-5">{content}<div className="flex justify-end gap-3"><button className={primary} disabled title={d.liveGate}>{d.dispatchUi.execute}</button><button ref={cancel} className={secondary} onClick={close}>{z.common.close}</button></div></div>
   </ModalDialog>;
   return <section className="max-w-4xl space-y-6" aria-labelledby="campaign-detail-title">
-    <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="campaign-detail-title" ref={title} tabIndex={-1} className="text-lg font-bold">{detail?.name ?? z.campaigns.details}</h2><button className={secondary} disabled={busy} onClick={close}>{d.backToContacts}</button></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><h1 id="campaign-detail-title" ref={title} tabIndex={-1} className="text-2xl font-bold">{detail?.name ?? z.campaigns.details}</h1></div><DetailPageBreadcrumb title={detail?.name ?? z.campaigns.details} disabled={busy} />
     {content}
     {pausing && detail && <ModalDialog title={z.campaigns.pauseTitle} description={u.pauseHelp} locked={busy} initialFocusRef={cancel} onRequestClose={() => { if (!lock.current) setPausing(false); }}>
       {error && <p role="alert" className="mb-4">{error}</p>}

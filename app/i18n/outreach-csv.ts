@@ -1,0 +1,9 @@
+import type { Locale } from "./dictionaries";
+export type OutreachCsvDictionary = { checking: string; summary: string; complete: string; errors: string; correct: string; retryHelp: string; import: string; topics: string; invalidTopics: string };
+export const outreachCsvDictionaries: Record<Locale, OutreachCsvDictionary> = {
+  ja: { checking: "CSVを確認しています…", summary: "全{total}件中、先頭{shown}件を表示 · 除外{excluded}件 · 取込対象{targets}件", complete: "取込完了: {count}件", errors: "全体で{count}件のエラーがあります。", correct: "CSVを修正して再選択してください。", retryHelp: "失敗した行を再試行できます。", import: "取り込む", topics: "通知希望", invalidTopics: "通知希望IDが正しくありません。" },
+  en: { checking: "Checking CSV…", summary: "Showing the first {shown} of {total} rows · {excluded} excluded · {targets} to import", complete: "Import complete: {count} rows", errors: "{count} errors in the file.", correct: "Correct the CSV and select it again.", retryHelp: "You can retry the failed rows.", import: "Import", topics: "Notification preferences", invalidTopics: "Invalid notification preference IDs." },
+  "zh-Hans": { checking: "正在检查CSV…", summary: "共{total}行，显示前{shown}行 · 已排除{excluded}行 · 待导入{targets}行", complete: "导入完成：{count}行", errors: "文件中有{count}个错误。", correct: "请修正CSV并重新选择。", retryHelp: "可以重试失败的行。", import: "导入", topics: "通知偏好", invalidTopics: "通知偏好ID无效。" },
+  "zh-Hant": { checking: "正在檢查CSV…", summary: "共{total}列，顯示前{shown}列 · 已排除{excluded}列 · 待匯入{targets}列", complete: "匯入完成：{count}列", errors: "檔案中有{count}個錯誤。", correct: "請修正CSV並重新選擇。", retryHelp: "可以重試失敗的列。", import: "匯入", topics: "通知偏好", invalidTopics: "通知偏好ID無效。" },
+  ko: { checking: "CSV 확인 중…", summary: "전체 {total}행 중 처음 {shown}행 표시 · {excluded}행 제외 · {targets}행 가져오기", complete: "가져오기 완료: {count}행", errors: "파일에 오류가 {count}개 있습니다.", correct: "CSV를 수정한 후 다시 선택하세요.", retryHelp: "실패한 행을 다시 시도할 수 있습니다.", import: "가져오기", topics: "알림 수신 희망", invalidTopics: "알림 수신 희망 ID가 올바르지 않습니다." },
+};

@@ -6,17 +6,16 @@ import { getAdminAccessActor } from "@/lib/server/admin-access/queries";
 import { fields, OutreachContractError, record, stringList, stringValue, whole, operationKey, choice } from "@/lib/zaad/outreach-contracts";
 import { MUNICIPAL_PURPOSES, parseAnswers, parseBusinessEvidence, parseCaseUpdate, parseWorkflow, type BusinessEvidence, type CaseState } from "@/lib/zaad/municipal/contracts";
 import { classifyMunicipalAnswers, eligibleMunicipalTarget, nextDueSlot, requireCaseTransition } from "@/lib/zaad/municipal/workflows";
-import { requireOutreachDepartment, resolveOutreachScope, outreachWhere, type OutreachScope } from "../outreach-scope";
+import { resolveOutreachScope, outreachWhere, type OutreachScope } from "../outreach-scope";
 import type { Database } from "../university/permissions";
 import { databaseError, digest, json } from "../outreach-data";
 import { writeZaadAudit } from "../audit";
 import { configuredMunicipalProvider, type MunicipalProvider } from "./provider";
 
-export async function requireMunicipalAssignee(db: Database, scope: OutreachScope, assigneeId: string, department: string) {
+export async function requireMunicipalAssignee(db: Database, scope: OutreachScope, assigneeId: string) {
   const actor = await getAdminAccessActor(db, assigneeId);
   if (!actor || !canAdminAccess(actor, "zaad", "UPDATE")) throw new OutreachContractError("ASSIGNEE_UNAVAILABLE", 422);
-  const recipient = await resolveOutreachScope(db, actor, scope.siteKey);
-  if (!recipient.departments.includes(department)) throw new OutreachContractError("ASSIGNEE_SCOPE_MISMATCH", 422);
+  await resolveOutreachScope(db, actor, scope.siteKey);
 }
 function municipal(scope: OutreachScope) { if (scope.siteKey !== "lg") throw new OutreachContractError("NOT_FOUND", 404); }
 export async function getWorkflow(db: Database, scope: OutreachScope, workflowId: string) {
@@ -37,17 +36,17 @@ export async function saveWorkflow(db: PrismaClient, scope: OutreachScope, paylo
   const input = parseWorkflow(settings);
   if (rawTargets !== undefined && (workflowId || !Array.isArray(rawTargets) || rawTargets.length > 1000)) throw new OutreachContractError("INVALID_TARGETS");
   const initialTargets = (rawTargets as unknown[] | undefined ?? []).map(raw => { const target = record(raw); fields(target, ["contactId", "businessEvidence", "excluded"]); if (typeof target.excluded !== "boolean") throw new OutreachContractError("INVALID_TARGETS"); const evidence = parseBusinessEvidence(target.businessEvidence, input.purpose); if (evidence.purpose === "FRAUD_ALERT") evidence.verifiedBy = scope.actorId; return { contactId: stringValue(target.contactId), evidence, excluded: target.excluded }; });
-  if (new Set(initialTargets.map(target => target.contactId)).size !== initialTargets.length) throw new OutreachContractError("INVALID_TARGETS"); requireOutreachDepartment(scope, input.departmentKey);
-  await requireMunicipalAssignee(db, scope, input.assigneeId, input.departmentKey);
+  if (new Set(initialTargets.map(target => target.contactId)).size !== initialTargets.length) throw new OutreachContractError("INVALID_TARGETS");
+  await requireMunicipalAssignee(db, scope, input.assigneeId);
   if (input.flowBindingId) {
-    const binding = await db.zoomResourceBinding.findFirst({ where: { id: input.flowBindingId, ownerSiteKey: scope.siteKey, resourceType: "FLOW", tombstone: false, departmentKey: input.departmentKey } });
+    const binding = await db.zoomResourceBinding.findFirst({ where: { id: input.flowBindingId, ownerSiteKey: scope.siteKey, resourceType: "FLOW", tombstone: false } });
     if (!binding) throw new OutreachContractError("NOT_FOUND", 404);
   }
   try {
     return await db.$transaction(async tx => {
       const previous = workflowId ? await getWorkflow(tx, scope, workflowId) : null;
       if (previous && (input.version !== previous.revision || previous.purpose !== input.purpose)) throw new OutreachContractError("VERSION_CONFLICT", 409);
-      const row = await tx.municipalWorkflowRevision.create({ data: { siteKey: scope.siteKey, workflowId: workflowId ?? randomUUID(), revision: (previous?.revision ?? 0) + 1, purpose: input.purpose, departmentKey: input.departmentKey, name: input.name, questionVersion: input.questionVersion, settings: json(input), flowBindingId: input.flowBindingId, assigneeId: input.assigneeId, dueAt: new Date(input.dueAt), enabled: false, createdBy: scope.actorId } });
+      const row = await tx.municipalWorkflowRevision.create({ data: { siteKey: scope.siteKey, workflowId: workflowId ?? randomUUID(), revision: (previous?.revision ?? 0) + 1, purpose: input.purpose, name: input.name, questionVersion: input.questionVersion, settings: json(input), flowBindingId: input.flowBindingId, assigneeId: input.assigneeId, dueAt: new Date(input.dueAt), enabled: false, createdBy: scope.actorId } });
       if (previous) {
         const targets = await tx.municipalWorkflowTarget.findMany({ where: { siteKey: scope.siteKey, workflowRevisionId: previous.id } });
         await tx.municipalWorkflowTarget.createMany({ data: targets.map(target => ({ siteKey: scope.siteKey, workflowRevisionId: row.id, contactId: target.contactId, businessEvidence: json(target.businessEvidence), excluded: target.excluded, verifiedBy: target.verifiedBy, verifiedAt: target.verifiedAt, version: target.version })) });
@@ -55,7 +54,7 @@ export async function saveWorkflow(db: PrismaClient, scope: OutreachScope, paylo
       }
       const createdTargets = [];
       for (const target of initialTargets) {
-        const contact = await tx.municipalContact.findFirst({ where: { ...outreachWhere(scope), id: target.contactId, departmentKey: input.departmentKey } });
+        const contact = await tx.municipalContact.findFirst({ where: { ...outreachWhere(scope), id: target.contactId } });
         if (!contact) throw new OutreachContractError("NOT_FOUND", 404);
         await requireCurrentMunicipalEvidence(tx, scope.siteKey, contact.id, target.evidence);
         createdTargets.push(await tx.municipalWorkflowTarget.create({ data: { siteKey: scope.siteKey, workflowRevisionId: row.id, contactId: contact.id, businessEvidence: json(target.evidence), excluded: target.excluded, verifiedBy: scope.actorId, verifiedAt: new Date() } }));
@@ -75,7 +74,7 @@ export async function setWorkflowTarget(db: PrismaClient, scope: OutreachScope, 
   const workflow = await getWorkflow(db, scope, workflowId), contactId = stringValue(v.contactId);
   if (whole(v.version) !== workflow.revision || typeof v.excluded !== "boolean") throw new OutreachContractError("VERSION_CONFLICT", 409);
   const contact = await db.municipalContact.findFirst({ where: { ...outreachWhere(scope), id: contactId } });
-  if (!contact || contact.departmentKey !== workflow.departmentKey) throw new OutreachContractError("NOT_FOUND", 404);
+  if (!contact) throw new OutreachContractError("NOT_FOUND", 404);
   const evidence = parseBusinessEvidence(v.businessEvidence, choice(workflow.purpose, MUNICIPAL_PURPOSES));
   if (evidence.purpose === "FRAUD_ALERT") evidence.verifiedBy = scope.actorId;
   try {
@@ -98,7 +97,7 @@ export async function setWorkflowTarget(db: PrismaClient, scope: OutreachScope, 
 export async function workflowTargets(db: Database, scope: OutreachScope, workflowId: string, now = new Date()) {
   const workflow = await getWorkflow(db, scope, workflowId), settings = parseWorkflow(workflow.settings);
   const rows = await db.municipalWorkflowTarget.findMany({ where: { siteKey: scope.siteKey, workflowRevisionId: workflow.id, contact: outreachWhere(scope) }, include: { contact: { include: { preferences: true } } }, orderBy: { id: "asc" } });
-  return { tenantKey: scope.siteKey, workflow, items: rows.map(row => ({ id: row.id, version: row.version, contactId: row.contactId, contactVersion: row.contact.version, contactDigest: municipalContactDigest(row.contact), name: row.contact.name, phoneLast4: row.contact.phone.slice(-4), businessEvidence: row.businessEvidence, excluded: row.excluded, ...eligibleMunicipalTarget({ purpose: settings.purpose, contact: row.contact, businessEvidence: row.businessEvidence, allowedDepartments: scope.departments, excluded: row.excluded, dueAt: workflow.dueAt, now, schedule: settings.schedule }) })) };
+  return { tenantKey: scope.siteKey, workflow, items: rows.map(row => ({ id: row.id, version: row.version, contactId: row.contactId, contactVersion: row.contact.version, contactDigest: municipalContactDigest(row.contact), name: row.contact.name, phoneLast4: row.contact.phone.slice(-4), businessEvidence: row.businessEvidence, excluded: row.excluded, ...eligibleMunicipalTarget({ purpose: settings.purpose, contact: row.contact, businessEvidence: row.businessEvidence, excluded: row.excluded, dueAt: workflow.dueAt, now, schedule: settings.schedule }) })) };
 }
 export async function previewWorkflowRun(db: PrismaClient, scope: OutreachScope, workflowId: string, payload: unknown, provider: MunicipalProvider = configuredMunicipalProvider()) {
   const v = record(payload); fields(v, ["version", "selection", "operationKey"]);
@@ -109,12 +108,12 @@ export async function previewWorkflowRun(db: PrismaClient, scope: OutreachScope,
   if (selection.some(id => !current.items.some(row => row.id === id))) throw new OutreachContractError("NOT_FOUND", 404);
   const eligible = current.items.filter(row => selection.includes(row.id) && row.eligible), excluded = current.items.filter(row => selection.includes(row.id) && !row.eligible);
   const readiness = await provider.readiness(workflow.flowBindingId);
-  const snapshot = { workflow, selected: selection, eligible, excluded }, snapshotDigest = digest(snapshot);
+  const snapshot = { scopeContract: "tenant-v1", workflow, selected: selection, eligible, excluded }, snapshotDigest = digest(snapshot);
   try {
     const run = await db.$transaction(async tx => {
       const previous = await tx.municipalOutreachRun.findUnique({ where: { siteKey_actorId_operationKey: { siteKey: scope.siteKey, actorId: scope.actorId, operationKey: key } } });
       if (previous) { if (previous.digest !== snapshotDigest) throw new OutreachContractError("OPERATION_CONFLICT", 409); return previous; }
-      const row = await tx.municipalOutreachRun.create({ data: { siteKey: scope.siteKey, departmentKey: workflow.departmentKey, workflowRevisionId: workflow.id, actorId: scope.actorId, operationKey: key, digest: snapshotDigest, snapshot: json(snapshot), expiresAt: new Date(Date.now() + 5 * 60000) } });
+      const row = await tx.municipalOutreachRun.create({ data: { siteKey: scope.siteKey, workflowRevisionId: workflow.id, actorId: scope.actorId, operationKey: key, digest: snapshotDigest, snapshot: json(snapshot), expiresAt: new Date(Date.now() + 5 * 60000) } });
       for (const target of eligible) {
         const contact = await tx.municipalContact.findFirstOrThrow({ where: { ...outreachWhere(scope), id: target.contactId }, include: { preferences: true } });
         if (contact.version !== target.contactVersion || municipalContactDigest(contact) !== target.contactDigest) throw new OutreachContractError("TARGET_CHANGED", 409);
@@ -131,7 +130,7 @@ export async function queueWorkflowRun(db: PrismaClient, scope: OutreachScope, w
   if (!scope.live) throw new OutreachContractError("LIVE_DISABLED", 403);
   const readiness = await provider.readiness(workflow.flowBindingId);
   if (!readiness.ready) throw new OutreachContractError("PROVIDER_NOT_CONFIGURED", 503);
-  await requireMunicipalAssignee(db, scope, workflow.assigneeId, workflow.departmentKey);
+  await requireMunicipalAssignee(db, scope, workflow.assigneeId);
   const current = await workflowTargets(db, scope, workflowId);
   try {
     return await db.$transaction(async tx => {
@@ -141,13 +140,14 @@ export async function queueWorkflowRun(db: PrismaClient, scope: OutreachScope, w
       if (!run) throw new OutreachContractError("NOT_FOUND", 404);
       if (run.operationKey !== key || run.digest !== v.digest || whole(v.version) !== workflow.revision || run.workflowRevisionId !== workflow.id) throw new OutreachContractError("TARGET_CHANGED", 409);
       if (run.state === "QUEUED") return { tenantKey: scope.siteKey, runId: run.id, state: run.state };
+      if (record(run.snapshot).scopeContract !== "tenant-v1") throw new OutreachContractError("TARGET_CHANGED", 409);
       if (run.state !== "PREVIEW" || run.expiresAt <= new Date() || !run.targets.length) throw new OutreachContractError("PREVIEW_EXPIRED", 409);
       if (run.targets.some(target => !current.items.some(item => item.id === target.targetId && item.eligible && item.version === target.targetVersion && item.contactVersion === target.contactVersion))) throw new OutreachContractError("TARGET_CHANGED", 409);
       for (const target of run.targets) {
         const currentTarget = await tx.municipalWorkflowTarget.findFirst({ where: { id: target.targetId, siteKey: scope.siteKey, workflowRevisionId: workflow.id }, include: { contact: { include: { preferences: true } } } });
         const snapshot = record(target.snapshot);
         if (!currentTarget || currentTarget.version !== target.targetVersion || municipalContactDigest(currentTarget.contact) !== municipalContactDigest(snapshot.contact)) throw new OutreachContractError("TARGET_CHANGED", 409);
-        const eligibility = eligibleMunicipalTarget({ purpose: settings.purpose, contact: currentTarget.contact, businessEvidence: currentTarget.businessEvidence, allowedDepartments: scope.departments, excluded: currentTarget.excluded, dueAt: workflow.dueAt, now: new Date(), schedule: settings.schedule });
+        const eligibility = eligibleMunicipalTarget({ purpose: settings.purpose, contact: currentTarget.contact, businessEvidence: currentTarget.businessEvidence, excluded: currentTarget.excluded, dueAt: workflow.dueAt, now: new Date(), schedule: settings.schedule });
         if (!eligibility.eligible || !eligibility.evidence) throw new OutreachContractError("TARGET_CHANGED", 409);
         await requireCurrentMunicipalEvidence(tx, scope.siteKey, currentTarget.contactId, eligibility.evidence);
         const evidence = eligibility.evidence, windows = [settings.schedule];
@@ -200,9 +200,9 @@ export async function updateMunicipalCase(db: PrismaClient, scope: OutreachScope
       if (previous) { if (previous.requestDigest !== requestDigest) throw new OutreachContractError("OPERATION_CONFLICT", 409); return { tenantKey: scope.siteKey, case: current }; }
       if (current.version !== input.version) throw new OutreachContractError("VERSION_CONFLICT", 409);
       requireCaseTransition(current.status as CaseState, input.status);
-      await requireMunicipalAssignee(tx, scope, input.assigneeId, current.departmentKey);
-      if (input.handoff) await requireMunicipalAssignee(tx, scope, input.handoff.recipientId, current.departmentKey);
-      if (input.handoff?.receivedBy) await requireMunicipalAssignee(tx, scope, input.handoff.receivedBy, current.departmentKey);
+      await requireMunicipalAssignee(tx, scope, input.assigneeId);
+      if (input.handoff) await requireMunicipalAssignee(tx, scope, input.handoff.recipientId);
+      if (input.handoff?.receivedBy) await requireMunicipalAssignee(tx, scope, input.handoff.receivedBy);
       const verification = input.businessVerification;
       if (verification && ((verification.type === "VERIFIED_COMPLETE" && current.purpose !== "PROCEDURE_SUPPORT") || (verification.type === "CHANGE_VERIFIED" && current.purpose !== "SERVICE_CONFIRMATION"))) throw new OutreachContractError("PURPOSE_MISMATCH", 422);
       if (input.status === "COMPLETED" && !verification && !current.businessVerification && ((current.purpose === "PROCEDURE_SUPPORT" && current.reasons.includes("COMPLETION_REPORTED")) || (current.purpose === "SERVICE_CONFIRMATION" && current.reasons.some(reason => ["CHANGE_REQUESTED", "CANCELLATION_REQUESTED"].includes(reason))))) throw new OutreachContractError("BUSINESS_VERIFICATION_REQUIRED", 422);
@@ -224,9 +224,8 @@ export async function listMunicipalAssignees(db: PrismaClient, scope: OutreachSc
     const actor = await getAdminAccessActor(db, user.id);
     if (!actor || !canAdminAccess(actor, "zaad", "UPDATE")) continue;
     try {
-      const allowed = await resolveOutreachScope(db, actor, "lg");
-      const departments = allowed.departments.filter(department => scope.departments.includes(department));
-      if (departments.length) items.push({ id: user.id, name: user.name, departments });
+      await resolveOutreachScope(db, actor, "lg");
+      items.push({ id: user.id, name: user.name });
     } catch (error) { if (!(error instanceof OutreachContractError)) throw error; }
   }
   return { tenantKey: scope.siteKey, items, total: items.length, nextCursor: null };

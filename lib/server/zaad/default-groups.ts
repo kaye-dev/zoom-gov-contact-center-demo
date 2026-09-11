@@ -27,7 +27,7 @@ export async function requireDefaultGroup(db: Database, scope: OutreachScope, id
 export async function defaultGroupDto(db: Database, group: Awaited<ReturnType<typeof requireDefaultGroup>>): Promise<DefaultGroupDto> {
   const settings = await db.globalDeveloperApiSetting.findUnique({ where: { id: "global" }, select: { accountId: true } });
   const accountId = settings?.accountId.trim() || null;
-  return { id: group.id, kind: "DEFAULT", defaultGroupId: group.id, topicKey: group.topicKey, name: group.topicKey, description: "", departmentKey: null, version: group.revision, revision: String(group.revision), accountId, contactListId: group.binding?.zoomId ?? null,
+  return { id: group.id, kind: "DEFAULT", defaultGroupId: group.id, topicKey: group.topicKey, name: group.topicKey, description: "", version: group.revision, revision: String(group.revision), accountId, contactListId: group.binding?.zoomId ?? null,
     rebindCount: await db.outreachRegistrationMembership.count({ where: { siteKey: group.siteKey, defaultGroupId: group.id, syncStatus: { not: "UNKNOWN" } } }), contactCount: null, bindingState: !group.binding || group.binding.tombstone ? "MISSING" : group.binding.accountId !== accountId ? "ACCOUNT_CHANGED" : "CONFIGURED" };
 }
 export async function listOutreachGroups(db: PrismaClient, scope: OutreachScope, injected?: Parameters<typeof listZoomGroups>[2]) {

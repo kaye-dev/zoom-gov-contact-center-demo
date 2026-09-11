@@ -9,7 +9,7 @@ export type RegistrationOrigin = "UNIVERSITY_REGISTRATION" | "MUNICIPAL_CONTACT"
 export type MemberSyncStatus = "REGISTERED" | "SYNCED" | "PENDING" | "FAILED" | "SYNCING" | "UNKNOWN" | "DIFFERENCE" | "WITHDRAWN";
 export type DefaultGroupDto = {
   id: string; kind: "DEFAULT"; defaultGroupId: string; topicKey: string;
-  name: string; description: string; departmentKey: null; version: number;
+  name: string; description: string; version: number;
   revision: string; rebindCount: number; contactCount: number | null; accountId: string | null;
   contactListId: string | null; bindingState: "CONFIGURED" | "MISSING" | "ACCOUNT_CHANGED";
 };

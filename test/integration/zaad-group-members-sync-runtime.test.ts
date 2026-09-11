@@ -9,18 +9,18 @@ import { saveZoomGroup, saveZoomMember, zoomGroupMembers } from "../../lib/serve
 import { startRegularGroupSync, advanceRegularSync, regularSyncOperation } from "../../lib/server/zaad/regular-group-sync";
 import type { OutreachScope } from "../../lib/server/zaad/outreach-scope";
 
-test("regular group union, department scope, durable concurrent sync and external changes", async () => {
+test("regular group union, tenant scope, durable concurrent sync and external changes", async () => {
   await withIsolatedPostgresDatabase(async databaseUrl => {
     const context = createDatabaseContext({ ...process.env, DATABASE_URL: databaseUrl }), db = context.prisma;
-    const scope: OutreachScope = { siteKey: "lg", actorId: "regular-sync", all: true, departments: ["resident-support"], live: false };
+    const scope: OutreachScope = { siteKey: "lg", actorId: "regular-sync", all: true, live: false };
     const oldKey = process.env.DEVELOPER_API_SETTINGS_ENCRYPTION_KEY; process.env.DEVELOPER_API_SETTINGS_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
     try {
       await db.user.create({ data: { id: scope.actorId, name: "Fixture", email: "regular@example.invalid", emailVerified: true, createdAt: new Date(), updatedAt: new Date() } });
       const provider = new ZoomOutreachProvider("fixture-account");
       await db.globalDeveloperApiSetting.create({ data: { id: "global", accountId: provider.accountId, clientId: "fixture", clientSecretEncrypted: encryptDeveloperApiSecret("fixture-secret", "clientSecret") } });
       const client = await ZaadZoomClient.fromDatabase(db, "lg", { fetchImpl: provider.fetch, apiBase: provider.apiBase, tokenUrl: provider.tokenUrl, writeGates: { contact: true, tts: false, campaign: false } });
-      const created = await saveZoomGroup(db, scope, { operationKey: "regular-create", name: "Fixture", description: "", departmentKey: "resident-support" }, undefined, client) as { group: { id: string } };
-      const person = await db.municipalContact.create({ data: { siteKey: "lg", departmentKey: "resident-support", name: "Original", phone: "+819000000099", district: "central", source: "HP" } });
+      const created = await saveZoomGroup(db, scope, { operationKey: "regular-create", name: "Fixture", description: "" }, undefined, client) as { group: { id: string } };
+      const person = await db.municipalContact.create({ data: { siteKey: "lg", name: "Original", phone: "+819000000099", district: "central", source: "HP" } });
       await saveZoomMember(db, scope, created.group.id, { operationKey: "regular-member", reference: { siteKey: "lg", kind: "resident", origin: "MUNICIPAL_CONTACT", id: person.id } }, undefined, client);
       await client.createContact(created.group.id, { name: "Remote only", phone: person.phone, email: "" });
       let detail = await zoomGroupMembers(db, scope, created.group.id, client);
@@ -35,7 +35,7 @@ test("regular group union, department scope, durable concurrent sync and externa
       assert.equal((await regularSyncOperation(db, scope, first.operationId, client)).counts.synced, 1);
       detail = await zoomGroupMembers(db, scope, created.group.id, client);
       assert.equal(detail.summary.unsynced, 0);
-      await assert.rejects(zoomGroupMembers(db, { ...scope, all: false, departments: ["welfare"] }, created.group.id, client));
+      assert.equal((await zoomGroupMembers(db, { ...scope, all: false }, created.group.id, client)).summary.unsynced, 0);
       await assert.rejects(regularSyncOperation(db, { ...scope, actorId: "other" }, first.operationId, client));
       await assert.rejects(regularSyncOperation(db, { ...scope, siteKey: "univ" }, first.operationId, client));
       const mapping = await db.zoomContactMembership.findFirstOrThrow({ where: { personId: person.id } });

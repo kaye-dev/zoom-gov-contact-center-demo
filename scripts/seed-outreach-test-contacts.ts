@@ -47,7 +47,7 @@ async function main() {
         const phone = index === 3 ? "+819000000001" : `+81900000000${index + 1}`;
         if (index === 1) await db.universityStudentRegistration.create({ data: registrationFixture });
         else await db.universityContact.create({ data: {
-          id: `outreach-fixture-univ-${suffix}`, siteKey: "univ", departmentKey: "student-affairs",
+          id: `outreach-fixture-univ-${suffix}`, siteKey: "univ",
           name: `学生デモ ${suffix}`, phone, facultyCode: String(index + 1), admissionYear: 2026,
           serial: `000${index + 1}`, displayStudentNumber: `${index + 1}26000${index + 1}`,
           registrationSource: source, registrationStatus: status, identityVerified: active,
@@ -58,7 +58,7 @@ async function main() {
           })) },
         } });
         await db.municipalContact.create({ data: {
-          id: `outreach-fixture-lg-${suffix}`, siteKey: "lg", departmentKey: "resident-support",
+          id: `outreach-fixture-lg-${suffix}`, siteKey: "lg",
           name: `市民デモ ${suffix}`, phone, district: "central", source, status,
           identityVerified: active, phoneVerified: active,
           ...(active ? { confirmedBy: "outreach-display-fixture", confirmedAt: observed,

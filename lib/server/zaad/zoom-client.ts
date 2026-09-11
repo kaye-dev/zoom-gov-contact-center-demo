@@ -1,3 +1,5 @@
+import { parseAudioAsset, parseAudioAssetsPage } from "./audio-asset-parser";
+import { assertAudioUpdateResponse, audioItemUpdatePayload, type AudioItemUpdate } from "@/lib/zaad/message-edit-contracts";
 import { createHash } from "node:crypto";
 
 import type { PrismaClient } from "@/lib/generated/prisma/client";
@@ -600,6 +602,22 @@ export class ZaadZoomClient {
     );
   }
 
+  async listAudioAssets(input: { pageSize?: number; nextPageToken?: string } = {}) {
+    const params = new URLSearchParams({ asset_type: "audio", page_size: String(Math.min(100, Math.max(1, input.pageSize ?? 100))) });
+    if (input.nextPageToken) params.set("next_page_token", input.nextPageToken);
+    return parseAudioAssetsPage(await this.requestJson("GET", `/contact_center/asset_library/assets?${params}`));
+  }
+
+  async getAudioAsset(id: string) {
+    return parseAudioAsset(await this.requestJson("GET", `/contact_center/asset_library/assets/${encodeId(id)}`), id);
+  }
+
+  async updateAudioAssetItem(input: AudioItemUpdate) {
+    this.assertWriteEnabled("tts");
+    const payload = audioItemUpdatePayload(input);
+    assertAudioUpdateResponse(await this.requestJson("PATCH", "/contact_center/asset_library/assets/items", payload), input);
+  }
+
   async getTtsAsset(id: string): Promise<ZoomTtsAssetResult> {
     const payload = await this.requestJson("GET", `/contact_center/asset_library/assets/${encodeId(id)}`);
     const result = parseTtsAsset(asRecord(payload));
@@ -943,13 +961,16 @@ function ttsAssetFormData(input: ZoomTtsAssetInput) {
   form.set("asset_name", input.name);
   form.set("asset_description", "ZAAD TTS message");
   form.set("asset_type", "audio");
-  form.set("asset_items", JSON.stringify([{
+  const item = {
     asset_item_name: input.name,
     asset_item_language: input.languageCode,
     asset_item_content: input.body,
     asset_item_voice: input.voiceId,
     is_default: true,
-  }]));
+  };
+  for (const [key, value] of Object.entries(item)) {
+    form.set(`asset_items[0].${key}`, String(value));
+  }
   return form;
 }
 

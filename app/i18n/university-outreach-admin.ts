@@ -261,13 +261,6 @@ const rows = {
     "선택 대상",
   ],
   excluded: ["除外", "Excluded", "已排除", "已排除", "제외"],
-  department: [
-    "担当部署",
-    "Responsible department",
-    "负责部门",
-    "負責部門",
-    "담당 부서",
-  ],
   select: ["選択", "Select", "选择", "選擇", "선택"],
   priorNotice: [
     "通常案内",
@@ -818,11 +811,11 @@ const rows = {
     "재연락 모의 실행",
   ],
   noGrant: [
-    "大学の部署権限が付与されていません。管理者に対象部署の権限設定を依頼してください。",
-    "No university department access has been granted. Ask an administrator to assign the relevant department.",
-    "尚未授予大学部门权限。请联系管理员设置相关部门权限。",
-    "尚未授予大學部門權限。請聯絡管理員設定相關部門權限。",
-    "대학 부서 권한이 없습니다. 관리자에게 해당 부서 권한 설정을 요청하세요.",
+    "大学のオートリーチへのアクセス権がありません。管理者に権限設定を依頼してください。",
+    "You do not have access to university outreach. Ask an administrator to grant access.",
+    "您没有大学外呼服务的访问权限。请联系管理员设置权限。",
+    "您沒有大學外撥服務的存取權限。請聯絡管理員設定權限。",
+    "대학 아웃리치 접근 권한이 없습니다. 관리자에게 권한 설정을 요청하세요.",
   ],
   liveDisabled: [
     "実発信は未設定です。外部連携の接続検証後に有効化します。",
