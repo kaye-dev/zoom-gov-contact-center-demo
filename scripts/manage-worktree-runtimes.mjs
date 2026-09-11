@@ -7,6 +7,7 @@ import process from "node:process";
 import { promisify } from "node:util";
 
 import { releaseWorktreeRuntime } from "./release-worktree-runtime.mjs";
+import { stopSession } from "./confirmation-session.mjs";
 
 const execFileAsync = promisify(execFile);
 const runtimeManifest = ".codex/runtime.local.env";
@@ -255,7 +256,7 @@ function hasRunningResource(item) {
 }
 
 function hasActiveRuntime(item) {
-  return item.state === "ready" && hasRunningResource(item);
+  return item.state === "ready" && (hasRunningResource(item) || item.confirmation?.state === "valid");
 }
 
 function sortInventory(inventory) {
@@ -273,6 +274,7 @@ function portSummary(item, colored = false) {
   );
   const services = (item.runningServices ?? []).filter((service) => !["web", "studio"].includes(service));
   if (services.length) ports.push(`${services.join(",")}:running`);
+  if (item.confirmation?.state === "valid" && !hasRunningResource(item)) ports.push("confirmation:cleanup pending");
   return ports.join(" ") || "no managed ports";
 }
 
@@ -446,19 +448,16 @@ async function composeContainerIds(checkout) {
 
 function stopFailure(error) {
   const diagnostic = typeof error?.stderr === "string" ? error.stderr.trim() : "";
-  if (diagnostic.includes("artifact PID was reused")) {
-    return "preserved: artifact PID was reused; confirmation metadata remains for inspection";
-  }
   return `failed: ${diagnostic || (error instanceof Error ? error.message : String(error))}`;
 }
 
-async function stopCheckout(checkout, { inspectContainers = composeContainerIds, release = releaseWorktreeRuntime } = {}) {
+async function stopCheckout(checkout, { inspectContainers = composeContainerIds, release = releaseWorktreeRuntime, stopConfirmation = stopSession } = {}) {
   const results = [];
   if (checkout.state !== "ready") return [{ action: "preserved", detail: checkout.reason ?? "checkout state is not safe" }];
   if (checkout.confirmation?.state === "valid") {
     try {
-      await command(path.join(checkout.checkout, "dev-confirmation.sh"), ["stop", checkout.confirmation.slug], { cwd: checkout.checkout });
-      results.push({ action: "confirmation", detail: "stopped" });
+      const result = await stopConfirmation({ repositoryRoot: checkout.checkout, slug: checkout.confirmation.slug });
+      results.push({ action: "confirmation", detail: result.reclaimedArtifacts ? "stopped; stale artifact metadata reclaimed" : "stopped" });
     } catch (error) {
       results.push({ action: "confirmation", detail: stopFailure(error) });
       return results;

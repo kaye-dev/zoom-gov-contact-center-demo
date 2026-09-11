@@ -43,6 +43,12 @@ node scripts/serve-plan-artifact.mjs plans/<slug>/review
 
 `attach-app`は既存の確認セッションへ所有権確認済みのアプリを関連付けます。通常の停止は予約を保持するため、再起動後も同じURLを使います。起動出力のURL、PID、PORT_SLOT、PORT_ALLOCATION_SCHEMAとownerを確認してください。
 
+`./dev-compose.sh wt`で選択したcheckoutの確認セッションは、コマンド起動元の停止処理で扱います。停止先worktreeのスクリプトが古い場合も、起動元の修正が適用されます。確認セッションだけが残るcheckoutは`confirmation:cleanup pending`として選択できます。
+
+artifactの終了、または登録された開始時刻との不一致によるPID再利用を確認し、artifactポートが空いていれば、古い登録を自動回収して停止処理を続行します。再利用されたPIDには停止シグナルを送りません。対象ポートを占有するprocessの所有権を確認できない場合、検査失敗、登録の不一致・変更時は情報を保全して理由を表示します。確認セッションを含む停止処理と全対象ポート・containerの再確認が成功した場合だけ、`wt`は予約とruntime manifestを解放し、named volumeを保持します。
+
+開始時刻はlocale・タイムゾーンに依存しないUTCのISO形式で取得します。旧形式の開始時刻との不一致だけではPID再利用と断定しません。占有中のartifactは、待受PID・checkoutのCWD・所有トークンと検査前後の開始時刻が一致した場合に限り通常の停止処理へ進みます。別のPIDが同じポートで応答している場合は停止しません。
+
 予約が不要になった場合はstatusのownerを使って明示的に解放します。Web/artifactと関連Composeサービスが起動中なら解放できません。
 
 ```sh

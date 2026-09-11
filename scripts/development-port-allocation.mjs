@@ -84,9 +84,25 @@ async function atomicJson(file, value) {
   } finally { await rm(temporary, { force: true }); }
 }
 
-export async function processStart(pid) {
-  try { return (await exec("ps", ["-p", String(pid), "-o", "lstart="], { timeout: 3000 })).stdout.trim() || null; }
-  catch { return null; }
+export async function processStart(pid, { run = async (file, args, options) => exec(file, args, options), signal = process.kill } = {}) {
+  try {
+    const start = (await run("ps", ["-p", String(pid), "-o", "lstart="], {
+      timeout: 3000, env: { ...process.env, LC_ALL: "C", TZ: "UTC" },
+    })).stdout.trim();
+    const instant = Date.parse(`${start} UTC`);
+    ensure(start.length > 0 && Number.isFinite(instant), "process start time could not be verified");
+    return new Date(instant).toISOString();
+  } catch (error) {
+    // Only a confirmed absent PID is stale. Command failures and permission
+    // errors must never authorize metadata removal or allocation release.
+    if (error.code === 1 && !(error.stderr ?? "").trim()) {
+      try { signal(pid, 0); } catch (probeError) {
+        if (probeError.code === "ESRCH") return null;
+        throw probeError;
+      }
+    }
+    throw error;
+  }
 }
 
 export async function assertArtifactStartupAllowed(identity) {
@@ -263,7 +279,30 @@ export function createPortAllocator({ stateRoot = defaultPortStateRoot(), inspec
       await atomicJson(file(lease.slot), lease);
     });
   }
-  return { allocate, status: (identity) => locked(() => ownLease(identity)), release, updateArtifact, clearArtifact };
+  async function reclaimStaleArtifact(identity, expected) {
+    return locked(async () => {
+      const lease = await ownLease(identity);
+      ensure(lease?.allocationId === expected.allocationId && lease.artifact &&
+        JSON.stringify(lease.artifact) === JSON.stringify(expected.artifact), "artifact registration changed before cleanup");
+      const start = await processStart(lease.artifact.pid);
+      if (start === lease.artifact.processStart) return false;
+      if (!(await inspect([lease.artifactPort], identity)).every(entry => entry.free)) {
+        // Old leases contain locale/timezone-dependent ps output. A mismatch
+        // alone does not prove PID reuse: bind the live token to the exact PID.
+        try {
+          ensure(await verifyArtifactProcess(lease), "artifact exited during owner verification");
+          return false;
+        } catch (error) {
+          throw new Error(`PORT_IN_USE: artifact metadata preserved; occupied port owner could not be verified: ${error.message}`);
+        }
+      }
+      ensure(await processStart(lease.artifact.pid) === start, "artifact PID changed during cleanup");
+      lease.artifact = null;
+      await atomicJson(file(lease.slot), lease);
+      return true;
+    });
+  }
+  return { allocate, status: (identity) => locked(() => ownLease(identity)), release, updateArtifact, clearArtifact, reclaimStaleArtifact };
 }
 
 export async function verifyArtifactProcess(lease) {
@@ -271,11 +310,18 @@ export async function verifyArtifactProcess(lease) {
   if (!artifact) return null;
   const start = await processStart(artifact.pid);
   if (start === null) return null;
-  ensure(start === artifact.processStart, "artifact PID was reused; no process will be stopped");
   ensure(await processCheckout(artifact.pid) === lease.checkout, "artifact process cwd changed");
+  const assertListenerPid = async () => {
+    const result = await exec("lsof", ["-nP", `-iTCP:${lease.artifactPort}`, "-sTCP:LISTEN", "-t"], { timeout: 3000 });
+    const pids = [...new Set(result.stdout.trim().split(/\s+/u).filter(Boolean).map(Number))];
+    ensure(pids.length === 1 && pids[0] === artifact.pid, "artifact listener PID does not match its registration");
+  };
+  await assertListenerPid();
   const response = await fetch(`http://127.0.0.1:${lease.artifactPort}/`, { method: "HEAD", redirect: "error", signal: AbortSignal.timeout(3000) });
   ensure(response.ok && response.headers.get("x-confirmation-session-token") === artifact.processToken, "artifact owner token mismatch");
-  return artifact;
+  await assertListenerPid();
+  ensure(await processStart(artifact.pid) === start, "artifact PID changed during owner verification");
+  return { ...artifact, processStart: start };
 }
 
 // Existing shell tests use isolated process/Docker stubs, never host listeners.
