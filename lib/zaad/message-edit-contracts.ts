@@ -8,7 +8,7 @@ export function parseAudioEdit(payload: unknown) {
   if (typeof value.replaceAudio !== "boolean") throw new OutreachContractError("INVALID_REQUEST");
   const common = { operationKey: operationKey(value.operationKey), ...parseMessageExpectation(value), name: stringValue(value.name, 150), replaceAudio: value.replaceAudio };
   if (!value.replaceAudio) return { ...common, body: null, voiceId: null };
-  const body = stringValue(value.body, 500), voiceId = stringValue(value.voiceId, 50);
+  const body = stringValue(value.body, 500, true), voiceId = stringValue(value.voiceId, 50);
   if (!OUTREACH_VOICES.includes(voiceId as typeof OUTREACH_VOICES[number])) throw new OutreachContractError("INVALID_VOICE");
   return { ...common, body, voiceId };
 }

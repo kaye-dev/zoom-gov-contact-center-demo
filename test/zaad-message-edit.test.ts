@@ -7,6 +7,13 @@ import type { AudioAsset } from "../lib/zaad/message-import-contracts";
 
 const input = { operationKey: "message_edit_test", expectedUpdatedAt: "2026-09-11T00:00:00.000Z", expectedDigest: "a".repeat(64), name: "更新名", replaceAudio: false };
 const target = { assetId: "asset", assetItemId: "item", languageCode: "ja-JP", name: "更新名" };
+test("MESSAGE-WRITE-01: edited TTS retains line breaks while rejecting control characters", () => {
+  const body = "これは大学の更新後の音声です。\n名称と本文の保存を確認しています。";
+  const edited = parseAudioEdit({ ...input, replaceAudio: true, body, voiceId: "Takumi" });
+  assert.equal(edited.body, body);
+  assert.equal(audioItemUpdatePayload({ ...target, body: edited.body!, voiceId: edited.voiceId! }).items[0].asset_item_content, body);
+  assert.throws(() => parseAudioEdit({ ...input, replaceAudio: true, body: "本文\u0000", voiceId: "Takumi" }));
+});
 test("MESSAGE-WRITE-01: name-only sends exactly one identified item and TTS requires the complete valid body", () => {
   assert.equal(parseAudioEdit({ ...input, body: "ignored", voiceId: "ignored" }).body, null);
   assert.deepEqual(audioItemUpdatePayload(target), { items: [{ asset_id: "asset", asset_item_language: "ja-JP", asset_item_name: "更新名" }] });
