@@ -84,3 +84,52 @@ test('MESSAGE-PLAY-04: returning from audio details reloads provider body and co
  query=new URLSearchParams('tenant=lg&view=messages');
  await render(h(Messages,props));assert.equal(catalogReads,2);assert.ok(document.body.textContent!.includes('取得した本文'));assert.ok(!document.body.textContent!.includes('本文の取得状況は未確認です。'));
 }));
+
+test('MESSAGE-BODY-UI-01: text is preserved literally and body provenance stays distinct',async()=>withDom(async(document,render)=>{
+ const Editor=component<React.ComponentType<OutreachPanelProps&{message:ImportedAudioMessage;saved:()=>void}>>('OutreachImportedAudioEditor',{
+  './outreach-client':{loadImportedAudio:async()=>'',OutreachApiError:class extends Error{}},'./DetailPageBreadcrumb':{DetailPageBreadcrumb:()=>null},'./OutreachAudioPlayer':{OutreachAudioPlayer:()=>null},
+ });
+ const body='第1段落\n\n・案内 <script>alert(1)</script>\n  続き';
+ for(const state of ['PROVIDER_RETURNED','USER_AUTHORED','UNCHECKED','UNAVAILABLE'] as const){
+  const row={...message,bodyState:state,body:state==='UNAVAILABLE'?null:body};
+  await render(h(Editor,{...props,key:state,message:row,saved:()=>{}}));
+  const heading=Array.from(document.querySelectorAll('h2')).find(node=>node.textContent==='読み上げ本文')!;
+  const section=document.querySelector(`section[aria-labelledby="${heading.id}"]`)!;
+  assert.equal(section.querySelector('script'),null);
+  if(state==='UNAVAILABLE')assert.ok(section.textContent!.includes('本文未取得'));
+  else{
+   assert.equal(section.querySelector('p.whitespace-pre-wrap')!.textContent,body);
+   const source=state==='PROVIDER_RETURNED'?'Zoomから取得した本文':state==='USER_AUTHORED'?'サイトで入力した本文':'前回取得した参考本文';
+   assert.ok(section.textContent!.includes(source));
+   if(state==='UNCHECKED'){assert.ok(section.textContent!.includes(message.bodyFetchedAt!));assert.ok(section.textContent!.includes('未確認'));}
+  }
+  await act(async()=>document.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
+  assert.equal(document.querySelector('textarea')!.value,row.body??'');
+ }
+}));
+
+test('MESSAGE-SYNC-LAYOUT-01: disclosure is independent of selection, requests and import identity',async()=>withDom(async(document,render)=>{
+ let reads=0;const dirty:boolean[]=[],writes:unknown[][]=[],confirmed:string[][]=[];
+ const rows=[{assetId:'private-asset-a',assetItemId:'same-item',name:'候補A',languageCode:'ja-JP',voiceId:null,body:'全文\n第2段落',bodyState:'PROVIDER_RETURNED',selectable:true,imported:true,observedDigest:'digest-a',expectedUpdatedAt:null},{assetId:'private-asset-b',assetItemId:'same-item',name:'候補B',languageCode:'ja-JP',voiceId:null,body:null,bodyState:'UNAVAILABLE',selectable:true,imported:false,observedDigest:'digest-b',expectedUpdatedAt:null}];
+ const Sync=component<React.ComponentType<OutreachPanelProps&{confirmed:(ids:string[])=>Promise<void>}>>('OutreachMessageSync',{
+  './DetailPageBreadcrumb':{DetailPageBreadcrumb:()=>null},
+  './outreach-client':{outreachRequest:async()=>{reads++;return{items:rows,accountId:'account',incomplete:false};},outreachMutation:async(...args:unknown[])=>{writes.push(args);return{status:'COMPLETED',result:{ids:['one','two']}};},OutreachApiError:class extends Error{}},
+ });
+ await render(h(Sync,{...props,setDirty:value=>dirty.push(value),confirmed:async ids=>{confirmed.push(ids);}}));
+ assert.equal(document.querySelectorAll('thead th').length,4);
+ assert.equal(document.querySelectorAll('colgroup col').length,4);
+ assert.ok(!document.body.textContent!.includes('private-asset'));assert.ok(!document.body.textContent!.includes('取り込み済み'));assert.ok(!document.body.textContent!.includes('第2段落'));
+ const buttons=()=>Array.from(document.querySelectorAll<HTMLButtonElement>('button[aria-expanded]'));
+ const first=buttons()[0];first.focus();await act(async()=>first.click());
+ assert.equal(first.getAttribute('aria-expanded'),'true');assert.equal(document.activeElement,first);
+ assert.equal(document.getElementById(first.getAttribute('aria-controls')!)!.querySelector('p')!.textContent,rows[0].body);
+ assert.ok(first.querySelector('svg path'));
+ await act(async()=>buttons()[1].click());assert.equal(document.querySelectorAll('td[colspan="4"]').length,2);assert.ok(document.body.textContent!.includes('本文未取得'));
+ await act(async()=>first.click());assert.equal(buttons()[1].getAttribute('aria-expanded'),'true');assert.equal(dirty.length,0);assert.equal(reads,1);assert.equal(writes.length,0);
+ const reload=Array.from(document.querySelectorAll('button')).find(node=>node.textContent==='再取得')!;
+ await act(async()=>reload.click());assert.equal(reads,2);assert.ok(buttons().every(node=>node.getAttribute('aria-expanded')==='false'));
+ for(const box of document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'))await act(async()=>box.click());
+ await act(async()=>buttons()[0].click());assert.equal(dirty.length,2);assert.ok(Array.from(document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).every(node=>node.checked));
+ const submit=Array.from(document.querySelectorAll('button')).find(node=>node.textContent==='取り込む')!;await act(async()=>submit.click());
+ assert.equal(writes.length,1);const payload=writes[0][2] as {items:unknown[]};assert.deepEqual(payload.items,rows.map(({assetId,assetItemId,observedDigest,expectedUpdatedAt})=>({assetId,assetItemId,observedDigest,expectedUpdatedAt})));assert.deepEqual(confirmed,[['one','two']]);assert.equal(dirty.at(-1),false);
+}));
