@@ -54,15 +54,33 @@ test('MESSAGE-ACTIONS-01: menu does not navigate the row; delete remains local a
  await render(h(Messages,{...props,fullAccess:false,permissions:{create:false,update:false,delete:false}}));
 }));
 test('MESSAGE-WRITE-01: fetched body is the initial replacement text and a name-only save sends no TTS or counter',async()=>withDom(async(document,render)=>{
- const writes:unknown[]=[],dirty:boolean[]=[];let saved=0;
+ const writes:unknown[]=[],dirty:boolean[]=[];let saved=0;let complete:(value:unknown)=>void=()=>{};
  const Editor=component<React.ComponentType<OutreachPanelProps&{message:ImportedAudioMessage;saved:()=>void}>>('OutreachImportedAudioEditor',{
-  './outreach-client':{outreachMutation:async(...args:unknown[])=>{writes.push(args);return {status:'COMPLETED'};},OutreachApiError:class extends Error{}},'./DetailPageBreadcrumb':{DetailPageBreadcrumb:()=>null},'./OutreachAudioPlayer':{OutreachAudioPlayer:()=>null},
+  './outreach-client':{outreachMutation:async(...args:unknown[])=>{writes.push(args);return new Promise(resolve=>{complete=resolve;});},OutreachApiError:class extends Error{}},'./DetailPageBreadcrumb':{DetailPageBreadcrumb:()=>null},'./OutreachAudioPlayer':{OutreachAudioPlayer:()=>null},
  });
  await render(h(Editor,{...props,message,setDirty:value=>dirty.push(value),saved:()=>saved++}));
  const checkbox=document.querySelector<HTMLInputElement>('input[type="checkbox"]')!;assert.equal(checkbox.checked,false);
  await act(async()=>checkbox.click());assert.equal(document.querySelector('textarea')!.value,message.body);
  await act(async()=>checkbox.click());
  await act(async()=>document.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ assert.equal(writes.length,0);
+ let dialog=document.querySelector('[role="dialog"]')!;
+ assert.ok(dialog.textContent!.includes('保存するとZoom Contact Centerの音声アイテムを更新します。'));
+ const cancel=Array.from(dialog.querySelectorAll('button')).find(node=>node.textContent==='キャンセル')!;
+ assert.equal(document.activeElement,cancel);
+ await act(async()=>cancel.click());assert.equal(writes.length,0);assert.equal(document.querySelector('[role="dialog"]'),null);
+ assert.equal(document.querySelector<HTMLInputElement>('input:not([type="checkbox"])')!.value,message.name);
+ assert.ok(!document.body.textContent!.includes('保存するとZoom Contact Centerの音声アイテムを更新します。'));
+ await act(async()=>document.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ dialog=document.querySelector('[role="dialog"]')!;
+ await act(async()=>{const button=Array.from(dialog.querySelectorAll('button')).find(node=>node.textContent==='Zoomに保存')!;button.click();button.click();});
+ assert.equal(writes.length,1);
+ assert.equal(dialog.getAttribute('aria-busy'),'true');
+ assert.ok(Array.from(dialog.querySelectorAll('button')).every(button=>button.disabled));
+ await act(async()=>document.dispatchEvent(new document.defaultView!.KeyboardEvent('keydown',{key:'Escape',bubbles:true})));
+ assert.ok(document.querySelector('[role="dialog"]'));
+ await act(async()=>complete({status:'COMPLETED'}));
+ assert.equal(document.querySelector('[role="dialog"]'),null);
  const args=writes[0] as [string,string,Record<string,unknown>,string];assert.equal(args[3],'PATCH');assert.equal(args[2].replaceAudio,false);assert.equal(args[2].expectedDigest,message.expectedDigest);
  for(const key of ['body','voiceId','version','revision','departmentKey'])assert.equal(key in args[2],false);
  assert.equal(saved,1);assert.equal(dirty.at(-1),false);
