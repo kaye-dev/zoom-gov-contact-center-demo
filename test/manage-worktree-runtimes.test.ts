@@ -135,7 +135,11 @@ test("explicit worktree selection stops confirmation and scoped Compose resource
     confirmation: { state: "valid", slug: "demo" },
     runtime: { state: "valid", mode: "worktree" },
     resources: [],
-  }, { inspectContainers: async () => ["fixture-container"], release: async () => ({ released: true, volumesPreserved: true }) });
+  }, { stopConfirmation: async ({ repositoryRoot, slug }) => {
+    assert.equal(repositoryRoot, checkout);
+    assert.equal(slug, "demo");
+    return { state: null, appResult: "none", reclaimedArtifacts: 0 };
+  }, inspectContainers: async () => ["fixture-container"], release: async () => ({ released: true, volumesPreserved: true }) });
   assert.deepEqual(results, [
     { action: "confirmation", detail: "stopped" },
     { action: "Compose services", detail: "stopped" },
@@ -143,7 +147,6 @@ test("explicit worktree selection stops confirmation and scoped Compose resource
     { action: "port allocation", detail: "released; named volumes preserved" },
   ]);
   assert.deepEqual((await readFile(log, "utf8")).trim().split("\n"), [
-    "confirmation:stop demo",
     "compose:stop web studio db",
     "compose:cleanup",
   ]);
@@ -192,13 +195,11 @@ test("missing Compose containers skip stop even when the checkout has no session
 });
 
 
-test("reused artifact PID preserves resources and blocks subsequent cleanup", async (context) => {
+test("unverifiable artifact preserves resources and blocks subsequent cleanup", async (context) => {
   const checkout = await fixture(context);
   const { stopCheckout } = await modulePromise;
-  await writeFile(path.join(checkout, "dev-confirmation.sh"), '#!/bin/sh\necho "artifact PID was reused; no process will be stopped" >&2\nexit 1\n');
-  await chmod(path.join(checkout, "dev-confirmation.sh"), 0o755);
-  const results = await stopCheckout({ checkout, state: "ready", confirmation: { state: "valid", slug: "demo" }, runtime: { state: "valid", mode: "worktree" }, resources: [] }, { inspectContainers: async () => { assert.fail("must not continue after confirmation failure"); } });
-  assert.deepEqual(results, [{ action: "confirmation", detail: "preserved: artifact PID was reused; confirmation metadata remains for inspection" }]);
+  const results = await stopCheckout({ checkout, state: "ready", confirmation: { state: "valid", slug: "demo" }, runtime: { state: "valid", mode: "worktree" }, resources: [] }, { stopConfirmation: async () => { throw new Error("PORT_IN_USE: stale artifact metadata preserved"); }, inspectContainers: async () => { assert.fail("must not continue after confirmation failure"); } });
+  assert.deepEqual(results, [{ action: "confirmation", detail: "failed: PORT_IN_USE: stale artifact metadata preserved" }]);
 });
 
 
@@ -206,6 +207,9 @@ test("stopped allocations are gray and unselectable while listeners and running 
   const { pickerScreen, hasActiveRuntime } = await modulePromise;
   const item = { checkout: "/fixture", state: "ready", resources: [{ surface: "app", port: 3000, containerId: "old", containerState: "exited" }] };
   assert.equal(hasActiveRuntime(item), false);
+  const pending = { ...item, confirmation: { state: "valid", slug: "demo" } };
+  assert.equal(hasActiveRuntime(pending), true);
+  assert.match(pickerScreen([pending], 0, new Set()), /confirmation:cleanup pending/u);
   const screen = pickerScreen([item], 0, new Set([0]));
   assert.ok(screen.includes("\u001b[90mapp:3000 (stopped)"));
   assert.ok(!screen.includes("[x]"));

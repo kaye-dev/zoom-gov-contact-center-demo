@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -107,6 +107,48 @@ test("PORT-11: allocator CLI returns stable JSON with verified Git identity", as
   assert.equal(JSON.parse(result.stdout), null);
   const source = await readFile(cli, "utf8");
   assert.doesNotMatch(source, /eval\(/u);
+});
+
+test("stale artifact reclamation preserves live PIDs and rejects changed registrations or occupied ports", async context => {
+  const { createPortAllocator, processStart } = await modulePromise;
+  const stateRoot = await root(context);
+  let occupied = false;
+  const allocator = createPortAllocator({ stateRoot, inspect: async ports => (await free(ports)).map(entry => ({ ...entry, free: !occupied })), assertStopped: async () => {} });
+  const owner = identity("/fixture/stale");
+  const lease = await allocator.allocate(owner);
+  const artifact = { pid: process.pid, processStart: await processStart(process.pid), processToken: randomUUID(), slug: "alpha", surface: "prototype", artifactRealpath: "/fixture/stale/plans/alpha/prototype" };
+  await allocator.updateArtifact(owner, lease.allocationId, artifact);
+  assert.equal(await allocator.reclaimStaleArtifact(owner, { ...lease, artifact }), false);
+  const stale = { ...artifact, processStart: "Mon Jan  1 00:00:00 2001" };
+  await allocator.updateArtifact(owner, lease.allocationId, stale);
+  await assert.rejects(allocator.reclaimStaleArtifact(owner, { ...lease, artifact }), /registration changed/);
+  occupied = true;
+  await assert.rejects(allocator.reclaimStaleArtifact(owner, { ...lease, artifact: stale }), /PORT_IN_USE/);
+  assert.deepEqual((await allocator.status(owner)).artifact, stale);
+  occupied = false;
+  assert.equal(await allocator.reclaimStaleArtifact(owner, { ...lease, artifact: stale }), true);
+  process.kill(process.pid, 0);
+  assert.equal((await allocator.status(owner)).artifact, null);
+  assert.equal((await allocator.release(owner, owner.owner, lease.allocationId)).released, true);
+});
+
+test("process inspection distinguishes confirmed exit from ps and permission failures", async () => {
+  const { processStart } = await modulePromise;
+  const failure = (code: string | number) => Object.assign(new Error(String(code)), { code, stderr: "" });
+  const missing = async () => { throw failure(1); };
+  assert.equal(await processStart(123, { run: missing, signal: () => { throw failure("ESRCH"); } }), null);
+  await assert.rejects(processStart(123, { run: missing, signal: () => { throw failure("EPERM"); } }), /EPERM/);
+  await assert.rejects(processStart(123, { run: async () => { throw failure("ENOENT"); } }), /ENOENT/);
+  await assert.rejects(processStart(123, { run: missing, signal: () => true }), /1/);
+});
+
+test("process start identity is UTC ISO across caller timezones", async () => {
+  const moduleUrl = new URL("../scripts/development-port-allocation.mjs", import.meta.url).href;
+  const code = `import {processStart} from ${JSON.stringify(moduleUrl)}; console.log(await processStart(Number(process.argv[1])));`;
+  const results = await Promise.all(["UTC", "Asia/Tokyo", "Pacific/Honolulu"].map(TZ => exec(process.execPath,
+    ["--input-type=module", "-e", code, String(process.pid)], { env: { ...process.env, TZ } })));
+  assert.equal(new Set(results.map(result => result.stdout.trim())).size, 1);
+  assert.match(results[0].stdout.trim(), /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z$/u);
 });
 
 test("PORT-11: documented policy and launcher ranges match exported bounds", async () => {

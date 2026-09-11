@@ -3,7 +3,7 @@
 import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { resolvePrototypeEntry } from "./prototype-entry.mjs";
-import { createPortAllocator, resolvePortIdentity, verifyArtifactProcess, processStart } from "./development-port-allocation.mjs";
+import { createPortAllocator, resolvePortIdentity, verifyArtifactProcess, processStart, inspectPorts } from "./development-port-allocation.mjs";
 import { realpathSync } from "node:fs";
 import {
   chmod,
@@ -332,8 +332,9 @@ function processIsAlive(pid) {
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if (error.code === "ESRCH") return false;
+    throw error;
   }
 }
 
@@ -557,8 +558,31 @@ export async function statusSession({ repositoryRoot = defaultRepositoryRoot, sl
 async function stopArtifact(identity, state, surface) {
   const artifact = state.artifactServers[surface];
   if (!artifact) return;
-  await probeArtifact({ ...identity, slug: state.slug }, artifact);
+  ensure(artifact.artifactRealpath === path.join(identity.checkout, "plans", state.slug, surface), "artifact path does not match the session slug");
+  const portIdentity = await resolvePortIdentity(identity.checkout);
+  const allocator = createPortAllocator();
+  const allocation = await allocator.status(portIdentity);
   const port = Number(new URL(artifact.url).port);
+  let reclaimed = false;
+  if (allocation?.artifact && port === allocation.artifactPort) {
+    const registered = allocation.artifact;
+    ensure(registered.pid === artifact.pid && registered.processToken === artifact.processToken &&
+      registered.slug === state.slug && registered.surface === surface && registered.artifactRealpath === artifact.artifactRealpath,
+    "artifact process no longer matches its allocation; no process will be stopped");
+    await assertSessionUnchanged(identity, state);
+    reclaimed = await allocator.reclaimStaleArtifact(portIdentity, allocation);
+  } else if (await processStart(artifact.pid) === null) {
+    // A graceful exit can already have cleared the shared artifact registration.
+    ensure((await inspectPorts([port], portIdentity)).every(entry => entry.free), "PORT_IN_USE: confirmation metadata preserved");
+    reclaimed = true;
+  }
+  if (reclaimed) {
+    await assertSessionUnchanged(identity, state);
+    delete state.artifactServers[surface];
+    await writeConfirmationState(identity, state);
+    return "reclaimed";
+  }
+  await probeArtifact({ ...identity, slug: state.slug }, artifact);
   if (port >= 4000 && port <= 4005) {
     const allocation = await createPortAllocator().status(await resolvePortIdentity(identity.checkout));
     const registered = await verifyArtifactProcess(allocation);
@@ -569,13 +593,19 @@ async function stopArtifact(identity, state, surface) {
   process.kill(artifact.pid, "SIGTERM");
   for (let attempt = 0; attempt < 50; attempt += 1) {
     if (!processIsAlive(artifact.pid)) {
+      await assertSessionUnchanged(identity, state);
       delete state.artifactServers[surface];
       await writeConfirmationState(identity, state);
-      return;
+      return "stopped";
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   throw new Error(`${surface} process ${artifact.pid} did not stop after SIGTERM`);
+}
+
+async function assertSessionUnchanged(identity, expected) {
+  const { state } = await readConfirmationState(identity.checkout);
+  ensure(JSON.stringify(state) === JSON.stringify(expected), "confirmation session changed during stop; metadata preserved");
 }
 
 async function stopOwnedApp(identity, state) {
@@ -587,6 +617,7 @@ async function stopOwnedApp(identity, state) {
     encoding: "utf8",
     env: { ...process.env, CODEX_CONFIRMATION_STOP_SESSION_ID: state.sessionId },
   });
+  await assertSessionUnchanged(identity, state);
   state.appRuntime = null;
   await writeConfirmationState(identity, state);
   return "removed";
@@ -599,6 +630,11 @@ export async function stopSession({ repositoryRoot = defaultRepositoryRoot, slug
     const portIdentity = await resolvePortIdentity(identity.checkout);
     const allocator = createPortAllocator();
     const allocation = await allocator.status(portIdentity);
+    if (!allocation?.artifact) return { state: null, appResult: "none", reclaimedArtifacts: 0 };
+    ensure(allocation.artifact.slug === slug, "no matching owned artifact session exists");
+    if (await allocator.reclaimStaleArtifact(portIdentity, allocation)) {
+      return { state: null, appResult: "none", reclaimedArtifacts: 1 };
+    }
     const artifact = await verifyArtifactProcess(allocation);
     ensure(artifact?.slug === slug, "no matching owned artifact session exists");
     ensure(await processStart(artifact.pid) === artifact.processStart, "artifact PID changed before stop");
@@ -610,11 +646,14 @@ export async function stopSession({ repositoryRoot = defaultRepositoryRoot, slug
     throw new Error("owned artifact did not stop after SIGTERM");
   }
   assertRequestedSlug(state, slug);
-  await stopArtifact(identity, state, "prototype");
-  await stopArtifact(identity, state, "review");
+  let reclaimedArtifacts = 0;
+  for (const surface of surfaces) {
+    if (await stopArtifact(identity, state, surface) === "reclaimed") reclaimedArtifacts += 1;
+  }
   const appResult = await stopOwnedApp(identity, state);
+  await assertSessionUnchanged(identity, state);
   await rm(identity.statePath);
-  return { state, appResult };
+  return { state, appResult, reclaimedArtifacts };
 }
 
 export async function inspectCleanupPolicy({ repositoryRoot = defaultRepositoryRoot, runtimeSessionId, runtimeId, composeProject, stopSessionId = process.env.CODEX_CONFIRMATION_STOP_SESSION_ID ?? "" }) {
@@ -656,6 +695,7 @@ async function main(args) {
     const result = await stopSession({ slug });
     console.log(`CONFIRMATION_SLUG=${slug}`);
     console.log(`APP_STOP_RESULT=${result.appResult}`);
+    console.log(`RECLAIMED_ARTIFACTS=${result.reclaimedArtifacts ?? 0}`);
     console.log("CONFIRMATION_STATE=removed");
     return;
   }

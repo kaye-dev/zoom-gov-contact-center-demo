@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { artifactTestEnvironment, releaseArtifactTestPorts } from "./helpers/development-port-fixture";
+import { artifactTestEnvironment, artifactTestStateRoot, releaseArtifactTestPorts } from "./helpers/development-port-fixture";
 import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { once } from "node:events";
 import {
   chmod,
   copyFile,
@@ -206,6 +207,107 @@ test("CS-04: a mismatched process token never stops the live foreign process", a
   assert.ok(processIsAlive(pid));
   assert.ok((await lstat(fixture.statePath)).isFile());
 });
+
+for (const scenario of ["cross-timezone", "legacy-timezone", "wrong-listener-pid"] as const) {
+  test(`live artifact ownership: ${scenario}`, async context => {
+    const fixture = await createFixture(context);
+    const started = values((await run(fixture, ["start", "alpha", "prototype"], { ...process.env, TZ: "Pacific/Honolulu" })).stdout);
+    const pid = Number(started.PROTOTYPE_PID);
+    fixture.ownedPids.add(pid);
+    const state = JSON.parse(await readFile(fixture.statePath, "utf8"));
+    const port = Number(new URL(started.PROTOTYPE_URL).port);
+    const leasePath = path.join(artifactTestStateRoot, `slot-${port - 4000}.json`);
+    const lease = JSON.parse(await readFile(leasePath, "utf8"));
+    if (scenario === "legacy-timezone") {
+      lease.artifact.processStart = (await execFileAsync("ps", ["-p", String(pid), "-o", "lstart="], { env: { ...process.env, TZ: "Pacific/Honolulu" } })).stdout.trim();
+      assert.ok(!lease.artifact.processStart.endsWith("Z"));
+      await writeFile(leasePath, JSON.stringify(lease));
+    }
+    if (scenario === "wrong-listener-pid") {
+      // The port still returns the correct token, but a different process owns it.
+      const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000); console.log('ready')"], {
+        cwd: fixture.root, stdio: ["ignore", "pipe", "pipe"],
+      });
+      assert.ok(child.pid);
+      fixture.ownedPids.add(child.pid);
+      await once(child.stdout!, "data");
+      state.artifactServers.prototype.pid = child.pid;
+      lease.artifact.pid = child.pid;
+      lease.artifact.processStart = "Mon Jan  1 00:00:00 2001";
+      await writeFile(leasePath, JSON.stringify(lease));
+      await writeFile(fixture.statePath, JSON.stringify(state));
+      await assert.rejects(run(fixture, ["stop", "alpha"]), /artifact listener PID does not match/u);
+      assert.ok(processIsAlive(pid));
+      assert.ok(processIsAlive(child.pid));
+      assert.deepEqual(JSON.parse(await readFile(fixture.statePath, "utf8")), state);
+    } else {
+      assert.equal(values((await run(fixture, ["stop", "alpha"], { ...process.env, TZ: "Asia/Tokyo" })).stdout).RECLAIMED_ARTIFACTS, "0");
+      await waitUntilStopped(pid);
+      await assert.rejects(lstat(fixture.statePath), { code: "ENOENT" });
+    }
+  });
+}
+
+for (const scenario of ["exited", "graceful-exit", "reused", "missing-session", "occupied", "wt-old-checkout"] as const) {
+  test(`stale artifact cleanup: ${scenario}`, async context => {
+    const fixture = await createFixture(context);
+    const started = values((await run(fixture, ["start", "alpha", "prototype"])).stdout);
+    const pid = Number(started.PROTOTYPE_PID);
+    fixture.ownedPids.add(pid);
+    const state = JSON.parse(await readFile(fixture.statePath, "utf8"));
+    const port = Number(new URL(started.PROTOTYPE_URL).port);
+    const leasePath = path.join(artifactTestStateRoot, `slot-${port - 4000}.json`);
+    const lease = JSON.parse(await readFile(leasePath, "utf8"));
+    // Abrupt termination deliberately leaves the artifact lease behind.
+    process.kill(pid, scenario === "graceful-exit" ? "SIGTERM" : "SIGKILL");
+    await waitUntilStopped(pid);
+    let foreignPid: number | undefined;
+    if (scenario !== "exited" && scenario !== "graceful-exit") {
+      const code = scenario === "occupied"
+        ? `require('node:net').createServer().listen(${port}, '127.0.0.1', () => console.log('ready'))`
+        : "setInterval(() => {}, 1000); console.log('ready')";
+      const child = spawn(process.execPath, ["-e", code], { stdio: ["ignore", "pipe", "pipe"] });
+      assert.ok(child.pid);
+      foreignPid = child.pid;
+      fixture.ownedPids.add(child.pid);
+      await once(child.stdout!, "data");
+      state.artifactServers.prototype.pid = child.pid;
+      lease.artifact.pid = child.pid;
+      lease.artifact.processStart = "Mon Jan  1 00:00:00 2001";
+      await writeFile(leasePath, JSON.stringify(lease));
+      await writeFile(fixture.statePath, JSON.stringify(state));
+    }
+    if (scenario === "missing-session") await rm(fixture.statePath);
+    if (scenario === "occupied") {
+      await assert.rejects(run(fixture, ["stop", "alpha"]), /PORT_IN_USE/);
+      assert.deepEqual(JSON.parse(await readFile(fixture.statePath, "utf8")), state);
+      assert.deepEqual(JSON.parse(await readFile(leasePath, "utf8")), lease);
+    } else if (scenario === "wt-old-checkout") {
+      // Neither target's old entrypoint nor its old implementation may run.
+      await writeFile(path.join(fixture.root, "dev-confirmation.sh"), "#!/bin/sh\nexit 99\n", { mode: 0o755 });
+      await writeFile(fixture.manager, "throw new Error('old checkout implementation');\n");
+      await writeFile(path.join(fixture.root, "dev-compose.sh"), '#!/bin/sh\n[ "$1" = cleanup ] || exit 99\nprintf done > cleanup.log\n', { mode: 0o755 });
+      const code = `import {stopCheckout} from ${JSON.stringify(new URL("../scripts/manage-worktree-runtimes.mjs", import.meta.url).href)};
+        console.log(JSON.stringify(await stopCheckout({checkout:process.argv[1],state:'ready',confirmation:{state:'valid',slug:'alpha'},runtime:{state:'valid',mode:'worktree'},resources:[]}, {inspectContainers:async()=>[]})));`;
+      const result = await execFileAsync(process.execPath, ["--input-type=module", "-e", code, fixture.root], { env: artifactTestEnvironment(fixture.root, path.join(fixture.root, ".git")) });
+      assert.deepEqual(JSON.parse(result.stdout), [
+        { action: "confirmation", detail: "stopped; stale artifact metadata reclaimed" },
+        { action: "Compose services", detail: "skipped: no project containers" },
+        { action: "worktree cleanup", detail: "completed" },
+        { action: "port allocation", detail: "released; named volumes preserved" },
+      ]);
+      await assert.rejects(lstat(fixture.statePath), { code: "ENOENT" });
+      await assert.rejects(lstat(leasePath), { code: "ENOENT" });
+      assert.equal(await readFile(path.join(fixture.root, "cleanup.log"), "utf8"), "done");
+    } else {
+      assert.equal(values((await run(fixture, ["stop", "alpha"])).stdout).RECLAIMED_ARTIFACTS, "1");
+      await assert.rejects(lstat(fixture.statePath), { code: "ENOENT" });
+      assert.equal(JSON.parse(await readFile(leasePath, "utf8")).artifact, null);
+      assert.equal(values((await run(fixture, ["stop", "alpha"])).stdout).RECLAIMED_ARTIFACTS, "0");
+    }
+    if (foreignPid) assert.ok(processIsAlive(foreignPid), "reused PID must survive cleanup");
+  });
+}
 
 test("CS-RT-01/CS-RT-02: exact worktree app hold skips cleanup and exact stop session releases it", async (context) => {
   const fixture = await createFixture(context);
