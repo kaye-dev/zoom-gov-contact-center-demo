@@ -9,6 +9,8 @@ import { useI18n } from "@/app/i18n/LanguageProvider";
 import { Feedback } from "@/app/components/admin/Feedback";
 import { startZoomVideo } from "@/lib/zoom-video-client";
 import type { ZoomVideoConfig } from "@/lib/zoom-video-tag";
+import type { ConsultationIntake } from "@/lib/consultation-intake";
+import { ConsultationIntakeDialog } from "./ConsultationIntakeDialog";
 
 type AvailabilityName = "ready" | "busy" | "unavailable" | "unknown";
 
@@ -42,12 +44,16 @@ export function ConsultationAvailability({
   const { t } = useI18n();
   const [launchState, setLaunchState] = useState<"idle" | "starting" | "active">("idle");
   const [launchError, setLaunchError] = useState(false);
+  const [selected, setSelected] = useState<UniversityConsultationService | null>(null);
+  const [intake, setIntake] = useState<ConsultationIntake>({ displayName: "", affiliation: "", topic: "" });
   const locked = useRef(false);
-  const launch = async (serviceKey: UniversityConsultationService) => {
+  const launch = async (serviceKey: UniversityConsultationService, values: ConsultationIntake) => {
     if (locked.current) return;
     locked.current = true;
     setLaunchError(false);
     setLaunchState("starting");
+    setIntake(values);
+    setSelected(null);
     try {
       const response = await fetch("/api/public/consultation-availability", { cache: "no-store" });
       if (!response.ok) throw new Error("UNAVAILABLE");
@@ -61,12 +67,13 @@ export function ConsultationAvailability({
         // Zoom has no documented teardown API; reload this stateless page to
         // remove the ended call's overlay and allow a fresh engagement.
         window.location.reload();
-      }, serviceKey);
+      }, serviceKey, values);
       if (locked.current) setLaunchState("active");
     } catch {
       locked.current = false;
       setLaunchState("idle");
       setLaunchError(true);
+      setSelected(serviceKey);
     }
   };
   const [status, setStatus] = useState<Status | null>(null);
@@ -98,7 +105,8 @@ export function ConsultationAvailability({
 
   return (
     <div>
-      {launchError && <Feedback tone="error" className="mt-5">{t.videoConsultation.failed}</Feedback>}
+      {launchError && !selected && <Feedback tone="error" className="mt-5">{t.videoConsultation.failed}</Feedback>}
+      {selected && <ConsultationIntakeDialog category={labels[selected]} initialValues={intake} launchError={launchError} onClose={() => setSelected(null)} onSubmit={values => void launch(selected, values)} />}
       {launchState !== "idle" && <p role="status" className="mt-5 text-sm">{t.videoConsultation[launchState]}</p>}
       {launchState === "active" && (
         <button type="button" onClick={() => window.location.reload()} className="mt-3 cursor-pointer text-sm font-bold text-primary underline underline-offset-4">
@@ -166,7 +174,7 @@ export function ConsultationAvailability({
                   type="button"
                   disabled={!enabled || launchState !== "idle"}
                   aria-busy={launchState === "starting"}
-                  onClick={() => void launch(serviceKey)}
+                  onClick={() => { setLaunchError(false); setSelected(serviceKey); }}
                   className={
                     enabled && launchState === "idle"
                       ? "mt-auto inline-flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-primary px-4 py-3 font-bold text-white hover:bg-primary-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"

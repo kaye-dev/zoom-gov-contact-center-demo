@@ -85,7 +85,25 @@ Start → Condition(category)
 
 根拠: [Entry ID作成](https://support.zoom.com/hc/en/article?id=zm_kb&sysparm_article=KB0060884)、[エントリーポイント](https://support.zoom.com/hc/en/article?id=zm_kb&sysparm_article=KB0059448)、[ビデオSDK・カスタムボタン](https://developers.zoom.us/docs/contact-center/web/video/)。
 
-## 5. エージェント接続を確認する
+## 5. 事前入力3項目を接続する
+
+1. 「設定 → 変数 → UniversityConsultation」で次のグローバル変数を追加する。データ型はすべて文字列、レポートで使用はオン。
+
+   | 変数名 | 入力項目 | グローバル Javascript 変数のパス |
+   | --- | --- | --- |
+   | `displayName` | 呼び名（40文字まで） | `window.universityConsultation.displayName` |
+   | `affiliation` | 立場（受験生・在学生・保護者・その他） | `window.universityConsultation.affiliation` |
+   | `topic` | 相談概要（300文字まで） | `window.universityConsultation.topic` |
+
+2. 各変数の取得元を「ウェブサイトのデータから → グローバル Javascript 変数」にして、上表のパスを保存する。
+3. 相談ページを再読み込みし、カテゴリーの開始ボタンで事前入力画面が開くことを確認する。
+4. 架空のデモ情報を入力して「入力して相談を開始」を押す。Zoomの着信名に呼び名が表示されることを確認する。
+
+全3項目は必須。ブラウザのメモリだけで保持し、アプリDB・URL・Web Storageへ保存しない。送信後はZoom側のエンゲージメント変数として扱われる。立場は選択時の表示言語で送られる。接続失敗時は入力を保持して再試行できる。
+
+根拠: [Web Videoのname指定](https://developers.zoom.us/docs/contact-center/web/video/)、[Webサイトデータからの変数取得](https://support.zoom.com/hc/en/article?id=zm_kb&sysparm_article=KB0059058)。
+
+## 6. エージェント接続を確認する
 
 1. 担当者がZoom Workplaceの「コンタクトセンター」にログインする。
 2. 対象キューの着信受け入れを有効にし、ステータスを「準備完了」にする。
@@ -96,7 +114,7 @@ Start → Condition(category)
 
 「受付中」はサイトの時間・接続設定の判定であり、担当者の空き状況をリアルタイム取得した表示ではない。待ち行列・実際の配信はZoom側で処理される。SDKの起動と担当者による受け入れは別々に確認する。
 
-## 6. 接続できないとき
+## 7. 接続できないとき
 
 | 症状 | 確認する場所 |
 | --- | --- |
@@ -122,6 +140,7 @@ Start → Condition(category)
 - 公開版3と3キューそれぞれの西川 継延の割り当てを管理画面で確認。
 - 3カテゴリーすべてで、再選択なしに対応する `Q_Univ_*` 宛てに着信し、応答後の参加者2名を確認。
 - カテゴリーのSDKロード前設定・終了時削除・再起動をテストし、TypeScript・変更対象ESLintが成功。
+- 事前入力フォームを1280pxと390pxで確認。必須入力、Escapeでの復帰、Tab循環、入力した「デモ学生」での着信・接続を確認。入力検証とSDK引き渡しのテスト2件、TypeScript、対象ESLintが成功。
 - カテゴリー未取得時の予備選択経路は公開検証を通過。利用者側での予備画面操作は未確認。
 - 以下は初期接続（公開版2）での確認記録。
 - `univ.localhost:3000`から担当者へ着信し、応答後の参加者2名・担当者側`Active Inbound video`を確認。

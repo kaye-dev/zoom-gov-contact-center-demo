@@ -10,10 +10,11 @@ test("custom video button loads once, uses the selected entry and releases on en
   Object.defineProperty(globalThis, "window", { value: dom.window, configurable: true });
   Object.defineProperty(globalThis, "document", { value: dom.window.document, configurable: true });
   const entries: string[] = [];
+  const names: (string | undefined)[] = [];
   const handlers = new Map<string, () => void>();
   let starts = 0, ended = 0, rejectInit = false;
   class Client {
-    async init({ entryId }: { entryId: string }) { if (rejectInit) throw new Error("OFFLINE"); entries.push(entryId); }
+    async init({ entryId, name }: { entryId: string; name?: string }) { if (rejectInit) throw new Error("OFFLINE"); entries.push(entryId); names.push(name); }
     startVideo() { starts++; }
     on(event: string, callback: () => void) { handlers.set(event, callback); }
   }
@@ -35,11 +36,14 @@ test("custom video button loads once, uses the selected entry and releases on en
     handlers.get("video-end")!();
     assert.equal(ended, 1);
     assert.equal(window.universityConsultation, undefined);
-    await startZoomVideo({ ...config, entryId: "careers" }, () => {}, "careers");
-    assert.deepEqual(window.universityConsultation, { category: "careers" });
+    await startZoomVideo({ ...config, entryId: "careers" }, () => {}, "careers", { displayName: " デモ学生 ", affiliation: "在学生", topic: " インターンについて " });
+    assert.deepEqual(window.universityConsultation, { category: "careers", displayName: "デモ学生", affiliation: "在学生", topic: "インターンについて" });
+    assert.deepEqual(names, [undefined, "デモ学生"]);
     assert.deepEqual(entries, ["admissions", "careers"]);
     assert.equal(document.querySelectorAll("script").length, 1);
     handlers.get("video-end")!();
+    await assert.rejects(startZoomVideo(config, () => {}, "admissions", { displayName: " ", affiliation: "受験生", topic: "相談" }), /INVALID_INTAKE/);
+    assert.equal(window.universityConsultation, undefined);
     rejectInit = true;
     await assert.rejects(startZoomVideo(config, () => {}, "admissions"), /OFFLINE/);
     rejectInit = false;
