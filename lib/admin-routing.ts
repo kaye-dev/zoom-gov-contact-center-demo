@@ -122,7 +122,7 @@ export function safeOutreachReturnPath(value: unknown, tenant?: TenantKey): stri
 
 /** Normalize an absent tenant only on pages with a municipal default. */
 export function resolveAdminDefaultTenantRedirect(url: URL, method: string): URL | null {
-  if (!["GET", "HEAD"].includes(method) || !["/admin/zaad", "/admin/languages"].includes(url.pathname) || url.searchParams.has("tenant")) return null;
+  if (!["GET", "HEAD"].includes(method) || !["/admin/zaad", "/admin/languages", "/admin/online-consultation-settings"].includes(url.pathname) || url.searchParams.has("tenant")) return null;
   const destination = new URL(url);
   destination.searchParams.set("tenant", "lg");
   return destination;

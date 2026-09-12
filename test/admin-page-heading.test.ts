@@ -9,6 +9,12 @@ import { locales } from "../app/i18n/dictionaries";
 import { defaultTenantDictionaries as dictionaries } from "../app/i18n/build-dictionary";
 
 const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+const pageSource = (path: string) => {
+  const text = source(`app/admin/${path}.tsx`);
+  return path === "maintenance-settings/MaintenanceSettingsForm"
+    ? text.replace(/<MaintenanceSettingsHeader[\s\S]*?\n        \/>/u, source("app/admin/maintenance-settings/MaintenanceSettingsHeader.tsx"))
+    : text;
+};
 const pages = [
   ["PHONE", "phone-settings/PhoneSettingsForm", "max-w-4xl", 'control.copy.pageHelpDescription.replace("{title}", t.admin.phoneManagement.title)'],
   ["CHAT", "chat-settings/ChatSettingsForm", "max-w-5xl", 'control.copy.pageHelpDescription.replace("{title}", t.admin.chatManagement.title)'],
@@ -21,7 +27,7 @@ const pages = [
 
 for (const [id, path, maxWidth, description] of pages) {
   test(`ALIGN-${id}: header and body align with the first tab and retain maximum width`, () => {
-    const text = source(`app/admin/${path}.tsx`);
+    const text = pageSource(path);
     for (const marker of ["header", "body"]) {
       const classes = text.match(new RegExp(`data-admin-page-${marker}\\s+className="([^"]+)"`))?.[1].split(/\s+/);
       assert.ok(classes, marker);
@@ -29,8 +35,13 @@ for (const [id, path, maxWidth, description] of pages) {
       assert.ok(classes.includes("mr-0"));
       assert.ok(!classes.includes("mx-auto"));
       assert.ok(!classes.includes("w-full"));
-      if (maxWidth && !(marker === "header" && ["PHONE", "CHAT", "LANG"].includes(id))) assert.ok(classes.includes(maxWidth));
+      if (maxWidth && !(marker === "header" && ["PHONE", "CHAT", "LANG", "MAINT"].includes(id))) assert.ok(classes.includes(maxWidth));
       if (marker === "header" && ["PHONE", "CHAT", "LANG"].includes(id)) { assert.ok(classes.includes("flex")); assert.ok(classes.includes("md:items-start")); }
+    }
+    if (id === "MAINT") {
+      const headerClasses = text.match(/data-admin-page-header\s+className="([^"]+)"/)?.[1] ?? "";
+      assert.match(headerClasses, /flex-wrap items-start justify-between/);
+      assert.doesNotMatch(headerClasses, /max-w-/);
     }
     if (id === "LANG") {
       const headerClasses = text.match(/data-admin-page-header\s+className="([^"]+)"/)?.[1] ?? "";
@@ -46,7 +57,7 @@ for (const [id, path, maxWidth, description] of pages) {
     }
   });
   if (description) test(`HELP-${id}: overview is passed only once to the common title`, () => {
-    const text = source(`app/admin/${path}.tsx`);
+    const text = pageSource(path);
     const help = text.match(/<AdminPageTitleHelp[\s\S]*?\/>/)?.[0];
     assert.ok(help);
     assert.ok(help.includes(`description={${description}}`));

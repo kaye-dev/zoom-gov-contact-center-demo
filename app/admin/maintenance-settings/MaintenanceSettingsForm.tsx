@@ -3,7 +3,7 @@ import { AdminTenantRouteSelect } from "@/app/components/admin/AdminTenantRouteS
 import { adminFetch as fetch } from "@/lib/admin-fetch";
 
 import { settingsSectionClassName, settingsInputFocusClassName } from "@/app/components/admin/settings-form-styles";
-import { AdminPageTitleHelp } from "@/app/components/admin/AdminPageTitleHelp";
+import { MaintenanceSettingsHeader } from "./MaintenanceSettingsHeader";
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
@@ -290,24 +290,16 @@ export function MaintenanceSettingsForm({
   return (
     <section>
       <div data-admin-page-chrome className="space-y-4">
-        <div
-          data-admin-page-header
-          className="ml-1 mr-0 flex max-w-5xl flex-wrap items-start justify-between gap-4"
-        >
-          <div className="max-w-3xl space-y-2">
-            <AdminPageTitleHelp
-              title={copy.title}
-              description={copy.description}
-              label={t.admin.pageDescriptionLabel.replace("{title}", copy.title)}
+        <MaintenanceSettingsHeader
+          environment={environment}
+          badgeClassName={environmentBadgeClass(environment)}
+          tenantControl={
+            <AdminTenantRouteSelect
+              dirty={mode !== savedConfig?.mode || scheduledStartAtJst !== savedScheduledStartAtJst || scheduledEndAtJst !== savedScheduledEndAtJst}
+              saving={isSubmitting}
             />
-          </div>
-          <AdminTenantRouteSelect dirty={mode !== savedConfig?.mode || scheduledStartAtJst !== savedScheduledStartAtJst || scheduledEndAtJst !== savedScheduledEndAtJst} saving={isSubmitting} />
-          <span
-            className={`inline-flex rounded-full border px-3 py-1 text-sm font-bold ${environmentBadgeClass(environment)}`}
-          >
-            {copy.environmentLabel}: {copy.environments[environment]}
-          </span>
-        </div>
+          }
+        />
         <AdminSectionNavigation />
       </div>
 
