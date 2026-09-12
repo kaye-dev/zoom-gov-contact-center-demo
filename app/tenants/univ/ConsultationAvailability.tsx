@@ -42,7 +42,7 @@ export function ConsultationAvailability({
   copy,
 }: ConsultationAvailabilityProps) {
   const { t } = useI18n();
-  const [launchState, setLaunchState] = useState<"idle" | "starting" | "active">("idle");
+  const [launchState, setLaunchState] = useState<"idle" | "starting" | "active" | "ended">("idle");
   const [launchError, setLaunchError] = useState(false);
   const [selected, setSelected] = useState<UniversityConsultationService | null>(null);
   const [intake, setIntake] = useState<ConsultationIntake>({ displayName: "", affiliation: "", topic: "" });
@@ -62,13 +62,12 @@ export function ConsultationAvailability({
       const service = fresh.services.find(item => item.serviceKey === serviceKey);
       if (!fresh.open || !service?.available || !service.video) throw new Error("UNAVAILABLE");
       await startZoomVideo(service.video, () => {
-        locked.current = false;
-        setLaunchState("idle");
-        // Zoom has no documented teardown API; reload this stateless page to
-        // remove the ended call's overlay and allow a fresh engagement.
-        window.location.reload();
+        // A video end event does not mean the post-engagement survey is done.
+        // Keep Zoom's UI and the launch lock until the user explicitly returns.
+        setLaunchState("ended");
+        setIntake({ displayName: "", affiliation: "", topic: "" });
       }, serviceKey, values);
-      if (locked.current) setLaunchState("active");
+      setLaunchState(current => current === "starting" ? "active" : current);
     } catch {
       locked.current = false;
       setLaunchState("idle");
@@ -108,10 +107,13 @@ export function ConsultationAvailability({
       {launchError && !selected && <Feedback tone="error" className="mt-5">{t.videoConsultation.failed}</Feedback>}
       {selected && <ConsultationIntakeDialog category={labels[selected]} initialValues={intake} launchError={launchError} onClose={() => setSelected(null)} onSubmit={values => void launch(selected, values)} />}
       {launchState !== "idle" && <p role="status" className="mt-5 text-sm">{t.videoConsultation[launchState]}</p>}
-      {launchState === "active" && (
+      {(launchState === "active" || launchState === "ended") && (
+        <div>
+        <p className="mt-2 text-sm text-fg-muted">{t.videoConsultation.returnHelp}</p>
         <button type="button" onClick={() => window.location.reload()} className="mt-3 cursor-pointer text-sm font-bold text-primary underline underline-offset-4">
           {t.videoConsultation.reset}
         </button>
+        </div>
       )}
     <div className="mt-7 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
       {(Object.keys(labels) as UniversityConsultationService[]).map(
