@@ -103,7 +103,21 @@ Start → Condition(category)
 
 根拠: [Web Videoのname指定](https://developers.zoom.us/docs/contact-center/web/video/)、[Webサイトデータからの変数取得](https://support.zoom.com/hc/en/article?id=zm_kb&sysparm_article=KB0059058)。
 
-## 6. エージェント接続を確認する
+## 6. 大学ロゴ付き待機室を設定する
+
+1. Zoomの「待機室 → 待機室を追加」で `WR_Univ_Consultation` を作成する。今回のIDは `Pw3B-bM9QdS7RCFwNMn-zg`。
+2. 「カスタマイズ」を開き、「ウェブとモバイルの両方にすべてのコンテンツを適用する」をオンにする。
+3. タイトルを `未来大学 オンライン相談`、表示を「ロゴと説明」にする。
+4. 「追加 ロゴ → アップロード ロゴ」でアセット名 `Mirai_University_Logo` を入力して「次へ」。ファイル名を入力し、アセット言語「日本語（日本）」、[大学ロゴPNG](assets/mirai-university-logo.png)を選び「追加 → 完了」を押す。
+5. 説明を `担当窓口へおつなぎしています。カメラ・マイクの設定をご確認のうえ、そのままお待ちください。` にして保存する。オーディオと待機室通知はオフ。
+6. 各 `Q_Univ_*` キューの「一般 → 待機室 → 編集 → 待機室を選択する」で `WR_Univ_Consultation` を選び「追加」。3キューすべてに待機室名が表示されることを確認する。
+7. 相談を開始し、担当者が応答する前に大学ロゴ・タイトル・案内文が表示されることを確認する。
+
+ロゴは既存の `public/favicons/univ.svg` を400×400pxのPNGに変換したもの。再生成は `node -e "require('sharp')('public/favicons/univ.svg').resize(400,400).png().toFile('docs/zoom/assets/mirai-university-logo.png')"`。Zoom画面の制約は1MB以下、縦横60〜400px。
+
+根拠: [待機室のカスタマイズ](https://support.zoom.com/hc/en/article?id=zm_kb&sysparm_article=KB0064592)。
+
+## 7. エージェント接続を確認する
 
 1. 担当者がZoom Workplaceの「コンタクトセンター」にログインする。
 2. 対象キューの着信受け入れを有効にし、ステータスを「準備完了」にする。
@@ -114,7 +128,7 @@ Start → Condition(category)
 
 「受付中」はサイトの時間・接続設定の判定であり、担当者の空き状況をリアルタイム取得した表示ではない。待ち行列・実際の配信はZoom側で処理される。SDKの起動と担当者による受け入れは別々に確認する。
 
-## 7. 接続できないとき
+## 8. 接続できないとき
 
 | 症状 | 確認する場所 |
 | --- | --- |
@@ -141,6 +155,7 @@ Start → Condition(category)
 - 3カテゴリーすべてで、再選択なしに対応する `Q_Univ_*` 宛てに着信し、応答後の参加者2名を確認。
 - カテゴリーのSDKロード前設定・終了時削除・再起動をテストし、TypeScript・変更対象ESLintが成功。
 - 事前入力フォームを1280pxと390pxで確認。必須入力、Escapeでの復帰、Tab循環、入力した「デモ学生」での着信・接続を確認。入力検証とSDK引き渡しのテスト2件、TypeScript、対象ESLintが成功。
+- 3キューの待機室割り当てと、利用者側での大学ロゴ・タイトル・案内文の実表示を確認。
 - カテゴリー未取得時の予備選択経路は公開検証を通過。利用者側での予備画面操作は未確認。
 - 以下は初期接続（公開版2）での確認記録。
 - `univ.localhost:3000`から担当者へ着信し、応答後の参加者2名・担当者側`Active Inbound video`を確認。
