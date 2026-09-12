@@ -192,6 +192,12 @@ const EXACT_POST_REVIEWED_CHAIN = [
     sha256: "b15257940dc85f1374e75aa267a7c5b5326f1693045f80f92f56474cbe88a220",
     classification: "destructive-reviewed",
   },
+  {
+    // 新規テーブルへの初期行追加だけで、既存のテーブル・行は変更しない。
+    name: "20260912090000_add_site_access_control",
+    sha256: "32cb3e08aab6d114b24fa26d1392d985a71a0f07654cede2cda28d5a2556139c",
+    classification: "expand-compatible",
+  },
 ] as const satisfies readonly ExactBatchMigration[];
 
 export type ReviewedMigrationBatchPlan = {

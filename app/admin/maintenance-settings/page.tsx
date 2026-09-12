@@ -1,3 +1,8 @@
+import { AccessSettingsClient } from "./AccessSettingsClient";
+import { allowedSiteAccessScopes } from "@/lib/server/site-access-admin";
+import { readSiteAccessSettings, publicSiteAccessSnapshot, siteAccessEnvironment } from "@/lib/server/site-access-settings";
+import type { SiteAccessScope, SiteAccessSnapshot } from "@/lib/site-access";
+import { normalizeRequestHostname } from "@/lib/hostname";
 import { getAdminPageTenant } from "@/lib/server/admin-scope";
 import { AdminTenantChoice } from "@/app/admin/AdminTenantChoice";
 import { headers } from "next/headers";
@@ -21,7 +26,15 @@ export default async function MaintenanceSettingsPage() {
   const requestHostname = requestHeaders.get("host");
   const snapshot = await getMaintenanceSettingsSnapshot({ requestHostname, tenantKey: selected.tenant.key });
 
-  return (
+  const allowedScopes = allowedSiteAccessScopes(actor, "VIEW", selected.allowed);
+  const updateScopes = allowedSiteAccessScopes(actor, "UPDATE", selected.allowed);
+  let initialValues: Partial<Record<SiteAccessScope, SiteAccessSnapshot>> = {};
+  try {
+    const rows = await readSiteAccessSettings(siteAccessEnvironment(normalizeRequestHostname(requestHostname) ?? ""));
+    initialValues = Object.fromEntries(rows.filter(row => allowedScopes.includes(row.scope)).map(row => [row.scope, publicSiteAccessSnapshot(row)]));
+  } catch { /* An unavailable snapshot stays unsaveable; the client offers retry. */ }
+
+  return (<>
     <MaintenanceSettingsForm
       key={selected.tenant.key}
       environment={snapshot.environment}
@@ -34,5 +47,6 @@ export default async function MaintenanceSettingsPage() {
       }
       allowUpdate={canAdminAccess(actor, "maintenance-settings", "UPDATE")}
     />
-  );
+    <AccessSettingsClient key={`access-${selected.tenant.key}`} initialValues={initialValues} allowedScopes={allowedScopes} updateScopes={updateScopes} />
+  </>);
 }

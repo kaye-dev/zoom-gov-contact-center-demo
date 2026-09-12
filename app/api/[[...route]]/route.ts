@@ -1,4 +1,10 @@
+import { X_ROBOTS_TAG_VALUE } from "@/lib/search-indexing";
 import { boundedBody, requireSameOrigin } from "@/lib/server/zaad/outreach-api";
+import { requirePublicAccess } from "@/lib/server/public-access-gate";
+import { publicRequestUrl } from "@/lib/public-access-request";
+import { isSiteAccessScope, SITE_ACCESS_CACHE_CONTROL } from "@/lib/site-access";
+import { readSiteAccessSettings, publicSiteAccessSnapshot, saveSiteAccessSettings, siteAccessEnvironment, SiteAccessError } from "@/lib/server/site-access-settings";
+import { allowedSiteAccessScopes } from "@/lib/server/site-access-admin";
 import { OutreachContractError } from "@/lib/zaad/outreach-contracts";
 import { resolveAdminSettingsTenant, ADMIN_SETTINGS_RESOURCES } from "@/lib/admin-settings-tenant";
 import { classifyAdminApi, parseAdminTenant } from "@/lib/admin-routing";
@@ -24,7 +30,6 @@ import {
 import { generateTemporaryPassword } from "@/lib/password-policy";
 import type { Prisma, PrismaClient } from "@/lib/generated/prisma/client";
 import {
-  countDemoRecords,
   createDemoRecord,
   ensureDatabase,
   listDemoRecords,
@@ -164,6 +169,17 @@ type AppEnvironment = {
 
 const app = new Hono<AppEnvironment>().basePath("/api");
 
+// Recheck at the data boundary even when this handler is invoked without Proxy.
+app.use("*", async (c, next) => {
+  const access = await requirePublicAccess(c.req.raw);
+  if (access.response) return access.response;
+  await next();
+  if (access.restricted) {
+    c.header("Cache-Control", SITE_ACCESS_CACHE_CONTROL);
+    c.header("X-Robots-Tag", X_ROBOTS_TAG_VALUE);
+  }
+});
+
 // テナント解決はDB接続の有無に関わらず必要なので、最初のミドルウェアで行う。
 app.use("*", async (c, next) => {
   c.set("tenantKey", resolveTenantFromHost(c.req.header("host")).key);
@@ -232,7 +248,6 @@ app.get("/health", async (c) => {
       driver: "postgresql",
       orm: "prisma",
       configured: hasDatabaseConfiguration(),
-      demoRecordCount: await countDemoRecords(prisma, c.get("tenantKey")),
     },
   });
 });
@@ -1182,6 +1197,33 @@ app.put("/admin/language-settings", async (c) => {
   } catch (error) {
     console.error("Failed to save language settings.", error);
     return c.json({ error: SETTINGS_ERROR_CODES.saveFailed }, 500);
+  }
+});
+
+app.on(["GET", "PUT"], "/admin/site-access-settings", async (c) => {
+  const action = c.req.method === "GET" ? "VIEW" : "UPDATE";
+  const authorization = await authorizeAdminApi(c.get("auth"), c.get("prisma"), c.req.raw.headers, "maintenance-settings", action);
+  if (!authorization.ok) return c.json({ code: authorization.error }, authorization.status);
+  const scopes = c.req.queries("scope") ?? [];
+  if (scopes.length !== 1 || !isSiteAccessScope(scopes[0])) return c.json({ code: "INVALID_SCOPE" }, 400);
+  const scope = scopes[0];
+  const tenants = await allowedAdminTenants(c.get("prisma"), authorization.actor, "maintenance-settings", action);
+  if (!allowedSiteAccessScopes(authorization.actor, action, tenants).includes(scope)) return c.json({ code: "ADMIN_ACCESS_DENIED" }, 403);
+  try {
+    const environment = siteAccessEnvironment(publicRequestUrl(c.req.raw).hostname);
+    if (action === "VIEW") {
+      const settings = await readSiteAccessSettings(environment);
+      return c.json(publicSiteAccessSnapshot(settings.find(row => row.scope === scope)!));
+    }
+    requireSameOrigin(c.req.raw);
+    if (c.req.header("content-type")?.split(";")[0] !== "application/json") return c.json({ code: "INVALID_REQUEST" }, 400);
+    let input: unknown;
+    try { input = JSON.parse(await boundedBody(c.req.raw, 4096)); } catch { return c.json({ code: "INVALID_REQUEST" }, 400); }
+    return c.json(await saveSiteAccessSettings(scope, environment, input, authorization.actor.id));
+  } catch (error) {
+    if (error instanceof SiteAccessError) return c.json({ code: error.code }, error.status);
+    if (error instanceof OutreachContractError) return c.json({ code: error.code }, error.status);
+    return c.json({ code: "SITE_ACCESS_UNAVAILABLE" }, 503);
   }
 });
 

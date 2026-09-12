@@ -32,6 +32,8 @@ Zoom 製品のデモ用に作成した、架空の市区町村ホームページ
 
 ローカルに Node.js や PostgreSQL の実行環境を直接用意せず、Docker Compose で開発サーバーと DB を起動できます。
 
+ローカルの業種選択と共通・業種別の閲覧コードについては[限定公開の運用](docs/operations/site-access.md)（[English](docs/operations/site-access.en.md)）を参照してください。
+
 メンテナンス設定は PostgreSQL の `site_maintenance_settings` を正本にします。migrationが`PRODUCTION`、`PREVIEW`、`DEVELOPMENT`の3行をversion 1・`DISABLED`で作成するため、外部storeや追加tokenの準備は不要です。`DATABASE_URL`にはprimary/read-writeのpooling endpointを設定し、read replicaは使用しません。設定行がない、形式が不正、またはDBから読めない場合、公開HTMLは安全側に倒して503のメンテナンス表示になります。`APP_CANONICAL_ORIGIN`は`BETTER_AUTH_URL`と同じoriginにし、Productionではcanonical HTTPS hostnameとの一致だけを`PRODUCTION`として扱います。
 
 緊急解除は管理画面で対象環境を`DISABLED`にするのが第一手段です。認証だけが故障し、DB接続が正常な場合に限り、Neon SQL Editorで[メンテナンスモード緊急解除](docs/deploy/vercel-neon/maintenance-recovery.md)のtransaction SQLを実行します。DB停止中はfail-closedの503を維持し、DBを復旧してから解除を確認します。コードrollbackは設定解除やDB復旧とは別操作です。

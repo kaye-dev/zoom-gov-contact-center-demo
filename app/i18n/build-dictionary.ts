@@ -1,3 +1,4 @@
+import { siteAccessDictionaries } from "./site-access";
 import { municipalWorkflowDictionaries } from "./municipal-workflows";
 import { outreachCommonDictionaries } from "./outreach-common";
 import { municipalOutreachDictionaries } from "./municipal-outreach";
@@ -53,6 +54,7 @@ export function buildDictionary(
 
   const dictionary: Dictionary = {
     ...chrome,
+    siteAccess: siteAccessDictionaries[locale],
     universityOutreach: universityOutreachDictionaries[locale],
     municipalOutreach: municipalOutreachDictionaries[locale],
     outreachCommon: outreachCommonDictionaries[locale],

@@ -457,6 +457,10 @@ test("reviewed migration manifest exactly classifies the current SHA-verified ch
       },
       {name: "20260911050000_outreach_tenant_scope", classification: "destructive-reviewed"},
       {name: "20260911051000_outreach_message_content", classification: "destructive-reviewed"},
+      {
+        name: "20260912090000_add_site_access_control",
+        classification: "expand-compatible",
+      },
     ],
   );
 });

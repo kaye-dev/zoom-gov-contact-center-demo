@@ -1,3 +1,4 @@
+import type { SiteAccessDictionary } from "./site-access";
 import type { MunicipalWorkflowDictionary } from "./municipal-workflows";
 import type { OutreachCommonDictionary } from "./outreach-common";
 import type { MunicipalOutreachDictionary } from "./municipal-outreach";
@@ -51,7 +52,7 @@ export const localeNames: Record<Locale, string> = {
  * 画面が参照する完成した辞書。共通クロームと業種コンテンツの合成結果であり、
  * 利用側（useI18n().t）から見た形はテナント軸の導入前と変わらない。
  */
-export type Dictionary = ChromeDictionary & TenantContentDictionary & { universityOutreach: UniversityOutreachDictionary; municipalOutreach: MunicipalOutreachDictionary; outreachCommon: OutreachCommonDictionary; municipalWorkflows: MunicipalWorkflowDictionary };
+export type Dictionary = ChromeDictionary & TenantContentDictionary & { siteAccess: SiteAccessDictionary; universityOutreach: UniversityOutreachDictionary; municipalOutreach: MunicipalOutreachDictionary; outreachCommon: OutreachCommonDictionary; municipalWorkflows: MunicipalWorkflowDictionary };
 
 export type IndustrySettingsDictionary = {
   openUniversitySettings: string;
