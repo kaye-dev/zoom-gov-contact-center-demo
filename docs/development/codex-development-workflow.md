@@ -109,6 +109,8 @@ pathと実際の内容で採用prototypeを特定し、live URL、PID、owner、
 
 明示呼出しで選択goalとprototypeを承認し、未解決の製品仕様がなければ実装を進める。実装中はfocused check、完成時は対象test、適用lint/typecheck、diff checkを行う。full testは具体的なcross-suite影響、buildはroute/configuration/bundling/server boundary等に理由がある場合に行う。
 
+[実装時のCI整合性規約](../../.claude/rules/implementation-quality.md)を実装開始時に読み、migrationの承認済み一覧・履歴期待値、UIや手順のtest/fixture/文書、Docker環境の依存を変更と一緒に整合させる。軽微な直接修正にも適用し、旧識別子・値を検索して別領域の固定期待値まで確認する。対象検証は実装中に済ませ、commit・pushへ先送りしない。毎回の全suite・DockerでのCI再現は追加しない。
+
 採用prototypeのTSX・fixture/config・関連shared source・CSS/参照資産（既存HTMLも可）を実装前に読み、goalに省略された視覚仕様も引き継ぐ。最新の直接修正指示を対象箇所へ優先し、実装の差を正当化するためにprototypeを書き換えない。
 
 成功済み結果は対象path・内容・実行時点で有効性を判断して再利用する。digestは補助情報であり、欠落だけで全checkを再実行しない。修正後は影響checkだけを再実行する。
@@ -160,7 +162,9 @@ Git規約・状態・task範囲・remote/GitHub identityを確認する。既存
 
 対象pathだけをstageし、staged diffと空白・秘密混入を確認する。有効な実装checkを再利用し、commit時はhookを実行する。機械的hook修正が対象内だけなら限定restageして1回retryする。commit済みtaskは空commitを作らずその差分を出荷する。
 
-エラーが発生した場合は原因を確認し、仕様・権限・データ契約・検証強度を保つ対象内の軽微修正を追加確認なしで行う。修正の影響するcheckだけを再実行し、関連pathだけをstageする。大規模変更や未決定事項が必要なら原因と対応案を報告して停止する。
+commit・push・PR操作のために独立したローカルtest/lint/typecheck/build/audit、DB検証、DockerでのCI再現を実行しない。実装結果が不足していても自動で検証せず未実施を記載する。既存hookと軽量なdiff/index/Git状態の確認は維持する。ユーザーが別途明示した修正・検証は、その依頼の範囲で行う。
+
+エラーが発生した場合は原因を確認し、仕様・権限・データ契約・検証強度を保つ対象内の軽微修正を追加確認なしで行い、関連pathだけをstageする。出荷中に独立したローカル検証を自動追加しない。既知の必須check失敗が残る場合や、検証を伴う修正・大規模変更・未決定事項の解決が必要なら、原因と対応案を報告して依存する出荷操作を停止する。結果の不足だけを既知の失敗とみなさない。
 
 remote topicにlocal HEADにないcommitがあれば停止する。安全なnon-force push、PR作成または最小更新、local/remote/PR HEAD照合まで同じ依頼内で行う。base先行だけでは同期を必須とせず、PRに競合がある場合はDraftで競合を報告できる。競合解消やbase同期は明示依頼時だけ行う。
 

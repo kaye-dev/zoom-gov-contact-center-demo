@@ -10,7 +10,7 @@ The current agent owns implementation and verification; do not delegate implemen
 ## Start
 
 1. Resolve the explicit `plans/<slug>/goal.md`, or the only canonical goal. Stop for an ambiguous choice, not for other plans when the requested path is known.
-2. Read the complete goal, applicable repository rules, affected code/tests, and Git status. Check its requirements, interfaces, completion conditions, and user-check handoff using [goal-quality.md](../plan/references/goal-quality.md).
+2. Read the complete goal, applicable repository rules including [implementation-quality.md](../../../.claude/rules/implementation-quality.md), affected code/tests, and Git status. Check its requirements, interfaces, completion conditions, and user-check handoff using [goal-quality.md](../plan/references/goal-quality.md).
 3. The explicit invocation approves the selected goal and prototype. Ask only for a genuinely unresolved specification or new consequential action. Browser availability is not a start gate.
 4. For UI work, read [workflow-verification-contract.md](../plan/references/workflow-verification-contract.md) and `.claude/rules/dev-server.md`. Read the adopted prototype TSX, fixture/config, relevant `.shared` components/styles and assets (or existing HTML/CSS); carry its visual specification into implementation even where the goal omits it, honoring later direct UI instructions. Legacy parity descriptions are historical validation data; retain product requirements and use smoke for this workflow.
 
@@ -24,6 +24,7 @@ For non-UI work, verify the goal-specific static checks. Do not create a prototy
 - At completion run affected tests, applicable lint/typecheck, and diff checks. Build for route/configuration/bundling/server-boundary changes or an explicit requirement. Run the full suite only for a concrete cross-suite impact or when no reliable focused selection exists.
 - Reuse passing checks when their paths, content, and execution time still apply. A digest is optional supporting information. A missing digest alone does not require re-execution. After a fix rerun only affected checks.
 - Review the final diff against the goal and latest instructions. Fix in-scope defects and continue; do not turn a test failure into another approval request for already-authorized repairs.
+- Resolve coupled migration registrations, test expectations, fixtures, documentation and CI environment dependencies within implementation, including direct minor fixes. Search old identifiers/values to find affected checks beyond the feature's own tests. Finish those checks here; do not defer them to commit/push or add a routine full CI reproduction.
 - Preserve user-owned servers. Use HMR for normal edits, an isolated build when needed, and the runtime ownership rules for any explicit restart.
 
 ## Brief final UI smoke
