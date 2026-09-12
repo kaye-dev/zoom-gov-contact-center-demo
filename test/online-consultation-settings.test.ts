@@ -8,7 +8,7 @@ import {
 } from "../lib/online-consultation-settings";
 
 const tag =
-  '<script src="https://us01.zoom.us/contact-center/video-client.js"></script>';
+  '<script type="module" src="https://us01ccistatic.zoom.us/us01cci/web-sdk/video-client.js" data-entry-id="entry-test" data-env="us01" data-apikey="public-test-key"></script>';
 
 test("online consultation accepts only official Zoom HTTPS script tags", () => {
   assert.equal(parseVideoClientWebTag(tag), tag);

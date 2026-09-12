@@ -4,8 +4,8 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
-import { createElement, useState } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { createElement, useState, type ReactNode } from "react";
+import { renderToStaticMarkup as renderMarkup } from "react-dom/server";
 import ts from "typescript";
 import { UniversityIcon, type UniversityIconName } from "../app/tenants/univ/icons/UniversityIcon";
 import { universityGlyphs } from "../app/tenants/univ/icons/UniversityGlyphs";
@@ -15,6 +15,12 @@ import { ConsultationAvailability } from "../app/tenants/univ/ConsultationAvaila
 import { univContent } from "../app/tenants/univ/content";
 import { buildDictionary } from "../app/i18n/build-dictionary";
 import type { Locale } from "../app/i18n/dictionaries";
+
+import { LanguageProvider } from "../app/i18n/LanguageProvider";
+const renderToStaticMarkup = (children: ReactNode) => {
+  const providerProps = { tenantKey: "univ" as const, availableLocales: ["ja"] as const, children };
+  return renderMarkup(createElement(LanguageProvider, providerProps));
+};
 
 // Render the real portal while supplying only request locale and router state.
 let locale: Locale = "ja";
@@ -130,9 +136,9 @@ function availabilityWithStatus(status: "ready" | "busy" | "unknown" | "unavaila
   }).outputText;
   const target = { exports: {} as { ConsultationAvailability: typeof ConsultationAvailability } };
   new Function("require", "module", "exports", code)((name: string) => {
-    if (name === "react") return { ...localRequire("react"), useState: () => useState({
+    if (name === "react") return { ...localRequire("react"), useState: (initial: unknown) => useState(initial === null ? {
       open: true, services: ["admissions", "student-support", "careers"].map(serviceKey => ({ serviceKey, status })),
-    }) };
+    } : initial) };
     return localRequire(name);
   }, target, target.exports);
   return target.exports.ConsultationAvailability;
