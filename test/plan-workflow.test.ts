@@ -22,6 +22,21 @@ const headings = [
 const workflowSkillNames = ["plan", "implement", "review", "workflow-retrospective", "workflow-performance-audit"];
 const allSkillNames = [...workflowSkillNames, "git-commit-push-pr", "kabeuchi"];
 
+test("出荷スキルの完了報告は到達可能な正本の代行依頼を参照する", async () => {
+  const skill = await read(".agents/skills/git-commit-push-pr/SKILL.md");
+  const link = /\[動作確認の代行依頼プロンプト\]\(([^)#]+)#[^)]+\)/u.exec(skill);
+  assert.ok(link, "出荷の完了手順から正本への参照が必要");
+  const target = path.resolve(root, ".agents/skills/git-commit-push-pr", link[1]);
+  assert.equal(target, path.join(root, "docs/development/codex-development-workflow.md"));
+  const workflow = await readFile(target, "utf8");
+  const section = /### 動作確認の代行依頼プロンプト\n([\s\S]*?)(?=\n### )/u.exec(workflow)?.[1];
+  assert.ok(section);
+  assert.equal([...section.matchAll(/^> <PR URL>/gmu)].length, 1, "定型文は正本に1件だけ置く");
+  assert.match(section, /`url`と`body`/u);
+  assert.match(section, /最新本文の取得失敗/u);
+  assert.match(await read("AGENTS.md"), /最終更新後に読み戻した対象PR本文/u);
+});
+
 function parseTomlSource(relative: string, source: string): Record<string, unknown> {
   try {
     return parseTOML(source) as Record<string, unknown>;
