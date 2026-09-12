@@ -160,7 +160,11 @@ test("every users and settings page places section navigation between header and
     "../app/admin/roles/[id]/RoleDetailsView.tsx",
   ]) {
     const view = source(file);
-    const header = view.indexOf("data-admin-page-header");
+    const extractedHeader = file.endsWith("maintenance-settings/MaintenanceSettingsForm.tsx");
+    if (extractedHeader) {
+      assert.match(source("../app/admin/maintenance-settings/MaintenanceSettingsHeader.tsx"), /data-admin-page-header/u);
+    }
+    const header = view.indexOf(extractedHeader ? "<MaintenanceSettingsHeader" : "data-admin-page-header");
     const section = view.indexOf("<AdminSectionNavigation />", header);
     const body = view.indexOf("data-admin-page-body", section);
 
