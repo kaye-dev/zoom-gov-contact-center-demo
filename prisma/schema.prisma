@@ -40,6 +40,60 @@ enum MaintenanceMode {
   SCHEDULED
 }
 
+enum SiteAccessScope {
+  global
+  lg
+  univ
+}
+
+model SiteAccessSetting {
+  scope       SiteAccessScope
+  environment MaintenanceEnvironment
+  enabled     Boolean                @default(false)
+  codeHash    String?
+  sessionDays Int                    @default(1)
+  revision    Int                    @default(1)
+  updatedAt   DateTime               @default(now()) @updatedAt @db.Timestamptz(3)
+
+  @@id([scope, environment])
+  @@map("site_access_settings")
+}
+
+model SiteAccessSession {
+  tokenHash   String                 @id
+  scope       SiteAccessScope
+  environment MaintenanceEnvironment
+  hostname    String
+  revision    Int
+  issuedAt    DateTime               @db.Timestamptz(3)
+  expiresAt   DateTime               @db.Timestamptz(3)
+
+  @@index([expiresAt])
+  @@map("site_access_sessions")
+}
+
+model SiteAccessAttempt {
+  bucketKey   String
+  windowStart DateTime @db.Timestamptz(3)
+  count       Int
+  expiresAt   DateTime @db.Timestamptz(3)
+
+  @@id([bucketKey, windowStart])
+  @@index([expiresAt])
+  @@map("site_access_attempts")
+}
+
+model SiteAccessAudit {
+  scope       SiteAccessScope
+  environment MaintenanceEnvironment
+  revision    Int
+  actorId     String
+  createdAt   DateTime               @default(now()) @db.Timestamptz(3)
+
+  @@id([scope, environment, revision])
+  @@map("site_access_audits")
+}
+
 enum AdminAccessAction {
   VIEW
   CREATE

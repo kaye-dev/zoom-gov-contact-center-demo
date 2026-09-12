@@ -37,7 +37,7 @@ export function classifyAdminApi(pathname: string) {
   const path = pathname.replace(/^\/api(?=\/)/u, "");
   if (!path.startsWith("/admin/")) return { kind: "public" } as const;
   const root = path.split("/")[2];
-  if (["users", "roles", "password-reset-requests", "developer-api"].includes(root)) return { kind: "global" } as const;
+  if (["users", "roles", "password-reset-requests", "developer-api", "site-access-settings"].includes(root)) return { kind: "global" } as const;
   if (root === "online-consultation-settings") return { kind: "tenant", resource: "online-consultation-settings" } as const;
   if (["reservations", "reservation-api-keys", "reservation-api-usage-limit", "reservation-api-request-logs"].includes(root))
     return { kind: "tenant", resource: "reservations" } as const;

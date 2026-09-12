@@ -1,3 +1,4 @@
+import { Pool } from "pg";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -124,7 +125,15 @@ test("sitemap path segments are encoded before URL resolution", () => {
   }
 });
 
-test("Proxy-owned redirects retain noindex and nofollow", async () => {
+test("Proxy-owned redirects retain noindex and nofollow", async (t) => {
+  t.mock.method(Pool.prototype, "query", async (_query: string, values: unknown[]) => ({ rows: ["global", "lg", "univ"].map(scope => ({scope,environment:values[0],enabled:false,codeHash:null,sessionDays:1,revision:1,updatedAt:new Date()})),rowCount:3 }));
+  t.mock.method(Pool.prototype, "connect", async () => ({query:async ({values}:{values:unknown[]})=>({rows:[{environment:values[1],version:1,mode:"DISABLED",scheduledStartAt:null,scheduledEndAt:null,revision:1,updatedAt:new Date()}]}),release(){}}));
+  const entryLower = await proxy(new NextRequest("http://localhost:3002/news?source=test"));
+  assert.equal(entryLower.status, 307);
+  assert.equal(entryLower.headers.get("location"), "http://localhost:3002/");
+  const entryRoot = await proxy(new NextRequest("http://localhost:3002/", {headers:{"x-public-request-path":"/admin", "x-public-request-method":"GET", "x-mirai-maintenance-rewrite":"1"}}));
+  assert.equal(entryRoot.headers.get("x-middleware-request-x-public-request-path"), "/");
+  assert.equal(entryRoot.headers.has("x-middleware-request-x-mirai-maintenance-rewrite"), false);
   const legacy = await proxy(
     new NextRequest(
       "https://city.example.jp/life/frequently-asked-questions/nanao-branch-office/branch-office-access?from=legacy",
@@ -184,7 +193,8 @@ test("the robots route resolves the canonical origin from the request host", () 
     new URL("../app/robots.ts", import.meta.url),
     "utf8",
   );
-  assert.match(robotsSource, /buildRobotsForHost\(\(await headers\(\)\)\.get\("host"\)\)/);
+  assert.match(robotsSource, /const host = \(await headers\(\)\)\.get\("host"\)/);
+  assert.match(robotsSource, /buildRobotsForHost\(host\)/);
 });
 
 test("sitemap contains the complete stable set of 276 canonical public HTML URLs", async () => {

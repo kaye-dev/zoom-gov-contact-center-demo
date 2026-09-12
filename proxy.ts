@@ -3,6 +3,11 @@ import { ADMIN_REQUEST_PATH_HEADER, isAdminPath, localAdminRequest, resolveOutre
 import { resolveFaqLegacyRedirect } from "@/lib/legacy-redirects";
 import { X_ROBOTS_TAG_VALUE } from "@/lib/search-indexing";
 import { handleMaintenanceRequest } from "@/lib/server/maintenance-request-gate";
+import { requirePublicAccess } from "@/lib/server/public-access-gate";
+import { classifyAccessRequest, publicRequestUrl } from "@/lib/public-access-request";
+import { resolvePublicSite } from "@/lib/public-site-routing";
+import { PUBLIC_REQUEST_PATH_HEADER, PUBLIC_REQUEST_METHOD_HEADER, PUBLIC_REQUEST_PROTOCOL_HEADER, SITE_ACCESS_CACHE_CONTROL } from "@/lib/site-access";
+import { MAINTENANCE_REWRITE_HEADER } from "@/lib/maintenance-request";
 
 export async function proxy(request: NextRequest) {
   const admin = localAdminRequest(request.url, request.method, process.env.NODE_ENV === "production");
@@ -15,6 +20,10 @@ export async function proxy(request: NextRequest) {
     return response;
   }
   const requestHeaders = new Headers(request.headers);
+  requestHeaders.delete(MAINTENANCE_REWRITE_HEADER);
+  requestHeaders.set(PUBLIC_REQUEST_PATH_HEADER, request.nextUrl.pathname + request.nextUrl.search);
+  requestHeaders.set(PUBLIC_REQUEST_METHOD_HEADER, request.method);
+  requestHeaders.set(PUBLIC_REQUEST_PROTOCOL_HEADER, request.nextUrl.protocol);
   requestHeaders.delete(ADMIN_REQUEST_PATH_HEADER);
   if (isAdminPath(request.nextUrl.pathname))
     requestHeaders.set(ADMIN_REQUEST_PATH_HEADER, request.nextUrl.pathname + request.nextUrl.search);
@@ -22,6 +31,27 @@ export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const normalizedPathname =
     pathname.length > 1 ? pathname.replace(/\/+$/u, "") : pathname;
+
+  const access = await requirePublicAccess(request);
+  if (access.response) return access.response;
+  const url = publicRequestUrl(request);
+  const kind = classifyAccessRequest(url, request.method);
+  const entry = resolvePublicSite(url.host).kind === "entry";
+  if (entry && kind === "public" && pathname !== "/" && !pathname.startsWith("/_next/") && !pathname.startsWith("/api/")) {
+    const destination = new URL("/", url);
+    const response = NextResponse.redirect(destination, 307);
+    response.headers.set("Cache-Control", SITE_ACCESS_CACHE_CONTROL);
+    response.headers.set("X-Robots-Tag", X_ROBOTS_TAG_VALUE);
+    return response;
+  }
+  const maintenance = entry || kind === "bootstrap"
+    ? NextResponse.next({ request: { headers: request.headers } })
+    : await handleMaintenanceRequest(request);
+  if (maintenance.status === 503) {
+    maintenance.headers.set("X-Robots-Tag", X_ROBOTS_TAG_VALUE);
+    maintenance.headers.set("Cache-Control", SITE_ACCESS_CACHE_CONTROL);
+    return maintenance;
+  }
   const legacyDestination = resolveFaqLegacyRedirect(normalizedPathname);
 
   if (legacyDestination !== null) {
@@ -38,8 +68,8 @@ export async function proxy(request: NextRequest) {
     response.headers.set("X-Robots-Tag", X_ROBOTS_TAG_VALUE);
     return response;
   }
-  const response = await handleMaintenanceRequest(request);
-  if (isAdminPath(pathname)) response.headers.set("Cache-Control", "no-store");
+  const response = maintenance;
+  if (isAdminPath(pathname) || kind === "bootstrap" || pathname === "/robots.txt" || access.restricted) response.headers.set("Cache-Control", SITE_ACCESS_CACHE_CONTROL);
   response.headers.set("X-Robots-Tag", X_ROBOTS_TAG_VALUE);
   return response;
 }
@@ -52,6 +82,7 @@ function createProtectedRedirect(
   const destination = new URL(request.url);
   destination.pathname = pathname;
   const response = NextResponse.redirect(destination, status);
+  response.headers.set("Cache-Control", SITE_ACCESS_CACHE_CONTROL);
   response.headers.set("X-Robots-Tag", X_ROBOTS_TAG_VALUE);
   return response;
 }
