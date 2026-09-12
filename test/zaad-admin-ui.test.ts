@@ -765,7 +765,8 @@ test("contact group counts and detail chrome keep localized labels and saved-ID 
     assert.ok(text.includes('break-all text-sm text-fg-muted'));
   }
   assert.ok(groups.includes('{d.defaultGroups.listId}：{detail.group.id}'));
-  assert.ok(detail.includes('border-l-2 border-accent pl-3 text-sm text-red-700 dark:text-red-300'));
+  assert.ok(detail.includes('<Feedback tone="warning">{data.group.bindingState === "MISSING" ? d.missingHelp : t.outreachCommon.bindingConflict}</Feedback>'));
+  assert.ok(detail.includes('<Feedback tone="error" action={<button className={secondary} onClick={refresh}>{common.retry}</button>}>{d.providerFailure}</Feedback>'));
   assert.ok(view.includes('isOutreachDetailPage(selected,'));
   assert.ok(view.includes('{!showingGroupDetail && <AdminTenantRouteSelect'));
 });
@@ -786,7 +787,9 @@ test("default detail keeps search and sync semantics with a portal help and cent
   assert.ok(detail.includes('onClick={() => void sync(row.id)}><RefreshIcon />'));
   assert.ok(detail.includes('canSync && needsLink ? <TableRowActions'));
   assert.ok(detail.includes('text-center"><div className="flex justify-center"'));
-  assert.ok(detail.includes('ref={noticeRef} tabIndex={-1} role="status"'));
+  assert.ok(detail.includes('<Feedback tone={noticeTone}>{notice}</Feedback>'));
+  assert.ok(detail.includes('<Feedback tone={errorTone} ref={errorRef} tabIndex={-1}>{error}</Feedback>'));
+  assert.ok(!detail.includes('noticeRef.current?.focus()'));
 });
 
 test("CSV-AUTO-01: preview is capped at five rows, but submission and errors cover the entire CSV", async () => {
