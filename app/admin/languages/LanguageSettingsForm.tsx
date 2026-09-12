@@ -12,7 +12,6 @@ import { Checkbox } from "@/app/components/Checkbox";
 import { localeNames } from "@/app/i18n/dictionaries";
 import {
   DEFAULT_SITE_LOCALE,
-  SITE_LOCALES,
   isSettingsErrorCode,
   type LanguageSetting,
   type LanguageSettings,
@@ -43,7 +42,6 @@ export function LanguageSettingsForm({
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const enabledCount = locales.filter(({ enabled }) => enabled).length;
   const feedbackMessage = feedback
     ? feedback.kind === "success"
       ? t.admin.settings.saved
@@ -121,7 +119,7 @@ export function LanguageSettingsForm({
       <div data-admin-page-chrome className="space-y-4">
         <div
           data-admin-page-header
-          className="ml-1 mr-0 flex max-w-3xl flex-col gap-4 md:flex-row md:items-center"
+          className="ml-1 mr-0 flex flex-col gap-4 md:flex-row md:items-start md:justify-between"
         >
           <AdminPageTitleHelp
             title={t.admin.languageManagement.title}
@@ -133,20 +131,11 @@ export function LanguageSettingsForm({
         <AdminSectionNavigation />
       </div>
 
-      <div data-admin-page-body className="ml-1 mr-0 mt-6 max-w-3xl">
+      <div data-admin-page-body className="ml-1 mr-0 mt-0 max-w-3xl">
       <form
         onSubmit={submit}
         className={settingsSectionClassName}
       >
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-4">
-          <h2 className="font-bold">
-            {t.admin.languageManagement.enabledCountLabel}
-          </h2>
-          <p className="rounded-full bg-surface-accent-subtle px-3 py-1 text-sm font-bold text-accent">
-            {enabledCount} / {SITE_LOCALES.length}
-          </p>
-        </div>
-
         <ol className="space-y-0">
           {locales.map((setting, index) => (
             <LanguageRow

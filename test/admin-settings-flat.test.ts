@@ -73,7 +73,9 @@ for (const canEdit of [true, false]) {
     const html = renderAdmin(createElement(LanguageSettingsForm, { canEdit, initialSettings: { locales: locales.map(locale => ({ locale, enabled: true })) } }), "/admin/languages");
     assert.match(html, /<form[^>]*class="min-w-0 space-y-5 border-0 p-0"/);
     assert.equal((html.match(/border-b border-line-subtle py-4 sm:flex-row/g) ?? []).length, 5);
-    assert.match(html, /5 \/ 5/);
+    assert.doesNotMatch(html, /5 \/ 5/);
+    assert.ok(!html.includes(dictionaries.ja.admin.languageManagement.enabledCountLabel));
+    assert.match(html, /data-admin-page-body="true" class="ml-1 mr-0 mt-0 max-w-3xl"><form[^>]*><ol/);
     assert.ok(html.includes(dictionaries.ja.admin.languageManagement.japaneseRequired));
     assert.equal((html.match(/type="checkbox"/g) ?? []).length, 5);
     assert.match(html, /max-w-3xl/);
