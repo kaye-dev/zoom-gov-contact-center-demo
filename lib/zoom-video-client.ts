@@ -1,4 +1,5 @@
 import type { ZoomVideoConfig } from "./zoom-video-tag";
+import type { UniversityConsultationService } from "./online-consultation-settings";
 
 type VideoClient = {
   init(options: { entryId: string }): Promise<void>;
@@ -6,7 +7,10 @@ type VideoClient = {
   on(event: string, callback: () => void): void;
 };
 declare global {
-  interface Window { VideoClient?: new (options: { env: string }) => VideoClient }
+  interface Window {
+    VideoClient?: new (options: { env: string }) => VideoClient;
+    universityConsultation?: { category: UniversityConsultationService };
+  }
 }
 let sdk: Promise<void> | undefined;
 let source: string | undefined;
@@ -42,10 +46,12 @@ function loadSdk(config: ZoomVideoConfig): Promise<void> {
 }
 
 /** Keep one active engagement across service buttons and release it on Zoom's end event. */
-export async function startZoomVideo(config: ZoomVideoConfig, onEnd: () => void): Promise<void> {
+export async function startZoomVideo(config: ZoomVideoConfig, onEnd: () => void, category: UniversityConsultationService): Promise<void> {
   if (active) throw new Error("VIDEO_ALREADY_ACTIVE");
   active = true;
   try {
+    // Zoom's website-data variable reads this before the engagement enters the flow.
+    window.universityConsultation = { category };
     await loadSdk(config);
     const client = new window.VideoClient!({ env: config.environment });
     let released = false;
@@ -53,6 +59,7 @@ export async function startZoomVideo(config: ZoomVideoConfig, onEnd: () => void)
       if (released) return;
       released = true;
       active = false;
+      delete window.universityConsultation;
       onEnd();
     };
     client.on("video-end", release);
@@ -62,6 +69,7 @@ export async function startZoomVideo(config: ZoomVideoConfig, onEnd: () => void)
     await client.startVideo();
   } catch (error) {
     active = false;
+    delete window.universityConsultation;
     throw error;
   }
 }

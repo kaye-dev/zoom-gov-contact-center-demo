@@ -9,20 +9,27 @@
 | フロー | デモ-日本郵政G-窓口応対 |
 | Flow ID | `p0rbD_YkR4i-w_05VGcK3Q` |
 | チャネル | ビデオ |
-| 公開バージョン | 2（旧バージョン1はアーカイブ） |
-| キュー | `Q_Video_Consultation_DEMO` |
-| Queue ID | `UvERMXRITjOlzu4wr9c99Q` |
+| 公開バージョン | 3（旧バージョンはアーカイブ） |
+| キュー | 下表の3キュー |
 | エージェント | 西川 継延 |
 | エントリーポイント名 | `JP-POST-CX` |
 | Entry ID | `8oAUdZfTT0-4vGx-uqdF0g` |
 | サイト設定対象 | 大学（`univ`） |
 
-今回の3相談項目は同じデモ窓口へ接続する。項目別の担当者へ分ける場合は、項目ごとにキュー・フロー・Entry IDを用意し、手順4でそれぞれのタグを登録する。Flow ID、Entry ID、Queue IDは別物。
+3相談項目で同じフロー・Entry IDを使用し、サイトから渡すカテゴリーでキューを切り替える。Flow ID、Entry ID、Queue IDは別物。
+
+| 相談項目 / category | キュー | Queue ID |
+| --- | --- | --- |
+| 入学・入試 / `admissions` | `Q_Univ_Admissions` | `XV6k3mqWTYKVGU9h-Yybcw` |
+| 学生生活・奨学金 / `student-support` | `Q_Univ_StudentSupport` | `KxtVE5yEQMaCB0A65Kl-ug` |
+| キャリア / `careers` | `Q_Univ_Careers` | `fLwNiDdrSfSjaUezRUqraw` |
+
+デモでは全キューに西川 継延を割り当てる。担当者を分けるときは各キューの割り当てだけを変更する。旧 `Q_Video_Consultation_DEMO` は残してあるが、新フローの接続先には使用しない。
 
 ## 2. ビデオキューを作る
 
 1. Zoom管理ポータルの「コンタクトセンター管理 → キュー → キューを追加」を開く。
-2. 名前に `Q_Video_Consultation_DEMO`、チャネルに「ビデオ」を指定して保存する。既に存在すればそのキューを開く。
+2. 上表の3キューをそれぞれ作成し、チャネルに「ビデオ」を指定して保存する。既に存在すればそのキューを開く。以下は3キューすべてで実施する。
 3. 「一般 → 割り当てられたユーザー → ユーザーを追加する → エージェントを追加」で担当者を選択して追加する。
 4. 割り当て一覧に対象エージェントが表示されることを確認する。Zoom Contact Centerライセンスを持つ既存ユーザーを使う。
 5. 「着信設定」で次を確認する。
@@ -39,18 +46,25 @@
 
 1. [フロー一覧](https://zoom.us/cci/index/admin#/admin-studios)から対象フローを開く。新規なら「フローを追加 → ビデオ」を選ぶ。
 2. 公開済みフローを編集するときは「その他のフローオプション → ドラフト バージョンを作成」。説明を入力して追加する。
-3. 左の「ルーティング先」をキャンバスへドラッグする。
-4. 追加した `Route_to` を選び「設定 → ルーティング先: キュー → キュー」で手順2のキュー名を検索して選択する。
-5. `Start` を選び「終了 → ビデオ」で `Route_to` を選ぶ。キャンバス上で線が接続されることを確認する。
+3. Zoomの「設定（Preferences）→ 変数」でカスタムグループ `UniversityConsultation` を作り、`category` を追加する。種類: グローバル変数、データ型: 文字列、レポートで使用: オン。値の取得元を「ウェブサイトのデータから → グローバル Javascript 変数」、パスを `window.universityConsultation.category` にして保存する。
+4. フローへ戻り「ルーティング先」を3個配置する。名前を `Route_Admissions` / `Route_StudentSupport` / `Route_Careers` にし、それぞれ「設定 → キュー」で上表の対応キューを選ぶ。
+5. 「条件」を配置する。「設定 → タイプ: 変数」で `category` を選び、パスが `{{global_custom.UniversityConsultation.category}}` であることを確認する。「終了 → 終了を追加」で3出口を作り、条件を「次に等しい」、値を上表のcategory、終了名を相談項目名、次のウィジェットを対応する `Route_*` にする。
+   - 予備経路として「入力を収集」を配置する。クイック応答・ボタン、プロンプト: 画像、テキスト: `相談カテゴリーを選んでください。`。画像アセット・音声は未指定、退出可、最大待機300秒。
+   - 予備経路の「終了」で3出口を作り、終了名・ボタン名を相談項目名、次のウィジェットを対応する `Route_*` にする。タイムアウト・整合なしは未接続で終了する。
+   - `Condition → 終了 → 整合なし` を `CollectInput` へ、`Start → 終了 → ビデオ` を `Condition` へ接続する。
 6. 「保存」を押し、保存ボタンが無効になるまで待つ。
 7. 「公開」を押す。検証エラーがあれば該当ウィジェットを修正する。公開確認で対象の新旧バージョンを確認して「公開」を押す。
 8. バージョン表示が「公開済み」になったことを確認する。ドラフトの保存だけでは着信経路は切り替わらない。
 
 ```text
-Start（ビデオ） → Route_to（ビデオキュー） → 準備完了の担当者へ着信
+Start → Condition(category)
+          ├ admissions      → Route_Admissions     → 入学・入試キュー
+          ├ student-support → Route_StudentSupport → 学生生活・奨学金キュー
+          ├ careers         → Route_Careers        → キャリアキュー
+          └ 整合なし        → CollectInput（カテゴリー選択）→ 対応するRoute_*
 ```
 
-根拠: [Route Toウィジェット](https://support.zoom.com/hc/en/article?id=zm_kb&sysparm_article=KB0063774)。
+根拠: [グローバル変数](https://support.zoom.com/hc/en/article?id=zm_kb&sysparm_article=KB0059058)、[Condition](https://support.zoom.com/hc/en/article?id=zm_kb&sysparm_article=KB0065873)、[Collect Input](https://support.zoom.com/hc/en/article?id=zm_kb&sysparm_article=KB0065278)、[Route To](https://support.zoom.com/hc/en/article?id=zm_kb&sysparm_article=KB0063774)。
 
 ## 4. Entry IDとサイトを接続する
 
@@ -63,7 +77,7 @@ Start（ビデオ） → Route_to（ビデオキュー） → 準備完了の担
    ```
 
 4. 本アプリの `/admin/online-consultation-settings?tenant=univ` を開く。対象業種が「大学」であることを確認する。
-5. 「入学・入試」「学生生活・奨学金」「キャリア」の各タブの「接続用Webタグ」へ貼り付ける。各項目で接続先を分ける場合は対応するタグを使う。
+5. 「入学・入試」「学生生活・奨学金」「キャリア」の各タブの「接続用Webタグ」へ同じタグを貼り付ける。キューの切り替えはカテゴリー変数で行う。
 6. 「設定を保存」を押す。全タブが一括保存される。「大学の設定を保存しました」の表示を確認する。
 7. 相談画面を再読み込みし、受付時間内に相談開始ボタンが有効になることを確認する。
 
@@ -101,10 +115,15 @@ Start（ビデオ） → Route_to（ビデオキュー） → 準備完了の担
 - 起動: `lib/zoom-video-client.ts`。カスタムボタン方式ではスクリプトを`src`のみでロードし、`new VideoClient({ env }) → init({ entryId }) → startVideo()`を呼ぶ。`data-apikey`・`data-entry-id`をスクリプトへ付けると自動埋め込み方式になるため混在させない。
 - 公開API: `app/api/public/consultation-availability/route.ts`。公開アクセス・大学テナント・受付時間を検証し、開始クリック時にも再取得する。
 - 終了: `ConsultationAvailability.tsx`。SDKの終了イベントでページを再読み込みし、終了済みオーバーレイを除去する。
+- カテゴリー引き継ぎ: SDKロード前に `window.universityConsultation.category` を設定し、終了・初期化失敗時に削除する。URL・Web Storageには保存しない。
 
 ## 今回の確認結果（2026-09-13）
 
-- 公開版2、キュー割り当て、大学3項目のタグ保存を管理画面で確認。
+- 公開版3と3キューそれぞれの西川 継延の割り当てを管理画面で確認。
+- 3カテゴリーすべてで、再選択なしに対応する `Q_Univ_*` 宛てに着信し、応答後の参加者2名を確認。
+- カテゴリーのSDKロード前設定・終了時削除・再起動をテストし、TypeScript・変更対象ESLintが成功。
+- カテゴリー未取得時の予備選択経路は公開検証を通過。利用者側での予備画面操作は未確認。
+- 以下は初期接続（公開版2）での確認記録。
 - `univ.localhost:3000`から担当者へ着信し、応答後の参加者2名・担当者側`Active Inbound video`を確認。
 - 入学相談の接続記録: `G0LZY2lZQae1FH8xgHYoNQ`。学生生活相談でも接続と利用者退出後の相談ページ復帰を確認。
 - 復帰後、キャリア相談のSDK再起動と待機画面を確認。

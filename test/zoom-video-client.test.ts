@@ -19,7 +19,8 @@ test("custom video button loads once, uses the selected entry and releases on en
   }
   const config = { scriptSrc: "https://us01ccistatic.zoom.us/us01cci/web-sdk/video-client.js", entryId: "admissions", apiKey: "public-key", environment: "us01" };
   try {
-    const first = startZoomVideo(config, () => ended++);
+    const first = startZoomVideo(config, () => ended++, "admissions");
+    assert.equal(window.universityConsultation?.category, "admissions");
     const script = document.querySelector("script")!;
     assert.ok(script);
     assert.equal(script.type, "module");
@@ -28,19 +29,21 @@ test("custom video button loads once, uses the selected entry and releases on en
     window.VideoClient = Client;
     script.dispatchEvent(new dom.window.Event("load"));
     await first;
-    await assert.rejects(startZoomVideo(config, () => {}), /ALREADY_ACTIVE/);
+    await assert.rejects(startZoomVideo(config, () => {}, "admissions"), /ALREADY_ACTIVE/);
     assert.equal(starts, 1);
     handlers.get("video-click-end")!();
     handlers.get("video-end")!();
     assert.equal(ended, 1);
-    await startZoomVideo({ ...config, entryId: "careers" }, () => {});
+    assert.equal(window.universityConsultation, undefined);
+    await startZoomVideo({ ...config, entryId: "careers" }, () => {}, "careers");
+    assert.deepEqual(window.universityConsultation, { category: "careers" });
     assert.deepEqual(entries, ["admissions", "careers"]);
     assert.equal(document.querySelectorAll("script").length, 1);
     handlers.get("video-end")!();
     rejectInit = true;
-    await assert.rejects(startZoomVideo(config, () => {}), /OFFLINE/);
+    await assert.rejects(startZoomVideo(config, () => {}, "admissions"), /OFFLINE/);
     rejectInit = false;
-    await startZoomVideo(config, () => {});
+    await startZoomVideo(config, () => {}, "admissions");
     handlers.get("video-end")!();
   } finally {
     dom.window.close();

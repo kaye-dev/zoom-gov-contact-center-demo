@@ -61,7 +61,7 @@ export function ConsultationAvailability({
         // Zoom has no documented teardown API; reload this stateless page to
         // remove the ended call's overlay and allow a fresh engagement.
         window.location.reload();
-      });
+      }, serviceKey);
       if (locked.current) setLaunchState("active");
     } catch {
       locked.current = false;
