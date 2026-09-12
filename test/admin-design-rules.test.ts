@@ -21,7 +21,8 @@ test("DOC-01 design rules share the current UI verification contract", () => {
 });
 test("DOC-02 adopted administration layout and safety contracts remain discoverable", () => {
   const design = read("DESIGN.md");
-  for (const value of ["1024px", "1023px", "18rem", "4.25rem", "200ms", "X/Y座標は固定", "最下部", "公開サイトへ戻る", "⌘B", "reduced-motion", "ダッシュボード → 予約システム → ZAAD → ユーザー → ロール → 電話管理 → AIチャット管理 → Developer API → 設定", "主領域全幅", "4px内側", "SearchInput", "Pagination", "1ページ", "AdminPageTitleHelp", "44px", "320px", "640px", "検索一致総数", "60dvh", "単一のaccent境界", "forced-colors", "水平線"]) assert.ok(design.includes(value), value);
+  assert.match(design, /管理入口はマイページとし、主ナビには含めない/u);
+  for (const value of ["1024px", "1023px", "18rem", "4.25rem", "200ms", "X/Y座標は固定", "最下部", "公開サイトへ戻る", "⌘B", "reduced-motion", "予約システム → ZAAD → ユーザー → ロール → 電話管理 → AIチャット管理 → オンライン相談 → Developer API → 設定", "主領域全幅", "4px内側", "SearchInput", "Pagination", "1ページ", "AdminPageTitleHelp", "44px", "320px", "640px", "検索一致総数", "60dvh", "単一のaccent境界", "forced-colors", "水平線"]) assert.ok(design.includes(value), value);
 });
 test("DOC-03 action count, exclusions and accessible portal contract are explicit", () => {
   const design = read("DESIGN.md");

@@ -12,19 +12,18 @@ import {
 } from "react";
 
 import { CalendarMonthIcon } from "@/app/components/svg/CalendarMonthIcon";
-import { CodeIcon } from "@/app/components/svg/CodeIcon";
-import { PhoneIcon } from "@/app/components/svg/PhoneIcon";
-import { OnlineConsultationIcon } from "@/app/components/svg/OnlineConsultationIcon";
-import { ChatIcon } from "@/app/components/svg/ChatIcon";
-import { ShieldIcon } from "@/app/components/svg/ShieldIcon";
+import { CodeBlocksIcon } from "@/app/components/svg/CodeBlocksIcon";
+import { WifiCallingBar2Icon } from "@/app/components/svg/WifiCallingBar2Icon";
+import { AiOnlineConsultationIcon } from "@/app/components/svg/AiOnlineConsultationIcon";
+import { AiChatIcon } from "@/app/components/svg/AiChatIcon";
+import { RoleCardIcon } from "@/app/components/svg/RoleCardIcon";
 import { ChevronLeftIcon } from "@/app/components/svg/ChevronLeftIcon";
-import { DashboardIcon } from "@/app/components/svg/DashboardIcon";
-import { GroupIcon } from "@/app/components/svg/GroupIcon";
+import { PersonIcon } from "@/app/components/svg/PersonIcon";
 import { LogoutIcon } from "@/app/components/svg/LogoutIcon";
-import { SettingsIcon } from "@/app/components/svg/SettingsIcon";
+import { MaterialSettingsIcon } from "@/app/components/svg/MaterialSettingsIcon";
 import { SmartToyIcon } from "@/app/components/svg/SmartToyIcon";
 
-import { useI18n } from "../i18n/LanguageProvider";
+import { useI18n } from "@/app/i18n/LanguageProvider";
 import type {
   AdminNavigationModel,
   AdminPrimaryNavigationKey,
@@ -47,14 +46,13 @@ const primaryIcons: Record<
   AdminPrimaryNavigationKey,
   ComponentType<{ className?: string }>
 > = {
-  dashboard: DashboardIcon,
-  users: GroupIcon,
-  "phone-settings": PhoneIcon,
-  "chat-settings": ChatIcon,
-  "online-consultation-settings": OnlineConsultationIcon,
-  settings: SettingsIcon,
-  roles: ShieldIcon,
-  "developer-api": CodeIcon,
+  users: PersonIcon,
+  "phone-settings": WifiCallingBar2Icon,
+  "chat-settings": AiChatIcon,
+  "online-consultation-settings": AiOnlineConsultationIcon,
+  settings: MaterialSettingsIcon,
+  roles: RoleCardIcon,
+  "developer-api": CodeBlocksIcon,
   reservations: CalendarMonthIcon,
   zaad: SmartToyIcon,
 };
@@ -215,6 +213,7 @@ export function AdminNavigation({
             onKeyDown={handleAccountMenuKeyDown}
             className="absolute bottom-full left-3 z-20 mb-2 w-64 overflow-hidden rounded-xl border border-line bg-surface-raised p-2 shadow-xl"
           >
+            <Link href="/admin/my-page" role="menuitem" data-account-menu-item onClick={() => { onAccountMenuOpenChange(false); onNavigate?.(); }} className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-fg hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-accent"><PersonIcon className="h-5 w-5 shrink-0" /><span>{t.admin.myPage.title}</span></Link>
             <Link
               href="/"
               role="menuitem"

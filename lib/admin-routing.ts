@@ -10,9 +10,17 @@ export function resolveOutreachView(tenant: TenantKey, requested: string | null,
   return OUTREACH_VIEWS.find(view => view === requested) ?? "contact-lists";
 }
 const LOCAL_ADMIN_ORIGIN = "http://localhost:3000";
+
+/** The former dashboard preserves only supported entry context. */
+export function adminHomeDestination(params: Record<string, string | string[] | undefined>) {
+  const query = new URLSearchParams();
+  if (typeof params.tenant === "string" && isTenantKey(params.tenant)) query.set("tenant", params.tenant);
+  if (params.error === "access-denied") query.set("error", params.error);
+  return `/admin/my-page${query.size ? `?${query}` : ""}`;
+}
 const authPaths = new Set(["/admin/login", "/admin/change-password", "/admin/forgot-password"]);
 const legacyAuthPaths = new Set(["/login", "/change-password", "/forgot-password"]);
-const adminPagePattern = /^\/admin(?:\/(?:users(?:\/(?:new|[A-Za-z0-9_-]+))?|roles(?:\/[A-Za-z0-9_-]+)?|password-reset-requests|phone-settings|chat-settings|online-consultation-settings|languages|maintenance-settings|developer-api|zaad|reservations(?:\/(?:bookings|api-keys(?:\/logs(?:\/[A-Za-z0-9_-]+)?)?))?))?$/u;
+const adminPagePattern = /^\/admin(?:\/(?:users(?:\/(?:new|[A-Za-z0-9_-]+))?|roles(?:\/[A-Za-z0-9_-]+)?|my-page|password-reset-requests|phone-settings|chat-settings|online-consultation-settings|languages|maintenance-settings|developer-api|zaad|reservations(?:\/(?:bookings|api-keys(?:\/logs(?:\/[A-Za-z0-9_-]+)?)?))?))?$/u;
 
 export function parseAdminTenant(values: readonly string[]) {
   if (values.length === 0) return { ok: false, code: "TENANT_REQUIRED" } as const;

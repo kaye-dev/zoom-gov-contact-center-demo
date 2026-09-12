@@ -15,7 +15,6 @@ export type AdminNavigationItemKey =
   | "roles";
 
 export type AdminPrimaryNavigationKey =
-  | "dashboard"
   | "users"
   | "phone-settings"
   | "chat-settings"
@@ -103,13 +102,7 @@ export function buildAdminNavigation(
     ] satisfies AdminSectionNavigationItem[]
   ).filter((item) => visible.has(item.key));
 
-  const primaryItems: AdminPrimaryNavigationItem[] = [
-    {
-      key: "dashboard",
-      href: "/admin",
-      label: t.admin.navigation.dashboard,
-    },
-  ];
+  const primaryItems: AdminPrimaryNavigationItem[] = [];
   // Daily operations first, followed by access administration and configuration.
   if (visible.has("reservations")) {
     primaryItems.push({
@@ -193,7 +186,7 @@ export function resolveAdminNavigationState(
   pathname: string,
 ): AdminNavigationState {
   if (pathname === "/admin") {
-    return { primaryKey: "dashboard", sectionKey: null, sectionItemKey: null };
+    return { primaryKey: null, sectionKey: null, sectionItemKey: null };
   }
   if (pathname === userPaths["new-user"]) {
     return {

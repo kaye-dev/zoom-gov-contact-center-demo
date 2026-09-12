@@ -222,7 +222,6 @@ export type ChromeDictionary = {
     zaad: ZaadDictionary;
     settingsMenu: string;
     navigation: {
-      dashboard: string;
       usersSection: string;
       settingsSection: string;
       usersSectionNavigation: string;
@@ -266,8 +265,7 @@ export type ChromeDictionary = {
     issuedPasswordTitle: string;
     issuedPasswordDescription: string;
     adminOnly: string;
-    dashboardTitle: string;
-    dashboardDescription: string;
+    myPage: { title: string; description: string; name: string; email: string; noAccess: string; denied: string };
     accessControl: {
       rolesNav: string;
       listTitle: string;
@@ -2431,7 +2429,6 @@ export const chromeDictionaries: Record<Locale, ChromeDictionary> = {
       reservations: "予約システム",
       settingsMenu: "設定",
       navigation: {
-        dashboard: "ダッシュボード",
         usersSection: "ユーザー",
         settingsSection: "設定",
         usersSectionNavigation: "ユーザー管理セクション",
@@ -2479,9 +2476,14 @@ export const chromeDictionaries: Record<Locale, ChromeDictionary> = {
       issuedPasswordDescription:
         "この画面を閉じると再表示できません。共有後はユーザーにログインと変更を依頼してください。",
       adminOnly: "管理者のみアクセスできます。",
-      dashboardTitle: "管理画面",
-      dashboardDescription:
-        "ログイン済みです。ユーザー管理機能を利用するには管理者権限が必要です。",
+      myPage: {
+        title: "マイページ",
+        description: "ログイン中のアカウント情報を確認できます。",
+        name: "名前",
+        email: "メールアドレス",
+        noAccess: "現在、利用できる管理機能はありません。利用が必要な場合は管理者にお問い合わせください。",
+        denied: "このページにアクセスする権限がありません。",
+      },
       accessControl: {
         rolesNav: "ロール",
         listTitle: "ロール",
@@ -3093,7 +3095,6 @@ export const chromeDictionaries: Record<Locale, ChromeDictionary> = {
       reservations: "Reservation system",
       settingsMenu: "Settings",
       navigation: {
-        dashboard: "Dashboard",
         usersSection: "Users",
         settingsSection: "Settings",
         usersSectionNavigation: "User management sections",
@@ -3141,9 +3142,14 @@ export const chromeDictionaries: Record<Locale, ChromeDictionary> = {
       issuedPasswordDescription:
         "It cannot be shown again after this view closes. Ask the user to log in and change it.",
       adminOnly: "Administrators only.",
-      dashboardTitle: "Admin",
-      dashboardDescription:
-        "You are signed in. Administrator features require the admin role.",
+      myPage: {
+        title: "My page",
+        description: "View your signed-in account information.",
+        name: "Name",
+        email: "Email address",
+        noAccess: "No admin features are currently available to you. Contact an administrator if you need access.",
+        denied: "You do not have permission to access this page.",
+      },
       accessControl: {
         rolesNav: "Roles",
         listTitle: "Roles",
@@ -3753,7 +3759,6 @@ export const chromeDictionaries: Record<Locale, ChromeDictionary> = {
       reservations: "预约系统",
       settingsMenu: "设置",
       navigation: {
-        dashboard: "仪表板",
         usersSection: "用户",
         settingsSection: "设置",
         usersSectionNavigation: "用户管理分区",
@@ -3800,8 +3805,14 @@ export const chromeDictionaries: Record<Locale, ChromeDictionary> = {
       issuedPasswordDescription:
         "关闭此画面后无法再次显示。共享后请用户登录并更改密码。",
       adminOnly: "仅限管理员访问。",
-      dashboardTitle: "管理页面",
-      dashboardDescription: "您已登录。用户管理功能需要管理员权限。",
+      myPage: {
+        title: "我的页面",
+        description: "查看当前登录的账户信息。",
+        name: "姓名",
+        email: "电子邮件地址",
+        noAccess: "您目前没有可用的管理功能。如需使用，请联系管理员。",
+        denied: "您没有访问此页面的权限。",
+      },
       accessControl: {
         rolesNav: "角色",
         listTitle: "角色",
@@ -4369,7 +4380,6 @@ export const chromeDictionaries: Record<Locale, ChromeDictionary> = {
       reservations: "預約系統",
       settingsMenu: "設定",
       navigation: {
-        dashboard: "儀表板",
         usersSection: "使用者",
         settingsSection: "設定",
         usersSectionNavigation: "使用者管理分區",
@@ -4416,8 +4426,14 @@ export const chromeDictionaries: Record<Locale, ChromeDictionary> = {
       issuedPasswordDescription:
         "關閉此畫面後無法再次顯示。分享後請使用者登入並變更密碼。",
       adminOnly: "僅限管理員存取。",
-      dashboardTitle: "管理頁面",
-      dashboardDescription: "您已登入。使用者管理功能需要管理員權限。",
+      myPage: {
+        title: "我的頁面",
+        description: "查看目前登入的帳戶資訊。",
+        name: "姓名",
+        email: "電子郵件地址",
+        noAccess: "您目前沒有可用的管理功能。如需使用，請聯絡管理員。",
+        denied: "您沒有存取此頁面的權限。",
+      },
       accessControl: {
         rolesNav: "角色",
         listTitle: "角色",
@@ -4992,7 +5008,6 @@ export const chromeDictionaries: Record<Locale, ChromeDictionary> = {
       reservations: "예약 시스템",
       settingsMenu: "설정",
       navigation: {
-        dashboard: "대시보드",
         usersSection: "사용자",
         settingsSection: "설정",
         usersSectionNavigation: "사용자 관리 섹션",
@@ -5040,9 +5055,14 @@ export const chromeDictionaries: Record<Locale, ChromeDictionary> = {
       issuedPasswordDescription:
         "이 화면을 닫으면 다시 표시할 수 없습니다. 공유 후 사용자에게 로그인과 변경을 요청하세요.",
       adminOnly: "관리자만 접근할 수 있습니다.",
-      dashboardTitle: "관리 화면",
-      dashboardDescription:
-        "로그인되어 있습니다. 사용자 관리 기능에는 관리자 권한이 필요합니다.",
+      myPage: {
+        title: "마이 페이지",
+        description: "로그인한 계정 정보를 확인할 수 있습니다.",
+        name: "이름",
+        email: "이메일 주소",
+        noAccess: "현재 사용할 수 있는 관리 기능이 없습니다. 접근 권한이 필요하면 관리자에게 문의하세요.",
+        denied: "이 페이지에 접근할 권한이 없습니다.",
+      },
       accessControl: {
         rolesNav: "역할",
         listTitle: "역할",
