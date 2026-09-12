@@ -380,3 +380,16 @@ test("worktree管理のhandoffは現行smokeと既存保持sessionを保全す�
   assert.match(devServer, /\.\/dev-compose\.sh wt/u);
   assert.match(devServer, /named volumeは保持する/u);
 });
+
+test("retention handoff入口は保持後statusとruntime障害の契約へ接続する", async () => {
+  const paths = [".agents/skills/plan/SKILL.md", ".agents/skills/plan/references/ui-prototype-quality.md", ".claude/rules/dev-server.md", "docs/development/codex-development-workflow.md"];
+  for (const file of paths) {
+    const source = await read(file);
+    assert.ok(source.includes("./dev-confirmation.sh status <slug>"), file);
+    assert.match(source, /runtime failure|Runtime failure|runtimeの実失敗/u, file);
+    assert.doesNotMatch(source, /smoke後に`\.\/dev-prototype\.sh --retain/u, file);
+  }
+  const { scenarios } = await import("../scripts/eval-plan-skills.mjs");
+  const scenario = (scenarios as Record<string, { grade?: unknown }>)["prototype-retention-handoff"];
+  assert.equal(typeof scenario.grade, "function");
+});

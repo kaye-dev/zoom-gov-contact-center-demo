@@ -346,60 +346,62 @@ async function probeArtifact(identity, artifact) {
   const timeout = setTimeout(() => controller.abort(), 3000);
   try {
     const response = await fetch(artifact.url, {
-      method: "HEAD",
+      method: "GET",
       headers: { Host: new URL(artifact.url).host },
       redirect: "error",
       signal: controller.signal,
     });
     ensure(response.ok, `${artifact.surface} server did not return a successful response`);
     ensure(response.headers.get(tokenHeader) === artifact.processToken, `${artifact.surface} server token does not match the confirmation session`);
+    await response.arrayBuffer();
   } finally {
     clearTimeout(timeout);
   }
 }
 
-async function waitForStartup(child, surface, timeoutMs = 7000) {
-  let stdout = "";
-  let stderr = "";
+export async function waitForStartup(child, surface, timeoutMs = 7000) {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => finish(new Error(`${surface} server startup timed out`)), timeoutMs);
     let settled = false;
+    const timeout = setTimeout(() => finish(new Error(`${surface} server startup timed out`)), timeoutMs);
     const finish = (error, result) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
-      child.stdout?.removeAllListeners();
-      child.stderr?.removeAllListeners();
+      child.removeListener("message", onMessage);
+      child.removeListener("error", onError);
+      child.removeListener("exit", onExit);
+      child.removeListener("disconnect", onDisconnect);
       if (error) reject(error);
       else resolve(result);
     };
-    const inspect = () => {
-      const url = stdout.match(/^URL=(.+)$/mu)?.[1];
-      const pid = stdout.match(/^PID=(\d+)$/mu)?.[1];
-      if (url && pid) finish(null, { url, pid: Number(pid) });
+    const onError = error => finish(error);
+    const onExit = (code, signal) => finish(new Error(`${surface} server exited before startup (code=${code ?? "none"}, signal=${signal ?? "none"})`));
+    const onDisconnect = () => finish(new Error(`${surface} server IPC disconnected before startup`));
+    const onMessage = message => {
+      if (message?.type === "artifact-startup-error") finish(new Error(String(message.message)));
+      if (message?.type === "artifact-ready" && typeof message.url === "string" && Number.isSafeInteger(message.pid)) {
+        finish(null, { url: message.url, pid: message.pid });
+      }
     };
-    child.stdout?.on("data", (chunk) => {
-      stdout += chunk.toString();
-      inspect();
-    });
-    child.stderr?.on("data", (chunk) => {
-      stderr += chunk.toString();
-    });
-    child.once("error", (error) => finish(error));
-    child.once("exit", (code, signal) => finish(new Error(`${surface} server exited before startup (code=${code ?? "none"}, signal=${signal ?? "none"}): ${stderr.trim()}`)));
+    child.on("message", onMessage);
+    child.once("error", onError);
+    child.once("exit", onExit);
+    child.once("disconnect", onDisconnect);
   });
 }
 
 async function startArtifactProcess(identity, slug, surface, artifactRealpath) {
+  const entry = await resolvePrototypeEntry(identity.checkout, slug, surface);
   const processToken = randomUUID();
   const child = spawn(process.execPath, [path.join(identity.checkout, "scripts/serve-plan-artifact.mjs"), `plans/${slug}/${surface}`], {
     cwd: identity.checkout,
     detached: true,
     env: { ...process.env, PLAN_ARTIFACT_SESSION_TOKEN: processToken },
-    stdio: ["ignore", "pipe", "pipe"],
+    // The retained child outlives this command. Closed output pipes make later
+    // Next.js logging emit EPIPE; use IPC only for the bounded startup handshake.
+    stdio: ["ignore", "ignore", "ignore", "ipc"],
   });
   try {
-    const entry = await resolvePrototypeEntry(identity.checkout, slug, surface);
     const startup = await waitForStartup(child, surface, entry.kind === "next" ? 60000 : 7000);
     const portIdentity = await resolvePortIdentity(identity.checkout);
     const allocation = await createPortAllocator().status(portIdentity);
@@ -414,8 +416,7 @@ async function startArtifactProcess(identity, slug, surface, artifactRealpath) {
       startedAt: processRecord.startedAt,
     };
     await probeArtifact({ ...identity, slug }, artifact);
-    child.stdout?.destroy();
-    child.stderr?.destroy();
+    if (child.connected) child.disconnect();
     child.unref();
     return { artifact, created: artifact.pid === child.pid };
   } catch (error) {

@@ -1,4 +1,5 @@
 "use client";
+import { Feedback } from "@/app/components/admin/Feedback";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useI18n } from "@/app/i18n/LanguageProvider";
@@ -16,7 +17,7 @@ export function OutreachCsvImport({ tenant, permissions, setDirty, setSaving, sa
   const { t } = useI18n(), d = t.outreachCommon, c = d.csv, z = t.admin.zaad, router = useRouter(), query = useSearchParams();
   const jobId = query.get("importJob"), [preview, setPreview] = useState<ImportResult | null>(null), [failed, setFailed] = useState(false), [reload, setReload] = useState(0);
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
-  const file = useRef<HTMLInputElement>(null), lock = useRef(false), generation = useRef(0), ownJob = useRef<string | null>(null), noticeRef = useRef<HTMLParagraphElement>(null), errorRef = useRef<HTMLParagraphElement>(null);
+  const file = useRef<HTMLInputElement>(null), lock = useRef(false), generation = useRef(0), ownJob = useRef<string | null>(null), errorRef = useRef<HTMLDivElement>(null);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!preview) return;
@@ -68,7 +69,7 @@ export function OutreachCsvImport({ tenant, permissions, setDirty, setSaving, sa
   }
   const loading = Boolean(jobId && preview?.id !== jobId), summary = preview ? crmImportSummary(preview, now) : null, expired = summary?.expired;
   const errorRows = summary?.errors ?? [];
-  useEffect(() => { if (error) errorRef.current?.focus(); else if (preview) noticeRef.current?.focus(); }, [error, preview]);
+  useEffect(() => { if (error) errorRef.current?.focus(); }, [error, preview]);
   const errorCsv = "\ufeff" + [["row", "field", "code", "name", "phone", ...(tenant === "univ" ? ["studentNumber"] : []), "topicIds"], ...errorRows.map(row => [String(row.rowNumber), row.errorField ?? "", row.errorCode ?? row.status, row.name ?? "", row.phone ?? "", ...(tenant === "univ" ? [row.studentNumber ?? ""] : []), row.rawTopicIds ?? row.topicIds?.join(";") ?? ""])].map(row => row.map(csvSafeCell).join(",")).join("\r\n") + "\r\n";
   function rowError(row: ImportRow) {
     if (row.errorField === "topicIds") return c.invalidTopics;
@@ -81,13 +82,13 @@ export function OutreachCsvImport({ tenant, permissions, setDirty, setSaving, sa
     <h1 id="csv-page-title" className="text-2xl font-bold">{d.csvRegister}</h1><DetailPageBreadcrumb title={d.csvRegister} parent="contacts" disabled={busy} />
     {busy && !preview && <p role="status">{c.checking}</p>}
     {loading ? failed ? <OutreachFailure retry={() => { setFailed(false); setReload(value => value + 1); }} /> : <OutreachLoading /> : <>
-      {error && <p ref={errorRef} tabIndex={-1} role="alert">{error}</p>}
-      {expired && <p role="alert">{d.importStates.EXPIRED}</p>}
+      {error && <Feedback tone="error" ref={errorRef} tabIndex={-1}>{error}</Feedback>}
+      {expired && <Feedback tone="warning">{d.importStates.EXPIRED}</Feedback>}
       <section className="space-y-3" aria-labelledby="csv-requirements-title"><div className="flex flex-col items-start gap-3 md:flex-row md:items-center md:justify-between"><h3 id="csv-requirements-title" className="text-lg font-bold">{d.csvRequirements}</h3><a className="inline-flex w-fit items-center gap-1 border-b border-current pb-0.5 text-accent no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" href={`data:text/csv;charset=utf-8,${encodeURIComponent(crmCsvSample(tenant))}`} download={crmCsvFilename(tenant)}><DownloadIcon className="h-6 w-6 shrink-0" />{d.sampleDownload}</a></div><p className="text-sm leading-7">{d.csvHelp}</p></section>
       {permissions.create && <><label className="block">{z.residents.chooseFile}<span className="relative mt-1 block"><input ref={file} type="file" accept=".csv,text/csv" disabled={busy} onChange={() => { changed(); void upload(); }} className={input + " pr-12"} /><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"><UploadIcon className="h-6 w-6" /></span></span></label></>}
       {preview && <section className="space-y-4" aria-label={d.csvPreview}>
         {errorRows.length > 0 && <a className="inline-flex text-accent underline" href={`data:text/csv;charset=utf-8,${encodeURIComponent(errorCsv)}`} download="outreach-import-errors.csv">{z.residents.csvErrorHeading} (.csv)</a>}
-        <p ref={noticeRef} tabIndex={-1} role="status">{preview.status === "COMPLETED" ? c.complete.replace("{count}", String(summary!.imported)) : c.summary.replace("{total}", String(preview.rows.length)).replace("{shown}", String(summary!.shown.length)).replace("{excluded}", String(summary!.excluded)).replace("{targets}", String(summary!.targets.length))}</p>{errorRows.length > 0 && <p role="alert">{c.errors.replace("{count}", String(errorRows.length))} {summary!.invalid ? c.correct : c.retryHelp}</p>}
+        <Feedback tone={errorRows.length || expired || (preview.status === "COMPLETED" && summary!.targets.length) ? "warning" : preview.status === "COMPLETED" ? "success" : "info"}>{preview.status === "COMPLETED" ? c.complete.replace("{count}", String(summary!.imported)) : c.summary.replace("{total}", String(preview.rows.length)).replace("{shown}", String(summary!.shown.length)).replace("{excluded}", String(summary!.excluded)).replace("{targets}", String(summary!.targets.length))}</Feedback>{errorRows.length > 0 && <Feedback tone="warning">{c.errors.replace("{count}", String(errorRows.length))} {summary!.invalid ? c.correct : c.retryHelp}</Feedback>}
         <div className="overflow-x-auto rounded-lg border border-line"><table className="w-full min-w-[640px] text-left text-sm"><thead className="bg-surface-hover"><tr>{[z.residents.csvErrorRow, z.residents.name, z.residents.phone, ...(tenant === "univ" ? [t.universityOutreach.studentNumber] : []), c.topics, d.registrationStatus].map(label => <th key={label} className="whitespace-nowrap px-4 py-3">{label}</th>)}</tr></thead><tbody className="divide-y divide-line [&>tr:first-child]:border-t [&>tr:first-child]:border-line">{summary!.shown.map(row => <tr key={row.rowKey}><td className="px-4 py-3">{row.rowNumber}</td><td className="min-w-[10rem] max-w-sm break-all px-4 py-3">{row.name}</td><td className="whitespace-nowrap px-4 py-3">{row.phone}</td>{tenant === "univ" && <td className="px-4 py-3">{row.studentNumber}</td>}<td className="px-4 py-3">{row.topicIds?.map(id => `${(tenant === "lg" ? t.municipalOutreach.topics : t.universityOutreach.topics)[id as never] ?? id} (${id})`).join("、") || "—"}</td><td className="px-4 py-3">{d.importStates[row.status] ?? d.unknown}{row.errorCode && <span className="block text-xs text-fg-muted">{rowError(row)}</span>}</td></tr>)}</tbody></table></div>
         {permissions.create && <button className={primary} disabled={busy || !summary?.canSubmit} onClick={() => void apply()}>{busy ? t.admin.industrySettings.saving : preview.rows.some(row => row.status === "FAILED") ? z.common.retry : c.import}</button>}
       </section>}

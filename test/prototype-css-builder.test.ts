@@ -101,7 +101,7 @@ test("foundation分離前後でproduction Tailwind生成物を完全一致させ
   assert.ok(foundation.startsWith(tailwindImport));
   assert.equal(
     createHash("sha256").update(foundation).digest("hex"),
-    "492169e6d7a675e4b40fb58d6fa3fea1024565bdc82e2d7ad2b1a5d11753714b",
+    "3fb486c8c8e4b04beed12214812561b0cac89a46ca359215372211b26488a353",
     "production foundation snapshot changed; verify intentional token/global-style compatibility",
   );
   const legacyMonolith = foundation.replace(

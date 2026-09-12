@@ -44,7 +44,11 @@ Next.js hostのcacheは`.local/prototype-runtime/<slug>/.next`に隔離し、HTM
 
 implementの照合では一致する既存prototype serverを再利用するか、`./dev-prototype.sh <slug>`で一時配信する。照合のためにprototypeを編集せず、新たな保持sessionを作らない。今回起動した一時配信processだけを終了し、planで保持済みのserverは残す。
 
-planは返却直前のsmoke後に`./dev-prototype.sh --retain <slug>`で保持し、URL、PID、owner、確認結果、`./dev-confirmation.sh stop <slug>`を返す。確認セッションはcheckoutごとに同時に1 slugだけで、他slugを暗黙停止しない。
+planは静的確認後に`./dev-prototype.sh --retain <slug>`を完了まで待ち、コマンド終了後の別呼出しで`./dev-confirmation.sh status <slug>`を1回実行する。成功した保持URLに必要なtenant/view等のqueryを付け、同じprocessで返却直前の最終smokeを行う。保持前後でsmokeを二重実行しない。URL、PID、owner、確認結果、`./dev-confirmation.sh stop <slug>`を返す。確認セッションはcheckoutごとに同時に1 slugだけで、他slugを暗黙停止しない。
+
+保持サーバーのstdioは親のpipeに接続せず、起動結果をIPCで通知する。初回readyは対象routeのGET本文受信完了を意味し、親終了後の応答はstatusで別に確認する。statusは所有tokenと対象routeのGET本文を期限付きで確認し、PID/LISTEN/root HEADだけを成功根拠にしない。
+
+保持後のtimeout/HTTP失敗はruntimeの実失敗であり、Browser利用不可とは区別する。HTTP成功でBrowserだけ利用不能ならUI未確認とする。失敗時は当該ownerのprocess・出力先・ログのbounded diagnosticを各1回取得し、認可scope内の修正と必要な再起動だけを行う。未解決のURLは到達不能と報告する。別port/別Browserへの回避、無制限poll、他slug/checkoutや所有不明PIDの停止は行わない。修正版を取り込んだcheckoutから所有serverを再起動して適用し、他セッションを一括変更しない。
 
 ```sh
 ./dev-confirmation.sh start <slug> prototype

@@ -1,4 +1,5 @@
 "use client";
+import { Feedback } from "@/app/components/admin/Feedback";
 import { DetailPageBreadcrumb } from "./DetailPageBreadcrumb";
 import { useRef, useState } from "react";
 import { useI18n } from "@/app/i18n/LanguageProvider";
@@ -31,8 +32,8 @@ export function OutreachGroupEditor({ group, close, saved, tenant, permissions, 
     <div className="flex flex-wrap items-center justify-between gap-3"><h1 id="group-page-title" className="text-2xl font-bold">{group?.name ?? d.groupCreate}</h1></div><DetailPageBreadcrumb title={group?.name ?? d.groupCreate} disabled={busy} />
     <form className="space-y-5" onSubmit={event => { event.preventDefault(); void save(); }}>
       {group && <p className="text-sm leading-7 text-fg-muted">{d.groupSync.sharedEdit}</p>}
-      {group?.mutationBlock && <p role="alert" className="text-sm leading-7">{d.groupMutationBlocks[group.mutationBlock]}</p>}
-      {error && <p role="alert">{error}</p>}
+      {group?.mutationBlock && <Feedback tone="warning">{d.groupMutationBlocks[group.mutationBlock]}</Feedback>}
+      {error && <Feedback tone="error">{error}</Feedback>}
       <fieldset className="space-y-5" disabled={busy || !writable}><legend className="sr-only">{group ? d.groupEdit : d.groupCreate}</legend>
         {tenant === "univ" && !group && <label className="block">{d.examples}<Select defaultValue="" onChange={event => { const example = CASES.find(row => row.id === event.target.value); if (example) change({ name: t.universityOutreach.templateText[example.name], description: t.universityOutreach.templateText[example.purpose] }); }}><option value="">{d.select}</option>{CASES.map(example => <option key={example.id} value={example.id}>{t.universityOutreach.templateText[example.name]}</option>)}</Select></label>}
         <label className="block">{d.groupName}<input required className={input} maxLength={100} value={draft.name} onChange={event => change({ name: event.target.value })} /></label>

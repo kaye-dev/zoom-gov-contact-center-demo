@@ -41,6 +41,7 @@ if (confirmationSessionToken !== "" && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{
 }
 
 function fail(message) {
+  if (process.connected) process.send?.({ type: "artifact-startup-error", message });
   console.error(message);
   process.exit(1);
 }
@@ -176,6 +177,7 @@ let allocation;
 let registered = false;
 
 function outputStartup(pid, reused = false) {
+  if (process.connected) process.send?.({ type: "artifact-ready", url: `http://127.0.0.1:${allocation.artifactPort}${prepared?.config.route ?? "/"}`, pid });
   console.log(`URL=http://127.0.0.1:${allocation.artifactPort}${prepared?.config.route ?? "/"}`);
   console.log(`PID=${pid}`);
   console.log(`PORT_SLOT=${allocation.slot}`);
@@ -251,6 +253,7 @@ try {
     if (registered) {
       if (nextTools) {
         const startupTimeout = setTimeout(() => {
+          if (process.connected) process.send?.({ type: "artifact-startup-error", message: "Next.js prototype startup timed out after 60000ms" });
           console.error("Next.js prototype startup timed out after 60000ms");
           void shutdown(1);
         }, 60000);
@@ -262,17 +265,16 @@ try {
         server.once("error", reject);
         server.listen(allocation.artifactPort, "127.0.0.1", resolve);
       });
-      if (nextTools) {
-        const result = await fetch(`http://127.0.0.1:${allocation.artifactPort}${prepared.config.route}`, { signal: AbortSignal.timeout(55000), redirect: "error" });
-        await result.arrayBuffer();
-        if (!result.ok) throw new Error(`Prototype route failed with HTTP ${result.status}`);
-      }
+      const result = await fetch(`http://127.0.0.1:${allocation.artifactPort}${prepared?.config.route ?? "/"}`, { signal: AbortSignal.timeout(nextTools ? 55000 : 3000), redirect: "error" });
+      await result.arrayBuffer();
+      if (!result.ok) throw new Error(`Artifact route failed with HTTP ${result.status}`);
       ready = true;
       clearTimeout(startupTimer);
       outputStartup(process.pid);
     }
   }
 } catch (error) {
+  if (process.connected) process.send?.({ type: "artifact-startup-error", message: `Artifact startup failed: ${error.message}. No fallback port was selected.` });
   if (registered) await portAllocator.clearArtifact(portIdentity, allocation.allocationId, confirmationSessionToken);
   if (allocation?.created) {
     await portAllocator.release(portIdentity, portIdentity.owner, allocation.allocationId, { rollback: true }).catch(() => {});

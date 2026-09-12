@@ -75,11 +75,13 @@ skillメタデータとproject-local `profiles`ではmodelを指定しない。�
 
 最新要求、採用済み判断と資料、repositoryの関連source/testsを整理する。`plans/template.md`の6見出しに沿い、`plans/<slug>/goal.md`へ現在の最終設計だけを書く。`## 要件クロージャ`の各行は5列で具体的要件、設計先、prototypeまたは非UI理由、検証case、観測できる完了結果を持つ。
 
-新規UIは共通Next.js・TypeScript・Tailwind環境で、既存のshell・共通component・semantic tokenを使う。表示部品をimportし、mockはdata、永続化、authorization、backend副作用だけとする。新規TSXの移植先、props/callbackと代表データをgoalのインターフェース節に記す。対象の型・lintを確認してから、返却直前に代表smokeを1回行う。
+新規UIは共通Next.js・TypeScript・Tailwind環境で、既存のshell・共通component・semantic tokenを使う。表示部品をimportし、mockはdata、永続化、authorization、backend副作用だけとする。新規TSXの移植先、props/callbackと代表データをgoalのインターフェース節に記す。対象の型・lintを確認してから保持コマンドを完了させ、その終了後に別呼出しでstatusを1回確認する。同じ保持URLと必要なqueryで返却直前に代表smokeを1回行う。
 
 ```sh
 node scripts/prototype-runtime.mjs check <slug>
 ./dev-prototype.sh --retain <slug>
+# 上のコマンド終了後、別呼出しで実行
+./dev-confirmation.sh status <slug>
 ```
 
 詳細な作成例は[prototype authoring](../../.agents/skills/plan/references/ui-prototype-quality.md)を使う。共通hostが初回に既存ソースを`prototype/.shared/`へ保存し、以後の実装変更から比較元を保つ。旧HTML prototypeは従来のCSS builderと配信を継続でき、変換は不要。
@@ -117,6 +119,8 @@ UIは完成した実アプリを所有権確認済みURLで開き、代表smoke�
 
 ## UI smokeとフィードバック
 
+通知の配置・4色・Toastの使い分け・結果不明とエラーの保持は`DESIGN.md` 6.7.2を正本とする。
+
 `UI検証方式: smoke`を使い、通常は合計1〜3代表シナリオを選ぶ。
 
 - prototypeとの照合と大きなUI崩れ: [共通検証契約](../../.agents/skills/plan/references/workflow-verification-contract.md)に従い、同じ代表条件でprototypeと実アプリを表示し、構成・主要な見た目を照合する。操作可能でも意図しない領域・配置・スタイルの差は修正する。主要領域の欠落、重なり、切れ、重大な横はみ出し、操作を妨げる配置も確認する。結果に条件・一致点・指示による差・未確認を記載し、片方を表示できなければ`prototypeとの視覚照合は未確認`とする。
@@ -125,6 +129,18 @@ UIは完成した実アプリを所有権確認済みURLで開き、代表smoke�
 responsive/themeが主題ならその代表条件を同じ選択に含める。全state、異常系、全境界、全consumer、各ボタンの総当たりや厳密なDOM/geometry/pixel比較は範囲外である。機能・権限・保存・APIの正しさは変更に応じた静的・統合testで支える。確認は数分を目安とし、同じツール障害の反復は打ち切って未確認を報告する。
 
 planはprototype、implementは実アプリを確認する。reviewと出荷は有効な結果を再利用し、工程が変わっただけではBrowserを再実行しない。`## ユーザー動作確認`は少数の未チェック`UI-CHECK-XX`（対象・前提・操作・期待結果）を引き渡し、人間の確認を自動検証から完了扱いにしない。非UIは`- 対象外: UI変更なし`とする。
+
+### 動作確認の代行依頼プロンプト
+
+タスク完了報告時、対象PRに未確認の「ユーザー動作確認」が残る場合だけ、代行依頼用プロンプトを1件添える。現在のPR本文から対象と確認状態を判断し、実際のPR URLを埋め込んで、そのまま送信できる文章にする。PR未作成・対象項目なし・全件確認済みの場合は提案しない。提案だけで検証を開始せず、ユーザーが依頼した場合に実施する。
+
+定型文（`<PR URL>`は実際のURLへ置換する）:
+
+> <PR URL> の「ユーザー動作確認」の未確認項目を私に代わって実施してください。不具合があれば対象範囲で修正・再検証し、修正をcommit・pushしてください。実際に確認できた項目だけチェック済みにし、Codexによる代行確認であることと実施結果をPR本文へ反映してください。確認できない項目は未チェックのまま理由を残してください。
+
+Codexアプリでは `- :codex-followup[ユーザー動作確認を依頼する]{prompt="実際のPR URLを含む上記の依頼文"}` の形式で表示する。対応しない環境ではコピー可能な引用またはコードブロックを使う。
+
+代行確認はユーザー自身の確認とは区別して記録する。実操作・観測結果を根拠とし、通常smokeや自動testの成功だけで未確認項目を一括チェックしない。修正した場合は影響する項目を再検証する。CI待機・merge・Production操作の承認は、この定型文に含めない。
 
 ### 実装後の修正
 
@@ -185,6 +201,8 @@ PR本文はbase...HEADのdiff、base..HEADのcommit、実検証結果、現在�
 ## Runtimeと権限
 
 起動・再利用・停止は[dev-server規約](../../.claude/rules/dev-server.md)と[開発用ポート](development-ports.md)に従う。worktreeは固有runtimeを使い、他checkoutの3000を再利用しない。正しい既存serverは再利用し、ユーザー所有serverは停止しない。
+
+保持後の実routeのtimeout/HTTP失敗はruntimeの実失敗とし、Browser利用不可へ読み替えない。HTTPが正常でBrowserだけ利用不能ならUI未確認として引き継ぐ。保持前のsmokeだけで閲覧可能とせず、保持完了→別呼出しのstatus→同URLの最終smokeという順序と障害時の限定診断はdev-server規約に従う。通常の1〜3シナリオを保ち、追加の承認・build・常時monitorは導入しない。
 
 Browser API文書は操作前に読み、未読エラーを権限拒否と断定しない。権限拒否を別Browserやtaskで回避しない。終了時はbaselineとの差分のうちtask所有資源だけをcleanupし、named volumeと他taskの資源を保持する。保持sessionのslugを暗黙置換しない。
 

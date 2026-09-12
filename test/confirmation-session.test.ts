@@ -463,3 +463,74 @@ process.on("SIGTERM", () => { server.closeAllConnections(); server.close(() => p
   const port = Number(new URL(restarted.PROTOTYPE_URL).port);
   assert.ok(port >= 4001 && port <= 4005);
 });
+
+test("retained artifact output stays writable after the startup command exits", async context => {
+  const fixture = await createFixture(context);
+  const serverPath = path.join(fixture.root, "scripts/serve-plan-artifact.mjs");
+  const source = await readFile(serverPath, "utf8");
+  await writeFile(serverPath, source.replace('const address = server.address();', `
+    // Exercise logging after the parent has exited, as Next.js does per request.
+    if (request.url === "/?log") {
+      await Promise.all([process.stdout, process.stderr].map(stream => new Promise((resolve, reject) => {
+        stream.once("error", () => {});
+        stream.write("retained request log\\n", error => error ? reject(error) : resolve(undefined));
+      })));
+    }
+    const address = server.address();`));
+  const started = values((await run(fixture, ["start", "alpha", "prototype"])).stdout);
+  fixture.ownedPids.add(Number(started.PROTOTYPE_PID));
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const response = await fetch(`${started.PROTOTYPE_URL}?log`, { signal: AbortSignal.timeout(3000) });
+    assert.equal(response.status, 200, "stdout/stderr remain writable after startup detaches");
+    assert.match(await response.text(), /<title>prototype<\/title>/u);
+  }
+  assert.equal(values((await run(fixture, ["start", "alpha", "prototype"])).stdout).PROTOTYPE_PID, started.PROTOTYPE_PID);
+  assert.equal(values((await run(fixture, ["status", "alpha"])).stdout).PROTOTYPE_PID, started.PROTOTYPE_PID);
+  await run(fixture, ["stop", "alpha"]);
+});
+
+test("startup IPC settles once and releases listeners on every terminal outcome", async () => {
+  const { EventEmitter } = await import("node:events");
+  const { waitForStartup } = await import("../scripts/confirmation-session.mjs");
+  for (const outcome of ["ready", "startup-error", "error", "exit", "disconnect", "timeout"]) {
+    const child = new EventEmitter();
+    const pending = waitForStartup(child, "prototype", 20);
+    if (outcome === "ready") child.emit("message", { type: "artifact-ready", url: "http://127.0.0.1:4001/page", pid: 101 });
+    else if (outcome === "startup-error") child.emit("message", { type: "artifact-startup-error", message: "fixture failure" });
+    else if (outcome === "error") child.emit("error", new Error("spawn failed"));
+    else if (outcome === "exit") child.emit("exit", 1, null);
+    else if (outcome === "disconnect") child.emit("disconnect");
+    if (outcome === "ready") assert.deepEqual(await pending, { url: "http://127.0.0.1:4001/page", pid: 101 });
+    else await assert.rejects(pending, /failure|failed|exited|disconnected|timed out/u);
+    for (const event of ["message", "error", "exit", "disconnect"]) assert.equal(child.listenerCount(event), 0, `${outcome}: ${event}`);
+    child.emit("message", { type: "artifact-ready", url: "ignored", pid: 102 });
+  }
+});
+
+for (const failure of ["http", "body-timeout"]) {
+  test(`retained status rejects actual GET ${failure} even when root HEAD succeeds`, async context => {
+    const fixture = await createFixture(context);
+    await writeFile(path.join(fixture.root, "plans/alpha/prototype/page.html"), "<!doctype html><title>Actual route</title>");
+    const serverPath = path.join(fixture.root, "scripts/serve-plan-artifact.mjs");
+    const source = await readFile(serverPath, "utf8");
+    await writeFile(serverPath, source.replaceAll('${prepared?.config.route ?? "/"}', '/page.html').replace('const address = server.address();', `
+      if (request.method === "GET" && request.url === "/page.html" && await stat(path.join(repositoryRoot, "fail-get")).then(() => true, () => false)) {
+        response.writeHead(${failure === "http" ? 503 : 200}, headers("text/html"));
+        ${failure === "http" ? 'response.end("failed");' : 'response.write("incomplete body");'}
+        return;
+      }
+      const address = server.address();`));
+    const started = values((await run(fixture, ["start", "alpha", "prototype"])).stdout);
+    fixture.ownedPids.add(Number(started.PROTOTYPE_PID));
+    assert.match(started.PROTOTYPE_URL, /\/page\.html$/u);
+    const state = await readFile(fixture.statePath, "utf8");
+    await writeFile(path.join(fixture.root, "fail-get"), "enabled");
+    const head = await fetch(new URL("/", started.PROTOTYPE_URL), { method: "HEAD" });
+    assert.equal(head.status, 200);
+    await assert.rejects(run(fixture, ["status", "alpha"]));
+    assert.equal(await readFile(fixture.statePath, "utf8"), state, "failed status preserves owner metadata");
+    await rm(path.join(fixture.root, "fail-get"));
+    assert.equal(values((await run(fixture, ["status", "alpha"])).stdout).PROTOTYPE_PID, started.PROTOTYPE_PID);
+    await run(fixture, ["stop", "alpha"]);
+  });
+}

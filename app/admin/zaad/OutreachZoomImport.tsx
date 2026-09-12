@@ -1,4 +1,5 @@
 "use client";
+import { Feedback } from "@/app/components/admin/Feedback";
 import { useEffect, useRef, useState } from "react";
 import { Checkbox } from "@/app/components/Checkbox";
 import { ModalDialog } from "@/app/components/admin/ModalDialog";
@@ -55,11 +56,11 @@ export function OutreachZoomImport({ tenant, groupId, contactId, close, saved, s
   return <ModalDialog title={contactId ? u.singleTitle : u.groupTitle} description={u.help} initialFocusRef={cancel} locked={busy} onRequestClose={finish} maxWidthClassName="max-w-3xl">
     <div className="space-y-5" aria-busy={busy}>
       {tenant === "univ" && <p className="text-sm leading-7">{u.studentHelp}</p>}
-      {error && <div role="alert" className="space-y-3"><p>{error === "changed" ? u.changed : z.common.failure}</p>{(!preview || error === "changed") && <button className={secondary} onClick={refresh}>{d.reload}</button>}</div>}
+      {error && <Feedback tone={error === "changed" ? "warning" : "error"} action={(!preview || error === "changed") && <button className={secondary} onClick={refresh}>{d.reload}</button>}>{error === "changed" ? u.changed : z.common.failure}</Feedback>}
       {!preview && !error && <OutreachLoading />}
       {preview && <>
-        {preview.rows.some(row => row.status === "FAILED") && <p role="alert">{u.partial}</p>}
-        {hasSaved && !preview.rows.some(row => row.status === "FAILED") && <p role="status">{u.saved}</p>}
+        {preview.rows.some(row => row.status === "FAILED") && <Feedback tone="warning">{u.partial}</Feedback>}
+        {hasSaved && !preview.rows.some(row => row.status === "FAILED") && <Feedback tone="success">{u.saved}</Feedback>}
         <div className="overflow-x-auto rounded-lg border border-line"><table className="w-full min-w-[520px] text-left text-sm">
           <thead className="border-b border-line bg-surface-hover"><tr><th scope="col" className="px-4 py-3">{d.select}</th><th scope="col" className="px-4 py-3">{z.residents.name}</th><th scope="col" className="px-4 py-3">{z.residents.phone}</th><th scope="col" className="px-4 py-3">{u.contents}</th></tr></thead>
           <tbody className="divide-y divide-line">{preview.rows.map(row => <tr key={row.rowKey}>
