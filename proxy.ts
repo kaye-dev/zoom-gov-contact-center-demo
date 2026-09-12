@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ADMIN_REQUEST_PATH_HEADER, isAdminPath, localAdminRequest, resolveOutreachDefaultRedirect } from "@/lib/admin-routing";
+import { ADMIN_REQUEST_PATH_HEADER, isAdminPath, localAdminRequest, resolveAdminDefaultTenantRedirect } from "@/lib/admin-routing";
 import { resolveFaqLegacyRedirect } from "@/lib/legacy-redirects";
 import { X_ROBOTS_TAG_VALUE } from "@/lib/search-indexing";
 import { handleMaintenanceRequest } from "@/lib/server/maintenance-request-gate";
@@ -31,9 +31,9 @@ export async function proxy(request: NextRequest) {
     return createProtectedRedirect(request, normalizedPathname, 308);
   }
 
-  const outreachDestination = resolveOutreachDefaultRedirect(new URL(request.url), request.method);
-  if (outreachDestination) {
-    const response = NextResponse.redirect(outreachDestination, 307);
+  const defaultTenantDestination = resolveAdminDefaultTenantRedirect(new URL(request.url), request.method);
+  if (defaultTenantDestination) {
+    const response = NextResponse.redirect(defaultTenantDestination, 307);
     response.headers.set("Cache-Control", "no-store");
     response.headers.set("X-Robots-Tag", X_ROBOTS_TAG_VALUE);
     return response;

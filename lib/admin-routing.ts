@@ -120,12 +120,17 @@ export function safeOutreachReturnPath(value: unknown, tenant?: TenantKey): stri
   return parsed.pathname + parsed.search;
 }
 
-/** Normalize only an absent tenant on the outreach page; preserve explicit values. */
-export function resolveOutreachDefaultRedirect(url: URL, method: string): URL | null {
-  if (!["GET", "HEAD"].includes(method) || url.pathname !== "/admin/zaad" || url.searchParams.has("tenant")) return null;
+/** Normalize an absent tenant only on pages with a municipal default. */
+export function resolveAdminDefaultTenantRedirect(url: URL, method: string): URL | null {
+  if (!["GET", "HEAD"].includes(method) || !["/admin/zaad", "/admin/languages"].includes(url.pathname) || url.searchParams.has("tenant")) return null;
   const destination = new URL(url);
   destination.searchParams.set("tenant", "lg");
   return destination;
+}
+
+/** Retain the outreach-only contract for existing callers. */
+export function resolveOutreachDefaultRedirect(url: URL, method: string): URL | null {
+  return url.pathname === "/admin/zaad" ? resolveAdminDefaultTenantRedirect(url, method) : null;
 }
 
 export function isOutreachDetailPage(view: string, query: URLSearchParams): boolean {
