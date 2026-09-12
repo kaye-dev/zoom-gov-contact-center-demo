@@ -173,7 +173,9 @@ test("every users and settings page places section navigation between header and
       file,
     );
     assert.match(view, /data-admin-page-body/u, file);
-    assert.match(view, /mt-6/u, file);
+    assert.match(view, file.endsWith("languages/LanguageSettingsForm.tsx")
+      ? /data-admin-page-body className="ml-1 mr-0 mt-0 max-w-3xl"/u
+      : /mt-6/u, file);
   }
 });
 

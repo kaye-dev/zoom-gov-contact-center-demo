@@ -29,8 +29,13 @@ for (const [id, path, maxWidth, description] of pages) {
       assert.ok(classes.includes("mr-0"));
       assert.ok(!classes.includes("mx-auto"));
       assert.ok(!classes.includes("w-full"));
-      if (maxWidth && !(marker === "header" && ["PHONE", "CHAT"].includes(id))) assert.ok(classes.includes(maxWidth));
-      if (marker === "header" && ["PHONE", "CHAT"].includes(id)) { assert.ok(classes.includes("flex")); assert.ok(classes.includes("md:items-start")); }
+      if (maxWidth && !(marker === "header" && ["PHONE", "CHAT", "LANG"].includes(id))) assert.ok(classes.includes(maxWidth));
+      if (marker === "header" && ["PHONE", "CHAT", "LANG"].includes(id)) { assert.ok(classes.includes("flex")); assert.ok(classes.includes("md:items-start")); }
+    }
+    if (id === "LANG") {
+      const headerClasses = text.match(/data-admin-page-header\s+className="([^"]+)"/)?.[1] ?? "";
+      assert.match(headerClasses, /md:justify-between/);
+      assert.doesNotMatch(headerClasses, /max-w-/);
     }
     const navigation = id === "DEV" ? "<DeveloperApiSectionTabs" : ["PHONE", "CHAT"].includes(id) ? "<AdminSettingsTabs" : "<AdminSectionNavigation";
     assert.ok(text.indexOf("data-admin-page-header") < text.indexOf(navigation));
@@ -65,7 +70,7 @@ test("HELP-CONTENT: field guidance, role count, environment and security control
   const cases = [
     ["phone-settings/PhoneSettingsForm", "representativeDescription", "aiPhoneDescription"],
     ["chat-settings/ChatSettingsForm", "chat-settings-mode-help", "activeModeDescription"],
-    ["languages/LanguageSettingsForm", "enabledCountLabel", "japaneseRequired"],
+    ["languages/LanguageSettingsForm", "japaneseRequired", "AdminTenantRouteSelect"],
     ["maintenance-settings/MaintenanceSettingsForm", "environmentBadgeClass(environment)", "propagationNote"],
     ["developer-api/DeveloperApiSettingsForm", "server-to-server-oauth", "webhook-only-app"],
     ["roles/RolesPanel", "`${total} ${copy.roleCount}`", "roles-read-only-reason", "setIsCreateOpen(true)", "<table"],
