@@ -1,4 +1,5 @@
 "use client";
+import { Feedback } from "@/app/components/admin/Feedback";
 import { DetailPageBreadcrumb } from "./DetailPageBreadcrumb";
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/app/i18n/LanguageProvider";
@@ -36,7 +37,7 @@ export function OutreachMessageEditor({ message, close, saved, tenant, permissio
   return <section className="max-w-3xl space-y-6" aria-labelledby="message-page-title">
     <div className="flex flex-wrap items-center justify-between gap-3"><h1 id="message-page-title" className="text-2xl font-bold">{message?.name ?? z.messages.createTitle}</h1></div><DetailPageBreadcrumb title={message?.name ?? z.messages.createTitle} disabled={busy} />
     <form className="space-y-5" onSubmit={event => { event.preventDefault(); void save(); }} aria-busy={busy}>
-      {error && <p role="alert">{error}</p>}
+      {error && <Feedback tone="error">{error}</Feedback>}
       <fieldset className="space-y-5" disabled={busy || !writable}><legend className="sr-only">{message ? z.messages.editTitle : z.messages.createTitle}</legend>
         <label className="block">{d.groupName}<input ref={name} required maxLength={100} className={input} value={draft.name} onChange={event => change({ name: event.target.value })} /></label>
 

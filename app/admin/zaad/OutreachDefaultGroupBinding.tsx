@@ -1,4 +1,5 @@
 "use client";
+import { Feedback } from "@/app/components/admin/Feedback";
 
 import { useEffect, useId, useRef, useState } from "react";
 import { getZaadErrorMessage } from "@/app/i18n/zaad-error-messages";
@@ -77,7 +78,7 @@ export function DefaultGroupBinding({ tenant, group, name, close, saved, setDirt
         {current?.unavailableReason && <p>{current.id !== listId && <span className="break-all">{d.listId}：{current.id} — </span>}{currentReasons[current.unavailableReason]}</p>}
         {group.contactListId && changed && <p>{d.rebindHelp}{group.rebindCount !== undefined && <> {d.rebindCount.replace("{count}", String(group.rebindCount))}</>}</p>}
       </div>
-      <div id={errorId} className="whitespace-pre-line text-sm text-red-700 dark:text-red-300">{error ? <p role="alert">{error}</p> : loadFailed && <p role="alert">{candidateFailure}</p>}</div>
+      <div id={errorId} className="whitespace-pre-line text-sm text-red-700 dark:text-red-300">{error ? <Feedback tone="error">{error}</Feedback> : loadFailed && <Feedback tone="error">{candidateFailure}</Feedback>}</div>
       </div>}
       </div>
       <div className="flex justify-end gap-3"><button ref={bindingCancel} className={secondary} type="button" disabled={busy} onClick={requestClose}>{common.cancel}</button>{!loading && <button className={primary} disabled={!canSave}>{busy ? common.loading : common.save}</button>}</div>

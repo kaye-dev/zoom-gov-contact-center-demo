@@ -18,7 +18,7 @@ Run affected tests, applicable lint/typecheck, and diff checks. Full tests/build
 
 ## Runtime and failures
 
-Use the Codex in-app Browser public API, after reading its current documentation. Follow `.claude/rules/dev-server.md` for verified URLs, ownership, login, retention, and cleanup. A Browser error must not be described as a permission error without supporting evidence. Do not bypass denials with another Browser or task.
+Use the Codex in-app Browser public API, after reading its current documentation. Follow `.claude/rules/dev-server.md` for verified URLs, ownership, login, retention, and cleanup. For retained prototypes, finish the retain command, run status once in a separate call, then smoke the same returned URL with its required query. Reuse that post-retention result; do not repeat smoke before and after retaining. A route timeout or HTTP failure is a runtime failure. Only a healthy route with unavailable Browser is `UI未確認`; report an unresolved failing URL as unreachable, never healthy. A Browser error must not be described as a permission error without supporting evidence. Do not bypass denials with another Browser or task.
 
 An observed in-scope defect is repaired and rechecked locally. Browser unavailability is `UI未確認`; preserve edits and allow disclosed shipping. Keep known test/functional failures distinct. Stop repeated identical tool failures and report the limitation; validation infrastructure development is a separate scope.
 

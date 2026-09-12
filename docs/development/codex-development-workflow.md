@@ -75,11 +75,13 @@ skillメタデータとproject-local `profiles`ではmodelを指定しない。�
 
 最新要求、採用済み判断と資料、repositoryの関連source/testsを整理する。`plans/template.md`の6見出しに沿い、`plans/<slug>/goal.md`へ現在の最終設計だけを書く。`## 要件クロージャ`の各行は5列で具体的要件、設計先、prototypeまたは非UI理由、検証case、観測できる完了結果を持つ。
 
-新規UIは共通Next.js・TypeScript・Tailwind環境で、既存のshell・共通component・semantic tokenを使う。表示部品をimportし、mockはdata、永続化、authorization、backend副作用だけとする。新規TSXの移植先、props/callbackと代表データをgoalのインターフェース節に記す。対象の型・lintを確認してから、返却直前に代表smokeを1回行う。
+新規UIは共通Next.js・TypeScript・Tailwind環境で、既存のshell・共通component・semantic tokenを使う。表示部品をimportし、mockはdata、永続化、authorization、backend副作用だけとする。新規TSXの移植先、props/callbackと代表データをgoalのインターフェース節に記す。対象の型・lintを確認してから保持コマンドを完了させ、その終了後に別呼出しでstatusを1回確認する。同じ保持URLと必要なqueryで返却直前に代表smokeを1回行う。
 
 ```sh
 node scripts/prototype-runtime.mjs check <slug>
 ./dev-prototype.sh --retain <slug>
+# 上のコマンド終了後、別呼出しで実行
+./dev-confirmation.sh status <slug>
 ```
 
 詳細な作成例は[prototype authoring](../../.agents/skills/plan/references/ui-prototype-quality.md)を使う。共通hostが初回に既存ソースを`prototype/.shared/`へ保存し、以後の実装変更から比較元を保つ。旧HTML prototypeは従来のCSS builderと配信を継続でき、変換は不要。
@@ -116,6 +118,8 @@ UIは完成した実アプリを所有権確認済みURLで開き、代表smoke�
 現在のinvocationに`確認セッションを保持`がなければ、今回起動したtask-owned prototype/review processとbaseline差分のagent-owned runtimeを停止・cleanupし、結果を報告する。planで保持済みのprototypeは保全する。実checkoutからの再起動手順（`cd <current-checkout> && ./dev-compose.sh ensure`、UIでは`cd <current-checkout> && ./dev-prototype.sh <slug>`）を返す。
 
 ## UI smokeとフィードバック
+
+通知の配置・4色・Toastの使い分け・結果不明とエラーの保持は`DESIGN.md` 6.7.2を正本とする。
 
 `UI検証方式: smoke`を使い、通常は合計1〜3代表シナリオを選ぶ。
 
@@ -185,6 +189,8 @@ PR本文はbase...HEADのdiff、base..HEADのcommit、実検証結果、現在�
 ## Runtimeと権限
 
 起動・再利用・停止は[dev-server規約](../../.claude/rules/dev-server.md)と[開発用ポート](development-ports.md)に従う。worktreeは固有runtimeを使い、他checkoutの3000を再利用しない。正しい既存serverは再利用し、ユーザー所有serverは停止しない。
+
+保持後の実routeのtimeout/HTTP失敗はruntimeの実失敗とし、Browser利用不可へ読み替えない。HTTPが正常でBrowserだけ利用不能ならUI未確認として引き継ぐ。保持前のsmokeだけで閲覧可能とせず、保持完了→別呼出しのstatus→同URLの最終smokeという順序と障害時の限定診断はdev-server規約に従う。通常の1〜3シナリオを保ち、追加の承認・build・常時monitorは導入しない。
 
 Browser API文書は操作前に読み、未読エラーを権限拒否と断定しない。権限拒否を別Browserやtaskで回避しない。終了時はbaselineとの差分のうちtask所有資源だけをcleanupし、named volumeと他taskの資源を保持する。保持sessionのslugを暗黙置換しない。
 

@@ -1,4 +1,5 @@
 "use client";
+import { Feedback } from "@/app/components/admin/Feedback";
 import { DetailPageBreadcrumb } from "./DetailPageBreadcrumb";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Checkbox } from "@/app/components/Checkbox";
@@ -65,9 +66,9 @@ export function OutreachCampaignSync({ tenant, writable, setDirty, setSaving, cl
   return <section aria-labelledby="campaign-sync-title" className="max-w-4xl space-y-6" aria-busy={loading || busy}>
     <h1 id="campaign-sync-title" ref={heading} tabIndex={-1} className="text-2xl font-bold">{c.title}</h1><DetailPageBreadcrumb title={c.title} disabled={busy} />
     <p className="font-semibold">{c.destination.replace("{tenant}", t.admin.industrySettings.names[tenant])}</p><p className="text-sm leading-7 text-fg-muted">{c.help}</p>
-    {!writable ? <><p role="alert">{c.permission}</p><button className={secondary} onClick={requestClose}>{z.common.cancel}</button></> : <>
-      {error && <p role="alert">{error}</p>}
-      {!loading && candidates && selected.length > 0 && !currentSelection && !unknown && <p role="alert">{d.bindingConflict}</p>}
+    {!writable ? <><Feedback tone="warning">{c.permission}</Feedback><button className={secondary} onClick={requestClose}>{z.common.cancel}</button></> : <>
+      {error && <Feedback tone={unknown ? "warning" : "error"}>{error}</Feedback>}
+      {!loading && candidates && selected.length > 0 && !currentSelection && !unknown && <Feedback tone="warning">{d.bindingConflict}</Feedback>}
       <div className="flex flex-wrap items-end gap-3"><label className="block min-w-0 flex-1 text-sm font-semibold">{c.search}<input className={input} type="search" value={query} disabled={busy} onChange={event => setQuery(event.target.value)} /></label><button className={secondary} disabled={busy || loading || unknown} onClick={() => { setLoading(true); setError(""); void load(); }}>{d.reload}</button></div>
       {loading && <p role="status">{c.loading}</p>}
       {candidates && <div className="divide-y divide-line rounded-lg border border-line">{filtered.map(row => <label key={row.id} className={`flex min-h-16 min-w-0 items-start gap-3 p-4 ${row.selectable && !busy && !loading && !unknown ? "cursor-pointer" : ""}`}><Checkbox checked={selected.includes(row.id)} disabled={!row.selectable || busy || loading || unknown} onChange={event => { operation.current = null; const next = event.target.checked ? [...selected, row.id] : selected.filter(id => id !== row.id); setSelected(next); setDirty(next.length > 0); }} /><span className="min-w-0"><span className="block break-words font-semibold">{row.name}</span><span className="block break-all text-xs text-fg-muted">{row.id}</span><span className="mt-1 block text-sm text-fg-muted">{c.type}: {row.dialingMethod === "agentless" ? "Agentless Dialer" : row.dialingMethod === "unknown" ? d.unknown : row.dialingMethod} · {z.campaigns.status}: {d.stateLabels[row.status.toUpperCase()] ?? d.unknown}</span>{!row.selectable && <span className="mt-1 block text-sm">{row.added ? d.added : row.dialingMethod === "unknown" ? c.unknownType : c.agentlessRequired}</span>}</span></label>)}{!loading && !filtered.length && <p className="p-4 text-sm text-fg-muted">{candidates.length ? c.noMatches : c.noCandidates}</p>}</div>}

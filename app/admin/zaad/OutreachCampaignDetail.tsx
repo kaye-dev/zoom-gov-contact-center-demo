@@ -1,4 +1,5 @@
 "use client";
+import { Feedback } from "@/app/components/admin/Feedback";
 import { DetailPageBreadcrumb } from "./DetailPageBreadcrumb";
 
 import { useEffect, useRef, useState } from "react";
@@ -90,7 +91,7 @@ export function OutreachCampaignDetail({ tenant, permissions, setSaving, id, con
     <div className="flex flex-wrap items-center justify-between gap-3"><h1 id="campaign-detail-title" ref={title} tabIndex={-1} className="text-2xl font-bold">{detail?.name ?? z.campaigns.details}</h1></div><DetailPageBreadcrumb title={detail?.name ?? z.campaigns.details} disabled={busy} />
     {content}
     {pausing && detail && <ModalDialog title={z.campaigns.pauseTitle} description={u.pauseHelp} locked={busy} initialFocusRef={cancel} onRequestClose={() => { if (!lock.current) setPausing(false); }}>
-      {error && <p role="alert" className="mb-4">{error}</p>}
+      {error && <Feedback tone="warning" className="mb-4">{error}</Feedback>}
       <div className="flex justify-end gap-3"><button ref={cancel} className={secondary} disabled={busy} onClick={() => setPausing(false)}>{z.common.cancel}</button><button className={primary} disabled={busy} onClick={() => void pause()}>{z.campaigns.pause}</button></div>
     </ModalDialog>}
   </section>;

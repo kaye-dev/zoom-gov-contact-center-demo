@@ -1,4 +1,5 @@
 "use client";
+import { Feedback } from "@/app/components/admin/Feedback";
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/app/i18n/LanguageProvider";
 import { Select } from "@/app/components/Select";
@@ -52,9 +53,9 @@ export function OutreachGroupMember({ tenant, group, action, close, saved, setDi
         <p className="text-sm leading-6 text-fg-muted">{d.memberBoundary}</p>
         {(mode === "edit" || mode === "add") && <p className="text-sm leading-6 text-fg-muted">{d.groupSync.sharedEdit}</p>}
         {mode === "delete" && <p className="text-sm leading-6 text-fg-muted">{d.groupSync.sharedMemberDelete}</p>}
-        {error && <p role="alert">{error}</p>}
+        {error && <Feedback tone="error">{error}</Feedback>}
         <fieldset disabled={busy} className="space-y-4">
-          {selecting && (failed ? <div role="alert"><p>{z.common.failure}</p><button type="button" className={secondary} onClick={() => setReload(value => value + 1)}>{z.common.retry}</button></div> : contacts === null ? <p role="status">{z.common.loading}</p> : <label className="block">{d.people}<Select required value={selected} onChange={event => setSelected(event.target.value)}><option value="">{d.select}</option>{contacts.map(row => <option key={referenceKey(row.reference)} value={referenceKey(row.reference)}>{row.name} · {row.phone}{row.studentNumber ? ` · ${row.studentNumber}` : ""}</option>)}</Select></label>)}
+          {selecting && (failed ? <Feedback tone="error" action={<button type="button" className={secondary} onClick={() => setReload(value => value + 1)}>{z.common.retry}</button>}>{z.common.failure}</Feedback> : contacts === null ? <p role="status">{z.common.loading}</p> : <label className="block">{d.people}<Select required value={selected} onChange={event => setSelected(event.target.value)}><option value="">{d.select}</option>{contacts.map(row => <option key={referenceKey(row.reference)} value={referenceKey(row.reference)}>{row.name} · {row.phone}{row.studentNumber ? ` · ${row.studentNumber}` : ""}</option>)}</Select></label>)}
           {mode === "link" && <label className="block">{d.attestation}<textarea required maxLength={2000} className={input} value={attestation} onChange={event => setAttestation(event.target.value)} /></label>}
           {mode === "edit" && <><label className="block">{z.residents.name}<input required maxLength={100} className={input} value={name} onChange={event => setName(event.target.value)} /></label><label className="block">{z.residents.phone}<input required type="tel" className={input} value={phone} onChange={event => setPhone(event.target.value)} /></label></>}
           {mode === "delete" && <p>{member?.displayName} · {member?.phones.map(row => row.number).join(" / ")}</p>}

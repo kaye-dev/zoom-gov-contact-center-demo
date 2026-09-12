@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import ts from "typescript";
+import { OutreachFeedbackProvider } from "../app/admin/zaad/OutreachFeedbackProvider";
 import { LanguageProvider } from "../app/i18n/LanguageProvider";
 import type { ImportedAudioMessage } from "../lib/zaad/message-import-contracts";
 import type { OutreachPanelProps } from "../app/admin/zaad/OutreachView";
@@ -22,7 +23,7 @@ async function withDom(work:(document:Document,render:(element:React.ReactNode)=
  const dom=new JSDOM('<html lang="ja"><body><div id="root"></div></body></html>',{url:'http://localhost/'}),before=new Map<string,PropertyDescriptor|undefined>();
  for(const[key,value]of Object.entries({window:dom.window,document:dom.window.document,navigator:dom.window.navigator,HTMLElement:dom.window.HTMLElement,HTMLButtonElement:dom.window.HTMLButtonElement,Element:dom.window.Element,Node:dom.window.Node,Event:dom.window.Event,CustomEvent:dom.window.CustomEvent,MutationObserver:dom.window.MutationObserver,getComputedStyle:dom.window.getComputedStyle,React,IS_REACT_ACT_ENVIRONMENT:true})){before.set(key,Object.getOwnPropertyDescriptor(globalThis,key));Object.defineProperty(globalThis,key,{configurable:true,writable:true,value});}
  const root=createRoot(dom.window.document.getElementById('root')!);
- try{await work(dom.window.document,element=>act(async()=>root.render(h(LanguageProvider,{availableLocales:['ja'],tenantKey:'lg',children:element}))));}finally{await act(async()=>root.unmount());for(const[key,value]of before){if(value)Object.defineProperty(globalThis,key,value);else Reflect.deleteProperty(globalThis,key);}dom.window.close();}
+ try{await work(dom.window.document,element=>act(async()=>root.render(h(LanguageProvider,{availableLocales:['ja'],tenantKey:'lg',children:h(OutreachFeedbackProvider,{tenant:'lg',view:'messages',children:element})}))));}finally{await act(async()=>root.unmount());for(const[key,value]of before){if(value)Object.defineProperty(globalThis,key,value);else Reflect.deleteProperty(globalThis,key);}dom.window.close();}
 }
 const props:OutreachPanelProps={tenant:'lg',permissions:{create:true,update:true,delete:true},fullAccess:true,setDirty:()=>{}};
 test('MESSAGE-ACTIONS-01: menu does not navigate the row; delete remains local and saving blocks duplicate submissions',async()=>withDom(async(document,render)=>{

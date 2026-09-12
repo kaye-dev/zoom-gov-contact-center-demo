@@ -29,3 +29,12 @@ test("DOC-03 action count, exclusions and accessible portal contract are explici
   for (const value of ["操作が0件", "1件なら", "2件以上", "表示されたdisabled操作も数える", "データ名・メンバー名", "checkbox", "matrix", "一括操作", "MoreHorizIcon", "UserActionsMenu", "ApiKeyActionsMenu", "document.body", "portal", "fixed", "実測", "Escape", "Tab/Shift+Tab", "focusを奪わない", "次の行または一覧見出し"]) assert.ok(design.includes(value), value);
   assert.match(read(".claude/rules/ui.md"), /2つ以上.*三点メニュー/);
 });
+
+test("DOC-04 operation feedback has one discoverable visual and outcome contract", () => {
+  const design = read("DESIGN.md");
+  const notice = design.split("#### 6.7.2 操作結果の通知")[1]?.split("## 7.")[0];
+  assert.ok(notice);
+  for (const term of ["20px", "1024px未満", "画面下部中央", "viewport左24px", "結果不明", "修正・再試行", "成功数・失敗数・未処理数", "6秒", "FIFO"]) assert.ok(notice.includes(term), term);
+  assert.match(read(".claude/rules/ui.md"), /DESIGN\.md.*6\.7\.2/u);
+  assert.match(design, /--feedback-\{success,info,warning,error\}-\{bg,fg,line\}/u);
+});

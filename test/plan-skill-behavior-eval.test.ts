@@ -150,6 +150,7 @@ test("plan skill behavioral evalは登録済みscenarioの実promptを公開す�
     ...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).workflowScenarioNames,
     ...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).smokeScenarioNames,
     "prototype-tsx-transfer",
+    "prototype-retention-handoff",
   ]);
 });
 
@@ -208,6 +209,7 @@ test("plan skill behavioral evalはsymlink経由のCLI起動でもmainを実行�
     ...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).workflowScenarioNames,
     ...(await import(pathToFileURL(path.join(root, "scripts/eval-workflow-scenarios.mjs")).href)).smokeScenarioNames,
     "prototype-tsx-transfer",
+    "prototype-retention-handoff",
   ]);
 });
 
@@ -1011,4 +1013,20 @@ test("FLOW-03: workflow scenarios bind actual tool history and affected paths", 
   assert.deepEqual(workflow.extractWorkflowCommands(JSON.stringify({ type: "item.completed", item: { type: "command_execution", command: "node workflow-fixture.mjs inspect", exit_code: 0 } })), ["node workflow-fixture.mjs inspect"]);
   assert.throws(() => workflow.extractWorkflowCommands(JSON.stringify({ type: "item.completed", item: { type: "command_execution", command: "node workflow-fixture.mjs browser", exit_code: 1 } })));
   assert.throws(() => workflow.extractWorkflowCommands("truncated-json"));
+});
+
+
+test("retention handoff: post-exit failure and Browser-only unavailability stay distinct", async context => {
+  const evaluator = await evaluatorModulePromise;
+  const fixture = await evaluator.prepareScenario("prototype-retention-handoff", `retention-${process.pid}`);
+  context.after(() => rm(fixture.fixtureRoot, { recursive: true, force: true }));
+  await fixture.scenario.simulate(fixture.repo);
+  const commands = ["retain-a", "status-a", "inspect-a", "retain-b", "status-b", "docs", "browser-b"].map(action => `node retention-fixture.mjs ${action}`);
+  const final = fixture.scenario.simulatedFinal!;
+  await evaluator.gradePreparedScenario(fixture, final, commands);
+  await assert.rejects(evaluator.gradePreparedScenario(fixture, final, [commands.slice(0, 2).join(" && "), ...commands.slice(2)]), /separate invocation/u);
+  await assert.rejects(evaluator.gradePreparedScenario(fixture, "fixtureはBrowser利用不可でUI未確認です。", commands), /runtime failure/u);
+  await assert.rejects(evaluator.gradePreparedScenario(fixture, final, [...commands, "kill 101"]), /out-of-scope/u);
+  await writeFile(path.join(fixture.repo, "retention-actions.jsonl"), '{"action":"retain-a"}\n');
+  await assert.rejects(evaluator.gradePreparedScenario(fixture, final, commands), /retention order/u);
 });

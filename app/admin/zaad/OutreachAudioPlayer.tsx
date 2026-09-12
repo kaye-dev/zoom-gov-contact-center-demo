@@ -1,4 +1,5 @@
 "use client";
+import { Feedback } from "@/app/components/admin/Feedback";
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/app/i18n/LanguageProvider";
 import { outreachSecondary as secondary } from "@/app/notifications/register/StudentNotificationRegistration";
@@ -22,6 +23,6 @@ export function OutreachAudioPlayer({ load }: { load: (signal: AbortSignal) => P
  return <div className="space-y-3" aria-busy={busy}>
   <audio ref={audio} className="w-full" controls preload="metadata" src={src} aria-label={c.label} aria-disabled={busy || failed} onError={() => { setFailed(true); setBusy(false); }} />
   {busy && <p role="status" className="text-sm text-fg-muted">{c.loading}</p>}
-  {failed && <><p role="alert" className="text-sm text-fg-muted">{c.failed}</p><button type="button" className={secondary} disabled={busy} onClick={retry}>{c.retry}</button></>}
+  {failed && <><Feedback tone="error">{c.failed}</Feedback><button type="button" className={secondary} disabled={busy} onClick={retry}>{c.retry}</button></>}
  </div>;
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { createSmokeScenarios, createWorkflowScenarios, createPrototypeTransferScenarios, extractSmokeObservations, extractWorkflowCommands } from "./eval-workflow-scenarios.mjs";
+import { createSmokeScenarios, createWorkflowScenarios, createPrototypeTransferScenarios, createPrototypeRetentionScenarios, extractSmokeObservations, extractWorkflowCommands } from "./eval-workflow-scenarios.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -1322,6 +1322,7 @@ const scenarios = {
 Object.assign(scenarios, createWorkflowScenarios({ write, run, ensure, assertOnlyPaths }));
 Object.assign(scenarios, createSmokeScenarios({ write, run, ensure, assertOnlyPaths }));
 Object.assign(scenarios, createPrototypeTransferScenarios({ write, run, ensure, assertOnlyPaths }));
+Object.assign(scenarios, createPrototypeRetentionScenarios({ write, run, ensure, assertOnlyPaths }));
 
 const commonAffectedPaths = [
   ".agents/skills/git-commit-push-pr/SKILL.md",
