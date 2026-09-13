@@ -1,0 +1,4 @@
+interface:
+  display_name: "Zoom Contact Center Flow"
+  short_description: "要望からZoom Contact Centerのフローを設計・生成・検証"
+  default_prompt: "$zoom-contact-center-flow を使い、指示に沿うフローのJSON・配置図・検証結果を作成してください。"
