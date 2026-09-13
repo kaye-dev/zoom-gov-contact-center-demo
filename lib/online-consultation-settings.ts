@@ -1,3 +1,4 @@
+import { parseZoomVideoTag } from "./zoom-video-tag";
 import { MAX_CHAT_MEMO_LENGTH } from "./chat-settings";
 import type { TenantKey } from "./tenants";
 import {
@@ -40,17 +41,7 @@ export function isUniversityConsultationService(
 
 /** Reject arbitrary markup: only an official HTTPS SDK script tag is accepted. */
 export function parseVideoClientWebTag(value: string): string | null {
-  const tag = value.trim();
-  if (!tag) return null;
-  if (
-    !/^<script\s+[^>]*\bsrc=["']https:\/\/(?:[a-z0-9-]+\.)?zoom\.us\/[^"']+["'][^>]*>\s*<\/script>$/iu.test(
-      tag,
-    )
-  )
-    return null;
-  if (/<\s*(?!\/script\s*>)[^>]+>/iu.test(tag.replace(/^<script/iu, "")))
-    return null;
-  return tag;
+  return parseZoomVideoTag(value) ? value.trim() : null;
 }
 
 export function parseOnlineConsultationSettings(

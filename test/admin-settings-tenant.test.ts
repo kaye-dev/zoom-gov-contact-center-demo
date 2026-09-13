@@ -6,7 +6,7 @@ import {
   ADMIN_SETTINGS_RESOURCES,
 } from "../lib/admin-settings-tenant";
 import { parseOnlineConsultationSettings } from "../lib/online-consultation-settings";
-const tag = '<script src="https://zoom.us/sdk.js"></script>';
+const tag = '<script type="module" src="https://us01ccistatic.zoom.us/us01cci/web-sdk/video-client.js" data-entry-id="entry-test" data-env="us01" data-apikey="public-test-key"></script>';
 test("REGISTRY: each management resource exposes only registered industries", () => {
   for (const resource of ADMIN_SETTINGS_RESOURCES) {
     assert.deepEqual(settingsTenantOptions(resource), ["lg", "univ"]);

@@ -1,3 +1,4 @@
+import { videoConsultationDictionaries } from "./video-consultation";
 import { siteAccessDictionaries } from "./site-access";
 import { municipalWorkflowDictionaries } from "./municipal-workflows";
 import { outreachCommonDictionaries } from "./outreach-common";
@@ -54,6 +55,7 @@ export function buildDictionary(
 
   const dictionary: Dictionary = {
     ...chrome,
+    videoConsultation: videoConsultationDictionaries[locale],
     siteAccess: siteAccessDictionaries[locale],
     universityOutreach: universityOutreachDictionaries[locale],
     municipalOutreach: municipalOutreachDictionaries[locale],
