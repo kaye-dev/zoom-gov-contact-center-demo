@@ -156,6 +156,8 @@ CSVをアップロードした後、処理成功の表示だけで完了にし�
 
 ## 5. Voice Flowを作成する
 
+この節のフローをCodexで設計・変更したり、既存JSONの配置を整理したりする場合は、[`$zoom-contact-center-flow` の利用ガイド](../../development/zoom-contact-center-flow.md)を参照してください。スキルの通常の完了地点はJSON・配置図・検証結果の納品であり、本手順のQueue設定、Publish、Run、実通話確認はそれぞれ別の作業として扱います。
+
 `Contact Center Management` → `Flows` → `Add Flow`を開きます。
 
 | 項目 | 設定値 |
