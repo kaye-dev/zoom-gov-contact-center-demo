@@ -6,6 +6,10 @@
 
 UIはCodexアプリ内Browserでprototypeの構成・主要な見た目との照合、大きなUI崩れと主要な正常系操作を確認する。詳細parityは開発手順、完了条件、別モードやrelease/CI/定期への案内に含めない。スキル本文と必要な用途別参照に責務を分ける構成は[OpenAIのskill設計ガイド](https://learn.chatgpt.com/docs/build-skills)を参考とする。
 
+## Zoom Contact Centerフローを扱う場合
+
+ZCCフローの新規作成、案内・分岐の変更、配置や接続先の整理には `$zoom-contact-center-flow` を使う。自然言語や既存JSONからフローと検証結果を作るためのスキルで、通常はファイル納品までを扱う。利用場面、依頼例、対応範囲は[フロー作成スキルの使い方](zoom-contact-center-flow.md)を参照する。
+
 ## 成果物
 
 `plans/template.md`だけをGitで追跡する。生成資料はGitからignoreせず、複数planを同じcheckoutへ保全できる。

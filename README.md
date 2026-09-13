@@ -20,6 +20,10 @@ Zoom 製品のデモ用に作成した、架空の市区町村ホームページ
 - Docker / Docker Compose
 - 多言語対応（i18n）/ ダークモード対応
 
+## Zoom Contact Centerフローの作成・整理
+
+ZCCのデモフローを要望から作成する、案内や分岐を変更する、既存フローの余白や合流を整理する場合は、`$zoom-contact-center-flow` を使います。通常はJSON・配置図・検証結果を納品します。[利用場面と依頼例](docs/development/zoom-contact-center-flow.md)を参照してください。
+
 ## 検索エンジン向け設定
 
 このサイトはデモ専用のため、Production、Preview、ローカルの全環境でHTMLへ`noindex, nofollow`のrobots metaを付与し、API、raw Markdown、static assetを含む全レスポンスにも`X-Robots-Tag: noindex, nofollow`を付与します。

@@ -1,0 +1,199 @@
+{
+  "name": "observed-voice-menu-export-v1",
+  "channel": "voice",
+  "envelope_match": {
+    "studioType": 0,
+    "studioScope": 0
+  },
+  "source": "User-provided voice export inspected 2026-09-13; sanitized structural regression fixture. Not an official JSON schema.",
+  "checked_on": "2026-09-13",
+  "scope": "Observed Start / SendMedia / CollectInput menu / RouteTo EnQueue and Disconnect only",
+  "owned_id_paths": [
+    "/id",
+    "/transitions/*/id",
+    "/properties/audioList/*/id",
+    "/properties/videoList/*/id",
+    "/properties/chatList/*/id",
+    "/properties/slidesList/*/id",
+    "/properties/emailList/*/id",
+    "/properties/cardList/*/id"
+  ],
+  "external_id_paths": [
+    "/properties/_selectedAgentRoutingProfileVariableId",
+    "/properties/_selectedFlowSourceId",
+    "/properties/_selectedInboxQueueVariableId",
+    "/properties/_selectedInboxSourceId",
+    "/properties/_selectedQueueSourceId",
+    "/properties/audioList/*/asset_id",
+    "/properties/audioList/*/file_id",
+    "/properties/audioList/*/textVariableId",
+    "/properties/audioList/*/voice_id",
+    "/properties/builtInGrammarId",
+    "/properties/cardList/*/asset_id",
+    "/properties/chatList/*/asset_id",
+    "/properties/chatList/*/assetsTextId",
+    "/properties/chatList/*/audio_id",
+    "/properties/chatList/*/imageVariableId",
+    "/properties/chatList/*/textVariableId",
+    "/properties/emailList/*/emailAssetId",
+    "/properties/emailList/*/emailVariableId",
+    "/properties/flowId",
+    "/properties/imageVariableId",
+    "/properties/inboxId",
+    "/properties/inboxQueueId",
+    "/properties/intentGroupId",
+    "/properties/optionRouteToFallbackQueueId",
+    "/properties/optionRouteToQueueId",
+    "/properties/outgoingCallTeamsExtId",
+    "/properties/outgoingCallTeamsId",
+    "/properties/outgoingCallerId",
+    "/properties/outgoingNumberVariableId",
+    "/properties/promptAudioId",
+    "/properties/promptImageId",
+    "/properties/promptSlidesId",
+    "/properties/promptTextAssetsId",
+    "/properties/promptVideoId",
+    "/properties/queueId",
+    "/properties/slidesList/*/asset_id",
+    "/properties/slidesList/*/slidesVariableId",
+    "/properties/slidesVariableId",
+    "/properties/textVariableId",
+    "/properties/to/variableId",
+    "/properties/videoList/*/asset_id",
+    "/properties/videoList/*/videoVariableId",
+    "/properties/videoVariableId",
+    "/properties/voiceId",
+    "/properties/zoomPhoneUserId",
+    "/transitions/*/categoryId",
+    "/transitions/*/intentKeywordList/*/intentId",
+    "/transitions/*/skillId"
+  ],
+  "types": {
+    "Start": {
+      "exit_counts": {
+        "next": [
+          1,
+          1
+        ]
+      },
+      "required_paths": [
+        "/properties",
+        "/transitions"
+      ]
+    },
+    "SendMedia": {
+      "exit_counts": {
+        "next": [
+          1,
+          1
+        ],
+        "sendMediaFailed": [
+          1,
+          1
+        ]
+      },
+      "required_paths": [
+        "/properties",
+        "/transitions"
+      ]
+    },
+    "CollectInput": {
+      "variant_pointer": "/properties/collectType",
+      "variants": {
+        "ivrMenu": {
+          "exit_counts": {
+            "Match": [
+              1,
+              100
+            ],
+            "timeout": [
+              1,
+              1
+            ],
+            "noMatch": [
+              1,
+              1
+            ],
+            "playbackAudioFail": [
+              1,
+              1
+            ]
+          },
+          "required_paths": [
+            "/properties",
+            "/transitions",
+            "/properties/collectType",
+            "/properties/timeoutInterval"
+          ],
+          "unique_condition_events": [
+            "Match"
+          ]
+        }
+      }
+    },
+    "RouteTo": {
+      "variant_pointer": "/properties/routeTo",
+      "variants": {
+        "EnQueue": {
+          "exit_counts": {
+            "callFinished": [
+              1,
+              1
+            ],
+            "overflow": [
+              1,
+              1
+            ],
+            "routingFailed": [
+              1,
+              1
+            ]
+          },
+          "required_paths": [
+            "/properties/queueId"
+          ],
+          "nonempty_paths": [
+            "/properties/queueId"
+          ]
+        },
+        "Disconnect": {
+          "exit_counts": {},
+          "required_paths": [
+            "/properties/routeTo"
+          ]
+        }
+      }
+    }
+  },
+  "name_limit": 20,
+  "name_limit_basis": "Conservative local naming convention from observed accepted artifact; not asserted as a global Zoom limit",
+  "dimensions": {
+    "Start": {
+      "width": 300,
+      "header": 70,
+      "exit_height": 38,
+      "input_y": 45
+    },
+    "SendMedia": {
+      "width": 300,
+      "header": 70,
+      "exit_height": 38,
+      "input_y": 45
+    },
+    "CollectInput": {
+      "width": 300,
+      "header": 70,
+      "exit_height": 38,
+      "input_y": 45
+    },
+    "RouteTo": {
+      "width": 300,
+      "header": 70,
+      "exit_height": 38,
+      "input_y": 45
+    }
+  },
+  "dimensions_basis": "Approximate dimensions from observed voice cards; verify/adjust against actual channel UI",
+  "identity_basis": "Node/transition and media-list item identity paths observed in export; list item ownership is a local adapter assumption, import unverified",
+  "unknown_channel_policy": "Do not infer other studioType/studioScope or messaging subtype values"
+}
