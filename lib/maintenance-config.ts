@@ -1,3 +1,4 @@
+import { PUBLIC_ENTRY_HOSTNAME } from "./public-site-routing";
 import {
   normalizeHttpsOriginHostname,
   normalizeRequestHostname,
@@ -361,6 +362,7 @@ export function resolveMaintenanceEnvironment(
   // treated as preview.
   if (
     requestHostname === canonicalHostname ||
+    requestHostname === PUBLIC_ENTRY_HOSTNAME ||
     findTenantByProductionHostname(requestHostname) !== null
   ) {
     return "production";

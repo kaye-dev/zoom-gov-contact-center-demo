@@ -106,7 +106,8 @@ const MAINTENANCE_ROWS_SQL = `
       "updatedAt" AT TIME ZONE 'UTC',
       'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
     ) AS "updatedAt"
-  FROM public."site_maintenance_settings"
+  FROM public."site_maintenance_settings" AS settings
+  WHERE COALESCE(to_jsonb(settings)->>'siteKey', 'lg') = 'lg'
   ORDER BY "environment"::text
 `;
 

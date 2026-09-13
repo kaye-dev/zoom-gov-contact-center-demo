@@ -8,6 +8,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { listTenantProductionOrigins } from "../../lib/tenants";
 import { validateAdminInput } from "./lib/admin";
 import {
   loadDeploymentContextFromStdin,
@@ -16,6 +17,9 @@ import {
   assertDeploymentEncryptionKey,
   type StoredDeploymentConfig,
 } from "./lib/aws-config";
+import { captureTenantData, assertTenantDataPreserved, type TenantDataSnapshot } from "./lib/tenant-migration-data";
+import { applyTenantUpgrade, createDeploymentMigrationPlan, isTenantMigrationPlan } from "./lib/tenant-migration";
+import { createNeonRehearsal, deleteNeonRehearsal, type NeonRehearsal } from "./lib/neon-rehearsal";
 import { inspectDatabase } from "./lib/database";
 import {
   applyMigrationPlan,
@@ -172,6 +176,7 @@ export type VerifiedDeploymentTarget = {
   developerApiSettingsEncryptionKey: string;
   targetFingerprint: string;
   vercelEnvironment: NodeJS.ProcessEnv;
+  migrationRehearsal?: { config: StoredDeploymentConfig["neon"]; apiKey: string };
 };
 
 type DirectDeploymentState = {
@@ -300,7 +305,7 @@ export async function runDeploymentWorkflow(
     } else {
       logDeploymentRevalidation("Production反映前のmigration状態を再検証");
     }
-    const migrationPlan = await createMigrationPlan({
+    const migrationPlan = await createDeploymentMigrationPlan({
       projectRoot,
       directUrl: target.database.directUrl,
       runner,
@@ -342,15 +347,51 @@ export async function runDeploymentWorkflow(
       }
       console.log(renderMigrationPlan(migrationPlan));
       assertDeploymentGitSnapshotUnchanged(git, process.env);
-      const executionPlan = await createMigrationPlan({
+      const executionPlan = await createDeploymentMigrationPlan({
         projectRoot,
         directUrl: target.database.directUrl,
         runner,
         inspect: inspectDatabase,
       });
       assertSameMigrationPlan(migrationPlan, executionPlan);
-      state.migrationAttempted = true;
-      applyMigrationPlan(runner, target.database.directUrl);
+      if (isTenantMigrationPlan(executionPlan)) {
+        const rehearsalConfig = target.migrationRehearsal;
+        if (!rehearsalConfig) throw new Error("Tenant migration rehearsal credentials are unavailable.");
+        let sourceData: TenantDataSnapshot | undefined;
+        await applyTenantUpgrade({
+          capture: async (url) => {
+            const snapshot = await captureTenantData(url);
+            sourceData ??= snapshot;
+            return JSON.stringify(snapshot);
+          },
+          verifyData: async (url) => {
+            if (!sourceData) throw new Error("Tenant source snapshot unavailable.");
+            assertTenantDataPreserved(sourceData, await captureTenantData(url, sourceData));
+          },
+          productionUrl: target.database.directUrl,
+          plan: executionPlan,
+          inspect: (directUrl) => createDeploymentMigrationPlan({ projectRoot, directUrl, runner, inspect: inspectDatabase }),
+          createClone: async () => {
+            logDeploymentDetail("テナント移行をNeon複製DBで検証しています");
+            const clone = await createNeonRehearsal(rehearsalConfig.config, rehearsalConfig.apiKey);
+            secrets.add(clone.directUrl, new URL(clone.directUrl).password);
+            return clone;
+          },
+          deleteClone: (clone) => deleteNeonRehearsal(rehearsalConfig.config, rehearsalConfig.apiKey, clone as NeonRehearsal),
+          apply: (directUrl) => applyMigrationPlan(runner, directUrl),
+          verify: async (directUrl) => {
+            await assertMigrationUpToDate(runner, directUrl, projectRoot);
+            await verifyMaintenanceSettingsDatabase(directUrl);
+          },
+          beforeProduction: async () => {
+            assertDeploymentGitSnapshotUnchanged(git, process.env);
+            state.migrationAttempted = true;
+          },
+        });
+      } else {
+        state.migrationAttempted = true;
+        applyMigrationPlan(runner, target.database.directUrl);
+      }
       await assertMigrationUpToDate(runner, target.database.directUrl, projectRoot);
       await verifyMaintenanceSettingsDatabase(target.database.directUrl);
       logDeploymentSuccess("Migration applied and verified");
@@ -379,13 +420,14 @@ export async function runDeploymentWorkflow(
       );
       state.previousProductionId = previousProduction?.id;
       if (previousProduction) {
-        const publicBaseline = await capturePublicSiteBaseline(
-          target.canonicalUrl,
-          globalThis.fetch,
-        );
-        logDeploymentDetail(
-          `Canonical before deployment: ${previousProduction.id} (HTTP ${publicBaseline.status})`,
-        );
+        // An old application may fail against an already migrated schema.
+        // Keep its deployment identity, but use final smoke as the success gate.
+        try {
+          const publicBaseline = await capturePublicSiteBaseline(target.canonicalUrl, globalThis.fetch);
+          logDeploymentDetail(`Canonical before deployment: ${previousProduction.id} (HTTP ${publicBaseline.status})`);
+        } catch {
+          console.warn(renderDeploymentWarning(`Canonical before deployment: ${previousProduction.id} の公開応答を検証できません。新しい公開後のsmokeで検証します。`, DEPLOYMENT_LOG_STYLE));
+        }
       } else {
         logDeploymentDetail("Canonical before deployment: none");
       }
@@ -610,6 +652,7 @@ export async function verifyStoredDeploymentTarget(
   return {
     link,
     canonicalUrl,
+    migrationRehearsal: { config: config.neon, apiKey: deploymentSecrets.neonApiKey },
     projectName: project.name,
     database: neon.database,
     developerApiSettingsEncryptionKey: deploymentSecrets.developerApiSettingsEncryptionKey,
@@ -651,7 +694,7 @@ export function syncProductionEnvironment(
   );
   for (const [name, value] of [
     ["BETTER_AUTH_URL", target.canonicalUrl.origin],
-    ["BETTER_AUTH_TRUSTED_ORIGINS", target.canonicalUrl.origin],
+    ["BETTER_AUTH_TRUSTED_ORIGINS", createProductionTrustedOrigins(target.canonicalUrl.origin)],
     ["BETTER_AUTH_TRUST_PROXY_HEADERS", "true"],
     ["APP_CANONICAL_ORIGIN", target.canonicalUrl.origin],
   ] as const) {
@@ -853,7 +896,7 @@ export function validateProductionDeploymentEvidence(
   };
 }
 
-async function runCanonicalSmoke(
+export async function runCanonicalSmoke(
   runner: CommandRunner,
   target: VerifiedDeploymentTarget,
   expectedDeploymentId: string,
@@ -1895,6 +1938,10 @@ async function waitForCanonicalDeployment(
   return false;
 }
 
+export function createProductionTrustedOrigins(canonicalOrigin: string): string {
+  return [...new Set([validateCanonicalUrl(canonicalOrigin).origin, ...listTenantProductionOrigins()])].join(",");
+}
+
 export function createBuildEnvironment(
   ambient: Readonly<NodeJS.ProcessEnv>,
   authSecret: string,
@@ -1907,7 +1954,7 @@ export function createBuildEnvironment(
     DATABASE_URL: SYNTHETIC_BUILD_DATABASE_URL,
     BETTER_AUTH_SECRET: authSecret,
     BETTER_AUTH_URL: normalizedCanonicalOrigin,
-    BETTER_AUTH_TRUSTED_ORIGINS: normalizedCanonicalOrigin,
+    BETTER_AUTH_TRUSTED_ORIGINS: createProductionTrustedOrigins(normalizedCanonicalOrigin),
     BETTER_AUTH_TRUST_PROXY_HEADERS: "true",
     APP_CANONICAL_ORIGIN: normalizedCanonicalOrigin,
   };

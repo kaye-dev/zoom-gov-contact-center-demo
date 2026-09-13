@@ -2,7 +2,7 @@
 
 [English](site-access.en.md)
 
-`http://localhost:<port>/`は自治体・大学の入口です。リンクは同じportの`lg.localhost`と`univ.localhost`に進みます。本番の登録済みHost、Preview等の未登録Hostの既存フォールバックは変わりません。localhostの一般下層URLは入口へ戻ります。管理画面のURL・認証は既存のままです。
+`http://localhost:<port>/`は自治体・大学の入口です。リンクは同じportの`lg.localhost`と`univ.localhost`に進みます。本番の`https://demo.keien.dev/`も自治体・大学の入口です。共通ドメインにも本番のアクセス設定を適用します。アクセスコード通過後は業種選択ページを表示し、リンクは`https://demo.lg.keien.dev/`と`https://demo.univ.keien.dev/`に進みます。業種別HostとPreview等の未登録Hostの既存フォールバックは変わりません。localhostと共通ドメインの一般下層URLは入口へ戻ります。管理画面のURL・認証は既存のままです。
 
 ## 設定と閲覧
 

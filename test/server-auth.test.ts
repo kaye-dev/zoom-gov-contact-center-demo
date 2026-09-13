@@ -5,6 +5,8 @@ import type { PrismaClient } from "../lib/generated/prisma/client";
 import { createAuth } from "../lib/auth";
 import { TENANTS } from "../lib/tenants";
 
+import { createBuildEnvironment, createProductionTrustedOrigins } from "../scripts/deploy/main";
+
 const fakePrisma = {} as PrismaClient;
 const productionSecret = "kShZ6X3N1bW9qP4vR8tY2uI5oA7sD0fG";
 
@@ -183,4 +185,13 @@ test("production auth rejects wildcard and non-origin configuration", () => {
       }),
     /VERCEL_URL must be an exact HTTPS Vercel host/,
   );
+});
+
+test("deployment origin configuration satisfies production auth for every tenant", () => {
+  for (const origin of [...TENANTS.map(t => `https://${t.productionHost}`), "https://city.example.jp"]) {
+    const env = createBuildEnvironment({ NODE_ENV: "test" }, productionSecret, origin);
+    assert.equal(env.BETTER_AUTH_TRUSTED_ORIGINS, createProductionTrustedOrigins(origin));
+    const auth = createAuth(fakePrisma, { env });
+    for (const tenant of TENANTS) assert.ok(auth.options.trustedOrigins?.includes(`https://${tenant.productionHost}`));
+  }
 });

@@ -1,10 +1,13 @@
 import { normalizeRequestHostname } from "./hostname";
 import { getTenant, resolveTenantFromHost, type TenantKey } from "./tenants";
 
+export const PUBLIC_ENTRY_HOSTNAME = "demo.keien.dev";
+
 export type PublicSite = { kind: "entry" } | { kind: "tenant"; tenantKey: TenantKey };
 
 export function resolvePublicSite(host: string | null | undefined, env = process.env): PublicSite {
-  if (normalizeRequestHostname(host) === "localhost") return { kind: "entry" };
+  const hostname = normalizeRequestHostname(host);
+  if (hostname === "localhost" || hostname === PUBLIC_ENTRY_HOSTNAME) return { kind: "entry" };
   return { kind: "tenant", tenantKey: resolveTenantFromHost(host, env).key };
 }
 

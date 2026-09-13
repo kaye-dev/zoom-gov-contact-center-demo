@@ -883,7 +883,7 @@ parse_release_output() {
 confirm_pending_migration() {
   local answer
   [[ -t 0 && -t 1 ]] || die "A pending migration requires one approval in an interactive terminal."
-  printf '上記のpending migrationをProduction deploy前に適用しますか? [y/N] '
+  printf '上記のpending migrationを適用してProduction deployへ進みますか（テナント移行は複製DBで検証後に適用）? [y/N] '
   IFS= read -r answer
   if [[ ! "${answer}" =~ ^([yY]|[yY][eE][sS])$ ]]; then
     die "Migration was refused. Database migration, Vercel environment updates, and Production deploy were not started."
