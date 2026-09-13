@@ -619,3 +619,19 @@ function protectedPublicSearchRequest(
     );
   };
 }
+
+for (const location of ["/admin/login?callbackURL=%2Fadmin", "https://foreign.example/admin/login", "/unexpected"]) {
+  test(`legacy login redirect validates destination: ${location}`, async () => {
+    const base = new URL("https://canonical.example.test");
+    const normal = protectedPublicSearchRequest(base, base, []);
+    const request = async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/login") return protectedResponse(url, "", { status: 307, headers: { location } });
+      if (url.pathname === "/admin/login") return normal(new URL("/login", base));
+      return normal(input);
+    };
+    const run = verifyPublicSiteSmoke(base, { environment: "PRODUCTION", status: 503 }, request, { canonicalOrigin: base });
+    if (location.startsWith("/admin/login")) await run;
+    else await assert.rejects(run, /outside the expected admin login route/);
+  });
+}

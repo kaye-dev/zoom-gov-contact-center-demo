@@ -265,7 +265,15 @@ async function assertPublicExclusions(
   canonicalOrigin: URL,
   searchIndexingExpectation: SearchIndexingExpectation,
 ): Promise<void> {
-  const login = await fetchWithTimeout(baseUrl, "/login", request);
+  let login = await fetchWithTimeout(baseUrl, "/login", request);
+  if (login.status === 307) {
+    const location = login.headers.get("location");
+    const destination = location ? new URL(location, baseUrl) : undefined;
+    if (!destination || destination.origin !== baseUrl.origin || destination.pathname !== "/admin/login") {
+      throw new Error("Legacy /login redirected outside the expected admin login route.");
+    }
+    login = await fetchWithTimeout(baseUrl, destination.pathname + destination.search, request);
+  }
   if (
     login.status !== 200 ||
     !(login.headers.get("content-type") ?? "").toLowerCase().includes("text/html")

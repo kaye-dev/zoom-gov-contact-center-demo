@@ -896,7 +896,7 @@ export function validateProductionDeploymentEvidence(
   };
 }
 
-async function runCanonicalSmoke(
+export async function runCanonicalSmoke(
   runner: CommandRunner,
   target: VerifiedDeploymentTarget,
   expectedDeploymentId: string,
