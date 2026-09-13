@@ -72,7 +72,7 @@ export function UniversityPortal({ page, children }: { page: Page; children?: Re
   }, [menuOpen]);
 
   return (
-    <div className="flex min-h-screen flex-col overflow-x-hidden bg-surface text-fg">
+    <div className="flex min-h-screen flex-col overflow-x-clip bg-surface text-fg">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[80] focus:rounded-md focus:bg-primary focus:px-4 focus:py-3 focus:text-white"
