@@ -177,7 +177,7 @@ Zoom AI、Zoom Virtual Agent、Zoom Contact Center、Zoom Phone への導線は�
 
 ### デモ入口・認証画面
 
-- localhostの入口と認証画面は中立な `DemoFrame` を共有する。中央の `keien.dev` ヘッダー、中央揃えの架空デモ注記を使い、管理リンクを置かない。
+- localhost・本番共通ドメイン（demo.keien.dev）の入口と認証画面は中立な `DemoFrame` を共有する。中央の `keien.dev` ヘッダー、中央揃えの架空デモ注記を使い、管理リンクを置かない。
 - 入口はmax-w-6xl内に自治体・大学の2リンクを配置し、768px未満で1列にする。認証はmax-w-mdの1列とし、説明の2文間を明示改行する。問い合わせ見出しはblockの太字、次行は通常本文で入力のaria-describedbyと関連付ける。
 - 限定公開設定はメンテナンスフォームの後に独立保存領域として配置する。設定対象、公開範囲、コード、有効日数、影響説明、保存の順。既存のフォーム、Feedback、ModalDialog、Success Toastを使い、外枠・影を追加しない。未取得は保存不可、競合時は入力保持、未保存のスコープ切替は確認する。
 

@@ -21,3 +21,18 @@ test("access gate precedes maintenance, and a grant never disables maintenance",
  }
  assert.deepEqual(resolvePublicSite('localhost'),{kind:'entry'});
 });
+
+test("common production host remains an entry after access-code authentication", async () => {
+ const {store,rows}=await accessFixture();
+ for (const row of rows) row.environment="PRODUCTION";
+ const env={NODE_ENV:"production" as const,APP_CANONICAL_ORIGIN:"https://demo.lg.keien.dev"};
+ const request=new NextRequest("https://demo.keien.dev/",{headers:{accept:"text/html"}});
+ assert.equal((await requirePublicAccess(request,{store,env})).response?.status,307);
+ const site=resolvePublicSite("demo.keien.dev",env);
+ assert.deepEqual(site,{kind:"entry"});
+ const settings=await readSiteAccessSettings("production",store);
+ const grant=await issueSiteAccessSession("Example2026",site,"demo.keien.dev","production",settings,store);
+ const authenticated=new NextRequest(request,{headers:{accept:"text/html",cookie:`__Host-site-access=${grant.token}`}});
+ assert.equal((await requirePublicAccess(authenticated,{store,env})).response,null);
+ assert.deepEqual(resolvePublicSite(authenticated.headers.get("host") ?? new URL(authenticated.url).host,env),{kind:"entry"});
+});
