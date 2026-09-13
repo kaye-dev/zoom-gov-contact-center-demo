@@ -191,6 +191,7 @@ test("database verification reads constraints and three rows in one read-only tr
   assert.match(queries[0]!, /REPEATABLE READ READ ONLY/);
   assert.match(queries[1]!, /pg_catalog\.pg_constraint/);
   assert.match(queries[2]!, /site_maintenance_settings/);
+  assert.match(queries[2]!, /COALESCE\(to_jsonb\(settings\)->>'siteKey', 'lg'\) = 'lg'/);
   assert.equal(queries[3]!.trim(), "ROLLBACK");
   assert.equal(ended, true);
 });

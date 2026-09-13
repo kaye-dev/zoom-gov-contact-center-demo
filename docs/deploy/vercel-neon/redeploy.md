@@ -44,6 +44,10 @@ git status --short
 
 migrationがup-to-dateなら、provider情報、project ID、connection string、管理者credential、plan確認文字列、deploy承認の入力はありません。pending migrationへの承認を拒否した場合は、DB、Vercel環境変数、Productionを変更せず停止します。
 
+`20260906120000_add_site_key_tenant_scope`直前の17件が適用済みの場合は、通常の`deploy.sh`からテナント移行16件（末尾`20260912090000_add_site_access_control`）を適用できます。SQL・分類・全33件の履歴を固定した専用経路で、既存の1回の承認後にNeon複製DBへ適用し、スキーマ・既存列のデータ・自治体のメンテナンス設定を検証します。追加された大学行と置換対象の旧singleton ID・旧メッセージrevisionは既存列比較から除外します。複製DBの削除確認と本番の履歴・データ再照合が成功した場合だけ本番へ適用し、そのまま公開まで継続します。複製DBの検証失敗、削除失敗、並行書き込みによるデータ変化、未知の履歴では本番適用へ進みません。本番適用を試みた後の失敗は自動再試行せず、実状態を確認します。この例外は将来のmigrationには自動拡張されません。
+
+移行中は他の管理操作・API書き込み・デプロイを実行しないでください。旧アプリは移行後の主キー・必須列に互換性がないため、本番移行から新アプリの公開完了までは操作を止めてください。データの変更はこの期間に自動復旧しません。
+
 通常の`deploy.sh`がexact `admin-access-v1` batchを検出して停止した場合だけ、[review済みadmin access migrationのProduction適用](reviewed-admin-access-migration.md)に従います。このsingle-purpose手順でDBをup-to-dateにした後は、通常の`./deploy.sh`とGitHub Actionsへ戻ります。
 
 AWS IAM Identity Center sessionが失効している場合だけ、AWSへの再loginが必要です。これは保存値の再入力ではなく短期credentialの更新です。login後に同じ`./deploy.sh`を再実行します。
