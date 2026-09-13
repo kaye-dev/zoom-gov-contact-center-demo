@@ -130,3 +130,5 @@ Developer API暗号鍵の初期導入・移行・復旧条件は[専用手順](d
 ## HobbyでのCron一時停止
 
 毎分実行の `/api/internal/zaad/municipal/tick` はHobbyプランでは登録できないため、サイト公開を復旧する目的で`vercel.json`のCron登録を一時的に解除しています。API自体は残りますが、自治体アウトリーチの受信処理・定期実行・期限処理・CRMプレビュー期限切れ処理は自動では進みません。定期処理の再開時は、対応プランまたは外部スケジューラーと`CRON_SECRET`を整備して動作確認してください。
+
+本番の`BETTER_AUTH_TRUSTED_ORIGINS`はcanonical originと登録済み業種ドメインの重複を除いた一覧を同期します。ビルド時も同じ一覧を使用し、複数業種を受け付ける認証設定と一致させます。

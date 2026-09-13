@@ -8,6 +8,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { listTenantProductionOrigins } from "../../lib/tenants";
 import { validateAdminInput } from "./lib/admin";
 import {
   loadDeploymentContextFromStdin,
@@ -693,7 +694,7 @@ export function syncProductionEnvironment(
   );
   for (const [name, value] of [
     ["BETTER_AUTH_URL", target.canonicalUrl.origin],
-    ["BETTER_AUTH_TRUSTED_ORIGINS", target.canonicalUrl.origin],
+    ["BETTER_AUTH_TRUSTED_ORIGINS", createProductionTrustedOrigins(target.canonicalUrl.origin)],
     ["BETTER_AUTH_TRUST_PROXY_HEADERS", "true"],
     ["APP_CANONICAL_ORIGIN", target.canonicalUrl.origin],
   ] as const) {
@@ -1937,6 +1938,10 @@ async function waitForCanonicalDeployment(
   return false;
 }
 
+export function createProductionTrustedOrigins(canonicalOrigin: string): string {
+  return [...new Set([validateCanonicalUrl(canonicalOrigin).origin, ...listTenantProductionOrigins()])].join(",");
+}
+
 export function createBuildEnvironment(
   ambient: Readonly<NodeJS.ProcessEnv>,
   authSecret: string,
@@ -1949,7 +1954,7 @@ export function createBuildEnvironment(
     DATABASE_URL: SYNTHETIC_BUILD_DATABASE_URL,
     BETTER_AUTH_SECRET: authSecret,
     BETTER_AUTH_URL: normalizedCanonicalOrigin,
-    BETTER_AUTH_TRUSTED_ORIGINS: normalizedCanonicalOrigin,
+    BETTER_AUTH_TRUSTED_ORIGINS: createProductionTrustedOrigins(normalizedCanonicalOrigin),
     BETTER_AUTH_TRUST_PROXY_HEADERS: "true",
     APP_CANONICAL_ORIGIN: normalizedCanonicalOrigin,
   };
