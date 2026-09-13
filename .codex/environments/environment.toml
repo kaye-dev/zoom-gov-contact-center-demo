@@ -12,7 +12,7 @@ if command -v brew >/dev/null 2>&1; then
 fi
 node -e 'if (Number(process.versions.node.split(".")[0]) !== 24) { throw new Error(`Node.js 24.x is required; found ${process.version}`); }'
 npm ci
-./dev-compose.sh prepare
+# Reserve runtime ports only when App start (dev-compose.sh ensure) is requested.
 '''
 
 [cleanup]
