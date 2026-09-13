@@ -12,6 +12,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 `.claude/rules/**.md` にプロジェクト固有のコーディング規約を置いている。
 作業を始める前に関連する規約を必ず参照し、その内容に従うこと。
+Zoom製品の仕様・APIに関する調査、設計、実装、レビューでは[Zoom公式情報の参照規約](.claude/rules/zoom-sources.md)を必ず読み、公式一次情報に基づく判断と出典提示を行う。
 実装・直接の軽微修正では[実装時のCI整合性規約](.claude/rules/implementation-quality.md)を必ず読み、変更に連動するmigration登録・テスト・fixture・文書・実行環境を同じ実装内で整合させる。
 
 # Git・PR規約
