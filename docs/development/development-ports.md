@@ -15,6 +15,8 @@ slot nはアプリ3000+n、artifact4000+nです。allocatorはworktreeにslot 1�
 
 ## 起動・再利用・停止
 
+Codexのworktree setupはNode.jsの確認と`npm ci`だけを行い、ポートを予約しません。5枠が予約済みでもworktree作成は完了できます。アプリを使うときに`App start`（`./dev-compose.sh ensure`）がruntimeの準備とポート予約を行うため、事前の`prepare`は不要です。prototypeの起動や明示的な`prepare`も予約を行います。起動時に枠が不足する場合は`./dev-compose.sh wt`で不要なcheckoutを明示選択して停止・予約解除してください。既存の予約はsetupで自動解除しません。
+
 アプリの割り当て確認と起動には次を使います。`prepare`は割り当てを準備し、`ensure`は所有権を確認したhealthyなアプリを再利用するか、必要なサービスを起動します。
 
 ```sh
